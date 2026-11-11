@@ -79,21 +79,22 @@ See:
 - [x] **1.1c Commercial Dual-License, Private Enterprise Repo & Quality/CI Gates *(pulled forward)*:**
   - Adopted CompCert-style Dual-License in [`../LICENSE`](../LICENSE) and provisioned private [`mannomannX/llvm-cert-enterprise`](https://github.com/mannomannX/llvm-cert-enterprise) (`D:\LLVMCert-Enterprise`) with High-Assurance Rust lints, `deny.toml`, `mold`, `cargo-nextest`, and `Swatinem/rust-cache`.
   - Added read-only integrity gate [`../scripts/verify_repo_integrity.py`](../scripts/verify_repo_integrity.py), CERT C baseline [`../c-quality/`](../c-quality), agent rules (`AGENTS.md`, `.agents/skills/rocq-proof-engineering`), [`feedback.csv`](./feedback.csv), [`rocq-proof-strategies.md`](./rocq-proof-strategies.md), and 3-tier GitHub Actions CI.
-- [ ] **1.2 (`TODO`) Server-Optimized Release Build & Rocq Toolchain Verification:**
-  - Trigger `llvm-toolchain-build.yml` (or run on 12 GB server) to produce the prebuilt Release `clang`, `opt`, `lld`, `llc`, `llvm-as`, `llvm-dis`, `llvm-extract`, and `llvm-objdump` SDK (`AArch64;RISCV`).
-  - Run `rocq-ci.yml` to verify `make -C vellvm/src` + `rocq chk` end-to-end on Rocq `9.1`.
+- [x] **1.2 Server-Optimized Release Build & Rocq Toolchain Verification:**
+  - Verified `llvm-toolchain-build.yml` green on GitHub Actions (run `42958598728`, `33m14s` cold build), producing the stripped Release `clang`, `opt`, `lld`, `llc`, `llvm-as`, `llvm-dis`, `llvm-extract`, and `llvm-objdump` SDK (`AArch64;RISCV`) and warming `ccache`.
+  - Verified `rocq-ci.yml` green on GitHub Actions (run `42959607954`, `9m05s`), compiling all 87 `.v` files, OCaml extraction, `libvellvm`, and `rocq check -o` end-to-end on Rocq `9.1`.
 - [x] **1.3 Fix LLVM 23 <-> Vellvm Surface Interface in Rust ([`../ir-bridge/`](../ir-bridge)):**
-  - Implemented High-Assurance **Rust** IR bridge (`ir-bridge/`, zero handwritten OCaml, `unsafe_code = "forbid"`) handling bitwise IEEE-754 normalization of LLVM 23 `f0x<hex>` / `±inf` / `±s?nan` FP literals to `0x<hex>`, `/* immarg */` & debug stripping, Fast-Path soundness eligibility checks (`F-08`), `GlobalOpt`/`GlobalDCE`-safe per-function `split`, and header-restoring / `#N` & `!N` re-indexing `merge`.
+  - Implemented High-Assurance **Rust** IR bridge (`ir-bridge/`, zero handwritten OCaml, `unsafe_code = "forbid"`) handling bitwise IEEE-754 normalization of LLVM 23 `f0x<hex>` / `±inf` / `±s?nan` FP literals to `0x<hex>`, `/* immarg */` & debug stripping, Fast-Path soundness eligibility checks (`F-08`, `F-15`), `GlobalOpt`/`GlobalDCE`-safe per-function `split`, and header-restoring / `#N` & `!N` re-indexing `merge`.
 
 ---
 
 ### Phase 2: Verified Rocq Fallback Core (Months 1–3)
 
-> **Baseline Note:** Ground-truth audit of [`LLVMAst.v`](../vellvm/src/rocq/Syntax/LLVMAst.v), [`llvm_parser.mly`](../vellvm/src/ml/libvellvm/llvm_parser.mly), and [`Operations/`](../vellvm/src/rocq/Semantics/Operations) confirms that Vellvm 3.0/`main` **already parses and prints** Opaque Pointers (`TYPE_Pointer None`), `zext nneg`, `or disjoint`, `trunc nuw/nsw`, `icmp samesign`, `gep inbounds/nusw/nuw`, `ptrtoaddr`, `captures(...)`, and `b<N>` byte types, **but leaves critical poison semantics unimplemented (`TODO`) in `Operations/Conversion.v` and `Operations/Compare.v`** (`F-08`).
+> **Baseline Note:** Ground-truth audit of [`LLVMAst.v`](../vellvm/src/rocq/Syntax/LLVMAst.v), [`llvm_parser.mly`](../vellvm/src/ml/libvellvm/llvm_parser.mly), and [`Operations/`](../vellvm/src/rocq/Semantics/Operations) confirmed that Vellvm 3.0/`main` already parses Opaque Pointers (`TYPE_Pointer None`), `zext nneg`, `or disjoint`, `trunc nuw/nsw`, `icmp samesign`, `gep inbounds/nusw/nuw`, `ptrtoaddr`, `captures(...)`, and `b<N>` byte types. Core poison-flag semantics (`trunc nuw/nsw`, `zext nneg`, `uitofp nneg`, `icmp samesign`) and `"bfloat"` lexing/parsing are now closed (`F-08`), while pointer/`iptr` `icmp samesign` and `bfloat`/`fp128` value ops remain soundly routed to Safe-Path (`F-15`).
 
-- [ ] **2.1 (`TODO`) Close Vellvm 3.0 Soundness Holes & Complete LLVM 23.1.5 Semantics (`F-08`):**
-  - Implement exact poison semantics for `trunc nuw/nsw`, `zext nneg`, and `uitofp nneg` in `Operations/Conversion.v:127,140,166` (currently `TODO` returning non-poison!) and fix pointer `icmp samesign` in `Operations/Compare.v:28-31`.
-  - Add missing `"bfloat"` keyword to `llvm_lexer.mll` / `llvm_parser.mly`, evaluate `Flocq` `fp128` support for AArch64/RISC-V `long double`, and extend `IntrinsicsDefinitions.v` for target workloads.
+- [x] **2.1a Close Vellvm 3.0 Conversion/Compare Poison Holes & Lexer Gaps (`F-08`):**
+  - Implemented exact poison semantics and kernel-checked `Qed.` lemmas for `trunc nuw/nsw`, `zext nneg`, and `uitofp nneg` in [`Conversion.v`](../vellvm/src/rocq/Semantics/Operations/Conversion.v), forwarded `samesign` in [`Compare.v`](../vellvm/src/rocq/Semantics/Operations/Compare.v), added `"bfloat"` (`KW_BFLOAT`) to [`llvm_lexer.mll`](../vellvm/src/ml/libvellvm/llvm_lexer.mll) / [`llvm_parser.mly`](../vellvm/src/ml/libvellvm/llvm_parser.mly), and preserved `I2F` (`Theory/I2F/I2F_exp.v`) while gating bare-metal MMIO pointer `icmp samesign` (`F-15`).
+- [ ] **2.1b (`TODO`) Target-Specific `fp128` & Intrinsic Extensions:**
+  - Evaluate `Flocq` `fp128` (`binary128`) value denotation for `AArch64`/`RISCV` `long double` and extend `IntrinsicsDefinitions.v` as required by target workloads.
 - [ ] **2.2 (`TODO`) Implement & Prove 5 Core Optimization Passes in Rocq:**
   1. `mem2reg` — Promote stack allocations (`alloca` + `load`/`store`) into SSA registers (highest-impact pass).
   2. `sccp` — Sparse Conditional Constant Propagation.

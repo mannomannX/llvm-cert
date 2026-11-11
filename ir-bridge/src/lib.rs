@@ -75,13 +75,12 @@ entry:
     }
 
     #[test]
-    fn test_fast_path_soundness_gate_catches_f08_and_bundle_hazards() {
+    fn test_fast_path_soundness_gate_catches_f15_and_unlocks_f08_conversions() {
         let unsafe_target = "\
-define i64 @opt_fn(i32 %x, ptr %p, ptr %q) {
+define i1 @opt_ptr(ptr %p, ptr %q) {
   call void @llvm.assume(i1 true) [ \"align\"(ptr %p, i64 16) ]
-  %ext = zext nneg i32 %x to i64
   %cmp = icmp samesign ult ptr %p, %q
-  ret i64 %ext
+  ret i1 %cmp
 }
 ";
         let verdict = check_fast_path_eligibility(unsafe_target);
@@ -90,13 +89,17 @@ define i64 @opt_fn(i32 %x, ptr %p, ptr %q) {
         assert!(matches!(err, Err(BridgeError::FastPathIneligible { .. })));
 
         let safe_target = "\
-define i32 @clean_add(i32 %x, i32 %y) !dbg !4 {
+define double @clean_conv(i32 %x, i32 %y) !dbg !4 {
   #dbg_value(i32 %x, !5, !DIExpression(), !6)
-  %sum = add nsw i32 %x, %y, !dbg !7
-  ret i32 %sum
+  %ext = zext nneg i32 %x to i64, !dbg !7
+  %tr = trunc nuw nsw i64 %ext to i32
+  %cmp = icmp samesign ult i32 %tr, %y
+  %sel = select i1 %cmp, i32 %tr, i32 0
+  %fp = uitofp nneg i32 %sel to double
+  ret double %fp
 }
 !llvm.dbg.cu = !{!0}
-!4 = distinct !DISubprogram(name: \"clean_add\")
+!4 = distinct !DISubprogram(name: \"clean_conv\")
 ";
         assert!(check_fast_path_eligibility(safe_target).is_eligible());
         let clean = sanitize_for_vellvm(safe_target, SliceRole::TargetFastPath);
@@ -105,6 +108,9 @@ define i32 @clean_add(i32 %x, i32 %y) !dbg !4 {
         assert!(!text.contains("#dbg_value"));
         assert!(!text.contains("!dbg"));
         assert!(!text.contains("!DISubprogram"));
+        assert!(text.contains("zext nneg i32 %x to i64"));
+        assert!(text.contains("trunc nuw nsw i64 %ext to i32"));
+        assert!(text.contains("uitofp nneg i32 %sel to double"));
     }
 
     #[test]

@@ -124,11 +124,17 @@ Section Convert.
    *)
   Definition convert_pure_base (conv : pure_conversion) (t1:dtyp_base) (x:dvalue_base) (t2:dtyp_base) : EOU dvalue_base :=
     match conv with
-    | Trunc nuw nsb => (* TODO: handle the nuw and nsb flags *)
+    | Trunc nuw nsw =>
         match t1, x, t2 with
         | DTYPE_I sz_t, DVALUE_I sz_from i1, DTYPE_I sz_to =>
             if Pos.eqb sz_t sz_from && (sz_to <? sz_from)%positive
-            then ret (DVALUE_I sz_to (repr (unsigned i1)))
+            then
+              let res : @bit_int sz_to := repr (unsigned i1) in
+              let nuw_violation := (nuw && negb (Z.eqb (unsigned res) (unsigned i1)))%bool in
+              let nsw_violation := (nsw && negb (Z.eqb (signed res) (signed i1)))%bool in
+              if (nuw_violation || nsw_violation)%bool
+              then ret (dvp t2)
+              else ret (DVALUE_I sz_to res)
             else raise_error "i-to-i ill-typed Trunc"
 
         | DTYPE_I sz_t, DVALUE_Poison, DTYPE_I sz_to =>
@@ -137,11 +143,14 @@ Section Convert.
         | _, _, _ => raise_error "ill-typed Trunc"
         end
 
-    | Zext nneg => (* TODO: handle the nneg flag *)
+    | Zext nneg =>
         match t1, x, t2 with
         | DTYPE_I sz_t, DVALUE_I sz_from i1, DTYPE_I sz_to =>
             if Pos.eqb sz_t sz_from && (sz_from <? sz_to)%positive
-            then ret (DVALUE_I sz_to (repr (unsigned i1)))
+            then
+              if (nneg && (signed i1 <? 0)%Z)%bool
+              then ret (dvp t2)
+              else ret (DVALUE_I sz_to (repr (unsigned i1)))
             else raise_error "i-to-i ill-typed Zext"
 
         | DTYPE_I sz_t, DVALUE_Poison, DTYPE_I sz_to =>
@@ -163,16 +172,22 @@ Section Convert.
         | _, _, _ => raise_error "ill-typed Sext"
         end
 
-    | Uitofp nneg => (* TODO: handle the nneg flag *)
+    | Uitofp nneg =>
         match t1, x, t2 with
         | DTYPE_I sz_t, DVALUE_I sz_from i1, DTYPE_FP FP_float =>
             if Pos.eqb sz_t sz_from
-            then ret (DVALUE_Float (Float32.of_intu (repr (unsigned i1))))
+            then
+              if (nneg && (signed i1 <? 0)%Z)%bool
+              then ret (dvp t2)
+              else ret (DVALUE_Float (Float32.of_intu (repr (unsigned i1))))
             else raise_error "i-to-float ill-typed Uitofp"
 
         | DTYPE_I sz_t, DVALUE_I sz_from i1, DTYPE_FP FP_double =>
             if Pos.eqb sz_t sz_from
-            then ret (DVALUE_Double (Float.of_longu (repr (unsigned i1))))
+            then
+              if (nneg && (signed i1 <? 0)%Z)%bool
+              then ret (dvp t2)
+              else ret (DVALUE_Double (Float.of_longu (repr (unsigned i1))))
             else raise_error "i-to-double ill-typed Uitofp"
 
         | DTYPE_I sz_t, DVALUE_Poison, DTYPE_FP _ =>
@@ -339,6 +354,47 @@ Section Convert.
     | CONV_Impure ct => conv ct t_from dv t_to
     end.
 
-  
+  Lemma convert_trunc_nuw_poison :
+    convert_pure_base (Trunc true false) (DTYPE_I 8) (DVALUE_I 8 (@repr 8 16)) (DTYPE_I 4)
+    = ret DVALUE_Poison.
+  Proof using Pa.
+    vm_compute. reflexivity.
+  Qed.
+
+  Lemma convert_trunc_nsw_poison :
+    convert_pure_base (Trunc false true) (DTYPE_I 8) (DVALUE_I 8 (@repr 8 8)) (DTYPE_I 4)
+    = ret DVALUE_Poison.
+  Proof using Pa.
+    vm_compute. reflexivity.
+  Qed.
+
+  Lemma convert_trunc_nsw_neg1_ok :
+    convert_pure_base (Trunc false true) (DTYPE_I 8) (DVALUE_I 8 (@repr 8 (-1))) (DTYPE_I 4)
+    = ret (DVALUE_I 4 (@repr 4 (-1))).
+  Proof using Pa.
+    vm_compute. repeat f_equal. apply mkint_eq. reflexivity.
+  Qed.
+
+  Lemma convert_zext_nneg_poison :
+    convert_pure_base (Zext true) (DTYPE_I 1) (DVALUE_I 1 (@repr 1 1)) (DTYPE_I 8)
+    = ret DVALUE_Poison.
+  Proof using Pa.
+    vm_compute. reflexivity.
+  Qed.
+
+  Lemma convert_zext_nneg_ok :
+    convert_pure_base (Zext true) (DTYPE_I 8) (DVALUE_I 8 (@repr 8 127)) (DTYPE_I 16)
+    = ret (DVALUE_I 16 (@repr 16 127)).
+  Proof using Pa.
+    vm_compute. reflexivity.
+  Qed.
+
+  Lemma convert_uitofp_nneg_poison :
+    convert_pure_base (Uitofp true) (DTYPE_I 32) (DVALUE_I 32 (@repr 32 (-1))) (DTYPE_FP FP_double)
+    = ret DVALUE_Poison.
+  Proof using Pa.
+    vm_compute. reflexivity.
+  Qed.
+
 End Convert.
 

@@ -422,6 +422,7 @@ let mk_metadata (m : ('a metadata list option)) : 'a metadata list =
 %token KW_PTR
 %token KW_VOID
 %token KW_HALF
+%token KW_BFLOAT
 %token KW_FLOAT
 %token KW_DOUBLE
 %token KW_X86_FP80
@@ -1189,6 +1190,7 @@ non_function_type:
   | KW_IPTR                                           { TYPE_Iptr             }
   | KW_PTR                                            { TYPE_Pointer (None)   }
   | KW_HALF                                           { TYPE_FP FP_half       }
+  | KW_BFLOAT                                         { TYPE_FP FP_bfloat     }
   | KW_FLOAT                                          { TYPE_FP FP_float      }
   | KW_DOUBLE                                         { TYPE_FP FP_double     }
   | KW_X86_FP80                                       { TYPE_FP FP_x86_fp80   }

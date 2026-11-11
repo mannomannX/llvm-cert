@@ -4,3 +4,4 @@
 [alias]
 lint = "clippy --workspace --all-targets --no-deps -- -D warnings"
 verify = "test --workspace"
+

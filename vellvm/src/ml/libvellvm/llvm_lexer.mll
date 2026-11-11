@@ -454,6 +454,7 @@
   ("ptr"       , KW_PTR);
   ("void"      , KW_VOID);
   ("half"      , KW_HALF);
+  ("bfloat"    , KW_BFLOAT);
   ("float"     , KW_FLOAT);
   ("double"    , KW_DOUBLE);
   ("x86_fp80"  , KW_X86_FP80);

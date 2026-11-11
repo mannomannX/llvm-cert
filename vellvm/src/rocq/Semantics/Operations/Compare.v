@@ -28,7 +28,7 @@ Section Compare.
        | DVALUE_Pointer a1, DVALUE_Pointer a2 =>
            let i1 := ptr_to_int a1 in
            let i2 := ptr_to_int a2 in
-           eval_int_icmp false icmp i1 i2
+           eval_int_icmp samesign icmp i1 i2
        | _, _ => raise_error ("eval_icmp_base: ill_typed-icmp: " ++ show v1 ++ ", " ++ show v2)
        end).
     destruct (Pos.eq_dec sz1 sz2); subst.

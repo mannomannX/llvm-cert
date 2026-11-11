@@ -79,24 +79,17 @@ pub fn check_fast_path_eligibility(ir: &str) -> FastPathEligibility {
 }
 
 fn check_line_soundness_hazards(scrubbed: &str, tokens: &[&str], reasons: &mut Vec<String>) {
-    // 1. Vellvm Operations/Conversion.v:127,140,166 ignores `trunc nuw/nsw`, `zext nneg`, `uitofp nneg`.
     for (idx, &tok) in tokens.iter().enumerate() {
         let next1 = tokens.get(idx + 1).copied().unwrap_or("");
-        if (tok == "zext" || tok == "uitofp") && next1 == "nneg" {
-            reasons.push(format!(
-                "unmodeled poison flag `{tok} nneg` in Vellvm Operations/Conversion.v (F-08)"
-            ));
-        }
-        if tok == "trunc" && (next1 == "nuw" || next1 == "nsw") {
+        // 1. Vellvm IP64Bit (`IPtrFinite.v:24,97`) uses unsigned `to_Z` and `msamesign = true`
+        // to preserve I2F against unbounded `PInf`, whereas AArch64/RISC-V lower `icmp samesign ult`
+        // to signed branches (`b.lt`/`blt`). Keep pointer/`iptr` `icmp samesign` gated (F-15).
+        if tok == "icmp"
+            && next1 == "samesign"
+            && matches!(tokens.get(idx + 3).copied(), Some("ptr" | "iptr"))
+        {
             reasons.push(
-                "unmodeled poison flag `trunc nuw/nsw` in Vellvm Operations/Conversion.v (F-08)"
-                    .to_owned(),
-            );
-        }
-        // 2. Vellvm Operations/Compare.v:28-31 drops `samesign` on pointer `icmp`.
-        if tok == "icmp" && next1 == "samesign" && tokens.get(idx + 3).copied() == Some("ptr") {
-            reasons.push(
-                "pointer `icmp samesign` is ignored in Vellvm Operations/Compare.v (F-08)"
+                "pointer/iptr `icmp samesign` requires Safe-Path fallback under IP64Bit MMIO addresses (F-15)"
                     .to_owned(),
             );
         }
