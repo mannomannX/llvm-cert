@@ -20,7 +20,6 @@ jobs:
     runs-on: ${{ vars.CERT_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 180
     env:
-      CCACHE_DIR: ${{ runner.temp }}/ccache
       CCACHE_MAXSIZE: 2G
       CCACHE_COMPRESS: "1"
       CCACHE_COMPRESSLEVEL: "6"
@@ -61,7 +60,7 @@ jobs:
       - name: Restore & persist ccache (Node-24 native cache with save-always)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ${{ runner.temp }}/ccache
+          path: ~/.cache/ccache
           key: llvm-23.1.5-ccache-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             llvm-23.1.5-ccache-${{ runner.os }}-
