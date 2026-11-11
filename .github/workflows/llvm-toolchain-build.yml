@@ -14,18 +14,17 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  CCACHE_DIR: ${{ runner.temp }}/ccache
-  CCACHE_MAXSIZE: 2G
-  CCACHE_COMPRESS: "1"
-  CCACHE_COMPRESSLEVEL: "6"
-  CCACHE_COMPILERCHECK: content
-
 jobs:
   build-llvm-sdk:
     name: Build Release LLVM 23.1.5 (AArch64 & RISCV)
     runs-on: ${{ vars.CERT_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 180
+    env:
+      CCACHE_DIR: ${{ runner.temp }}/ccache
+      CCACHE_MAXSIZE: 2G
+      CCACHE_COMPRESS: "1"
+      CCACHE_COMPRESSLEVEL: "6"
+      CCACHE_COMPILERCHECK: content
     steps:
       - name: Conditionally reclaim disk space only when < 15 GB free (0.01s fast check)
         if: vars.CERT_RUNNER == '' && runner.os == 'Linux'
