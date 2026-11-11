@@ -74,18 +74,18 @@ module Z = struct
   let to_int (z : coq_Z) : int = Int64.to_int (to_int64 z)
 end
 
-let coqint_of_camlint (v : int32) : Integers.Int.int =
+let coqint_of_camlint (v : int32) : Integers.bit_int =
   let u = Int64.logand (Int64.of_int32 v) 0xFFFFFFFFL in
-  Integers.Int.repr (Z.of_sint64 u)
+  Integers.repr (P.of_int 32) (Z.of_sint64 u)
 
-let camlint_of_coqint (v : Integers.Int.int) : int32 =
-  Int64.to_int32 (Z.to_int64 (Integers.Int.unsigned v))
+let camlint_of_coqint (v : Integers.bit_int) : int32 =
+  Int64.to_int32 (Z.to_int64 (Integers.unsigned (P.of_int 32) v))
 
-let coqint_of_camlint64 (v : int64) : Integers.Int64.int =
-  Integers.Int64.repr (Z.of_uint64 v)
+let coqint_of_camlint64 (v : int64) : Integers.bit_int =
+  Integers.repr (P.of_int 64) (Z.of_uint64 v)
 
-let camlint64_of_coqint (v : Integers.Int64.int) : int64 =
-  Z.to_int64 (Integers.Int64.unsigned v)
+let camlint64_of_coqint (v : Integers.bit_int) : int64 =
+  Z.to_int64 (Integers.unsigned (P.of_int 64) v)
 
 let coqfloat_of_camlfloat (f : float) : Floats.float =
   Floats.Float.of_bits (coqint_of_camlint64 (Int64.bits_of_float f))

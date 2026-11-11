@@ -9,10 +9,10 @@
 
 | Phase | Timeframe | Status | Completion |
 | :--- | :--- | :--- | :--- |
-| **Phase 1: Repository Setup & Minimal Build** | Weeks 1–2 | **In Progress** | **~50%** (1.1 Done + Vellvm Clean Import Done; 1.2 & 1.3 Pending) |
+| **Phase 1: Repository Setup & Minimal Build** | Weeks 1–2 | **In Progress** | **~65%** (1.1 Done, Vellvm Sanitized, Dual-License + Enterprise Split + Quality/CI Gates Done; 1.2 SDK Build & 1.3 Rust `ir-bridge` Next) |
 | **Phase 2: Verified Fallback Core (Rocq)** | Months 1–3 | Not Started *(Foundation Ready)* | **~10%** (Vellvm 3.0/`main` already includes Opaque Pointers `TYPE_Pointer None` & `Theory/`) |
-| **Phase 3: Verified Translation Validator** | Months 3–6 | Not Started | **0%** |
-| **Phase 4: Orchestration, Backend Check & Audit** | Months 6–9 | Not Started | **0%** |
+| **Phase 3: Verified Translation Validator** | Months 3–6 | Not Started | **~5%** (`cert-z3-engine` & `cert-llvm` Rust workspace scaffolded in `llvm-cert-enterprise`) |
+| **Phase 4: Orchestration, Backend Check & Audit** | Months 6–9 | Not Started | **~10%** (`cert-attestation` `.proof.json` schema & unit tests scaffolded in `llvm-cert-enterprise`) |
 
 ---
 
@@ -56,7 +56,12 @@ flowchart TD
 | **Orchestration Driver** | Rust (`cert-llvm`) | Drop-in CLI replacement for `clang`/`opt`, splits modules into functions, drives Fast-Path vs. Safe-Path, signs `.proof.json` | **100% Proprietary** |
 | **AI Proof Pipeline** | LLM Agents + `rocq-lsp` / `rocq top` | Automated proof synthesis & repair loop against the Rocq typechecker for Vellvm lemmas and validator rules | Internal Tooling |
 
-See [`licensing-and-boundaries.md`](./licensing-and-boundaries.md) for mandatory commercial license isolation rules and [`business-model-and-ip-strategy.md`](./business-model-and-ip-strategy.md) for the CompCert-style Dual-License, anti-cloning Open-Core split, and GitHub Actions CI strategy.
+See:
+- [`licensing-and-boundaries.md`](./licensing-and-boundaries.md) — Mandatory commercial license isolation & subprocess boundaries.
+- [`business-model-and-ip-strategy.md`](./business-model-and-ip-strategy.md) — CompCert-style Dual-License & Open-Core 2-repository split (`llvm-cert` + private `llvm-cert-enterprise`).
+- [`code-quality-and-ci.md`](./code-quality-and-ci.md) — "MISRA-Grade" Rust, Mathematical Rocq, CERT C / MISRA C, Minimal-OCaml (`<= 750 LOC`), and optimized multi-tier CI (`mold`, `cargo-nextest`, `Swatinem/rust-cache`, `ccache`).
+- [`rocq-proof-strategies.md`](./rocq-proof-strategies.md) — Fast-compute Rocq 9.1 & Vellvm 3.0 proof playbook (`[PS-01]`..`[PS-08]`).
+- [`feedback.csv`](./feedback.csv) — Structured agent audit & findings ledger (`F-XX`).
 
 ---
 
@@ -71,11 +76,14 @@ See [`licensing-and-boundaries.md`](./licensing-and-boundaries.md) for mandatory
 - [x] **1.1b Clean Vellvm Import & License Sanitization *(pulled forward)*:**
   - Imported Vellvm (`main`, Rocq 9.1, including restored `src/rocq/Theory/`) into [`../vellvm/`](../vellvm).
   - Stripped all `GPL-3.0+` driver files and `GPL-2.0+` `Camlcoq.ml`; synced `Zbits.v` with upstream CompCert `LGPL-2.1+` and added a clean-room MIT [`Camlcoq.ml`](../vellvm/src/ml/libvellvm/Camlcoq.ml).
-- [ ] **1.2 (`TODO`) Server-Optimized Release Build & Rocq Toolchain Setup:**
-  - Build `clang`, `opt`, `lld`, `llc`, `llvm-as`, `llvm-dis`, `llvm-extract`, and `llvm-objdump` in `Release` mode (`-DLLVM_TARGETS_TO_BUILD="AArch64;RISCV" -DLLVM_PARALLEL_LINK_JOBS=1` for ≤ 12 GB RAM).
-  - Provision Rocq `9.1.x` + OCaml `>= 4.14` (`opam`) environment and verify `make -C vellvm/src` compiles all `.vo` targets and OCaml extraction cleanly.
-- [ ] **1.3 (`TODO`) Fix LLVM 23 <-> Vellvm AST Interface (`ir-bridge`):**
-  - Implement a lean parser/serializer (OCaml/Rust) translating LLVM 23.1.5 IR / bitcode into Vellvm's `LLVMAst.toplevel_entities` and serializing verified ASTs back to valid LLVM 23.1.5 IR.
+- [x] **1.1c Commercial Dual-License, Private Enterprise Repo & Quality/CI Gates *(pulled forward)*:**
+  - Adopted CompCert-style Dual-License in [`../LICENSE`](../LICENSE) and provisioned private [`mannomannX/llvm-cert-enterprise`](https://github.com/mannomannX/llvm-cert-enterprise) (`D:\LLVMCert-Enterprise`) with High-Assurance Rust lints, `deny.toml`, `mold`, `cargo-nextest`, and `Swatinem/rust-cache`.
+  - Added read-only integrity gate [`../scripts/verify_repo_integrity.py`](../scripts/verify_repo_integrity.py), CERT C baseline [`../c-quality/`](../c-quality), agent rules (`AGENTS.md`, `.agents/skills/rocq-proof-engineering`), [`feedback.csv`](./feedback.csv), [`rocq-proof-strategies.md`](./rocq-proof-strategies.md), and 3-tier GitHub Actions CI.
+- [ ] **1.2 (`TODO`) Server-Optimized Release Build & Rocq Toolchain Verification:**
+  - Trigger `llvm-toolchain-build.yml` (or run on 12 GB server) to produce the prebuilt Release `clang`, `opt`, `lld`, `llc`, `llvm-as`, `llvm-dis`, `llvm-extract`, and `llvm-objdump` SDK (`AArch64;RISCV`).
+  - Run `rocq-ci.yml` to verify `make -C vellvm/src` + `rocq chk` end-to-end on Rocq `9.1`.
+- [ ] **1.3 (`TODO`) Fix LLVM 23 <-> Vellvm AST Interface in Rust (`ir-bridge/`):**
+  - Implement a High-Assurance **Rust** parser/serializer (`ir-bridge/`, zero handwritten OCaml) translating LLVM 23.1.5 IR / bitcode into canonical Vellvm-compatible IR / AST exchange format and serializing verified outputs back to LLVM 23.1.5 IR.
 
 ---
 

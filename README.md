@@ -4,7 +4,7 @@ Minimal, history-free baseline combining:
 1. **[`llvmorg-23.1.5`](https://github.com/llvm/llvm-project/releases/tag/llvmorg-23.1.5)** (commit `392dfff97d29b59d77e5cac6d4b6ef2585fe7117`, released 2026-11-03) — compiler frontend (`clang`), high-speed optimizer (`opt`), linker (`lld`), and `AArch64` + `RISCV` backends.
 2. **[`vellvm/vellvm`](https://github.com/vellvm/vellvm)** (`main` @ `1d651e7a391c`, Rocq 9.1 with restored `Theory/` meta-theory) — formal LLVM IR semantics, ITree infrastructure, and OCaml extraction, cleaned of all GPLv2/GPLv3 files for commercial use.
 
-See **[`plan/README.md`](./plan/README.md)** for the full 4-phase architecture roadmap, **[`plan/licensing-and-boundaries.md`](./plan/licensing-and-boundaries.md)** for architectural license isolation, and **[`plan/business-model-and-ip-strategy.md`](./plan/business-model-and-ip-strategy.md)** for the CompCert-style dual-license & Open-Core CI strategy.
+See **[`plan/README.md`](./plan/README.md)** for the full 4-phase architecture roadmap, **[`plan/licensing-and-boundaries.md`](./plan/licensing-and-boundaries.md)** for architectural license isolation, **[`plan/business-model-and-ip-strategy.md`](./plan/business-model-and-ip-strategy.md)** for the CompCert-style dual-license & Open-Core CI strategy, **[`plan/code-quality-and-ci.md`](./plan/code-quality-and-ci.md)** for our High-Assurance Rust / CERT C / Mathematical Rocq gates, **[`plan/rocq-proof-strategies.md`](./plan/rocq-proof-strategies.md)** for fast-compute Rocq 9.1 proof strategies, and **[`plan/feedback.csv`](./plan/feedback.csv)** for the structured audit ledger.
 
 ## Repository Layout
 
@@ -20,7 +20,9 @@ See **[`plan/README.md`](./plan/README.md)** for the full 4-phase architecture r
 | `third-party/siphash/` | `Apache-2.0 WITH LLVM-exception` | Header-only SipHash implementation required by `LLVMSupport` |
 | `vellvm/src/rocq/{Syntax,Semantics,Theory,Utils}` | `MIT` | Formal LLVM IR AST, Interaction Trees semantics, memory model, and equational meta-theory |
 | `vellvm/src/rocq/Numeric/` | `LGPL-2.1-or-later` | CompCert machine integer (`Integers.v`, `Zbits.v`) and IEEE-754 float (`Floats.v`) formalizations (`Zbits.v` synced with upstream CompCert commit `04f499c632a7`) |
-| `vellvm/src/ml/{extracted,libvellvm}` | `MIT` / `ISC` | Rocq-to-OCaml extraction, LLVM IR lexer/parser/printer, and clean-room MIT [`Camlcoq.ml`](./vellvm/src/ml/libvellvm/Camlcoq.ml) |
+| `vellvm/src/ml/{extracted,libvellvm}` | `MIT` / `ISC` | Rocq-to-OCaml extraction, LLVM IR lexer/parser/printer, and clean-room [`Camlcoq.ml`](./vellvm/src/ml/libvellvm/Camlcoq.ml) (`<= 750` handwritten OCaml LOC cap) |
+| `c-quality/` | `LLVMCert Dual-License` | SEI CERT C / MISRA C `.clang-tidy` & `.clang-format` baseline for freestanding runtime shims |
+| `scripts/verify_repo_integrity.py` | `LLVMCert Dual-License` | Fast (< 1s) read-only CI gate verifying licenses, zero `Admitted`/unapproved `Axiom`s, OCaml TCB cap, and `plan/feedback.csv` |
 
 All unneeded LLVM subprojects (`mlir`, `flang`, `lldb`, `bolt`, `polly`, `clang-tools-extra`, `compiler-rt`, `libcxx`, `openmp`, …), 21 unneeded backend targets (`X86`, `AMDGPU`, `WebAssembly`, `NVPTX`, `SPIRV`, …), all test/benchmark/doc suites, and all GPLv2/GPLv3 driver files in Vellvm have been removed.
 

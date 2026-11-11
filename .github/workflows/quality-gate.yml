@@ -1,0 +1,82 @@
+name: Fast Quality, License & Integrity Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  integrity-and-quality:
+    name: Repository, Proof, Rust & CERT C Gate
+    runs-on: ${{ vars.CERT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify licenses, feedback ledger, workflow security, Rocq hygiene & frozen LLVM
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: python3 scripts/verify_repo_integrity.py --base "$BASE_SHA" --head "$HEAD_SHA"
+
+      - name: CERT C / MISRA C check on custom C runtime & qualification code (read-only)
+        run: |
+          C_FILES=$(find runtime c-quality -type f \( -name '*.c' -o -name '*.h' \) 2>/dev/null || true)
+          if [ -z "$C_FILES" ]; then
+            echo "No custom C runtime files present yet; skipping clang-format / clang-tidy."
+            exit 0
+          fi
+          clang-format --style=file:c-quality/.clang-format --dry-run --Werror $C_FILES
+          for f in $C_FILES; do
+            case "$f" in
+              *.c) clang-tidy --config-file=c-quality/.clang-tidy "$f" -- -std=c17 -Wall -Wextra -Werror ;;
+            esac
+          done
+
+      - name: Install Rust toolchain for ir-bridge
+        if: hashFiles('ir-bridge/Cargo.toml') != ''
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Configure mold linker for ir-bridge (Linux)
+        if: hashFiles('ir-bridge/Cargo.toml') != '' && runner.os == 'Linux'
+        uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
+
+      - name: Install prebuilt cargo-nextest & cargo-deny for ir-bridge
+        if: hashFiles('ir-bridge/Cargo.toml') != ''
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2
+        with:
+          tool: cargo-nextest,cargo-deny
+
+      - name: Cache Cargo artifacts for ir-bridge
+        if: hashFiles('ir-bridge/Cargo.toml') != ''
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: "ir-bridge"
+          shared-key: "public-ir-bridge-check"
+          cache-on-failure: true
+
+      - name: Check, lint & test ir-bridge (single-job fast pipeline)
+        if: hashFiles('ir-bridge/Cargo.toml') != ''
+        working-directory: ir-bridge
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --workspace --all-targets --no-deps -- -D warnings
+          cargo nextest run --workspace --no-tests=pass
+          cargo deny check licenses advisories bans sources

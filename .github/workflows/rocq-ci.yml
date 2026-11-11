@@ -1,0 +1,65 @@
+name: Rocq 9.1 Formal Verification & Extraction CI
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "phase-*"
+      - "toolchain-*"
+      - "v*"
+  pull_request:
+    paths:
+      - "vellvm/src/**"
+      - "vellvm/rocq-vellvm.opam"
+      - "passes/**"
+      - "validator/**"
+      - ".github/workflows/rocq-ci.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  rocq-verify:
+    name: Build Vellvm Proofs & OCaml Extraction (Rocq 9.1)
+    runs-on: ${{ vars.CERT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Run static zero-Admitted & OCaml TCB gate first
+        run: python3 scripts/verify_repo_integrity.py
+
+      - name: Set up OCaml 4.14 & Rocq 9.1 opam switch (cached)
+        uses: ocaml/setup-ocaml@ff66428f72b64472e749b22e0ad4dded4b2ddca6 # v3
+        with:
+          ocaml-compiler: "4.14.x"
+          opam-local-packages: "vellvm/*.opam"
+          opam-repositories: |
+            rocq-released: https://rocq-prover.org/opam/released
+            default: https://opam.ocaml.org
+
+      - name: Cache compiled Vellvm .vo proof objects
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            vellvm/src/rocq
+            vellvm/src/ml/extracted
+            vellvm/src/_build
+          key: vellvm-vo-${{ runner.os }}-${{ hashFiles('vellvm/rocq-vellvm.opam', 'vellvm/src/rocq/**/*.v', 'vellvm/src/ml/extracted/Extract.v') }}
+          restore-keys: |
+            vellvm-vo-${{ runner.os }}-
+
+      - name: Compile Rocq 9.1 theories, extract OCaml & build libvellvm
+        run: opam exec -- make -C vellvm/src all -j$(nproc)
+
+      - name: Independent Rocq kernel proof-checker gate (rocq chk)
+        run: |
+          INCLUDES=$(opam exec -- make -s -C vellvm/src print-includes)
+          cd vellvm/src && opam exec -- rocq chk $INCLUDES Vellvm.Semantics.TopLevel Vellvm.Theory.Equational

@@ -1,0 +1,98 @@
+name: LLVM 23.1.5 Minimal Toolchain Release Build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "toolchain-*"
+      - "v*"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-llvm-sdk:
+    name: Build Release LLVM 23.1.5 (AArch64 & RISCV)
+    runs-on: ${{ vars.CERT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 180
+    steps:
+      - name: Reclaim preinstalled SDK disk space (GitHub-hosted runner only)
+        if: vars.CERT_RUNNER == '' && runner.os == 'Linux'
+        uses: jlumbroso/free-disk-space@cf1e78c50ca91e757bab3edc229027eebfc07871 # main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          swap-storage: false
+
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install host Clang, LLD, Ninja & zstd (GitHub-hosted runner only)
+        if: vars.CERT_RUNNER == '' && runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang lld ninja-build ccache zstd python3
+
+      - name: Restore & manage ccache
+        uses: hendrikmuhs/ccache-action@5ebbd400eff9e74630f759d94ddd7b6c26299639 # v1.2
+        with:
+          key: llvm-23.1.5-aarch64-riscv
+          max-size: 2G
+
+      - name: Configure minimal Release LLVM 23.1.5
+        run: |
+          cmake -S llvm -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DLLVM_USE_LINKER=lld \
+            -DLLVM_ENABLE_PROJECTS="clang;lld" \
+            -DLLVM_TARGETS_TO_BUILD="AArch64;RISCV" \
+            -DLLVM_PARALLEL_LINK_JOBS=1 \
+            -DLLVM_INCLUDE_TESTS=OFF \
+            -DLLVM_INCLUDE_BENCHMARKS=OFF \
+            -DLLVM_INCLUDE_EXAMPLES=OFF \
+            -DLLVM_INCLUDE_DOCS=OFF \
+            -DCLANG_INCLUDE_TESTS=OFF \
+            -DCMAKE_INSTALL_PREFIX="$PWD/sdk-install"
+
+      - name: Build required LLVMCert compiler & verification tools
+        run: |
+          ninja -C build \
+            clang \
+            opt \
+            lld \
+            llc \
+            llvm-as \
+            llvm-dis \
+            llvm-extract \
+            llvm-objdump
+
+      - name: Package stripped binary SDK archive
+        run: |
+          mkdir -p dist/llvm-cert-sdk/bin
+          for bin in clang opt lld llc llvm-as llvm-dis llvm-extract llvm-objdump; do
+            cp -a "build/bin/$bin" dist/llvm-cert-sdk/bin/
+            strip --strip-unneeded "dist/llvm-cert-sdk/bin/$bin" || true
+          done
+          ln -sf lld dist/llvm-cert-sdk/bin/ld.lld
+          cp LICENSE LICENSE-LLVM.TXT dist/llvm-cert-sdk/
+          tar -C dist -I 'zstd -19 -T0' -cf llvm-cert-sdk-23.1.5-linux-x86_64.tar.zst llvm-cert-sdk
+
+      - name: Upload prebuilt LLVM 23.1.5 SDK artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: llvm-cert-sdk-23.1.5-linux-x86_64
+          path: llvm-cert-sdk-23.1.5-linux-x86_64.tar.zst
+          retention-days: 90

@@ -1,0 +1,15 @@
+# CERT C / MISRA C:2023-Aligned Static Analysis Profile for LLVMCert C Runtime & Qualification Suites
+# Scoped exclusively to LLVMCert-authored C code (never run against frozen upstream LLVM C++).
+Checks: >
+  -*,
+  cert-*,
+  bugprone-*,
+  clang-analyzer-*,
+  misc-const-correctness,
+  misc-redundant-expression,
+  readability-braces-around-statements,
+  readability-isolate-declaration
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*'
+AnalyzeTemporaryDtors: false
+FormatStyle: file
