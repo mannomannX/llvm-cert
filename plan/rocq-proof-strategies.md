@@ -59,7 +59,7 @@ This living knowledge base collects **fast-computing, extraction-clean, kernel-f
 - **Context:** Executable Rocq code in `passes/` and `validator/` extracted via [`Extract.v`](../vellvm/src/ml/extracted/Extract.v).
 - **Anti-Pattern:**
   1. Building `{x = y} + {x <> y}` deciders with heavy tactics or `Program Fixpoint` inside extracted pass code.
-  2. Calling `DynamicValues.dvalue_eq_dec` or `dvalue_eqb` ([`DynamicValues.v`](../vellvm/src/rocq/Semantics/DynamicValues.v)) inside computations you expect to reduce with `vm_compute` in Rocq — upstream `dvalue_bv_eq_dec` and `ibinop_eq_dec`..`conversion_type_eq_dec` end with `Qed.` (opaque in Rocq; see `feedback.csv` `F-10`).
+  2. Sealing computational `{x = y} + {x <> y}` deciders with `Qed.` instead of `Defined.` (fixed in [`DynamicValues.v`](../vellvm/src/rocq/Semantics/DynamicValues.v) under `F-10`).
 - **Fast Strategy:**
   - Write all pass/validator syntax & lattice comparators as **transparent structural `bool` functions** (`Pos.eqb`, `N.eqb`, `Z.eqb`, `String.eqb`, `RawIDOrd`) paired with separate `Qed.` reflection lemmas (`foo_eqb_spec : foo_eqb x y = true <-> x = y`).
   - Use Vellvm's AVL finite maps directly: `rmap` (`RawIdMaps.RM` in [`RawIdMaps.v`](../vellvm/src/rocq/Syntax/RawIdMaps.v)) for SSA `raw_id` environments/lattices ($O(\log N)$ lookup vs. quadratic association lists) and `IntMap` ([`IntMaps.v`](../vellvm/src/rocq/Utils/IntMaps.v)) for `Z`-keyed tables.
@@ -84,16 +84,16 @@ This living knowledge base collects **fast-computing, extraction-clean, kernel-f
   - Use `-vos` (`rocq compile -vos ...`) to check downstream statement/interface compatibility in milliseconds while skipping `Qed.` bodies, and `-vok` (`rocq compile -vok ...`) to verify opaque proof bodies independently in parallel.
   - Run full `make -C vellvm/src` + `python scripts/verify_repo_integrity.py` only after completing a coherent logical task group.
 
-### `[PS-08]` Zero-Axiom Hygiene & Independent Kernel Gate (`rocq chk`)
+### `[PS-08]` Zero-Axiom Hygiene & Independent Kernel Gate (`rocq check`)
 - **Context:** TCB integrity across `vellvm/`, `passes/`, and `validator/` (`rocq-ci.yml`).
-- **Anti-Pattern:** Calling upstream helper tactics in [`Tactics.v`](../vellvm/src/rocq/Utils/Tactics.v) that silently pull extra axioms from `ITree` or `Stdlib` into proof terms without triggering local `Axiom` regex checks (see `feedback.csv` `F-09`).
+- **Anti-Pattern:** Importing `ITree.Eq.EqAxiom`, `JMeq`, or `ProofIrrelevance` (remediated across `Tactics.v`, `IPtrFinite.v`, and `I2F_exp.v` under `F-09`).
 - **Fast Strategy:**
-  - Never leave `Admitted`, `admit`, `give_up`, `Abort`, or unapproved `Axiom`s in any `.v` file (`scripts/verify_repo_integrity.py` rejects them in `< 0.5s`).
-  - **Ban `force_rewrite` and `subst_existT` / `Tactics.inj_pair2` in all LLVMCert proofs:**
-    - `force_rewrite` imports `ITree.Eq.EqAxiom.bisimulation_is_eq` — rewrite modulo `eq_itree` / `eutt` / `ruttc` Proper morphisms instead.
-    - `subst_existT` (`Tactics.inj_pair2`) invokes `JMeq.JMeq_eq` — for dependent pairs over decidable indices (`sz : positive`, `N`, `Z`, `raw_id`), use **`Eqdep_dec.inj_pair2_eq_dec _ Pos.eq_dec`** (100% axiom-free in `Stdlib.Logic.Eqdep_dec`).
-    - For decidable arithmetic range proofs (`intrange`), use constructive proof irrelevance (`Integers.eq_proofs_unicity` / `Z.lt_irrelevance`) rather than `Stdlib.Logic.ProofIrrelevance`.
-  - Before closing any milestone, run `Print Assumptions TopLevelTheorem.` to verify `Closed under the global context` (or solely `Integers.wordsize_not_zero` from `F-05`), and ensure `rocq chk` covers the new top-level `passes` / `validator` modules in CI.
+  - Never leave `Admitted`, `admit`, `give_up`, `Abort`, unapproved `Axiom`s, or `EqAxiom`/`JMeq`/`ProofIrrelevance` imports in any `.v` file (`scripts/verify_repo_integrity.py` rejects all of them in `< 0.5s`).
+  - **Constructive dependent-pair & range-proof idioms:**
+    - Never re-introduce `ITree.Eq.EqAxiom.bisimulation_is_eq` (`force_rewrite`) — rewrite modulo `eq_itree` / `eutt` / `ruttc` Proper morphisms instead.
+    - `subst_existT` in [`Tactics.v`](../vellvm/src/rocq/Utils/Tactics.v) uses constructive Hedberg UIP (`Eqdep_dec.inj_pair2_eq_dec` over `positive`, `N`, `Z`, `nat`, `bool` — 100% axiom-free).
+    - For decidable machine-integer range proofs (`intrange`), use constructive `Integers.mkint_eq` (`Integers.eq_proofs_unicity`) rather than `Stdlib.Logic.ProofIrrelevance`.
+  - Before closing any milestone, run `Print Assumptions TopLevelTheorem.` and ensure `rocq check -o` in `rocq-ci.yml` covers `TopLevel`, `Equational`, and all new top-level `passes` / `validator` modules.
 
 ---
 

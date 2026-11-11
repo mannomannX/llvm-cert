@@ -1,6 +1,3 @@
-(* Used in [to_Z_inj] *)
-From Stdlib Require Import ProofIrrelevance.
-
 From Vellvm Require Import
   Utils
   Syntax
@@ -130,12 +127,8 @@ Proof.
     + pose proof Integers.unsigned_range i;
       unfold Integers.max_unsigned in *;
       lia.
-  - intros x y EQ;
-    cbn in *; unfold to_Z in *.
-    destruct x, y;
-    unfold Integers.unsigned in *;
-    cbn in *; subst.
-  (* TODO : do we need this? Should we assume and leverage it more broadly? *)
-    rewrite (proof_irrelevance _ intrange intrange0); auto.
+  - intros [x Px] [y Py] EQ;
+    cbn in *; unfold to_Z, Integers.unsigned in *; cbn in *.
+    now apply Integers.mkint_eq.
 Qed.
 

@@ -444,7 +444,7 @@ Section DValue.
         right. intros H; inversion H. subst_existT. contradiction.
       - destruct (list_eq_dec memory_bit_eq_dec bits bits0); subst; auto.
          + right. intros H. inversion H. subst_existT. contradiction.
-    Qed.
+    Defined.
       
     Lemma dvalue_base_eq_dec : forall (v1 v2 : dvalue_base), {v1 = v2} + {v1 <> v2}.
     Proof.
@@ -547,32 +547,32 @@ Section DValue.
     Lemma ibinop_eq_dec : forall (op1 op2:ibinop), {op1 = op2} + {op1 <> op2}.
       intros.
       repeat decide equality.
-    Qed.
+    Defined.
 
     Lemma fbinop_eq_dec : forall (op1 op2:fbinop), {op1 = op2} + {op1 <> op2}.
       intros.
       repeat decide equality.
-    Qed.
+    Defined.
 
     Lemma icmp_eq_dec : forall (op1 op2:icmp), {op1 = op2} + {op1 <> op2}.
       intros.
       repeat decide equality.
-    Qed.
+    Defined.
 
     Lemma fcmp_eq_dec : forall (op1 op2:fcmp), {op1 = op2} + {op1 <> op2}.
       intros.
       repeat decide equality.
-    Qed.
+    Defined.
 
     Lemma fast_math_eq_dec : forall (op1 op2:fast_math), {op1 = op2} + {op1 <> op2}.
       intros.
       repeat decide equality.
-    Qed.
+    Defined.
 
     Lemma conversion_type_eq_dec : forall (op1 op2:conversion_type), {op1 = op2} + {op1 <> op2}.
       intros.
       repeat decide equality.
-    Qed.
+    Defined.
 
     Arguments ibinop_eq_dec: clear implicits.
     Arguments fbinop_eq_dec: clear implicits.

@@ -75,6 +75,9 @@ PROPRIETARY_LEAK_MARKERS = (
 
 PROOF_HOLE_RE = re.compile(r"\b(Admitted|admit|give_up|Abort)\b")
 AXIOM_DECL_RE = re.compile(r"\b(Axiom|Conjecture)\s+([A-Za-z0-9_']+)")
+FORBIDDEN_AXIOM_IMPORT_RE = re.compile(
+    r"\b(EqAxiom|bisimulation_is_eq|JMeq|JMeq_eq|ProofIrrelevance|proof_irrelevance)\b"
+)
 
 
 def strip_rocq_comments_and_strings(src: str) -> str:
@@ -315,6 +318,12 @@ def check_rocq_proofs(root: pathlib.Path, errors: list[str]) -> int:
                             f"Unapproved Rocq `{kind} {ident}` in {rel}:{lineno} "
                             "(prove as Lemma or document in ALLOWED_ROCQ_AXIOMS after TCB review)"
                         )
+                bad_import = FORBIDDEN_AXIOM_IMPORT_RE.search(line)
+                if bad_import:
+                    errors.append(
+                        f"Forbidden axiom-backed helper/import `{bad_import.group(1)}` in {rel}:{lineno} "
+                        "(use Eqdep_dec.inj_pair2_eq_dec / Integers.mkint_eq / eutt instead)"
+                    )
     return checked_files
 
 

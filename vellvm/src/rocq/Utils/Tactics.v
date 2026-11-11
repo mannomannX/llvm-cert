@@ -1,18 +1,14 @@
 (* begin hide *)
 From Stdlib Require Import
-     String.
+     String
+     ZArith
+     PeanoNat
+     Bool
+     Eqdep_dec.
 
 From ITree Require Import
-     Eq.EqAxiom.
+     ITree.
 (* end hide *)
-
-Ltac force_rewrite H :=
-  let HB := fresh "HB" in
-  pose proof @H as HB; eapply bisimulation_is_eq in HB; rewrite HB; clear HB.
-
-Tactic Notation "force_rewrite:" constr(H) "in" hyp(H') :=
-  let HB := fresh "HB" in
-  pose proof @H as HB; eapply bisimulation_is_eq in HB; rewrite HB in H'; clear HB.
 
 Ltac flatten_goal :=
   match goal with
@@ -371,27 +367,21 @@ Ltac subst_cont :=
     destruct h; subst
   end.
 
-(* This exists in the stdlib as [ProofIrrelevance.inj_pair2], but we reprove
-   it to not depend on proof irrelevance (we use axiom [JMeq.JMeq_eq] instead).
-   The itree library now avoids as much as possible using this axiom, we may want
-   to see if it's possible to do so here.
- *)
-Lemma inj_pair2 :
-  forall (U : Type) (P : U -> Type) (p : U) (x y : P p),
-    existT P p x = existT P p y -> x = y.
-Proof using.
-  intros. apply JMeq.JMeq_eq.
-  refine (
-      match H in _ = w return JMeq.JMeq x (projT2 w) with
-      | eq_refl => JMeq.JMeq_refl
-      end).
-Qed.
-
+(* Constructive Hedberg UIP projection for decidable index types (zero axioms). *)
 Ltac inj_pair2_existT :=
   repeat
-      match goal with
-      | H : _ |- _ => apply inj_pair2 in H
-      end.
+    match goal with
+    | H : existT _ (?p : positive) _ = existT _ ?p _ |- _ =>
+        apply (Eqdep_dec.inj_pair2_eq_dec positive Pos.eq_dec) in H
+    | H : existT _ (?p : N) _ = existT _ ?p _ |- _ =>
+        apply (Eqdep_dec.inj_pair2_eq_dec N N.eq_dec) in H
+    | H : existT _ (?p : Z) _ = existT _ ?p _ |- _ =>
+        apply (Eqdep_dec.inj_pair2_eq_dec Z Z.eq_dec) in H
+    | H : existT _ (?p : nat) _ = existT _ ?p _ |- _ =>
+        apply (Eqdep_dec.inj_pair2_eq_dec nat Nat.eq_dec) in H
+    | H : existT _ (?p : bool) _ = existT _ ?p _ |- _ =>
+        apply (Eqdep_dec.inj_pair2_eq_dec bool Bool.bool_dec) in H
+    end.
 
 Ltac subst_existT :=
   inj_pair2_existT; subst.

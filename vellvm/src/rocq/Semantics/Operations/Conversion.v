@@ -372,7 +372,7 @@ Section Convert.
     convert_pure_base (Trunc false true) (DTYPE_I 8) (DVALUE_I 8 (@repr 8 (-1))) (DTYPE_I 4)
     = ret (DVALUE_I 4 (@repr 4 (-1))).
   Proof using Pa.
-    vm_compute. repeat f_equal. apply mkint_eq. reflexivity.
+    vm_compute. do 2 f_equal. apply mkint_eq. reflexivity.
   Qed.
 
   Lemma convert_zext_nneg_poison :

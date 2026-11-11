@@ -1,6 +1,6 @@
 From Equations Require Import Equations.
 
-From Stdlib Require Import Lia Logic.ProofIrrelevance.
+From Stdlib Require Import Lia.
 
 From ExtLib Require Import Structures.Monads.
 
@@ -1185,17 +1185,11 @@ Lemma I2F_EOUP_valid_pointer_bits p p' base offset bits bits'
     end.
  *)
 
-(* NOTE: we use proof irrelevance here *)
 Lemma unsigned_inj : forall sz x y, (@unsigned sz) x = unsigned y -> x = y.
 Proof.
-  intros.
-  unfold unsigned in H.
-  unfold intval in H.
-  destruct x. destruct y.
-  subst.
-  specialize (proof_irrelevance _ intrange intrange0) as H.
-  rewrite H.
-  reflexivity.
+  intros sz [x Px] [y Py] H.
+  unfold unsigned in H; cbn in H.
+  now apply Integers.mkint_eq.
 Qed.  
   
 (* TODO: this is a pretty ugly proof. *)
