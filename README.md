@@ -4,7 +4,7 @@ Minimal, history-free baseline combining:
 1. **[`llvmorg-23.1.5`](https://github.com/llvm/llvm-project/releases/tag/llvmorg-23.1.5)** (commit `392dfff97d29b59d77e5cac6d4b6ef2585fe7117`, released 2026-11-03) — compiler frontend (`clang`), high-speed optimizer (`opt`), linker (`lld`), and `AArch64` + `RISCV` backends.
 2. **[`vellvm/vellvm`](https://github.com/vellvm/vellvm)** (`main` @ `1d651e7a391c`, Rocq 9.1 with restored `Theory/` meta-theory) — formal LLVM IR semantics, ITree infrastructure, and OCaml extraction, cleaned of all GPLv2/GPLv3 files for commercial use.
 
-See **[`plan/README.md`](./plan/README.md)** for the full 4-phase architecture roadmap, current status, and **[`plan/licensing-and-boundaries.md`](./plan/licensing-and-boundaries.md)** for commercial licensing rules.
+See **[`plan/README.md`](./plan/README.md)** for the full 4-phase architecture roadmap, **[`plan/licensing-and-boundaries.md`](./plan/licensing-and-boundaries.md)** for architectural license isolation, and **[`plan/business-model-and-ip-strategy.md`](./plan/business-model-and-ip-strategy.md)** for the CompCert-style dual-license & Open-Core CI strategy.
 
 ## Repository Layout
 
@@ -44,5 +44,6 @@ cmake --build build --target clang opt lld llc llvm-as llvm-dis llvm-extract llv
 
 ## License
 
-- LLVM / Clang / LLD components: Apache License v2.0 with LLVM Exceptions — see [`LICENSE.TXT`](./LICENSE.TXT).
-- Vellvm components: MIT License (with `vellvm/src/rocq/Numeric/` under `LGPL-2.1-or-later`) — see [`vellvm/LICENSE.md`](./vellvm/LICENSE.md).
+- **LLVMCert Original Code, Proofs & Modifications:** Dual-licensed under the **LLVMCert Non-Commercial Evaluation & Research License** and a separate **LLVMCert Commercial Software License Agreement** (mandatory for any commercial or production use) — see [`LICENSE`](./LICENSE).
+- **Upstream LLVM / Clang / LLD (`23.1.5`):** Apache License v2.0 with LLVM Exceptions — see [`LICENSE-LLVM.TXT`](./LICENSE-LLVM.TXT).
+- **Upstream Vellvm Components:** MIT License (with `vellvm/src/rocq/Numeric/` under `LGPL-2.1-or-later`) — see [`vellvm/LICENSE.md`](./vellvm/LICENSE.md).

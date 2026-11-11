@@ -1,0 +1,134 @@
+LLVMCert (cert-llvm) Distribution & Licensing Notice
+====================================================
+
+Copyright (c) 2026 LLVMCert Contributors (mannomannX). All rights reserved.
+
+This repository distributes components of the LLVMCert certified compiler
+toolchain alongside upstream third-party open-source components.
+
+1. DUAL-LICENSING OF LLVMCERT ORIGINAL CODE AND MODIFICATIONS
+-------------------------------------------------------------
+All original files, formal proofs, optimization passes, translation validation
+checkers, certificate schemas, IR bridges, orchestration tools, build scripts,
+and modifications authored for the LLVMCert project (collectively, the
+"LLVMCert Proprietary Software") are dual-licensed under EITHER:
+
+  (a) The LLVMCert Non-Commercial Evaluation & Research License Agreement set
+      forth below (permitting strictly non-commercial academic, educational,
+      and internal evaluation use only); OR
+
+  (b) A separate written LLVMCert Commercial Software License Agreement
+      executed with the copyright holder, which is MANDATORY for any commercial
+      use, production builds, safety-critical qualification, internal business
+      operations, or hosted/SaaS compilation services.
+
+To obtain a Commercial Software License Agreement, contact the repository
+owner (@mannomannX).
+
+2. THIRD-PARTY OPEN-SOURCE COMPONENTS IN THIS REPOSITORY
+--------------------------------------------------------
+Upstream third-party files included in this repository retain their respective
+copyrights and open-source licenses:
+
+  * LLVM, Clang, LLD, CMake modules, libc shared headers, libunwind headers,
+    and SipHash (`llvm/`, `clang/`, `lld/`, `cmake/`, `libc/`, `libunwind/`,
+    `third-party/siphash/`):
+    Distributed under the Apache License v2.0 with LLVM Exceptions.
+    See `LICENSE-LLVM.TXT` and `llvm/LICENSE.TXT`.
+
+  * Vellvm Rocq formal semantics & AST utilities (`vellvm/src/rocq/Syntax/`,
+    `Semantics/`, `Theory/`, `Utils/`, `vellvm/src/ml/extracted/`, and MIT
+    helper modules in `vellvm/src/ml/`):
+    Copyright (c) Vellvm developers, distributed under the MIT License.
+    See `vellvm/LICENSE.md`.
+
+  * Vellvm surface IR lexer and parser (`vellvm/src/ml/libvellvm/llvm_lexer.mll`,
+    `vellvm/src/ml/libvellvm/llvm_parser.mly`):
+    Distributed under the ISC License (preserved in each file header).
+
+  * CompCert numeric formalizations (`vellvm/src/rocq/Numeric/*.v`):
+    Copyright Institut National de Recherche en Informatique et en Automatique
+    (INRIA), dual-licensed under the GNU Lesser General Public License v2.1 or
+    later (`LGPL-2.1-or-later`) and the INRIA Non-Commercial License Agreement.
+    For commercial distributions, LLVMCert elects the `LGPL-2.1-or-later`
+    option as indicated in each file header.
+
+Nothing in the LLVMCert Non-Commercial Evaluation & Research License Agreement
+restricts your rights under the applicable upstream open-source licenses solely
+with respect to unmodified third-party files listed above.
+
+================================================================================
+LLVMCERT NON-COMMERCIAL EVALUATION & RESEARCH LICENSE AGREEMENT
+================================================================================
+
+IMPORTANT — READ CAREFULLY: BY DOWNLOADING, CLONING, COMPILING, EXECUTING, OR
+OTHERWISE USING ANY LLVMCERT PROPRIETARY SOFTWARE ("SOFTWARE"), YOU AGREE TO BE
+BOUND BY THE TERMS OF THIS AGREEMENT. IF YOU DO NOT AGREE, DO NOT USE THE
+SOFTWARE WITHOUT A SEPARATE COMMERCIAL LICENSE AGREEMENT.
+
+1. License Grant (Non-Commercial Only).
+   Subject to strict compliance with all terms of this Agreement, the copyright
+   holder ("Licensor") grants you ("Licensee") a revocable, non-exclusive,
+   non-transferable, non-sublicensable, royalty-free, worldwide license to
+   download, build, execute, inspect, and create academic Derivative Works of
+   the Software SOLELY for:
+     (a) non-commercial academic research and university teaching;
+     (b) personal, non-commercial study; or
+     (c) temporary internal technical evaluation (not exceeding 30 days) solely
+         to assess whether to purchase a Commercial Software License Agreement,
+         provided no compiled outputs enter production or distribution.
+
+2. Strict Prohibition of Commercial Use and Managed Services.
+   Any use outside Section 1 is strictly prohibited without a valid Commercial
+   Software License Agreement. Without limitation, Licensee MAY NOT:
+     (a) use the Software to compile, optimize, validate, verify, or certify any
+         code that is sold, licensed, embedded in hardware, deployed in internal
+         business operations, or delivered to customers or third parties;
+     (b) use the Software or its verification outputs in any safety, security,
+         or regulatory certification process (including ISO 26262, DO-178C,
+         IEC 61508, EN 50128, or Common Criteria);
+     (c) offer, host, or integrate the Software (or any Derivative Work) as a
+         cloud service, SaaS platform, CI/CD service, verification-as-a-service,
+         or competing commercial compiler/verifier product; or
+     (d) remove, alter, or obscure any copyright, license, or attribution
+         notices.
+
+3. Redistribution Restrictions.
+   Licensee may redistribute verbatim copies or non-commercial academic
+   Derivative Works of the Software ONLY under the exact terms of this
+   Agreement, accompanied by a complete copy of this `LICENSE` file, and may
+   not grant any broader rights or charge any fee for the Software.
+
+4. Intellectual Property & Reservation of Rights.
+   The Software is licensed, not sold. Licensor retains all right, title, and
+   interest in and to the Software, including all copyrights, trade secrets,
+   patents, trademarks, and other intellectual property rights. All rights not
+   expressly granted herein are reserved by Licensor.
+
+5. Academic Attribution.
+   Any academic publication, thesis, benchmark, or presentation reporting
+   results obtained in whole or in part using the Software must include a clear
+   citation acknowledging the LLVMCert (`cert-llvm`) project.
+
+6. Automatic Termination.
+   This Agreement and all rights granted hereunder terminate automatically and
+   immediately without notice if Licensee breaches any term of this Agreement.
+   Upon termination, Licensee must immediately cease all use of the Software
+   and destroy all copies and compiled binaries in Licensee's possession.
+
+7. Disclaimer of Warranty.
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE, SOUNDNESS, AND NONINFRINGEMENT. LICENSOR
+   HAS NO OBLIGATION TO PROVIDE MAINTENANCE, UPDATES, OR SUPPORT UNDER THIS
+   AGREEMENT.
+
+8. Limitation of Liability.
+   TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL
+   LICENSOR OR ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING PROCUREMENT OF
+   SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+   CONTRACT, STRICT LIABILITY, OR TORT, ARISING IN ANY WAY OUT OF THE USE OF OR
+   INABILITY TO USE THE SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+   DAMAGE.

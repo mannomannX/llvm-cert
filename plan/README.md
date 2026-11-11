@@ -56,7 +56,7 @@ flowchart TD
 | **Orchestration Driver** | Rust (`cert-llvm`) | Drop-in CLI replacement for `clang`/`opt`, splits modules into functions, drives Fast-Path vs. Safe-Path, signs `.proof.json` | **100% Proprietary** |
 | **AI Proof Pipeline** | LLM Agents + `rocq-lsp` / `rocq top` | Automated proof synthesis & repair loop against the Rocq typechecker for Vellvm lemmas and validator rules | Internal Tooling |
 
-See [`licensing-and-boundaries.md`](./licensing-and-boundaries.md) for mandatory commercial license isolation rules.
+See [`licensing-and-boundaries.md`](./licensing-and-boundaries.md) for mandatory commercial license isolation rules and [`business-model-and-ip-strategy.md`](./business-model-and-ip-strategy.md) for the CompCert-style Dual-License, anti-cloning Open-Core split, and GitHub Actions CI strategy.
 
 ---
 
@@ -119,3 +119,4 @@ See [`licensing-and-boundaries.md`](./licensing-and-boundaries.md) for mandatory
   - Implement a symbolic disassembler/MC equivalence check validating that emitted `AArch64` and `RISCV` machine instructions match the verified IR semantics.
 - [ ] **4.3 (`TODO`) Cryptographically Signed Customer Audit Report (`.proof.json`):**
   - Emit a deterministic, signed per-build verification manifest (e.g., *"97.4% of functions verified via Fast-Path, 2.6% compiled via Rocq Fallback Core — 0 unproven transformations"*), ready for ISO 26262 / DO-178C / IEC 61508 qualification artifacts.
+

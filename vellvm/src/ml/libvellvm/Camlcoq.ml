@@ -1,4 +1,7 @@
-(* SPDX-License-Identifier: MIT *)
+(* Copyright (c) 2026 LLVMCert Contributors. All rights reserved.
+   Licensed under the LLVMCert Non-Commercial Evaluation & Research License
+   or a separate LLVMCert Commercial Software License Agreement.
+   See /LICENSE in the repository root for details. *)
 (* Clean-room OCaml <-> Rocq primitive conversion helpers for libvellvm. *)
 
 open BinNums
@@ -95,3 +98,4 @@ let coqfloat32_of_camlfloat (f : float) : Floats.float32 =
 
 let camlfloat_of_coqfloat32 (f : Floats.float32) : float =
   Int32.float_of_bits (camlint_of_coqint (Floats.Float32.to_bits f))
+
