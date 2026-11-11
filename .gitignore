@@ -55,16 +55,25 @@ autoconf/autom4te.cache
 # CLion project configuration
 /.idea
 /cmake-build*
-# Coding assistants' stuff
+# Coding assistants' local scratch directories (project AGENTS.md & .agents/skills/ are tracked intentionally)
 .agent/
-.agents/
 /CLAUDE.md
 /instructions.md
 .claude/
 /GEMINI.md
 .gemini/
-AGENTS.md
 .codex/
+
+# Never track cryptographic keys, secrets, or release staging directories
+*.key
+*.pem
+*.p12
+*.pfx
+*.secret
+.env
+.env.*
+/dist
+/sdk-install
 # Cursor specific files
 .cursor
 .cursorignore
