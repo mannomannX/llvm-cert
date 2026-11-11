@@ -216,7 +216,7 @@ def check_code_licenses_and_leaks(root: pathlib.Path, errors: list[str]) -> None
         if not base.exists():
             continue
         for path in base.rglob("*"):
-            if not path.is_file() or "_build" in path.parts:
+            if not path.is_file() or "_build" in path.parts or "target" in path.parts:
                 continue
             rel = path.relative_to(root).as_posix()
             if rel == self_rel:

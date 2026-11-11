@@ -49,13 +49,12 @@ jobs:
             rocq-released: https://rocq-prover.org/opam/released
             default: https://opam.ocaml.org
 
-      - name: Cache compiled Rocq 9.1 & Vellvm opam dependencies
+      - name: Restore compiled Rocq 9.1 & Vellvm opam dependencies
         id: opam-deps-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: _opam
           key: rocq91-opam-${{ runner.os }}-4.14-${{ hashFiles('vellvm/rocq-vellvm.opam') }}
-          save-always: true
 
       - name: Install Rocq 9.1 & Vellvm dependencies (skipped on cache hit)
         run: |
@@ -70,7 +69,6 @@ jobs:
           key: vellvm-dune-${{ runner.os }}-${{ hashFiles('vellvm/src/ml/**') }}
           restore-keys: |
             vellvm-dune-${{ runner.os }}-
-          save-always: true
 
       - name: Cache compiled Vellvm .vo proof objects (exact hash key to preserve make mtimes)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -83,7 +81,12 @@ jobs:
       - name: Compile Rocq 9.1 theories, extract OCaml & build libvellvm
         run: opam exec -- make -C vellvm/src all -j$(nproc)
 
-      - name: Independent Rocq kernel proof-checker gate (rocq chk)
-        run: |
-          INCLUDES=$(opam exec -- make -s -C vellvm/src print-includes)
-          cd vellvm/src && opam exec -- rocq chk $INCLUDES Vellvm.Semantics.TopLevel Vellvm.Theory.Equational
+      - name: Independent Rocq kernel proof-checker gate (rocq check)
+        run: cd vellvm/src && opam exec -- rocq check -o -R rocq Vellvm Vellvm.Semantics.TopLevel Vellvm.Theory.Equational
+
+      - name: Persist compiled Rocq 9.1 & Vellvm opam dependencies (even if downstream fails)
+        if: always() && steps.opam-deps-cache.outputs.cache-hit != 'true' && hashFiles('_opam/bin/rocq') != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: _opam
+          key: ${{ steps.opam-deps-cache.outputs.cache-primary-key }}

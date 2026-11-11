@@ -74,6 +74,8 @@ autoconf/autom4te.cache
 .env.*
 /dist
 /sdk-install
+/ir-bridge/target
+/vellvm/_build
 # Cursor specific files
 .cursor
 .cursorignore
