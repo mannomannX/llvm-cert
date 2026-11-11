@@ -1,0 +1,6 @@
+# Portable Cargo aliases and build tuning (safe across Windows, Linux, and macOS).
+# On Linux CI runners, `rui314/setup-mold` injects `mold` dynamically via RUSTFLAGS.
+
+[alias]
+lint = "clippy --workspace --all-targets --no-deps -- -D warnings"
+verify = "test --workspace"

@@ -1,0 +1,49 @@
+[workspace]
+resolver = "2"
+members = ["."]
+
+[package]
+name = "ir-bridge"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "LicenseRef-LLVMCert-Dual-License"
+description = "High-assurance LLVM 23.1.5 <-> Vellvm 3.0 IR bridge, per-function splitter/merger, and Fast-Path soundness gate."
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[lints]
+workspace = true
+
+# High-Assurance ("MISRA-Grade") Rust lint baseline for safety-critical compiler tooling.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+unreachable_pub = "deny"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+indexing_slicing = "deny"
+exit = "deny"
+mem_forget = "deny"
+dbg_macro = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_precision_loss = "deny"
+cast_sign_loss = "deny"
+checked_conversions = "deny"
+fallible_impl_from = "deny"
+undocumented_unsafe_blocks = "deny"
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.test]
+debug = "line-tables-only"

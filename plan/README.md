@@ -9,7 +9,7 @@
 
 | Phase | Timeframe | Status | Completion |
 | :--- | :--- | :--- | :--- |
-| **Phase 1: Repository Setup & Minimal Build** | Weeks 1–2 | **In Progress** | **~65%** (1.1 Done, Vellvm Sanitized, Dual-License + Enterprise Split + Quality/CI Gates Done; 1.2 SDK Build & 1.3 Rust `ir-bridge` Next) |
+| **Phase 1: Repository Setup & Minimal Build** | Weeks 1–2 | **In Progress** | **~90%** (1.1, 1.1b, 1.1c & 1.3 Rust `ir-bridge` Done; 1.2 LLVM 23.1.5 SDK & Rocq 9.1 CI running) |
 | **Phase 2: Verified Fallback Core (Rocq)** | Months 1–3 | Not Started *(Foundation Ready)* | **~10%** (Vellvm 3.0/`main` already includes Opaque Pointers `TYPE_Pointer None` & `Theory/`) |
 | **Phase 3: Verified Translation Validator** | Months 3–6 | Not Started | **~5%** (`cert-z3-engine` & `cert-llvm` Rust workspace scaffolded in `llvm-cert-enterprise`) |
 | **Phase 4: Orchestration, Backend Check & Audit** | Months 6–9 | Not Started | **~10%** (`cert-attestation` `.proof.json` schema & unit tests scaffolded in `llvm-cert-enterprise`) |
@@ -82,18 +82,18 @@ See:
 - [ ] **1.2 (`TODO`) Server-Optimized Release Build & Rocq Toolchain Verification:**
   - Trigger `llvm-toolchain-build.yml` (or run on 12 GB server) to produce the prebuilt Release `clang`, `opt`, `lld`, `llc`, `llvm-as`, `llvm-dis`, `llvm-extract`, and `llvm-objdump` SDK (`AArch64;RISCV`).
   - Run `rocq-ci.yml` to verify `make -C vellvm/src` + `rocq chk` end-to-end on Rocq `9.1`.
-- [ ] **1.3 (`TODO`) Fix LLVM 23 <-> Vellvm AST Interface in Rust (`ir-bridge/`):**
-  - Implement a High-Assurance **Rust** parser/serializer (`ir-bridge/`, zero handwritten OCaml) translating LLVM 23.1.5 IR / bitcode into canonical Vellvm-compatible IR / AST exchange format and serializing verified outputs back to LLVM 23.1.5 IR.
+- [x] **1.3 Fix LLVM 23 <-> Vellvm Surface Interface in Rust ([`../ir-bridge/`](../ir-bridge)):**
+  - Implemented High-Assurance **Rust** IR bridge (`ir-bridge/`, zero handwritten OCaml, `unsafe_code = "forbid"`) handling bitwise IEEE-754 normalization of LLVM 23 `f0x<hex>` / `±inf` / `±s?nan` FP literals to `0x<hex>`, `/* immarg */` & debug stripping, Fast-Path soundness eligibility checks (`F-08`), `GlobalOpt`/`GlobalDCE`-safe per-function `split`, and header-restoring / `#N` & `!N` re-indexing `merge`.
 
 ---
 
 ### Phase 2: Verified Rocq Fallback Core (Months 1–3)
 
-> **Baseline Note:** Inspecting [`LLVMAst.v`](../vellvm/src/rocq/Syntax/LLVMAst.v) confirms that Vellvm 3.0/`main` **already models Opaque Pointers (`TYPE_Pointer None`)**, `bfloat`, and `undef`-free semantics (tested up to LLVM 20). Phase 2.1 therefore focuses specifically on the **LLVM 20 -> 23.1.5 delta** rather than a legacy LLVM 14 rewrite.
+> **Baseline Note:** Ground-truth audit of [`LLVMAst.v`](../vellvm/src/rocq/Syntax/LLVMAst.v), [`llvm_parser.mly`](../vellvm/src/ml/libvellvm/llvm_parser.mly), and [`Operations/`](../vellvm/src/rocq/Semantics/Operations) confirms that Vellvm 3.0/`main` **already parses and prints** Opaque Pointers (`TYPE_Pointer None`), `zext nneg`, `or disjoint`, `trunc nuw/nsw`, `icmp samesign`, `gep inbounds/nusw/nuw`, `ptrtoaddr`, `captures(...)`, and `b<N>` byte types, **but leaves critical poison semantics unimplemented (`TODO`) in `Operations/Conversion.v` and `Operations/Compare.v`** (`F-08`).
 
-- [ ] **2.1 (`TODO`) Lift Vellvm Semantics to Full LLVM 23.1.5:**
-  - Add LLVM 21–23 instruction flags & modifiers (`zext nneg`, `or disjoint`, `trunc nuw/nsw`, `icmp samesign`, `getelementptr nusw/nuw`) to `LLVMAst.v`, `Denotation.v`, `Operations.v`, `ShowAST.v`, and `llvm_parser.mly`.
-  - Add missing LLVM 23 memory/arithmetic intrinsics in `IntrinsicsDefinitions.v` as required by target C/C++/Rust workloads.
+- [ ] **2.1 (`TODO`) Close Vellvm 3.0 Soundness Holes & Complete LLVM 23.1.5 Semantics (`F-08`):**
+  - Implement exact poison semantics for `trunc nuw/nsw`, `zext nneg`, and `uitofp nneg` in `Operations/Conversion.v:127,140,166` (currently `TODO` returning non-poison!) and fix pointer `icmp samesign` in `Operations/Compare.v:28-31`.
+  - Add missing `"bfloat"` keyword to `llvm_lexer.mll` / `llvm_parser.mly`, evaluate `Flocq` `fp128` support for AArch64/RISC-V `long double`, and extend `IntrinsicsDefinitions.v` for target workloads.
 - [ ] **2.2 (`TODO`) Implement & Prove 5 Core Optimization Passes in Rocq:**
   1. `mem2reg` — Promote stack allocations (`alloca` + `load`/`store`) into SSA registers (highest-impact pass).
   2. `sccp` — Sparse Conditional Constant Propagation.
