@@ -28,7 +28,7 @@ flowchart LR
         Rocq["Vellvm + Rocq Proofs\ncert-validator ('The Lock') +\nverified-opt-fallback\n(~9% of CI compute)"]
     end
 
-    subgraph PrivateRepo["Private Repo: cert-llvm-enterprise\n(Fits easily in 2,000 free private CI min/month)"]
+    subgraph PrivateRepo["Private Repo: mannomannX/llvm-cert-enterprise\n(Fits easily in 2,000 free private CI min/month)"]
         Gen["Proprietary Z3 Certificate Engine\n('The Key-Maker': loop/vector/alias\nwitness heuristics -> 95-98% Fast-Path)"]
         Orch["cert-llvm Production Rust Driver\n(Drop-in clang/rustc wrapper,\ncaching, license-key verification)"]
         QKit["Signed .proof.json Authority &\nISO 26262 / DO-178C Qualification Kit"]
@@ -43,7 +43,7 @@ flowchart LR
    - However, `cert-validator` **only verifies certificates; it does not generate them**. Without the private Rust + Z3 **Certificate Generator** (loop-unrolling witness synthesis, alias-analysis hints, vectorization equivalence heuristics), a clone achieves **0% `-O2` Fast-Path acceptance** and degrades every function to slow basic fallback passes.
 2. **CI Compute Asymmetry (Free GitHub Actions Leverage):**
    - Compiling LLVM 23 C++ (`clang`, `opt`, `lld`) and typechecking Rocq `.v` files consume **~99% of build time and RAM**. Keeping them in the public `llvm-cert` repository unlocks **unlimited free GitHub Actions minutes** on public runners (`ubuntu-latest`: 4 vCPU, **16 GB RAM** — faster and larger than a 12 GB VPS) and free GitHub Releases artifact hosting.
-   - The private `cert-llvm-enterprise` repository contains **only lightweight Rust code** (`cert-llvm` CLI, Z3 witness generator, cryptographic `.proof.json` signer) that downloads prebuilt LLVM + Rocq binaries from `llvm-cert` Releases and compiles in **< 30 seconds**, staying well within GitHub's free private runner quota.
+   - The private `mannomannX/llvm-cert-enterprise` repository (`D:\LLVMCert-Enterprise`) contains **only lightweight Rust code** (`cert-llvm` CLI, Z3 witness generator, cryptographic `.proof.json` signer) that downloads prebuilt LLVM + Rocq binaries from `llvm-cert` Releases and compiles in **< 30 seconds**, staying well within GitHub's free private runner quota.
 3. **Cryptographic Vendor Attestation & Qualification Kit:**
    - Safety customers do not just buy an executable; they buy **vendor-backed Tool Qualification Packages** (ISO 26262 TCL3, IEC 61508 T3, DO-178C TQL-1) and `.proof.json` audit reports signed by your official vendor key + reproducible compiler hashes. An unauthorized fork cannot issue valid vendor-attested compliance certificates for TÜV / FAA / EASA audits.
 
@@ -56,3 +56,4 @@ flowchart LR
 | **Academic / Evaluation** | Researchers, universities, 30-day POCs | Public repo source (`llvm-cert`) + time-limited evaluation binary | **€0** (Non-Commercial License) |
 | **Commercial Pro** | High-assurance embedded, crypto, fintech, robotics | Full `cert-llvm` Rust driver (`C`/`C++`/`Rust` -> `AArch64`/`RISCV`), private Z3 Fast-Path engine, CI runner licenses, unsigned/local `.proof.json` logs | **Annual subscription per developer seat / CI node** |
 | **Enterprise Safety & Qualification** | Automotive (ISO 26262 ASIL-D), Avionics (DO-178C), Industrial (IEC 61508), Defense | Everything in Pro + **Tool Qualification Kit (QSK)**, vendor-signed `.proof.json` audit trail, LTS pinning on `LLVM 23.1.5`, priority SLA | **Annual enterprise contract per project / target architecture** (CompCert/Ferrocene market standard: €15k–€75k+/yr) |
+
