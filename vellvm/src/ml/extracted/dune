@@ -1,0 +1,16 @@
+(env
+ (dev
+  (flags
+   (:standard -g -w -20-32-33-39-67)))
+ (release
+  (ocamlopt_flags (:standard -O3))
+  (flags
+   (:standard -w -20-32-33-39-67))))
+
+(library
+ (name extracted)
+ (wrapped false)
+ (synopsis "ML code extracted from Coq")
+ (libraries zarith)
+ (instrumentation
+  (backend bisect_ppx)))

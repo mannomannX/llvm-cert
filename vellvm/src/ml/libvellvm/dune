@@ -1,0 +1,20 @@
+(env
+ (dev
+  (flags (:standard -g -w -20-32-33-39)))
+ (release
+  (ocamlopt_flags (:standard -O3))
+  (flags (:standard -w -20-32-33-39))))
+
+(menhir
+ (explain true)
+ (modules llvm_parser)
+)
+
+(ocamllex llvm_lexer)
+
+(library
+  (name libvellvm)
+  (wrapped false)
+  (libraries extracted str)
+  (synopsis "Vellvm library")
+  )

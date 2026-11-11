@@ -1,0 +1,707 @@
+ (* {{{ LICENSE                                                              *
+  * vi: set fdm=marker fdl=0:                                                *
+  *                                                                          *
+  * Copyright (c) 2012 Raphaël Proust <raphlalou@gmail.com>                  *
+  * Copyright (c) 2012 INRIA - Raphaël Proust <raphlalou@gmail.com>          *
+  * Copyright (c) 2012 ENS - Raphaël Proust <raphlalou@gmail.com>            *
+  *                                                                          *
+  * Permission to use, copy, modify, and distribute this software for any    *
+  * purpose with or without fee is hereby granted, provided that the above   *
+  * copyright notice and this permission notice appear in all copies.        *
+  *                                                                          *
+  * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES *
+  * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF         *
+  * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR  *
+  * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES   *
+  * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN    *
+  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF  *
+  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.           *
+  * }}}                                                                      *)
+
+(*  ------------------------------------------------------------------------- *)
+(* Adapted for use in Vellvm by Steve Zdancewic (c) 2017                      *)
+(*  ------------------------------------------------------------------------- *)
+
+{
+  open Lexing
+  open Llvm_parser
+
+  let reset_lexbuf (filename:string) (lnum:int) lexbuf : unit =
+    lexbuf.lex_curr_p <- {
+      pos_fname = filename;
+      pos_cnum = 0;
+      pos_bol = 0;
+      pos_lnum = lnum;
+    }
+
+  let newline lexbuf =
+    lexbuf.lex_curr_p <- { (lexeme_end_p lexbuf) with
+      pos_lnum = (lexeme_end_p lexbuf).pos_lnum + 1;
+      pos_bol = (lexeme_end lexbuf) }
+
+  let str = Camlcoq.coqstring_of_camlstring
+  let of_str = Camlcoq.camlstring_of_coqstring
+  let coq_N_of_int = Camlcoq.N.of_int
+  let coq_P_of_int = Camlcoq.P.of_int
+  let coq_of_int = Camlcoq.Z.of_sint
+  let coq_of_int64 = Camlcoq.Z.of_sint64
+  let coqfloat_of_float f = Floats.Float.of_bits(Camlcoq.coqint_of_camlint64(Int64.bits_of_float f))
+  let explode_string s : char list = List.init (String.length s) (String.get s)
+
+  (* Strings to Rocq Decimal *)
+  let string_to_decimal_uint (s:string) : Decimal.uint =
+    let open Decimal in
+    let rec helper acc (c:char) =
+      match c with
+      | '0' -> D0 acc
+      | '1' -> D1 acc
+      | '2' -> D2 acc
+      | '3' -> D3 acc
+      | '4' -> D4 acc
+      | '5' -> D5 acc
+      | '6' -> D6 acc
+      | '7' -> D7 acc
+      | '8' -> D8 acc
+      | '9' -> D9 acc
+      | c -> failwith (Printf.sprintf "string_to_decimal_uint got bad character %c" c)
+   in
+     List.fold_left helper Nil (List.rev (explode_string s))
+
+  let string_to_decimal_int (sign : string) (s:string) =
+    match sign with
+    | ""
+    | "+" -> Decimal.Pos (string_to_decimal_uint s)
+    | "-" -> Decimal.Neg (string_to_decimal_uint s)
+    | _ -> assert false 
+
+
+  (* Strings to Rocq Hexadecimal.uint *)
+  (* len - optional required length of the hex digits
+           any length is allowed, if None  *)
+  let string_to_hex_uint (len:int option) (s:string) : Hexadecimal.uint =
+    (match len with
+     | Some l ->
+        if String.length s <> l then failwith @@ Printf.sprintf "got ill-sized hex literal: %s" s
+     | None -> ()
+    );
+    let open Hexadecimal in
+    let rec helper acc c =
+      match c with
+      | '0' -> D0 acc
+      | '1' -> D1 acc
+      | '2' -> D2 acc
+      | '3' -> D3 acc
+      | '4' -> D4 acc
+      | '5' -> D5 acc
+      | '6' -> D6 acc
+      | '7' -> D7 acc
+      | '8' -> D8 acc
+      | '9' -> D9 acc
+      | 'a' -> Da acc
+      | 'A' -> Da acc      
+      | 'b' -> Db acc
+      | 'B' -> Db acc      
+      | 'c' -> Dc acc
+      | 'C' -> Dc acc      
+      | 'd' -> Dd acc
+      | 'D' -> Dd acc      
+      | 'e' -> De acc
+      | 'E' -> De acc      
+      | 'f' -> Df acc
+      | 'F' -> Df acc      
+      | c -> failwith (Printf.sprintf "string_to_hex_uint got bad character %c" c)
+   in
+     List.fold_left helper Nil (List.rev (explode_string s))
+
+
+  let int_hexadecimal_syntax (is_signed:bool) (s:string) : Number.signed_int =
+    if is_signed then
+       Number.IntHexadecimal (Hexadecimal.Neg (string_to_hex_uint None s))
+    else		      
+       Number.IntHexadecimal (Hexadecimal.Pos (string_to_hex_uint None s))
+
+  exception Lex_error_unterminated_string of Lexing.position
+
+  let reserved_words = [
+  ("target"                       , KW_TARGET);
+  ("datalayout"                   , KW_DATALAYOUT);
+  ("source_filename"              , KW_SOURCE_FILENAME);
+  ("triple"                       , KW_TRIPLE);
+  ("define"                       , KW_DEFINE);
+  ("declare"                      , KW_DECLARE);
+  ("alias"                        , KW_ALIAS);
+
+  (* Linkage *)
+  ("private"                      , KW_PRIVATE);
+  ("internal"                     , KW_INTERNAL);
+  ("available_externally"         , KW_AVAILABLE_EXTERNALLY);
+  ("linkonce"                     , KW_LINKONCE);
+  ("weak"                         , KW_WEAK);
+  ("common"                       , KW_COMMON);
+  ("appending"                    , KW_APPENDING);
+  ("extern_weak"                  , KW_EXTERN_WEAK);
+  ("linkonce_odr"                 , KW_LINKONCE_ODR);
+  ("weak_odr"                     , KW_WEAK_ODR);
+  ("external"                     , KW_EXTERNAL);
+
+  (* DLL storage *)
+  ("dllimport"                    , KW_DLLIMPORT);
+  ("dllexport"                    , KW_DLLEXPORT);
+
+  (* Visibility *)
+  ("default"                      , KW_DEFAULT);
+  ("hidden"                       , KW_HIDDEN);
+  ("protected"                    , KW_PROTECTED);
+
+  (* Calling Conventions cconv *)
+  ("ccc"                          , KW_CCC);
+  ("fastcc"                       , KW_FASTCC);
+  ("coldcc"                       , KW_COLDCC);
+  ("cc"                           , KW_CC);
+  ("webkit_jscc"                  , KW_WEBKIT_JSCC);
+  ("anyregcc"                     , KW_ANYREGCC);
+  ("preserve_mostcc"              , KW_PRESERVE_MOSTCC);
+  ("preserve_allcc"               , KW_PRESERVE_ALLCC);
+  ("cxx_fast_tlscc"               , KW_CXX_FAST_TLSCC);
+  ("tailcc"                       , KW_TAILCC);
+  ("swiftcc"                      , KW_SWIFTCC);
+  ("swifttailcc"                  , KW_SWIFTTAILCC);
+  ("cfguard_checkcc"              , KW_CFGUARD_CHECKCC);
+
+
+  ("unnamed_addr"                 , KW_UNNAMED_ADDR);
+  ("local_unnamed_addr"           , KW_LOCAL_UNNAMED_ADDR);
+
+  ("type"                         , KW_TYPE);
+  ("opaque"                       , KW_OPAQUE);
+  ("global"                       , KW_GLOBAL);
+  ("addrspace"                    , KW_ADDRSPACE);
+  ("externally_initialized"       , KW_EXTERNALLY_INITIALIZED);
+  ("constant"                     , KW_CONSTANT);
+  ("section"                      , KW_SECTION);
+  ("comdat"                       , KW_COMDAT);
+  ("partition"                    , KW_PARTITION);
+  ("thread_local"                 , KW_THREAD_LOCAL);
+  ("localdynamic"                 , KW_LOCALDYNAMIC);
+  ("initialexec"                  , KW_INITIALEXEC);
+  ("localexec"                    , KW_LOCALEXEC);
+
+  (* Parameter Attributes param_attr *)
+  ("zeroext"                      , KW_ZEROEXT);
+  ("signext"                      , KW_SIGNEXT);
+  ("inreg"                        , KW_INREG);
+  ("byval"                        , KW_BYVAL);
+  ("byref"                        , KW_BYREF);
+  ("preallocated"                 , KW_PREALLOCATED);
+  ("inalloca"                     , KW_INALLOCA);
+  ("sret"                         , KW_SRET);
+  ("elementtype"                  , KW_ELEMENTTYPE);
+
+  ("noalias"                      , KW_NOALIAS);
+  ("nocapture"                    , KW_NOCAPTURE);
+  ("readonly"                     , KW_READONLY);
+  ("nofree"                       , KW_NOFREE);
+  ("nest"                         , KW_NEST);
+  ("returned"                     , KW_RETURNED);
+  ("nonnull"                      , KW_NONNULL);
+  ("dereferenceable"              , KW_DEREFERENCEABLE);
+  ("dereferenceable_or_null"      , KW_DEREFERENCEABLE_OR_NULL);
+  ("swiftself"                    , KW_SWIFTSELF);
+  ("swiftasync"                   , KW_SWIFTASYNC);
+  ("swifterror"                   , KW_SWIFTERROR);
+  ("immarg"                       , KW_IMMARG);
+  ("noundef"                      , KW_NOUNDEF);
+  ("alignstack"                   , KW_ALIGNSTACK);
+  ("allocalign"                   , KW_ALLOCALIGN);
+  ("allocptr"                     , KW_ALLOCPTR);
+  ("captures"                     , KW_CAPTURES);
+  ("address"                      , KW_ADDRESS);
+  ("address_is_null"              , KW_ADDRESS_IS_NULL);
+  ("provenance"                   , KW_PROVENANCE);
+  ("read_provenance"              , KW_READ_PROVENANCE);
+
+(* Function Attributes *)
+  ("allockind"                    , KW_ALLOCKIND);
+  ("allocsize"                    , KW_ALLOCSIZE);
+  ("alwaysinline"                 , KW_ALWAYSINLINE);
+  ("builtin"                      , KW_BUILTIN);
+  ("cold"                         , KW_COLD);
+  ("convergent"                   , KW_CONVERGENT);
+  ("disable_sanitizer_instrumentation" , KW_DISABLE_SANITIZER_INSTRUMENTATION);
+  ("fn_ret_thunk_extern"          , KW_FN_RET_THUNK_EXTERN);
+  ("hot"                          , KW_HOT);
+  ("inaccessiblememonly"          , KW_INACCESSIBLEMEMONLY);
+  ("inaccessiblemem_or_argmemonly" , KW_INACCESSIBLEMEM_OR_ARGMEMONLY);
+  ("inlinehint"                   , KW_INLINEHINT);
+  ("jumptable"                    , KW_JUMPTABLE);
+  ("minsize"                      , KW_MINSIZE);
+  ("naked"                        , KW_NAKED);
+  ("no_jump_tables"               , KW_NO_JUMP_TABLES);
+  ("nobuiltin"                    , KW_NOBUILTIN);
+  ("noduplicate"                  , KW_NODUPLICATE);
+  ("noimplicitfloat"              , KW_NOIMPLICITFLOAT);
+  ("noinline"                     , KW_NOINLINE);
+  ("nomerge"                      , KW_NOMERGE);
+  ("nonlazybind"                  , KW_NONLAZYBIND);
+  ("noredzone"                    , KW_NOREDZONE);
+  ("indirect-tls-seg-refs"        , KW_INDIRECT_TLS_SEG_REFS);
+  ("noreturn"                     , KW_NORETURN);
+  ("norecurse"                    , KW_NORECURSE);
+  ("willreturn"                   , KW_WILLRETURN);
+  ("nosync"                       , KW_NOSYNC);
+  ("nounwind"                     , KW_NOUNWIND);
+  ("nocreateundeforpoison"        , KW_NOCREATEUNDEFORPOISON);
+  ("nosantitize_bounds"           , KW_NOSANITIZE_BOUNDS);
+  ("nosantitize_coverage"         , KW_NOSANITIZE_COVERAGE);
+  ("null_pointer_is_valid"        , KW_NULL_POINTER_IS_VALID);
+  ("optforfuzzing"                , KW_OPTFORFUZZING);
+  ("optnone"                      , KW_OPTNONE);
+  ("optsize"                      , KW_OPTSIZE);
+  ("readnone"                     , KW_READNONE);
+  ("writeonly"                    , KW_WRITEONLY);
+  ("writable"                     , KW_WRITABLE);
+  ("dead_on_unwind"               , KW_DEADONUNWIND);    
+  ("dead_on_return"               , KW_DEADONRETURN);
+  ("nofpclass"                    , KW_NOFPCLASS);
+  ("nofreeobj"                    , KW_NOFREEOBJ);
+  ("argmemonly"                   , KW_ARGMEMONLY);
+  ("returns_twice"                , KW_RETURNS_TWICE);
+  ("safestack"                    , KW_SAFESTACK);
+  ("sanitize_address"             , KW_SANITIZE_ADDRESS);
+  ("no_sanitize"                  , KW_NO_SANITIZE);
+  ("no_sanitize_address"          , KW_NO_SANITIZE_ADDRESS);
+  ("no_sanitize_hwaddress"        , KW_NO_SANITIZE_HWADDRESS);
+  ("sanitize_address_dyninit"     , KW_SANITIZE_ADDRESS_DYNINIT);
+  ("sanitize_memory"              , KW_SANITIZE_MEMORY);
+  ("sanitize_thread"              , KW_SANITIZE_THREAD);
+  ("sanitize_hwaddress"           , KW_SANITIZE_HWADDRESS);
+  ("sanitize_memtag"              , KW_SANITIZE_MEMTAG);
+  ("speculative_load_hardening"   , KW_SPECULATIVE_LOAD_HARDENING);
+  ("speculatable"                 , KW_SPECULATABLE);
+  ("ssp"                          , KW_SSP);
+  ("sspreq"                       , KW_SSPREQ);
+  ("sspstrong"                    , KW_SSPSTRONG);
+  ("strictfp"                     , KW_STRICTFP);
+  ("uwtable"                      , KW_UWTABLE);
+  ("sync"                         , KW_SYNC);
+  ("async"                        , KW_ASYNC);
+  ("nocf_check"                   , KW_NOCF_CHECK);
+  ("shadowcallstack"              , KW_SHADOWCALLSTACK);
+  ("mustprogress"                 , KW_MUSTPROGRESS);
+  ("vscale_range"                 , KW_VSCALE_RANGE);
+
+  ("align"                        , KW_ALIGN);
+
+  ("prefix"                       , KW_PREFIX);
+  ("prologue"                     , KW_PROLOGUE);
+  ("personality"                  , KW_PERSONALITY);
+  ("gc"                           , KW_GC);
+  ("to"                           , KW_TO);
+  ("unwind"                       , KW_UNWIND);
+  ("tail"                         , KW_TAIL);
+  ("musttail"                     , KW_MUSTTAIL);
+  ("notail"                       , KW_NOTAIL);
+  ("volatile"                     , KW_VOLATILE);
+  ("memory"                       , KW_MEMORY);
+  ("read"                         , KW_READ);
+  ("write"                        , KW_WRITE);
+  ("none"                         , KW_NONE);
+  ("readwrite"                    , KW_READWRITE);
+  ("argmem"                       , KW_ARGMEM);
+  ("inaccessiblemem"              , KW_INACCESSIBLEMEM);
+  ("errnomem"                     , KW_ERRNOMEM);
+
+  (* instrs *)
+  ("add"            , KW_ADD);
+  ("fadd"           , KW_FADD);
+  ("sub"            , KW_SUB);
+  ("fsub"           , KW_FSUB);
+  ("mul"            , KW_MUL);
+  ("fmul"           , KW_FMUL);
+  ("udiv"           , KW_UDIV);
+  ("sdiv"           , KW_SDIV);
+  ("fdiv"           , KW_FDIV);
+  ("fneg"           , KW_FNEG);
+  ("urem"           , KW_UREM);
+  ("srem"           , KW_SREM);
+  ("frem"           , KW_FREM);
+  ("shl"            , KW_SHL);
+  ("lshr"           , KW_LSHR);
+  ("ashr"           , KW_ASHR);
+  ("and"            , KW_AND);
+  ("or"             , KW_OR);
+  ("disjoint"       , KW_DISJOINT);
+  ("xor"            , KW_XOR);
+  ("icmp"           , KW_ICMP);
+  ("fcmp"           , KW_FCMP);
+  ("phi"            , KW_PHI);
+  ("call"           , KW_CALL);
+  ("trunc"          , KW_TRUNC);
+  ("zext"           , KW_ZEXT);
+  ("sext"           , KW_SEXT);
+  ("fptrunc"        , KW_FPTRUNC);
+  ("fpext"          , KW_FPEXT);
+  ("uitofp"         , KW_UITOFP);
+  ("sitofp"         , KW_SITOFP);
+  ("fptoui"         , KW_FPTOUI);
+  ("fptosi"         , KW_FPTOSI);
+  ("inttoptr"       , KW_INTTOPTR);
+  ("ptrtoint"       , KW_PTRTOINT);
+  ("ptrtoaddr"      , KW_PTRTOADDR);
+  ("addrspacecast"  , KW_ADDRSPACECAST);    
+  ("bitcast"        , KW_BITCAST);
+  ("select"         , KW_SELECT);
+  ("freeze"         , KW_FREEZE);
+  ("va_arg"         , KW_VAARG);
+  ("ret"            , KW_RET);
+  ("br"             , KW_BR);
+  ("switch"         , KW_SWITCH);
+  ("indirectbr"     , KW_INDIRECTBR);
+  ("blockaddress"   , KW_BLOCKADDRESS);
+  ("invoke"         , KW_INVOKE);
+  ("resume"         , KW_RESUME);
+  ("unreachable"    , KW_UNREACHABLE);
+  ("alloca"         , KW_ALLOCA);
+  ("load"           , KW_LOAD);
+  ("store"          , KW_STORE);
+  ("cmpxchg"        , KW_ATOMICCMPXCHG);
+  ("atomicrmw"      , KW_ATOMICRMW);
+  ("fence"          , KW_FENCE);
+  ("getelementptr"  , KW_GETELEMENTPTR);
+  ("inbounds"       , KW_INBOUNDS);
+  ("extractelement" , KW_EXTRACTELEMENT);
+  ("insertelement"  , KW_INSERTELEMENT);
+  ("shufflevector"  , KW_SHUFFLEVECTOR);
+  ("extractvalue"   , KW_EXTRACTVALUE);
+  ("insertvalue"    , KW_INSERTVALUE);
+  ("landingpad"     , KW_LANDINGPAD);
+  ("catch"          , KW_CATCH);
+  ("filter"         , KW_FILTER);
+  ("cleanup"        , KW_CLEANUP);    
+
+  ("dso_preemptable" , KW_DSO_PREEMPTABLE);
+  ("dso_local"       , KW_DSO_LOCAL);
+
+  (* icmp *)
+  ("nuw"            , KW_NUW);
+  ("nusw"           , KW_NUSW);  
+  ("nsw"            , KW_NSW);
+  ("nneg"           , KW_NNEG);  
+  ("exact"          , KW_EXACT);
+  ("eq"             , KW_EQ);
+  ("ne"             , KW_NE);
+  ("ugt"            , KW_UGT);
+  ("uge"            , KW_UGE);
+  ("ult"            , KW_ULT);
+  ("ule"            , KW_ULE);
+  ("sgt"            , KW_SGT);
+  ("sge"            , KW_SGE);
+  ("slt"            , KW_SLT);
+  ("sle"            , KW_SLE);
+  ("samesign"       , KW_SAMESIGN);
+
+  (* fcmp. true and false are already handled later.
+   * some are already handled in icmp *)
+  ("oeq"            , KW_OEQ);
+  ("ogt"            , KW_OGT);
+  ("oge"            , KW_OGE);
+  ("olt"            , KW_OLT);
+  ("ole"            , KW_OLE);
+  ("one"            , KW_ONE);
+  ("ord"            , KW_ORD);
+  ("uno"            , KW_UNO);
+  ("ueq"            , KW_UEQ);
+  ("une"            , KW_UNE);
+
+  (* fast math flags *)
+  ("nnan"           , KW_NNAN);
+  ("ninf"           , KW_NINF);
+  ("nsz"            , KW_NSZ);
+  ("arcp"           , KW_ARCP);
+  ("contract"       , KW_CONTRACT);
+  ("afn"            , KW_AFN);
+  ("reassoc"        , KW_REASSOC);
+  ("fast"           , KW_FAST);
+
+  (* synchronization *)
+  ("atomic"         , KW_ATOMIC);
+  ("syncscope"      , KW_SYNCSCOPE);
+  ("unordered"      , KW_UNORDERED);
+  ("monotonic"      , KW_MONOTONIC);
+  ("acquire"        , KW_ACQUIRE);
+  ("release"        , KW_RELEASE);
+  ("acq_rel"        , KW_ACQ_REL);
+  ("seq_cst"        , KW_SEQ_CST);
+
+  (* atomicrmw ops *)
+  ("max"      	    , KW_MAX);
+  ("min"	    , KW_MIN);
+  ("xchg"           , KW_XCHG);
+  ("fmax"           , KW_FMAX);
+  ("fmin"	    , KW_FMIN);
+  ("umin"	    , KW_UMIN);
+  ("umax"	    , KW_UMAX);
+  ("nand"	    , KW_NAND);
+  ("fmaximum"	    , KW_FMAXIMUM);
+  ("fminimum"	    , KW_FMINIMUM); 
+  ("uinc_wrap"	    , KW_UINC_WRAP);
+  ("udec_wrap"	    , KW_UDEC_WRAP);
+  ("usub_cond"	    , KW_USUB_COND);
+  ("usub_sat"	    , KW_USUB_SAT);
+
+  (*types*)
+  ("iptr"      , KW_IPTR);
+  ("ptr"       , KW_PTR);
+  ("void"      , KW_VOID);
+  ("half"      , KW_HALF);
+  ("float"     , KW_FLOAT);
+  ("double"    , KW_DOUBLE);
+  ("x86_fp80"  , KW_X86_FP80);
+  ("fp128"     , KW_FP128);
+  ("ppc_fp128" , KW_PPC_FP128);
+  ("label"     , KW_LABEL);
+  ("metadata"  , KW_METADATA);
+  ("distinct"  , KW_DISTINCT);
+  ("x86_mmx"   , KW_X86_MMX);
+  ("asm"       , KW_ASM);
+  ("sideeffect", KW_SIDEEFFECT);
+  ("inteldialect", KW_INTELDIALECT);    
+
+  ("attributes" , KW_ATTRIBUTES);
+
+  (*constants*)
+  ("true"  , KW_TRUE);
+  ("false" , KW_FALSE);
+  ("null"  , KW_NULL);
+  ("undef" , KW_UNDEF);
+  ("poison", KW_POISON);
+  ("zeroinitializer" , KW_ZEROINITIALIZER);
+  ("c" , KW_C);
+  ("range", KW_RANGE);
+  ("initializes", KW_INITIALIZES);
+
+  ("splat", KW_SPLAT);
+
+  (* metadata *)
+(*  
+  ("nontemporal"             , META_NONTEMPORAL);
+  ("invariant.load"          , META_INVARIANT_LOAD);
+  ("invariant.group"         , META_INVARIANT_GROUP);
+  ("nonnull"                 , META_NONNULL);
+  ("dereferenceable"         , META_DEREFERENCEABLE);
+  ("dereferenceable_or_null" , META_DEREFERENCEABLE_OR_NULL);
+  ("noundef"                 , META_NOUNDEF);
+*)
+  (* misc *)
+  ("x" , KW_X);
+]
+
+  let histogram : (string, int) Hashtbl.t = Hashtbl.create 1024
+
+  let (symbol_table : (string, Llvm_parser.token) Hashtbl.t) = Hashtbl.create 1024
+  let _ =
+      List.iter (fun (str,t) -> Hashtbl.add symbol_table str t) reserved_words
+
+  let create_token str =
+    try
+      let token = Hashtbl.find symbol_table str in
+      let _ = Histogram.record histogram str in
+      token
+    with _ -> KW_UNKNOWN str
+
+  let create_label_or_colon_kw str =
+    begin match str with
+    | "default" -> KW_DEFAULT_COLON
+    | "argmem" -> KW_ARGMEM_COLON
+    | "inaccessiblemem" -> KW_INACCESSIBLEMEM_COLON
+    | "errnomem" -> KW_ERRNOMEM_COLON
+    | "ret" -> KW_RET_COLON
+    | _ -> LABEL str
+    end	
+
+}
+
+let ws = [' ' '\t']
+let eol = ('\n' | '\r' | "\r\n" | "\n\r")
+let digit = ['0'-'9']
+let hexletter = ['A'-'F']|['a'-'f']
+let hexdigit = digit | hexletter
+let upletter = ['A'-'Z']
+let lowletter = ['a'-'z']
+let letter = upletter | lowletter
+let alphanum = digit | letter
+let ident_fst  = letter   | ['-' '$' '.' '_']
+let ident_nxt  = alphanum | ['-' '$' '.' '_']
+let label_char = alphanum | ['-' '$' '.' '_'] 
+let kwletter   = alphanum | ['_' '$' '.' '_']
+let sign = ('+' | '-')
+
+rule token = parse
+  (* seps and stuff *)
+  | ws+ { token lexbuf }
+  | eol { Lexing.new_line lexbuf; token lexbuf } (* ignore newlines! *)
+  | eof { EOF }
+  | ';' { comment (Buffer.create 10) lexbuf }
+  | '=' { EQ }
+  | ',' { COMMA }
+  | '('  { LPAREN }
+  | ')'  { RPAREN }
+  | '{'  { LCURLY }
+  | '}'  { RCURLY }
+  | "<{" { LTLCURLY }
+  | "}>" { RCURLYGT }
+  | '['  { LSQUARE }
+  | ']'  { RSQUARE }
+  | '<'  { LT }
+  | '>'  { GT }
+  | ':'  { COLON }
+  | "..." { DOTDOTDOT }
+
+  (* identifier *)
+  | '@' { GLOBAL (lexed_id lexbuf) }
+  | '%' { LOCAL  (lexed_id lexbuf) }
+
+  (* "DI" metadata has special, nested structure, but we just ignore it all *)
+  | "!DI" (kwletter*  as di) '('
+     (* ignore input until next closing paren; produce METADATA_DEBUG after *)
+     { gobble_metadata_debug di (Buffer.create 10) 1 lexbuf } 
+
+  (* Strip out LTI Module Summarries *)
+  | '^' (alphanum|ws)*'='(alphanum|ws)*':' { gobble_module lexbuf }
+
+  (* A named metadata reference ([!noundef], [!llvm.loop], [!captures]) is a
+     single token, as in LLVM's lexer, so that a name that is also a keyword
+     ([!align], [!dereferenceable]) is not lexed as that keyword.  "!DI..(" is
+     matched by the longer rule above. *)
+  | '!' (ident_fst ident_nxt* as s) { METADATA_NAME s }
+  (* FIXME: support metadata strings and struct. Parsed as identifier here. *)
+  | "!"  { BANG }
+  | '#' (digit+ as i) { ATTR_GRP_ID (coq_of_int (int_of_string i)) }
+
+  | "#dbg" kwletter* '(' { gobble_debug 1 lexbuf } (* ignore input until next closing paren *)
+
+  (* Integer Decimal constants *)
+  | (sign? as s) (digit+ as d)   { INTEGER(Number.IntDecimal(string_to_decimal_int s d)) }
+
+  (* Integer Hexadecimal constants -- [us]0x[0-9A-Fa-f]+ *)
+  | "s0x" (hexdigit+ as d)  { INTEGER(int_hexadecimal_syntax true d) }  (* signed *)  
+  | "u0x" (hexdigit+ as d)  { INTEGER(int_hexadecimal_syntax false d) } (* unsigned *)
+
+  (* Floating point Decimal constants *)
+  | (sign? as s) (digit+ as integral) '.' (digit* as fractional)
+      { FLOAT(FS_decimal(Decimal.Decimal(string_to_decimal_int s integral,
+                          string_to_decimal_uint fractional))) }
+
+  | (sign? as s1) (digit+ as integral) '.' (digit* as fractional) ('e'|'E') (sign? as s2) (digit+ as exp)
+      { FLOAT(FS_decimal(Decimal.DecimalExp(
+           string_to_decimal_int s1 integral,
+	   string_to_decimal_uint fractional,
+	   string_to_decimal_int s2 exp))) }
+
+  (* Floating point Hexadecimal constants *)
+  | "0x"  (hexdigit+ as d)     { FLOAT(FS_hex(FH_X, string_to_hex_uint None d)) }
+  | "0xK" (hexdigit+ as d)     { FLOAT(FS_hex(FH_K, string_to_hex_uint (Some 20) d)) }
+  | "0xL" (hexdigit+ as d)     { FLOAT(FS_hex(FH_L, string_to_hex_uint (Some 32) d)) }
+  | "0xM" (hexdigit+ as d)     { FLOAT(FS_hex(FH_M, string_to_hex_uint (Some 32) d)) }
+  | "0xH" (hexdigit+ as d)     { FLOAT(FS_hex(FH_H, string_to_hex_uint (Some 4) d)) }
+  | "0xR" (hexdigit+ as d)     { FLOAT(FS_hex(FH_R, string_to_hex_uint (Some 4) d)) }      
+
+  (* strings *)
+  | '"'                         { STRING (string (Buffer.create 10) lexbuf) }
+
+  (* types *)
+  | 'i' (digit+ as i) { I (coq_P_of_int (int_of_string i)) }
+  | 'b' (digit+ as i) { B (coq_P_of_int (int_of_string i)) }  
+  | '*' { STAR }
+
+  (* labels *)
+  | ((label_char)+) as l ':' { create_label_or_colon_kw l }
+
+  (* keywords *)
+  | kwletter+ as a { create_token a }
+
+and gobble_module = parse
+  | ws*'('     { gobble_debug 1 lexbuf }
+  | eol        { token lexbuf }
+  | eof        { EOF }
+  | _          { gobble_module lexbuf }
+  
+and gobble_debug depth = parse
+  | '(' { gobble_debug (depth+1) lexbuf }
+  | ')' { if depth = 1 then token lexbuf else gobble_debug (depth - 1) lexbuf }
+  | eol { Lexing.new_line lexbuf; gobble_debug depth lexbuf }
+  | eof { EOF }
+  | _   { gobble_debug depth lexbuf }
+
+and gobble_metadata_debug di buf depth = parse
+  | '(' {
+          Buffer.add_char buf '(';
+          gobble_metadata_debug di buf (depth+1) lexbuf
+	}
+  | ')' {
+          if depth = 1 then
+            METADATA_DEBUG (di, Buffer.contents buf)
+	  else begin
+	    Buffer.add_char buf ')';
+	    gobble_metadata_debug di buf (depth - 1) lexbuf
+	  end
+	}
+  | eol as x {
+          Lexing.new_line lexbuf;
+	  Buffer.add_string buf x;
+          gobble_metadata_debug di buf depth lexbuf
+	}
+  | eof { EOF }
+  | _ as c  { Buffer.add_char buf c; gobble_metadata_debug di buf depth lexbuf }
+
+
+and comment buf = parse
+  | eol    { Lexing.new_line lexbuf;
+             token lexbuf  
+           }
+  | eof    { EOF } 
+  | _ as c {
+             Buffer.add_char buf c;
+             comment buf lexbuf
+	   }
+
+and string buf = parse
+  | '"'    { Buffer.contents buf }
+  | _ as c { Buffer.add_char buf c; string buf lexbuf }
+
+and lexed_id = parse
+  | ident_fst ident_nxt* as i { Parse_util.Named i }
+  | digit+ as i               { Parse_util.Anonymous (int_of_string i) }
+  | '"'                       { Parse_util.Named ("\"" ^ string (Buffer.create 10) lexbuf ^ "\"") }
+
+{
+
+  let parsing_err lexbuf msg =
+    let pos = Lexing.lexeme_start_p lexbuf in
+    let msg =
+        Printf.sprintf "Parsing error: line %d, column %d, token '%s': %s %s"
+                       pos.Lexing.pos_lnum
+                       (pos.Lexing.pos_cnum - pos.Lexing.pos_bol)
+                       (Lexing.lexeme lexbuf)
+		       msg
+		       (Printexc.get_backtrace ())
+      in failwith msg
+
+  let parse lexbuf =
+    try Llvm_parser.toplevel_entities token lexbuf
+    with
+    | Llvm_parser.Error -> parsing_err lexbuf "Error token encountered"
+    | Failure s ->
+      begin
+        parsing_err lexbuf ("Failure: " ^ s)
+      end
+
+  let parse_test_call lexbuf =
+    try Llvm_parser.test_call token lexbuf
+    with Llvm_parser.Error -> parsing_err lexbuf "Parsing Error Encountered"
+
+  let parse_texp lexbuf =
+    try Llvm_parser.texp token lexbuf
+    with Llvm_parser.Error -> parsing_err lexbuf "Error token encountered"
+
+}

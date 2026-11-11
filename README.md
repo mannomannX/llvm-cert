@@ -1,23 +1,28 @@
-# llvm-cert (LLVM 23.1.5 Minimal Baseline)
+# llvm-cert (LLVM 23.1.5 + Vellvm Verified Compiler Baseline)
 
-Minimaler, historienfreier Snapshot des offiziellen Releases **[`llvmorg-23.1.5`](https://github.com/llvm/llvm-project/releases/tag/llvmorg-23.1.5)** (Commit `392dfff97d29b59d77e5cac6d4b6ef2585fe7117`, veröffentlicht am 03.11.2026) als Compiler-Basis für die zertifizierte Pipeline (`clang`, `opt`, `lld`, Backends `AArch64` & `RISCV`).
+Minimal, history-free baseline combining:
+1. **[`llvmorg-23.1.5`](https://github.com/llvm/llvm-project/releases/tag/llvmorg-23.1.5)** (commit `392dfff97d29b59d77e5cac6d4b6ef2585fe7117`, released 2026-11-03) — compiler frontend (`clang`), high-speed optimizer (`opt`), linker (`lld`), and `AArch64` + `RISCV` backends.
+2. **[`vellvm/vellvm`](https://github.com/vellvm/vellvm)** (`main` @ `1d651e7a391c`, Rocq 9.1 with restored `Theory/` meta-theory) — formal LLVM IR semantics, ITree infrastructure, and OCaml extraction, cleaned of all GPLv2/GPLv3 files for commercial use.
 
-## Enthaltene Komponenten
+## Repository Layout
 
-| Pfad | Zweck |
-| :--- | :--- |
-| `llvm/` | LLVM Core IR, Optimizer (`opt`), Bitcode-/Backend-Tools (`llc`, `llvm-as`, `llvm-dis`, `llvm-extract`, `llvm-objdump`) |
-| `llvm/lib/Target/AArch64`, `RISCV` | Einzige vollständige Codegen-Backends (`ARM/*.td` & `PowerPC/*.td` liegen nur als TableGen-Definitionen für `LLVMTargetParser` bei) |
-| `clang/` | C/C++-Frontend zur Erzeugung unoptimierter LLVM-23-IR |
-| `lld/` | Linker (`ld.lld` / `lld`) |
-| `cmake/` | Gemeinsame LLVM-CMake-Module (`LLVMVersion.cmake` = `23.1.5`) |
-| `libc/` (`shared`, `src/__support`, `hdr`, `include`) | Header-only Floating-Point-/Math-Utilities für `LLVMSupport` (`APFloat`) |
-| `libunwind/include/` | Header-only Unwind-Definitionen für `lld` |
-| `third-party/siphash/` | Header-only SipHash-Implementierung für `LLVMSupport` |
+| Path | License | Purpose |
+| :--- | :--- | :--- |
+| `llvm/` | `Apache-2.0 WITH LLVM-exception` | LLVM Core IR, optimizer (`opt`), bitcode/backend tools (`llc`, `llvm-as`, `llvm-dis`, `llvm-extract`, `llvm-objdump`) |
+| `llvm/lib/Target/{AArch64,RISCV}` | `Apache-2.0 WITH LLVM-exception` | Full codegen backends (`ARM/*.td` & `PowerPC/*.td` included only as TableGen specs for `LLVMTargetParser`) |
+| `clang/` | `Apache-2.0 WITH LLVM-exception` | C/C++ frontend emitting unoptimized LLVM 23 IR |
+| `lld/` | `Apache-2.0 WITH LLVM-exception` | Linker (`ld.lld` / `lld`) |
+| `cmake/` | `Apache-2.0 WITH LLVM-exception` | Shared LLVM CMake modules (`LLVMVersion.cmake` = `23.1.5`) |
+| `libc/{shared,src/__support,hdr,include}` | `Apache-2.0 WITH LLVM-exception` | Header-only floating-point/math utilities required by `LLVMSupport` (`APFloat`) |
+| `libunwind/include/` | `Apache-2.0 WITH LLVM-exception` | Header-only unwind definitions required by `lld` |
+| `third-party/siphash/` | `Apache-2.0 WITH LLVM-exception` | Header-only SipHash implementation required by `LLVMSupport` |
+| `vellvm/src/rocq/{Syntax,Semantics,Theory,Utils}` | `MIT` | Formal LLVM IR AST, Interaction Trees semantics, memory model, and equational meta-theory |
+| `vellvm/src/rocq/Numeric/` | `LGPL-2.1-or-later` | CompCert machine integer (`Integers.v`, `Zbits.v`) and IEEE-754 float (`Floats.v`) formalizations (`Zbits.v` synced with upstream CompCert commit `04f499c632a7`) |
+| `vellvm/src/ml/{extracted,libvellvm}` | `MIT` / `ISC` | Rocq-to-OCaml extraction, LLVM IR lexer/parser/printer, and clean-room MIT [`Camlcoq.ml`](./vellvm/src/ml/libvellvm/Camlcoq.ml) |
 
-Alle übrigen Subprojekte (`mlir`, `flang`, `lldb`, `bolt`, `polly`, `clang-tools-extra`, `compiler-rt`, `libcxx`, `openmp`, …), alle 21 nicht benötigten Backend-Targets (`X86`, `AMDGPU`, `WebAssembly`, `NVPTX`, `SPIRV`, …) sowie sämtliche Test-, Benchmark-, Doku- und Beispiel-Verzeichnisse wurden entfernt (~93,5 % weniger Dateien: **11.777 statt 180.650 Dateien**).
+All unneeded LLVM subprojects (`mlir`, `flang`, `lldb`, `bolt`, `polly`, `clang-tools-extra`, `compiler-rt`, `libcxx`, `openmp`, …), 21 unneeded backend targets (`X86`, `AMDGPU`, `WebAssembly`, `NVPTX`, `SPIRV`, …), all test/benchmark/doc suites, and all GPLv2/GPLv3 driver files in Vellvm have been removed.
 
-## Minimaler Release-Build (optimiert für ≤ 12 GB RAM)
+## Minimal LLVM 23.1.5 Release Build (Optimized for ≤ 12 GB RAM)
 
 ```bash
 cmake -G Ninja -S llvm -B build \
@@ -35,6 +40,7 @@ cmake -G Ninja -S llvm -B build \
 cmake --build build --target clang opt lld llc llvm-as llvm-dis llvm-extract llvm-objdump
 ```
 
-## Lizenz
+## License
 
-Apache License v2.0 with LLVM Exceptions — siehe [`LICENSE.TXT`](./LICENSE.TXT).
+- LLVM / Clang / LLD components: Apache License v2.0 with LLVM Exceptions — see [`LICENSE.TXT`](./LICENSE.TXT).
+- Vellvm components: MIT License (with `vellvm/src/rocq/Numeric/` under `LGPL-2.1-or-later`) — see [`vellvm/LICENSE.md`](./vellvm/LICENSE.md).

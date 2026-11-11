@@ -1,0 +1,139 @@
+From Stdlib Require Import
+  String List NArith.
+From ExtLib Require Import
+  Structures.Monads.
+From Vellvm.Utils Require Import
+  ListUtil Tactics.
+Import MonadNotation.
+
+Import MonadNotation.
+Open Scope monad.
+
+Variant EOU {X : Type} : Type :=
+  | raise_error (s : string): EOU
+  | raise_oom (s : string) : EOU
+  | raise_ub (s : string) : EOU
+  | raise_ret (x : X) : EOU.
+Arguments EOU: clear implicits.
+
+#[global] Instance EOU_monad : Monad EOU :=
+  {| ret := @raise_ret ;
+    bind _ _ c k :=
+      match c with
+      | raise_oom s => raise_oom s
+      | raise_ub  s => raise_ub s
+      | raise_error s => raise_error s
+      | raise_ret x => k x
+      end
+  |}.
+
+Lemma map_monad_EOU_Forall2 :
+  forall {A B} (f : A -> EOU B) l res,
+    map_monad f l = ret res <->
+      Forall2 (fun a b => f a = ret b) l res.
+Proof.
+  induction l as [| a l IH]; cbn; intros ?.
+  - split.
+    + intros EQ; inv EQ; auto.
+    + intros F; inv F; auto.
+  - split.
+    + intros EQ; break_match_hyp; abs_eq.
+      break_match_hyp; abs_eq.
+      inv EQ.
+      apply Forall2_cons; auto.
+      now apply IH.
+    + intros HF; inv HF.
+      rw_match.
+      apply IH in H3.
+      rw_match; auto.
+Qed.
+
+Lemma map_monad_EOU_success A B (f : A -> EOU B) (l : list A) b :
+  map_monad f l = ret b ->
+  forall a, In a l -> exists b, f a = ret b.
+Proof.
+  intros EQ; apply map_monad_EOU_Forall2 in EQ.
+  induction EQ.
+  - cbn; easy.
+  - intros ? [<- | IN]; eauto.
+Qed.
+
+Definition option_ub {X : Type} (s : string) (x : option X) :=
+  match x with
+  | None => raise_ub s
+  | Some v => ret v
+  end.
+
+
+(* This function may essentially compute poison, but without a dvalue to embed it into yet.
+     We take an adhoc lightweigh way to handle this currently with the following option return type.
+     It is also tied to how we treat the behavior of running map_monad to extract a list of bytes:
+     currently we want it to result into a Poison dvalue if any byte resulted in poison.
+     We are likely to follow a finer grained approach soon.
+ *)
+Notation MaybePoison := option.
+Notation Pois := None.
+Notation NoPois := Some.
+Definition EOUP Z := EOU (option Z).
+
+#[global] Instance EOUP_Monad : Monad EOUP :=
+  {| ret _ a := ret (NoPois a) ;
+    bind _ _ c k := 
+      bind (m := EOU) c (fun pov => match pov with
+                                 | Pois => ret Pois
+                                 | NoPois a => k a
+                                 end)
+  |}.
+
+#[local] Open Scope monad_scope.
+
+Definition catch_pois {A} {Z} (z_default:Z) (c : EOUP A) (k : A -> EOU Z) : EOU Z := 
+  x <- (c : EOU _) ;;
+  match x with
+  | Pois => ret z_default
+  | NoPois v => k v
+  end.
+
+Lemma map_monad_cons_EOUP : forall {A B} (f : A -> EOUP B) x xs,
+    map_monad f (x :: xs) = (y <- f x ;; ys <- map_monad f xs ;; ret (y :: ys)).
+Proof. reflexivity. Qed.
+
+Lemma map_monad_EOUP_pois_head : forall {A B} (f : A -> EOUP B) x rest,
+    f x = raise_ret Pois -> map_monad f (x :: rest) = raise_ret Pois.
+Proof. intros A B f x rest H; cbn; rewrite H; reflexivity. Qed.
+
+Lemma EOU_bind_ret_inv : forall {A B} (m : EOU A) (k : A -> EOU B) v,
+    bind m k = ret v -> exists a, m = ret a /\ k a = ret v.
+Proof. intros A B [] k v H; cbn in H; try discriminate; eauto. Qed.
+
+(* [seq_map_monad_acc] (the tail-recursive builder used by [intptr_seq],
+   see [IPtr.v]) agrees with [map_monad] over [Nseq] on [EOU]. Proved
+   directly against [EOU]'s concrete (non-recursive) [bind] by case
+   analysis, rather than generically over an arbitrary [MonadLaws]
+   instance: [bind]'s continuation argument is buried under a binder in
+   the induction, and plain [rewrite]/[setoid_rewrite] on an abstract
+   [Monad]/[MonadLaws] don't get through it cleanly, whereas destructing
+   the concrete [EOU] value trivializes each case (the accumulator swap
+   that would otherwise need its own lemma is just [rev_append]'s
+   defining equation, so [reflexivity] gets it for free here). *)
+Lemma seq_map_monad_acc_go_eq :
+  forall {A} (f : N -> EOU A) (len : nat) (acc : list A) (cur : N),
+    seq_map_monad_acc_go f acc cur len =
+      bs <- map_monad f (Nseq cur len);;
+      ret (rev_append acc bs).
+Proof.
+  induction len as [| k IH]; intros acc cur; cbn.
+  - reflexivity.
+  - destruct (f cur) eqn:Hf; cbn; try reflexivity.
+    rewrite IH.
+    destruct (map_monad f (Nseq (N.succ cur) k)) eqn:Hmap; reflexivity.
+Qed.
+
+Lemma seq_map_monad_acc_eq :
+  forall {A} (f : N -> EOU A) (start : N) (len : nat),
+    seq_map_monad_acc f start len = map_monad f (Nseq start len).
+Proof.
+  intros; unfold seq_map_monad_acc.
+  rewrite seq_map_monad_acc_go_eq.
+  destruct (map_monad f (Nseq start len)); reflexivity.
+Qed.
