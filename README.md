@@ -4,6 +4,8 @@ Minimal, history-free baseline combining:
 1. **[`llvmorg-23.1.5`](https://github.com/llvm/llvm-project/releases/tag/llvmorg-23.1.5)** (commit `392dfff97d29b59d77e5cac6d4b6ef2585fe7117`, released 2026-11-03) — compiler frontend (`clang`), high-speed optimizer (`opt`), linker (`lld`), and `AArch64` + `RISCV` backends.
 2. **[`vellvm/vellvm`](https://github.com/vellvm/vellvm)** (`main` @ `1d651e7a391c`, Rocq 9.1 with restored `Theory/` meta-theory) — formal LLVM IR semantics, ITree infrastructure, and OCaml extraction, cleaned of all GPLv2/GPLv3 files for commercial use.
 
+See **[`plan/README.md`](./plan/README.md)** for the full 4-phase architecture roadmap, current status, and **[`plan/licensing-and-boundaries.md`](./plan/licensing-and-boundaries.md)** for commercial licensing rules.
+
 ## Repository Layout
 
 | Path | License | Purpose |
