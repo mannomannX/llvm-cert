@@ -22,39 +22,63 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  DUNE_CACHE: enabled
+  DUNE_CACHE_STORAGE_MODE: copy
+
 jobs:
   rocq-verify:
     name: Build Vellvm Proofs & OCaml Extraction (Rocq 9.1)
-    runs-on: ${{ vars.CERT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CERT_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 45
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Run static zero-Admitted & OCaml TCB gate first
         run: python3 scripts/verify_repo_integrity.py
 
-      - name: Set up OCaml 4.14 & Rocq 9.1 opam switch (cached)
-        uses: ocaml/setup-ocaml@ff66428f72b64472e749b22e0ad4dded4b2ddca6 # v3
+      - name: Set up OCaml 4.14 base switch (without slow workspace rsync)
+        uses: ocaml/setup-ocaml@ff66428f72b64472e749b22e0ad4dded4b2ddca6 # v3.9.1
         with:
           ocaml-compiler: "4.14.x"
-          opam-local-packages: "vellvm/*.opam"
+          opam-pin: false
           opam-repositories: |
             rocq-released: https://rocq-prover.org/opam/released
             default: https://opam.ocaml.org
 
-      - name: Cache compiled Vellvm .vo proof objects
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - name: Cache compiled Rocq 9.1 & Vellvm opam dependencies
+        id: opam-deps-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: _opam
+          key: rocq91-opam-${{ runner.os }}-4.14-${{ hashFiles('vellvm/rocq-vellvm.opam') }}
+          save-always: true
+
+      - name: Install Rocq 9.1 & Vellvm dependencies (skipped on cache hit)
+        run: |
+          if [ ! -x "_opam/bin/rocq" ]; then
+            opam install -y --deps-only ./vellvm/rocq-vellvm.opam -j$(nproc)
+          fi
+
+      - name: Cache Dune content-addressed build store
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/dune
+          key: vellvm-dune-${{ runner.os }}-${{ hashFiles('vellvm/src/ml/**') }}
+          restore-keys: |
+            vellvm-dune-${{ runner.os }}-
+          save-always: true
+
+      - name: Cache compiled Vellvm .vo proof objects (exact hash key to preserve make mtimes)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             vellvm/src/rocq
             vellvm/src/ml/extracted
-            vellvm/src/_build
-          key: vellvm-vo-${{ runner.os }}-${{ hashFiles('vellvm/rocq-vellvm.opam', 'vellvm/src/rocq/**/*.v', 'vellvm/src/ml/extracted/Extract.v') }}
-          restore-keys: |
-            vellvm-vo-${{ runner.os }}-
+          key: vellvm-vo-${{ runner.os }}-${{ hashFiles('vellvm/rocq-vellvm.opam', 'vellvm/src/_RocqProject', 'vellvm/src/rocq/**/*.v', 'vellvm/src/ml/extracted/Extract.v') }}
 
       - name: Compile Rocq 9.1 theories, extract OCaml & build libvellvm
         run: opam exec -- make -C vellvm/src all -j$(nproc)

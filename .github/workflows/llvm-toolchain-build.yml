@@ -14,44 +14,68 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  CCACHE_DIR: ${{ runner.temp }}/ccache
+  CCACHE_MAXSIZE: 2G
+  CCACHE_COMPRESS: "1"
+  CCACHE_COMPRESSLEVEL: "6"
+  CCACHE_COMPILERCHECK: content
+
 jobs:
   build-llvm-sdk:
     name: Build Release LLVM 23.1.5 (AArch64 & RISCV)
-    runs-on: ${{ vars.CERT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CERT_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 180
     steps:
-      - name: Reclaim preinstalled SDK disk space (GitHub-hosted runner only)
+      - name: Conditionally reclaim disk space only when < 15 GB free (0.01s fast check)
         if: vars.CERT_RUNNER == '' && runner.os == 'Linux'
-        uses: jlumbroso/free-disk-space@cf1e78c50ca91e757bab3edc229027eebfc07871 # main
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          swap-storage: false
+        run: |
+          AVAIL_GB=$(df -BG --output=avail / | tail -1 | tr -dc '0-9')
+          echo "Available root disk space: ${AVAIL_GB} GB"
+          if [ "${AVAIL_GB:-0}" -lt 15 ]; then
+            echo "Reclaiming preinstalled Android/.NET SDK directories in parallel..."
+            sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc &
+            wait
+          fi
 
       - name: Checkout repository
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Install host Clang, LLD, Ninja & zstd (GitHub-hosted runner only)
+      - name: Ensure host Clang, LLD, Ninja, ccache & zstd (skips apt-get when preinstalled)
         if: vars.CERT_RUNNER == '' && runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang lld ninja-build ccache zstd python3
+          MISSING=()
+          command -v clang >/dev/null || MISSING+=(clang)
+          command -v clang++ >/dev/null || MISSING+=(clang)
+          command -v ld.lld >/dev/null || MISSING+=(lld)
+          command -v ninja >/dev/null || MISSING+=(ninja-build)
+          command -v ccache >/dev/null || MISSING+=(ccache)
+          command -v zstd >/dev/null || MISSING+=(zstd)
+          if [ "${#MISSING[@]}" -gt 0 ]; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends "${MISSING[@]}"
+          fi
+          ccache --zero-stats || true
 
-      - name: Restore & manage ccache
-        uses: hendrikmuhs/ccache-action@5ebbd400eff9e74630f759d94ddd7b6c26299639 # v1.2
+      - name: Restore & persist ccache (Node-24 native cache with save-always)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: llvm-23.1.5-aarch64-riscv
-          max-size: 2G
+          path: ${{ runner.temp }}/ccache
+          key: llvm-23.1.5-ccache-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            llvm-23.1.5-ccache-${{ runner.os }}-
+          save-always: true
 
-      - name: Configure minimal Release LLVM 23.1.5
+      - name: Configure minimal Release LLVM 23.1.5 (hardware-adaptive link parallelism)
         run: |
+          HOST_TRIPLE=$(clang -dumpmachine)
+          LINK_JOBS=$(awk '/MemTotal/ {print ($2 > 14000000) ? 2 : 1}' /proc/meminfo)
+          echo "Host triple: ${HOST_TRIPLE}, parallel LLD link jobs: ${LINK_JOBS}"
           cmake -S llvm -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_HOST_TRIPLE="${HOST_TRIPLE}" \
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
@@ -59,11 +83,19 @@ jobs:
             -DLLVM_USE_LINKER=lld \
             -DLLVM_ENABLE_PROJECTS="clang;lld" \
             -DLLVM_TARGETS_TO_BUILD="AArch64;RISCV" \
-            -DLLVM_PARALLEL_LINK_JOBS=1 \
+            -DLLVM_PARALLEL_LINK_JOBS="${LINK_JOBS}" \
+            -DLLVM_ENABLE_TERMINFO=OFF \
+            -DLLVM_ENABLE_LIBXML2=OFF \
+            -DLLVM_ENABLE_ZLIB=OFF \
+            -DLLVM_ENABLE_ZSTD=OFF \
+            -DLLVM_ENABLE_UNWIND_TABLES=OFF \
+            -DLLVM_ENABLE_BINDINGS=OFF \
             -DLLVM_INCLUDE_TESTS=OFF \
             -DLLVM_INCLUDE_BENCHMARKS=OFF \
             -DLLVM_INCLUDE_EXAMPLES=OFF \
             -DLLVM_INCLUDE_DOCS=OFF \
+            -DLLVM_INCLUDE_RUNTIMES=OFF \
+            -DLLVM_INCLUDE_UTILS=OFF \
             -DCLANG_INCLUDE_TESTS=OFF \
             -DCMAKE_INSTALL_PREFIX="$PWD/sdk-install"
 
@@ -78,6 +110,7 @@ jobs:
             llvm-dis \
             llvm-extract \
             llvm-objdump
+          ccache --show-stats || true
 
       - name: Package stripped binary SDK archive
         run: |
@@ -91,7 +124,7 @@ jobs:
           tar -C dist -I 'zstd -19 -T0' -cf llvm-cert-sdk-23.1.5-linux-x86_64.tar.zst llvm-cert-sdk
 
       - name: Upload prebuilt LLVM 23.1.5 SDK artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: llvm-cert-sdk-23.1.5-linux-x86_64
           path: llvm-cert-sdk-23.1.5-linux-x86_64.tar.zst
