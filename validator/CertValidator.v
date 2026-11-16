@@ -108,8 +108,8 @@ Set Default Goal Selector "!".
 #[local] Arguments String.eqb _ _ : simpl nomatch.
 
 Local Open Scope bool_scope.
-Local Open Scope list_scope.
 Local Open Scope string_scope.
+Local Open Scope list_scope.
 
 (** ** 1. ITree Observation Primitives, Open-World Event Signatures & [DrawE] Strategies *)
 
@@ -2124,11 +2124,11 @@ Definition cert_raw_id_bare (id : raw_id) : string :=
   match id with
   | Name s => s
   | Anon z => show_Z_dec z
-  | Raw z => "_RAW_" ++ show_Z_dec z
+  | Raw z => ("_RAW_" ++ show_Z_dec z)%string
   end.
 
 Definition cert_reg_name (id : raw_id) : string :=
-  "%" ++ cert_raw_id_bare id.
+  ("%" ++ cert_raw_id_bare id)%string.
 
 Lemma cert_reg_name_not_dollar : forall id,
   starts_with_dollar (cert_reg_name id) = false.
@@ -9754,8 +9754,8 @@ Qed.
 
 (** **** Relational Cut-State Bijection & Coinductive Natural-Loop Checker ([F-26]) *)
 
-Definition cut_p_name (k : nat) : string := "!p" ++ show_Z_dec (Z.of_nat k).
-Definition cut_v_name (k : nat) : string := "!v" ++ show_Z_dec (Z.of_nat k).
+Definition cut_p_name (k : nat) : string := ("!p" ++ show_Z_dec (Z.of_nat k))%string.
+Definition cut_v_name (k : nat) : string := ("!v" ++ show_Z_dec (Z.of_nat k))%string.
 
 Lemma cut_p_name_not_dollar : forall k, starts_with_dollar (cut_p_name k) = false.
 Proof. reflexivity. Qed.
@@ -10384,7 +10384,7 @@ Definition denote_cfg_from {Pa : Params}
   (j : block_id * block_id) : CFGtop (@dvalue Pa) :=
   r <- @denote_ocfg_map Pa bmap varargs j ;;
   match r with
-  | inl bid => raise ("Can't find block in denote_cfg " ++ show (snd bid))
+  | inl bid => raise ("Can't find block in denote_cfg " ++ show (snd bid))%string
   | inr uv => ret uv
   end.
 
@@ -14136,10 +14136,10 @@ Proof.
         rewrite Enc_t.
         eapply det_ref_obs_eq with
           (t1 := run_draws s1 (run_fn_frames cenv cstk exc_slot
-                   (ITree.bind (apply_attrs s_ret (fname_s ++ " return value violates noundef.") dv1)
+                   (ITree.bind (apply_attrs s_ret (fname_s ++ " return value violates noundef.")%string dv1)
                      (fun v' => ret (inr v')))))
           (t2 := run_draws s2 (run_fn_frames cenv cstk exc_slot
-                   (ITree.bind (apply_attrs t_ret (fname_t ++ " return value violates noundef.") dv2)
+                   (ITree.bind (apply_attrs t_ret (fname_t ++ " return value violates noundef.")%string dv2)
                      (fun v' => ret (inr v'))))).
         -- apply obs_eq_fn_frames_draws; symmetry; rewrite observe_bind; reflexivity.
         -- apply obs_eq_fn_frames_draws; symmetry; rewrite observe_bind; reflexivity.
@@ -14152,11 +14152,11 @@ Proof.
                  rewrite value_attrs_poison_poison, Enu_sr; cbn [dvalue_well_defined negb andb].
                  eapply det_ref_obs_eq with
                    (t1 := run_draws s1 (run_fn_frames cenv cstk exc_slot
-                            (ITree.bind (raiseUB (fname_s ++ " return value violates noundef."))
-                              (fun x => ITree.bind (assert_attrs_dereferenceable s_ret x (fname_s ++ " return value violates noundef.") ;; ret x)
+                            (ITree.bind (raiseUB (fname_s ++ " return value violates noundef.")%string)
+                              (fun x => ITree.bind (assert_attrs_dereferenceable s_ret x (fname_s ++ " return value violates noundef.")%string ;; ret x)
                                 (fun v' => ret (inr v'))))))
                    (t2 := run_draws s2 (run_fn_frames cenv cstk exc_slot
-                            (ITree.bind (apply_attrs t_ret (fname_t ++ " return value violates noundef.") dv2)
+                            (ITree.bind (apply_attrs t_ret (fname_t ++ " return value violates noundef.")%string dv2)
                               (fun v' => ret (inr v')))));
                    [apply obs_eq_fn_frames_draws; symmetry; rewrite !observe_bind; reflexivity
                    | reflexivity

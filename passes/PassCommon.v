@@ -307,16 +307,16 @@ Section SyntaxCollectors.
     | _ => []
     end.
 
-  Definition full_operand_uses (op : operand T) : list raw_id :=
+  Definition full_operand_uses (op : @operand T) : list raw_id :=
     match op with
     | SSA_value te => full_texp_uses te
     | Metadata_string md => full_metadata_uses md
     end.
 
-  Definition full_ob_uses (ob : operand_bundle T) : list raw_id :=
+  Definition full_ob_uses (ob : @operand_bundle T) : list raw_id :=
     flat_map full_operand_uses (ob_ops ob).
 
-  Definition full_lp_clause_uses (c : landingpad_clause T) : list raw_id :=
+  Definition full_lp_clause_uses (c : @landingpad_clause T) : list raw_id :=
     match c with
     | CATCH te | FILTER te => full_texp_uses te
     end.
@@ -446,7 +446,7 @@ Section SyntaxCollectors.
     | _ => false
     end.
 
-  Definition ob_has_inttoptr (ob : operand_bundle T) : bool :=
+  Definition ob_has_inttoptr (ob : @operand_bundle T) : bool :=
     existsb (fun op =>
                match op with
                | SSA_value (_, ex) => exp_has_inttoptr ex

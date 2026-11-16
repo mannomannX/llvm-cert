@@ -964,7 +964,7 @@ Proof.
     + intros rem [| k'] Hk Hsat; cbn [List.map List.nth].
       * apply (Hz_ev (d2 ++ rem)).
         rewrite app_assoc, <- Hd2; exact Hsat.
-      * apply Hzr_ev; [cbn in Hk; lia | exact Hsat].
+      * apply (Hzr_ev rem); [cbn in Hk; lia | exact Hsat].
 Qed.
 
 Lemma emit_and2_pref : forall x y st z st1,

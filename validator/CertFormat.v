@@ -72,8 +72,8 @@ Set Default Goal Selector "!".
 #[local] Arguments String.eqb _ _ : simpl nomatch.
 
 Local Open Scope bool_scope.
-Local Open Scope list_scope.
 Local Open Scope string_scope.
+Local Open Scope list_scope.
 
 (** ** 1. Canonical [cert-v1] Certificate AST *)
 

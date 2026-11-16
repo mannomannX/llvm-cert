@@ -676,8 +676,8 @@ Proof.
   generalize (defined_intrinsics (Pa := PInf) (E := @MCFGEtop PInf))
              (defined_intrinsics (Pa := PFin) (E := @MCFGEtop PFin))
              I2F_defined_intrinsics.
-  intros l1 l2 H; induction H as [| [d1 f1] [d2 f2] l1' l2' [Hd Hf] H' IH]; cbn in *; [constructor |].
-  subst d2.
+  intros l1 l2 H; induction H as [| [d1 f1] [d2 f2] l1' l2' Hxy H' IH]; cbn in *; [constructor |].
+  destruct Hxy as [Hd Hf]; cbn in Hd, Hf; destruct Hd.
   destruct (dc_name d1); (constructor; [constructor; [reflexivity | exact Hf] | exact IH]).
 Qed.
 

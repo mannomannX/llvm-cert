@@ -76,8 +76,8 @@ Set Default Goal Selector "!".
 #[local] Arguments String.eqb _ _ : simpl nomatch.
 
 Local Open Scope bool_scope.
-Local Open Scope list_scope.
 Local Open Scope string_scope.
+Local Open Scope list_scope.
 
 (** ** 1. Vanilla-CIC Hedberg & Bitvector Foundations *)
 
@@ -842,7 +842,7 @@ Fixpoint eval_cert_expr {Pa : Params}
       | None =>
           match penv nm with
           | Some dv => check_scalar_width w dv
-          | None => raise_error ("unbound variable: " ++ nm)
+          | None => raise_error ("unbound variable: " ++ nm)%string
           end
       end
   | CE_BinOp op _ fl l r =>
@@ -9094,7 +9094,7 @@ Proof.
         destruct (Hpenv nm w (or_introl eq_refl)) as [dv [Hpm Hwfdv]].
         assert (Hev_var : match penv nm with
                           | Some dv0 => check_scalar_width w dv0
-                          | None => raise_error ("unbound variable: " ++ nm)
+                          | None => raise_error ("unbound variable: " ++ nm)%string
                           end = raise_ret dv)
           by (rewrite Hpm; exact (check_scalar_width_ok w dv Hwfdv)).
         destruct (alloc_aligned_bits (ctx_ptr_low_bit_zero ctx nm w) 0%nat
