@@ -3317,7 +3317,7 @@ Lemma cfg_no_exceptions_block_inv {T : Set} :
 Proof.
   intros G b H Hb; unfold cfg_no_exceptions in H.
   rewrite forallb_forall in H; specialize (H b Hb); unfold block_no_exceptions in H.
-  apply andb_true_iff in H as [Hc Ht]; split; [| exact Ht].
+  apply andb_true_iff in H as [Hc Ht]; split; [| destruct (blk_term b) as [[? ?] ?]; exact Ht].
   intros iid ins mds Hins; rewrite forallb_forall in Hc.
   exact (Hc (iid, ins, mds) Hins).
 Qed.

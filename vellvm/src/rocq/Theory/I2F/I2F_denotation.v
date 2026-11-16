@@ -406,11 +406,12 @@ Lemma I2F_denote_instr :
         eapply I2F_EOU_bind.
         - apply I2F_eval_iop; [exact H1 | repeat constructor].
         - intros and1 and2 Hand.
-          inversion Hand as [db1 db2 Hdb | | ]; subst; cbn; try repeat constructor.
-          inversion Hdb; subst; cbn; try repeat constructor.
-          clear Hand Hdb i;
-          destruct (Pos.eq_dec _ _) as [-> | ?];
-            unfold eq_rec_r, eq_rec, eq_rect, Logic.eq_sym; cbn; repeat constructor.
+          inversion Hand as [db1 db2 Hdb | | v1 s1 s2 HA]; subst; cbn; try repeat constructor.
+          + inversion Hdb; subst; cbn; try repeat constructor.
+            clear Hand Hdb i;
+            destruct (Pos.eq_dec _ _) as [-> | ?];
+              unfold eq_rec_r, eq_rec, eq_rect, Logic.eq_sym; cbn; repeat constructor.
+          + destruct v1; cbn; repeat constructor.
       }
       all: erbind; [apply I2F_refine_lift', I2F_eval_fop; eauto | intros].
       all: rbind (fun _ _ => True); [rstep; cbnn; easy | intros].

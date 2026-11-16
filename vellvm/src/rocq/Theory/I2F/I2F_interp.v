@@ -676,9 +676,14 @@ Proof.
   generalize (defined_intrinsics (Pa := PInf) (E := @MCFGEtop PInf))
              (defined_intrinsics (Pa := PFin) (E := @MCFGEtop PFin))
              I2F_defined_intrinsics.
-  intros l1 l2 H; induction H as [| [d1 f1] [d2 f2] l1' l2' Hxy H' IH]; cbn in *; [constructor |].
-  destruct Hxy as [Hd Hf]; cbn in Hd, Hf; destruct Hd.
-  destruct (dc_name d1); (constructor; [constructor; [reflexivity | exact Hf] | exact IH]).
+  intros l1 l2 H.
+  revert l2 H; induction l1 as [| [d1 f1] l1' IH]; intros [| [d2 f2] l2'] H;
+    try (inversion H; fail); cbn; [constructor |].
+  assert (Hcons : Logic.eq d1 d2 /\ I2F_semantic_function f1 f2 /\
+                  Forall2 (prod_rel Logic.eq I2F_semantic_function) l1' l2')
+    by (inversion H; subst; firstorder).
+  destruct Hcons as (<- & Hf & H').
+  destruct (dc_name d1); (constructor; [constructor; [reflexivity | exact Hf] | exact (IH l2' H')]).
 Qed.
 
 Lemma I2F_assoc_lookup {A B1 B2 : Type} {RD : RelDec.RelDec (@Logic.eq A)}

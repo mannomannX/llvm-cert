@@ -970,25 +970,22 @@ Qed.
 Lemma emit_and2_pref : forall x y st z st1,
   emit_and2 x y st = (z, st1) -> exists d, bs_cnf st1 = bs_cnf st ++ d.
 Proof.
-  intros x y st z st1 H; unfold emit_and2 in H; cbn in H.
-  destruct (append_clauses _ _) as [cid' new_cnf]; inversion H; subst; cbn.
-  exists new_cnf; reflexivity.
+  intros x y st z st1 H; unfold emit_and2 in H; cbn in H; inversion H; subst; cbn.
+  eexists; reflexivity.
 Qed.
 
 Lemma emit_or2_pref : forall x y st z st1,
   emit_or2 x y st = (z, st1) -> exists d, bs_cnf st1 = bs_cnf st ++ d.
 Proof.
-  intros x y st z st1 H; unfold emit_or2 in H; cbn in H.
-  destruct (append_clauses _ _) as [cid' new_cnf]; inversion H; subst; cbn.
-  exists new_cnf; reflexivity.
+  intros x y st z st1 H; unfold emit_or2 in H; cbn in H; inversion H; subst; cbn.
+  eexists; reflexivity.
 Qed.
 
 Lemma emit_xor2_pref : forall x y st z st1,
   emit_xor2 x y st = (z, st1) -> exists d, bs_cnf st1 = bs_cnf st ++ d.
 Proof.
-  intros x y st z st1 H; unfold emit_xor2 in H; cbn in H.
-  destruct (append_clauses _ _) as [cid' new_cnf]; inversion H; subst; cbn.
-  exists new_cnf; reflexivity.
+  intros x y st z st1 H; unfold emit_xor2 in H; cbn in H; inversion H; subst; cbn.
+  eexists; reflexivity.
 Qed.
 
 Definition blast_and_rail (sz : positive) (a b : rail_bv) (st : blast_state)
@@ -1228,9 +1225,7 @@ Proof.
     destruct (mux_bits_list sel rt rf st1) as [mr st2] eqn:Hmr.
     inversion H; subst; clear H.
     assert (Hd1 : exists d1, bs_cnf st1 = bs_cnf st ++ d1).
-    { unfold emit_mux2 in Hm; cbn in Hm.
-      destruct (append_clauses _ _) as [cid' new_cnf]; inversion Hm; subst; cbn.
-      exists new_cnf; reflexivity. }
+    { unfold emit_mux2 in Hm; cbn in Hm; inversion Hm; subst; cbn; eexists; reflexivity. }
     destruct Hd1 as [d1 Hd1].
     destruct (IH rf st1 mr st' Hmr) as [d2 Hd2].
     exists (d1 ++ d2); rewrite Hd2, Hd1, app_assoc; reflexivity.
