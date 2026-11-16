@@ -1136,10 +1136,11 @@ Fixpoint emit_or_list (ls : list lit) (st : blast_state)
 Lemma emit_or_list_pref : forall ls st out st',
   emit_or_list ls st = (out, st') -> exists d, bs_cnf st' = bs_cnf st ++ d.
 Proof.
-  induction ls as [| x [| y r] IH]; intros st out st' H; cbn in H.
-  - inversion H; subst; exists []; rewrite app_nil_r; reflexivity.
-  - inversion H; subst; exists []; rewrite app_nil_r; reflexivity.
-  - destruct (emit_or_list (y :: r) st) as [sub st1] eqn:Hs.
+  induction ls as [| x [| y r] IH]; intros st out st' H.
+  - cbn in H; inversion H; subst; exists []; rewrite app_nil_r; reflexivity.
+  - cbn in H; inversion H; subst; exists []; rewrite app_nil_r; reflexivity.
+  - change ((let '(sub, st1) := emit_or_list (y :: r) st in emit_or2 x sub st1) = (out, st')) in H.
+    destruct (emit_or_list (y :: r) st) as [sub st1] eqn:Hs.
     destruct (IH st sub st1 Hs) as [d1 Hd1].
     destruct (emit_or2_pref x sub st1 out st' H) as [d2 Hd2].
     exists (d1 ++ d2); rewrite Hd2, Hd1, app_assoc; reflexivity.
@@ -1158,7 +1159,7 @@ Proof.
   - cbn in Hemit; inversion Hemit; subst; split; [discriminate | exact Hlf].
   - cbn in Hemit; inversion Hemit; subst; inversion Hwf as [| ? ? Hx _]; subst.
     split; [exact Hx | cbn; rewrite orb_false_r; reflexivity].
-  - cbn [emit_or_list] in Hemit.
+  - change ((let '(sub, st1) := emit_or_list (y :: r) st in emit_or2 x sub st1) = (out, st')) in Hemit.
     inversion Hwf as [| ? ? Hx Hwfr]; subst.
     destruct (emit_or_list (y :: r) st) as [sub st1] eqn:Hsub.
     destruct (emit_or2_pref x sub st1 out st' Hemit) as [d2 Hd2].
@@ -2309,14 +2310,15 @@ Lemma emit_or_list_sat : forall ls asg st out st',
     sat_blast_st asg' st' /\
     wf_lit_bound (bs_next_var st') out.
 Proof.
-  induction ls as [| x [| y r] IH]; intros asg st out st' Hwf Hsat Hemit; cbn in Hemit.
-  - inversion Hemit; subst; exists asg;
+  induction ls as [| x [| y r] IH]; intros asg st out st' Hwf Hsat Hemit.
+  - cbn in Hemit; inversion Hemit; subst; exists asg;
       split; [lia | split; [apply agree_below_refl | split; [exact Hsat |
       cbn; pose proof (proj1 (proj1 Hsat)); lia]]].
-  - inversion Hemit; subst; inversion Hwf as [| ? ? Hx _]; subst.
+  - cbn in Hemit; inversion Hemit; subst; inversion Hwf as [| ? ? Hx _]; subst.
     exists asg;
       split; [lia | split; [apply agree_below_refl | split; [exact Hsat | exact Hx]]].
-  - inversion Hwf as [| ? ? Hx Hwfr]; subst.
+  - change ((let '(sub, st1) := emit_or_list (y :: r) st in emit_or2 x sub st1) = (out, st')) in Hemit.
+    inversion Hwf as [| ? ? Hx Hwfr]; subst.
     destruct (emit_or_list (y :: r) st) as [sub st1] eqn:Hsub.
     destruct (IH asg st sub st1 Hwfr Hsat Hsub)
       as (asg1 & Hle1 & Hag1 & Hsat1 & Hwf_sub).

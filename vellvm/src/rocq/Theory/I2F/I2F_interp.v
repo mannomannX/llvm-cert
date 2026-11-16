@@ -667,23 +667,32 @@ Proof.
     apply Forall2_nil.
 Qed.
 
+Lemma I2F_defs_assoc_aux
+  (l1 : list (declaration typ * @semantic_function PInf (@MCFGEtop PInf)))
+  (l2 : list (declaration typ * @semantic_function PFin (@MCFGEtop PFin))) :
+  Forall2 (prod_rel Logic.eq I2F_semantic_function) l1 l2 ->
+  Forall2 (prod_rel Logic.eq I2F_semantic_function)
+    (List.map (fun '(d, f) => (match dc_name d with Name s => s | _ => ""%string end, f)) l1)
+    (List.map (fun '(d, f) => (match dc_name d with Name s => s | _ => ""%string end, f)) l2).
+Proof.
+  revert l2; induction l1 as [| p1 l1' IH]; intros [| p2 l2'] H.
+  - constructor.
+  - exfalso; inversion H.
+  - exfalso; inversion H.
+  - destruct p1 as [d1 f1], p2 as [d2 f2].
+    assert (Hhd : prod_rel Logic.eq I2F_semantic_function (d1, f1) (d2, f2) /\
+                  Forall2 (prod_rel Logic.eq I2F_semantic_function) l1' l2')
+      by (inversion H; subst; split; assumption).
+    destruct Hhd as ([Hd Hf] & Htl); cbn in Hd, Hf |- *; subst d2.
+    destruct (dc_name d1); constructor; [constructor; [reflexivity | exact Hf] | exact (IH l2' Htl)].
+Qed.
+
 Lemma I2F_defs_assoc :
   Forall2 (prod_rel Logic.eq I2F_semantic_function)
     (defs_assoc (Pa := PInf) (E := @MCFGEtop PInf))
     (defs_assoc (Pa := PFin) (E := @MCFGEtop PFin)).
 Proof.
-  unfold defs_assoc.
-  generalize (defined_intrinsics (Pa := PInf) (E := @MCFGEtop PInf))
-             (defined_intrinsics (Pa := PFin) (E := @MCFGEtop PFin))
-             I2F_defined_intrinsics.
-  intros l1 l2 H.
-  revert l2 H; induction l1 as [| [d1 f1] l1' IH]; intros [| [d2 f2] l2'] H;
-    try (inversion H; fail); cbn; [constructor |].
-  assert (Hcons : Logic.eq d1 d2 /\ I2F_semantic_function f1 f2 /\
-                  Forall2 (prod_rel Logic.eq I2F_semantic_function) l1' l2')
-    by (inversion H; subst; firstorder).
-  destruct Hcons as (<- & Hf & H').
-  destruct (dc_name d1); (constructor; [constructor; [reflexivity | exact Hf] | exact (IH l2' H')]).
+  unfold defs_assoc; exact (@I2F_defs_assoc_aux _ _ I2F_defined_intrinsics).
 Qed.
 
 Lemma I2F_assoc_lookup {A B1 B2 : Type} {RD : RelDec.RelDec (@Logic.eq A)}

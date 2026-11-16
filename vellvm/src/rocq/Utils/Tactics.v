@@ -371,15 +371,15 @@ Ltac subst_cont :=
 Ltac inj_pair2_existT :=
   repeat
     match goal with
-    | H : existT _ (?p : positive) _ = existT _ ?p _ |- _ =>
+    | H : @existT positive _ ?p _ = @existT positive _ ?p _ |- _ =>
         apply (Eqdep_dec.inj_pair2_eq_dec positive Pos.eq_dec) in H
-    | H : existT _ (?p : N) _ = existT _ ?p _ |- _ =>
+    | H : @existT N _ ?p _ = @existT N _ ?p _ |- _ =>
         apply (Eqdep_dec.inj_pair2_eq_dec N N.eq_dec) in H
-    | H : existT _ (?p : Z) _ = existT _ ?p _ |- _ =>
+    | H : @existT Z _ ?p _ = @existT Z _ ?p _ |- _ =>
         apply (Eqdep_dec.inj_pair2_eq_dec Z Z.eq_dec) in H
-    | H : existT _ (?p : nat) _ = existT _ ?p _ |- _ =>
+    | H : @existT nat _ ?p _ = @existT nat _ ?p _ |- _ =>
         apply (Eqdep_dec.inj_pair2_eq_dec nat Nat.eq_dec) in H
-    | H : existT _ (?p : bool) _ = existT _ ?p _ |- _ =>
+    | H : @existT bool _ ?p _ = @existT bool _ ?p _ |- _ =>
         apply (Eqdep_dec.inj_pair2_eq_dec bool Bool.bool_dec) in H
     end.
 

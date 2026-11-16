@@ -54,7 +54,7 @@ extractedclean:
 
 .PHONY: clean-rocqmakefile
 clean-rocqmakefile: RocqMakefile
-	$(MAKE) -j --no-print-directory -f RocqMakefile clean
+	$(MAKE) --no-print-directory -f RocqMakefile clean
 
 $(EXTRACTDIR)/FRONTEND_STAMP: $(FRONTEND_VOFILES) $(EXTRACTDIR)/ExtractFrontend.v
 	@echo "Extracting Frontend"
@@ -77,11 +77,11 @@ ml/dune ml/extracted/dune ml/IO.ml: ;
 
 .PHONY: rocqmakefile-exec
 rocqmakefile-exec:
-	+$(MAKE) -j --no-print-directory -f RocqMakefile $(EXEC_VOFILES) $(PASS_VOFILES) $(VALIDATOR_VOFILES)
+	+$(MAKE) --no-print-directory -f RocqMakefile $(EXEC_VOFILES) $(PASS_VOFILES) $(VALIDATOR_VOFILES)
 
 .PHONY: rocqmakefile-frontend
 rocqmakefile-frontend:
-	+$(MAKE) -j --no-print-directory -f RocqMakefile $(FRONTEND_VOFILES)
+	+$(MAKE) --no-print-directory -f RocqMakefile $(FRONTEND_VOFILES)
 
 $(FRONTEND_VOFILES): RocqMakefile rocqmakefile-frontend ;
 $(filter-out $(FRONTEND_VOFILES),$(EXEC_VOFILES)) $(PASS_VOFILES) $(VALIDATOR_VOFILES): RocqMakefile rocqmakefile-exec ;
@@ -90,4 +90,4 @@ $(filter-out $(FRONTEND_VOFILES),$(EXEC_VOFILES)) $(PASS_VOFILES) $(VALIDATOR_VO
 invoke-rocqmakefile: RocqMakefile
 
 %: invoke-rocqmakefile
-	+$(MAKE) -j --no-print-directory -f RocqMakefile $@
+	+$(MAKE) --no-print-directory -f RocqMakefile $@
