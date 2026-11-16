@@ -154,7 +154,8 @@ Qed.
 Lemma string_app_length (s1 s2 : string) :
   String.length (s1 ++ s2)%string = (String.length s1 + String.length s2)%nat.
 Proof.
-  induction s1 as [| c s1' IH]; [reflexivity | cbn; lia].
+  induction s1 as [| c s1' IH];
+    [reflexivity | change (String c s1' ++ s2)%string with (String c (s1' ++ s2)%string); cbn [String.length]; lia].
 Qed.
 
 Definition raw_id_name_len (id : raw_id) : nat :=

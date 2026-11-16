@@ -535,7 +535,7 @@ Qed.
 
 Lemma I2F_mk_int_unop_defs (op_name : string) (widths : list positive)
   (op : forall w : positive, @bit_int w -> @bit_int w) :
-  Forall2 (prod_rel eq I2F_semantic_function)
+  Forall2 (prod_rel Logic.eq I2F_semantic_function)
     (mk_int_unop_defs (Pa := PInf) (E := @MCFGEtop PInf) op_name widths op)
     (mk_int_unop_defs (Pa := PFin) (E := @MCFGEtop PFin) op_name widths op).
 Proof.
@@ -546,7 +546,7 @@ Qed.
 
 Lemma I2F_mk_int_unop_flag_defs (op_name : string) (widths : list positive)
   (op : forall w : positive, @bit_int w -> bool -> option (@bit_int w)) :
-  Forall2 (prod_rel eq I2F_semantic_function)
+  Forall2 (prod_rel Logic.eq I2F_semantic_function)
     (mk_int_unop_flag_defs (Pa := PInf) (E := @MCFGEtop PInf) op_name widths op)
     (mk_int_unop_flag_defs (Pa := PFin) (E := @MCFGEtop PFin) op_name widths op).
 Proof.
@@ -557,7 +557,7 @@ Qed.
 
 Lemma I2F_mk_int_binop_defs (op_name : string) (widths : list positive)
   (op : forall w : positive, @bit_int w -> @bit_int w -> @bit_int w) :
-  Forall2 (prod_rel eq I2F_semantic_function)
+  Forall2 (prod_rel Logic.eq I2F_semantic_function)
     (mk_int_binop_defs (Pa := PInf) (E := @MCFGEtop PInf) op_name widths op)
     (mk_int_binop_defs (Pa := PFin) (E := @MCFGEtop PFin) op_name widths op).
 Proof.
@@ -567,7 +567,7 @@ Proof.
 Qed.
 
 Lemma I2F_mk_expect_int_defs (widths : list positive) :
-  Forall2 (prod_rel eq I2F_semantic_function)
+  Forall2 (prod_rel Logic.eq I2F_semantic_function)
     (mk_expect_int_defs (Pa := PInf) (E := @MCFGEtop PInf) widths)
     (mk_expect_int_defs (Pa := PFin) (E := @MCFGEtop PFin) widths).
 Proof.
@@ -578,7 +578,7 @@ Qed.
 
 Lemma I2F_mk_int_ternop_defs (op_name : string) (widths : list positive)
   (op : forall w : positive, @bit_int w -> @bit_int w -> @bit_int w -> @bit_int w) :
-  Forall2 (prod_rel eq I2F_semantic_function)
+  Forall2 (prod_rel Logic.eq I2F_semantic_function)
     (mk_int_ternop_defs (Pa := PInf) (E := @MCFGEtop PInf) op_name widths op)
     (mk_int_ternop_defs (Pa := PFin) (E := @MCFGEtop PFin) op_name widths op).
 Proof.
@@ -589,7 +589,7 @@ Qed.
 
 Lemma I2F_mk_int_ovf_binop_defs (op_name : string) (widths : list positive)
   (op : forall w : positive, @bit_int w -> @bit_int w -> @bit_int w * bool) :
-  Forall2 (prod_rel eq I2F_semantic_function)
+  Forall2 (prod_rel Logic.eq I2F_semantic_function)
     (mk_int_ovf_binop_defs (Pa := PInf) (E := @MCFGEtop PInf) op_name widths op)
     (mk_int_ovf_binop_defs (Pa := PFin) (E := @MCFGEtop PFin) op_name widths op).
 Proof.
@@ -600,7 +600,7 @@ Proof.
 Qed.
 
 Lemma I2F_extra_fp_intrinsics :
-  Forall2 (prod_rel eq I2F_semantic_function)
+  Forall2 (prod_rel Logic.eq I2F_semantic_function)
     (extra_fp_intrinsics (Pa := PInf) (E := @MCFGEtop PInf))
     (extra_fp_intrinsics (Pa := PFin) (E := @MCFGEtop PFin)).
 Proof.
@@ -619,7 +619,7 @@ Proof.
 Qed.
 
 Lemma I2F_extra_int_intrinsics :
-  Forall2 (prod_rel eq I2F_semantic_function)
+  Forall2 (prod_rel Logic.eq I2F_semantic_function)
     (extra_int_intrinsics (Pa := PInf) (E := @MCFGEtop PInf))
     (extra_int_intrinsics (Pa := PFin) (E := @MCFGEtop PFin)).
 Proof.
@@ -634,7 +634,7 @@ Proof.
 Qed.
 
 Lemma I2F_defined_intrinsics :
-  Forall2 (prod_rel eq I2F_semantic_function)
+  Forall2 (prod_rel Logic.eq I2F_semantic_function)
     (defined_intrinsics (Pa := PInf) (E := @MCFGEtop PInf))
     (defined_intrinsics (Pa := PFin) (E := @MCFGEtop PFin)).
 Proof.
@@ -668,7 +668,7 @@ Proof.
 Qed.
 
 Lemma I2F_defs_assoc :
-  Forall2 (prod_rel eq I2F_semantic_function)
+  Forall2 (prod_rel Logic.eq I2F_semantic_function)
     (defs_assoc (Pa := PInf) (E := @MCFGEtop PInf))
     (defs_assoc (Pa := PFin) (E := @MCFGEtop PFin)).
 Proof.
@@ -679,9 +679,9 @@ Proof.
   destruct (dc_name d1); (constructor; [constructor; [reflexivity | exact Hf] | exact IH]).
 Qed.
 
-Lemma I2F_assoc_lookup {A B1 B2 : Type} {RD : RelDec.RelDec (@eq A)}
+Lemma I2F_assoc_lookup {A B1 B2 : Type} {RD : RelDec.RelDec (@Logic.eq A)}
   {RB : B1 -> B2 -> Prop} {l1 : list (A * B1)} {l2 : list (A * B2)}
-  (k : A) (H : Forall2 (prod_rel eq RB) l1 l2) :
+  (k : A) (H : Forall2 (prod_rel Logic.eq RB) l1 l2) :
   match assoc k l1, assoc k l2 with
   | Some v1, Some v2 => RB v1 v2
   | None, None => True

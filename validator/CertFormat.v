@@ -2206,7 +2206,7 @@ Qed.
 
 Definition raw_id_eqb (r1 r2 : raw_id) : bool :=
   match RawIDOrd.cmp r1 r2 with
-  | Eq => true
+  | Datatypes.Eq => true
   | _ => false
   end.
 

@@ -695,25 +695,11 @@ Lemma emit_and2_sound : forall assign a b st out st',
      eval_lit assign out = (eval_lit assign a && eval_lit assign b)).
 Proof.
   intros assign a b st out st' Ha Hb Hemit.
-  unfold emit_and2 in Hemit; cbn in Hemit.
-  destruct (append_clauses (bs_next_cid st)
-              [[neg_lit (Z.pos (bs_next_var st)); a];
-               [neg_lit (Z.pos (bs_next_var st)); b];
-               [Z.pos (bs_next_var st); neg_lit a; neg_lit b]]) as [cid' new_cnf] eqn:Happ.
-  inversion Hemit; subst; clear Hemit.
+  unfold emit_and2, alloc_var in Hemit; inversion Hemit; subst out st'; clear Hemit.
   split; [discriminate |].
   intros rem Hsat.
-  cbn [bs_cnf] in Hsat; rewrite <- app_assoc in Hsat; rewrite eval_cnf_app in Hsat.
-  apply andb_true_iff in Hsat as [Hst Hnew_rem].
-  rewrite eval_cnf_app in Hnew_rem; apply andb_true_iff in Hnew_rem as [Hnew _].
-  assert (Hcls : eval_cnf assign (bs_cnf (add_clauses
-                   [[neg_lit (Z.pos (bs_next_var st)); a];
-                    [neg_lit (Z.pos (bs_next_var st)); b];
-                    [Z.pos (bs_next_var st); neg_lit a; neg_lit b]]
-                   (snd (alloc_var st)))) = true).
-  { unfold add_clauses; cbn [alloc_var snd bs_next_cid bs_cnf neg_lit].
-    rewrite Happ; cbn [bs_cnf]; rewrite eval_cnf_app, Hst, Hnew; reflexivity. }
-  destruct (add_clauses_sat_split assign _ _ Hcls) as [_ Hin].
+  rewrite eval_cnf_app in Hsat; apply andb_true_iff in Hsat as [Hcls _].
+  destruct (add_clauses_sat_split assign _ _ Hcls) as [Hst Hin]; cbn [bs_cnf] in Hst.
   pose proof (Hin _ (or_introl eq_refl)) as C1.
   pose proof (Hin _ (or_intror (or_introl eq_refl))) as C2.
   pose proof (Hin _ (or_intror (or_intror (or_introl eq_refl)))) as C3.
@@ -743,25 +729,11 @@ Lemma emit_or2_sound : forall assign a b st out st',
      eval_lit assign out = (eval_lit assign a || eval_lit assign b)).
 Proof.
   intros assign a b st out st' Ha Hb Hemit.
-  unfold emit_or2 in Hemit; cbn in Hemit.
-  destruct (append_clauses (bs_next_cid st)
-              [[Z.pos (bs_next_var st); neg_lit a];
-               [Z.pos (bs_next_var st); neg_lit b];
-               [neg_lit (Z.pos (bs_next_var st)); a; b]]) as [cid' new_cnf] eqn:Happ.
-  inversion Hemit; subst; clear Hemit.
+  unfold emit_or2, alloc_var in Hemit; inversion Hemit; subst out st'; clear Hemit.
   split; [discriminate |].
   intros rem Hsat.
-  cbn [bs_cnf] in Hsat; rewrite <- app_assoc in Hsat; rewrite eval_cnf_app in Hsat.
-  apply andb_true_iff in Hsat as [Hst Hnew_rem].
-  rewrite eval_cnf_app in Hnew_rem; apply andb_true_iff in Hnew_rem as [Hnew _].
-  assert (Hcls : eval_cnf assign (bs_cnf (add_clauses
-                   [[Z.pos (bs_next_var st); neg_lit a];
-                    [Z.pos (bs_next_var st); neg_lit b];
-                    [neg_lit (Z.pos (bs_next_var st)); a; b]]
-                   (snd (alloc_var st)))) = true).
-  { unfold add_clauses; cbn [alloc_var snd bs_next_cid bs_cnf neg_lit].
-    rewrite Happ; cbn [bs_cnf]; rewrite eval_cnf_app, Hst, Hnew; reflexivity. }
-  destruct (add_clauses_sat_split assign _ _ Hcls) as [_ Hin].
+  rewrite eval_cnf_app in Hsat; apply andb_true_iff in Hsat as [Hcls _].
+  destruct (add_clauses_sat_split assign _ _ Hcls) as [Hst Hin]; cbn [bs_cnf] in Hst.
   pose proof (Hin _ (or_introl eq_refl)) as C1.
   pose proof (Hin _ (or_intror (or_introl eq_refl))) as C2.
   pose proof (Hin _ (or_intror (or_intror (or_introl eq_refl)))) as C3.
@@ -793,27 +765,11 @@ Lemma emit_xor2_sound : forall assign a b st out st',
      eval_lit assign out = xorb (eval_lit assign a) (eval_lit assign b)).
 Proof.
   intros assign a b st out st' Ha Hb Hemit.
-  unfold emit_xor2 in Hemit; cbn in Hemit.
-  destruct (append_clauses (bs_next_cid st)
-              [[neg_lit (Z.pos (bs_next_var st)); a; b];
-               [neg_lit (Z.pos (bs_next_var st)); neg_lit a; neg_lit b];
-               [Z.pos (bs_next_var st); neg_lit a; b];
-               [Z.pos (bs_next_var st); a; neg_lit b]]) as [cid' new_cnf] eqn:Happ.
-  inversion Hemit; subst; clear Hemit.
+  unfold emit_xor2, alloc_var in Hemit; inversion Hemit; subst out st'; clear Hemit.
   split; [discriminate |].
   intros rem Hsat.
-  cbn [bs_cnf] in Hsat; rewrite <- app_assoc in Hsat; rewrite eval_cnf_app in Hsat.
-  apply andb_true_iff in Hsat as [Hst Hnew_rem].
-  rewrite eval_cnf_app in Hnew_rem; apply andb_true_iff in Hnew_rem as [Hnew _].
-  assert (Hcls : eval_cnf assign (bs_cnf (add_clauses
-                   [[neg_lit (Z.pos (bs_next_var st)); a; b];
-                    [neg_lit (Z.pos (bs_next_var st)); neg_lit a; neg_lit b];
-                    [Z.pos (bs_next_var st); neg_lit a; b];
-                    [Z.pos (bs_next_var st); a; neg_lit b]]
-                   (snd (alloc_var st)))) = true).
-  { unfold add_clauses; cbn [alloc_var snd bs_next_cid bs_cnf neg_lit].
-    rewrite Happ; cbn [bs_cnf]; rewrite eval_cnf_app, Hst, Hnew; reflexivity. }
-  destruct (add_clauses_sat_split assign _ _ Hcls) as [_ Hin].
+  rewrite eval_cnf_app in Hsat; apply andb_true_iff in Hsat as [Hcls _].
+  destruct (add_clauses_sat_split assign _ _ Hcls) as [Hst Hin]; cbn [bs_cnf] in Hst.
   pose proof (Hin _ (or_introl eq_refl)) as C1.
   pose proof (Hin _ (or_intror (or_introl eq_refl))) as C2.
   pose proof (Hin _ (or_intror (or_intror (or_introl eq_refl)))) as C3.
@@ -847,27 +803,11 @@ Lemma emit_mux2_sound : forall assign sel t_lit f_lit st out st',
                             else eval_lit assign f_lit)).
 Proof.
   intros assign sel tl fl st out st' Hsel Htl Hfl Hemit.
-  unfold emit_mux2 in Hemit; cbn in Hemit.
-  destruct (append_clauses (bs_next_cid st)
-              [[neg_lit sel; neg_lit (Z.pos (bs_next_var st)); tl];
-               [neg_lit sel; Z.pos (bs_next_var st); neg_lit tl];
-               [sel; neg_lit (Z.pos (bs_next_var st)); fl];
-               [sel; Z.pos (bs_next_var st); neg_lit fl]]) as [cid' new_cnf] eqn:Happ.
-  inversion Hemit; subst; clear Hemit.
+  unfold emit_mux2, alloc_var in Hemit; inversion Hemit; subst out st'; clear Hemit.
   split; [discriminate |].
   intros rem Hsat.
-  cbn [bs_cnf] in Hsat; rewrite <- app_assoc in Hsat; rewrite eval_cnf_app in Hsat.
-  apply andb_true_iff in Hsat as [Hst Hnew_rem].
-  rewrite eval_cnf_app in Hnew_rem; apply andb_true_iff in Hnew_rem as [Hnew _].
-  assert (Hcls : eval_cnf assign (bs_cnf (add_clauses
-                   [[neg_lit sel; neg_lit (Z.pos (bs_next_var st)); tl];
-                    [neg_lit sel; Z.pos (bs_next_var st); neg_lit tl];
-                    [sel; neg_lit (Z.pos (bs_next_var st)); fl];
-                    [sel; Z.pos (bs_next_var st); neg_lit fl]]
-                   (snd (alloc_var st)))) = true).
-  { unfold add_clauses; cbn [alloc_var snd bs_next_cid bs_cnf neg_lit].
-    rewrite Happ; cbn [bs_cnf]; rewrite eval_cnf_app, Hst, Hnew; reflexivity. }
-  destruct (add_clauses_sat_split assign _ _ Hcls) as [_ Hin].
+  rewrite eval_cnf_app in Hsat; apply andb_true_iff in Hsat as [Hcls _].
+  destruct (add_clauses_sat_split assign _ _ Hcls) as [Hst Hin]; cbn [bs_cnf] in Hst.
   pose proof (Hin _ (or_introl eq_refl)) as C1.
   pose proof (Hin _ (or_intror (or_introl eq_refl))) as C2.
   pose proof (Hin _ (or_intror (or_intror (or_introl eq_refl)))) as C3.
