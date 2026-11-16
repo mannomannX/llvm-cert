@@ -42,14 +42,18 @@ Unset Implicit Arguments.
 Unset Strict Implicit.
 Set Default Goal Selector "!".
 
+#[local] Arguments Pos.eqb _ _ : simpl nomatch.
 #[local] Arguments Pos.ltb _ _ : simpl nomatch.
 #[local] Arguments Pos.leb _ _ : simpl nomatch.
+#[local] Arguments N.eqb _ _ : simpl nomatch.
 #[local] Arguments N.ltb _ _ : simpl nomatch.
 #[local] Arguments N.leb _ _ : simpl nomatch.
+#[local] Arguments Z.eqb _ _ : simpl nomatch.
 #[local] Arguments Z.ltb _ _ : simpl nomatch.
 #[local] Arguments Z.leb _ _ : simpl nomatch.
 #[local] Arguments Z.gtb _ _ : simpl nomatch.
 #[local] Arguments Z.geb _ _ : simpl nomatch.
+#[local] Arguments Nat.eqb _ _ : simpl nomatch.
 
 Local Open Scope bool_scope.
 Local Open Scope list_scope.
@@ -668,7 +672,7 @@ Proof.
     destruct Hin as [<- | Hrest].
     + exact Hc0.
     + exact (IH (mk_blast_state (bs_next_var st) (Pos.succ (bs_next_cid st)) (bs_cnf st))
-                cid2 tail_cnf Hcr Htail c Hrest).
+                cid' tail_cnf Hcr Htail c Hrest).
 Qed.
 
 (** *** 4.1 Verified Tseitin Gate Primitives ([AND], [OR], [XOR], [MUX], [EQ]) *)

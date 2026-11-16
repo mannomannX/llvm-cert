@@ -56,15 +56,20 @@ Unset Implicit Arguments.
 Unset Strict Implicit.
 Set Default Goal Selector "!".
 
+#[local] Arguments Pos.eqb _ _ : simpl nomatch.
 #[local] Arguments Pos.ltb _ _ : simpl nomatch.
 #[local] Arguments Pos.leb _ _ : simpl nomatch.
+#[local] Arguments N.eqb _ _ : simpl nomatch.
 #[local] Arguments N.ltb _ _ : simpl nomatch.
 #[local] Arguments N.leb _ _ : simpl nomatch.
 #[local] Arguments N.shiftl : simpl never.
+#[local] Arguments Z.eqb _ _ : simpl nomatch.
 #[local] Arguments Z.ltb _ _ : simpl nomatch.
 #[local] Arguments Z.leb _ _ : simpl nomatch.
 #[local] Arguments Z.gtb _ _ : simpl nomatch.
 #[local] Arguments Z.geb _ _ : simpl nomatch.
+#[local] Arguments Nat.eqb _ _ : simpl nomatch.
+#[local] Arguments String.eqb _ _ : simpl nomatch.
 
 Local Open Scope bool_scope.
 Local Open Scope list_scope.

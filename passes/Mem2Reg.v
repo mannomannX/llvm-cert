@@ -14984,7 +14984,7 @@ Section MemoryAndSerialization.
     - apply app_eq_nil in Hba as [Him_ba Hrest_ba].
       destruct (is_promotable_load_of p dt (iid, ins, md)) as [dst |].
       + destruct (rewrite_code_for_slot p dt cur_reg avoid rest) as [[rest' er] av'] eqn:E.
-        inversion Hrw; subst; cbn; exact (IH cur_reg avoid rest' er av' Hrest_ba E).
+        inversion Hrw; subst; cbn; exact (IH cur_reg avoid rest' end_reg avoid' Hrest_ba E).
       + destruct (is_promotable_store_of p dt (iid, ins, md)) as [val_exp |] eqn:Est.
         * destruct (is_promotable_store_of_inv p dt (iid, ins, md) val_exp Est)
             as (_ & vid & anns_st & md_st & Heq_im & _).
@@ -14993,10 +14993,10 @@ Section MemoryAndSerialization.
           destruct (rewrite_code_for_slot p dt (fresh_name "m2r_st" avoid)
                       (fresh_name "m2r_st" avoid :: avoid) rest) as [[rest' er] av'] eqn:E.
           inversion Hrw; subst; cbn; rewrite Him_ba; cbn.
-          exact (IH _ _ rest' er av' Hrest_ba E).
+          exact (IH _ _ rest' end_reg avoid' Hrest_ba E).
         * destruct (rewrite_code_for_slot p dt cur_reg avoid rest) as [[rest' er] av'] eqn:E.
           inversion Hrw; subst; cbn; rewrite Him_ba; cbn.
-          exact (IH cur_reg avoid rest' er av' Hrest_ba E).
+          exact (IH cur_reg avoid rest' end_reg avoid' Hrest_ba E).
   Qed.
 
   Lemma flat_map_nil_in {A B : Type} (f : A -> list B) (xs : list A) :

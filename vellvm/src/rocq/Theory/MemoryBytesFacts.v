@@ -4431,7 +4431,7 @@ Section MemoryByteFacts.
         by (rewrite repeat_length; lia).
       exists foff, (DVALUE_Base DVALUE_Poison).
       split; [exact Hfoff | split; [reflexivity | split; [exact Hlen_rep |]]].
-      rewrite (@take_drop_repeat_exact _ poison_memory_byte foff (store_size_dtyp ft) _ Hlen_rep).
+      rewrite take_drop_repeat_exact by lia.
       apply read_repeat_poison_serializable.
       exact (@FORALL_nth_error serializable dts idx ft Hser Hnth_t).
     - inversion Htyp as [| | pp ffs ddts HNP HF2 |]; subst.
