@@ -3043,7 +3043,7 @@ Section DCESoundness.
     - (* EXP_Bool *)
       rewrite (is_i1_dtyp_eq dt Hlit); unfold denote_exp'; cbn [denote_exp].
       destruct b; apply left_evals_to_withCall_ret;
-        split; [apply dvalue_has_dtyp_I | intros Hc; discriminate Hc].
+        (split; [apply dvalue_has_dtyp_I | intros Hc; discriminate Hc]).
     - (* EXP_Zero_initializer *)
       assert (Hsc : is_scalar_dtyp dt = true).
       { destruct (is_int_dtyp_inv dt Hlit) as [sz ->]; reflexivity. }
@@ -4682,7 +4682,7 @@ Section DCESoundness.
       destruct iid as [id | vid];
         cbn [step_tenv_instr instr_must_kill] in Hkill |- *;
         unfold denote_instr; cbv beta iota zeta;
-        apply cfg_local_sim_ret; split; [intros Heq; exact Heq | exact (conj Hte Hkill)].
+        apply cfg_local_sim_ret; (split; [intros Heq; exact Heq | exact (conj Hte Hkill)]).
     - (* INSTR_AtomicCmpXchg *)
       destruct iid as [id | vid];
         [| unfold denote_instr; cbv beta iota zeta; apply cfg_local_sim_raise_sync].

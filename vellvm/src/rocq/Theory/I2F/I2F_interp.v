@@ -673,9 +673,11 @@ Lemma I2F_defs_assoc :
     (defs_assoc (Pa := PFin) (E := @MCFGEtop PFin)).
 Proof.
   unfold defs_assoc.
-  pose proof I2F_defined_intrinsics as H.
-  induction H as [| x y l1 l2 Hxy H IH]; cbn; [constructor |].
-  destruct x as [d1 f1], y as [d2 f2], Hxy as [Hd Hf]; cbn in Hd, Hf; subst d2.
+  generalize (@defined_intrinsics PInf (@MCFGEtop PInf))
+             (@defined_intrinsics PFin (@MCFGEtop PFin))
+             I2F_defined_intrinsics.
+  intros l1 l2 H; induction H as [| [d1 f1] [d2 f2] l1 l2 [Hd Hf] H IH]; cbn in *; [constructor |].
+  subst d2.
   destruct (dc_name d1); (constructor; [constructor; [reflexivity | exact Hf] | exact IH]).
 Qed.
 

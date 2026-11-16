@@ -3372,7 +3372,7 @@ Section SCCPSimulation.
     - (* INSTR_Fence *)
       destruct iid as [id | vid]; cbn [denote_instr sccp_rewrite_instr sccp_instr_defs app];
         apply cfg_local_sim_ret;
-        split; [reflexivity | split; [exact Henv | apply fargs_preserved_refl]].
+        (split; [reflexivity | split; [exact Henv | apply fargs_preserved_refl]]).
     - (* INSTR_AtomicCmpXchg *)
       destruct iid as [id | vid];
         [| cbn [sccp_rewrite_instr]; destruct (c_ptr cpx), (c_cmp cpx), (c_new cpx);

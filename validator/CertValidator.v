@@ -11299,7 +11299,7 @@ Proof.
   destruct ua as [nm w | nm | nm al | nm n | | | | |]; try exact IH;
     (destruct (string_in_list nm src_pnames) eqn:Ein; [| exact IH]);
     apply string_in_list_spec in Ein;
-    constructor; [| exact IH];
+    (constructor; [| exact IH]);
     cbn [ub_assumption_holds] in *; intros dv Hpm;
     rewrite (extend_penv_not_in bs penv nm (Hdisj nm Ein)) in Hpm;
     exact (Hua dv Hpm).

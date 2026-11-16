@@ -405,7 +405,10 @@ Lemma I2F_denote_instr :
         apply I2F_refine_lift'.
         eapply I2F_EOU_bind.
         - apply I2F_eval_iop; [exact H1 | repeat constructor].
-        - intros and1 and2 Hand; apply I2F_eval_iop; [repeat constructor | exact Hand].
+        - intros and1 and2 Hand.
+          inversion Hand as [db1 db2 Hdb | | ]; subst; cbn; try repeat constructor.
+          inversion Hdb; subst; cbn; try repeat constructor.
+          destruct (Pos.eq_dec _ _) as [<- | ?]; cbn; repeat constructor.
       }
       all: erbind; [apply I2F_refine_lift', I2F_eval_fop; eauto | intros].
       all: rbind (fun _ _ => True); [rstep; cbnn; easy | intros].

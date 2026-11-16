@@ -705,8 +705,8 @@ Proof.
   pose proof (Hin _ (or_intror (or_intror (or_introl eq_refl)))) as C3.
   cbn [eval_clause existsb] in C1, C2, C3.
   rewrite (eval_neg_lit_nonzero assign a Ha), (eval_neg_lit_nonzero assign b Hb) in C3.
-  cbn [neg_lit eval_lit] in C1, C2, C3.
   split; [exact Hst |].
+  cbn [neg_lit Z.opp eval_lit] in C1, C2, C3 |- *.
   destruct (assign (bs_next_var st)), (eval_lit assign a), (eval_lit assign b);
     cbn in *; try reflexivity; discriminate.
 Qed.
@@ -740,8 +740,8 @@ Proof.
   cbn [eval_clause existsb] in C1, C2, C3.
   rewrite (eval_neg_lit_nonzero assign a Ha) in C1.
   rewrite (eval_neg_lit_nonzero assign b Hb) in C2.
-  cbn [neg_lit eval_lit] in C1, C2, C3.
   split; [exact Hst |].
+  cbn [neg_lit Z.opp eval_lit] in C1, C2, C3 |- *.
   destruct (assign (bs_next_var st)), (eval_lit assign a), (eval_lit assign b);
     cbn in *; try reflexivity; discriminate.
 Qed.
@@ -777,8 +777,8 @@ Proof.
   cbn [eval_clause existsb] in C1, C2, C3, C4.
   rewrite (eval_neg_lit_nonzero assign a Ha) in C2, C3.
   rewrite (eval_neg_lit_nonzero assign b Hb) in C2, C4.
-  cbn [neg_lit eval_lit] in C1, C2, C3, C4.
   split; [exact Hst |].
+  cbn [neg_lit Z.opp eval_lit] in C1, C2, C3, C4 |- *.
   destruct (assign (bs_next_var st)), (eval_lit assign a), (eval_lit assign b);
     cbn in *; try reflexivity; discriminate.
 Qed.
@@ -816,8 +816,8 @@ Proof.
   rewrite (eval_neg_lit_nonzero assign sel Hsel) in C1, C2.
   rewrite (eval_neg_lit_nonzero assign tl Htl) in C2.
   rewrite (eval_neg_lit_nonzero assign fl Hfl) in C4.
-  cbn [neg_lit eval_lit] in C1, C2, C3, C4.
   split; [exact Hst |].
+  cbn [neg_lit Z.opp eval_lit] in C1, C2, C3, C4 |- *.
   destruct (assign (bs_next_var st)), (eval_lit assign sel),
            (eval_lit assign tl), (eval_lit assign fl);
     cbn in *; try reflexivity; discriminate.

@@ -2231,7 +2231,7 @@ Lemma ident_eqb_eq : forall i1 i2, ident_eqb i1 i2 = true <-> i1 = i2.
 Proof.
   intros [r1 | r1] [r2 | r2]; cbn;
     try (split; intros; discriminate);
-    rewrite raw_id_eqb_eq; split; intros H; [subst; reflexivity | inversion H; reflexivity].
+    (rewrite raw_id_eqb_eq; split; intros H; [subst; reflexivity | inversion H; reflexivity]).
 Qed.
 
 Definition fp_variant_eqb (f1 f2 : floating_point_variant) : bool :=

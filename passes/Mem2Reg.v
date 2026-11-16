@@ -12322,8 +12322,7 @@ Section MemoryAndSerialization.
     revert attrss; induction args as [| v vs IH]; intros attrss; cbn [apply_args_attrs].
     - apply ev_ok_ret.
     - destruct attrss as [| a r];
-        eapply ev_ok_bind; [apply ev_ok_apply_attrs |];
-        intros v'; eapply ev_ok_bind; [apply IH | intros vs'; apply ev_ok_ret].
+        (eapply ev_ok_bind; [apply ev_ok_apply_attrs | intros v'; eapply ev_ok_bind; [apply IH | intros vs'; apply ev_ok_ret]]).
   Qed.
 
   Lemma ev_ok_check_call_return
@@ -14691,7 +14690,7 @@ Section MemoryAndSerialization.
                          s2_rv = (σ2_e, ((sf2_e, fstk), g0)) /\
                          stage2_mem_inv U_rv P_e fs0 f2 base_dead pr_dead sz_dead σ1_e σ2_e).
              { destruct rv1 as [ex1 | v1], rv2 as [ex2 | v2]; cbn [exc_post] in Hrv_post;
-                 try contradiction; destruct Hrv_post as [<- Hrest]; split; [reflexivity | exact Hrest]. }
+                 try contradiction; destruct Hrv_post as [<- Hrest]; (split; [reflexivity | exact Hrest]). }
              clear Hrv_post.
              destruct Hrv_unif as (<- & HincU_rv & P_e & f2 & base_dead & pr_dead &
                                    σ1_e & σ2_e & sf1_e & sf2_e & -> & -> & Hinv_e).

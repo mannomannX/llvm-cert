@@ -171,8 +171,9 @@ Lemma max_name_len_ge (x : raw_id) (ids : list raw_id) :
   In x ids -> (raw_id_name_len x <= max_name_len ids)%nat.
 Proof.
   induction ids as [| y ys IH]; intros Hin; [contradiction |].
-  cbn [max_name_len fold_right].
-  destruct Hin as [<- | Hin]; [lia | specialize (IH Hin); lia].
+  cbn [max_name_len fold_right]; fold (max_name_len ys).
+  destruct Hin as [<- | Hin];
+    [apply Nat.le_max_l | eapply Nat.le_trans; [exact (IH Hin) | apply Nat.le_max_r]].
 Qed.
 
 Definition fresh_name (prefix : string) (avoid : list raw_id) : raw_id :=

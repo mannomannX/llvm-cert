@@ -1039,14 +1039,14 @@ Proof.
   intros Pa op fl w vl vr [-> | [il ->]] [-> | [ir ->]].
   - destruct op; cbn;
       try (left; eexists; reflexivity);
-      right; exists (DVALUE_Base DVALUE_Poison); split; [reflexivity | left; reflexivity].
+      (right; exists (DVALUE_Base DVALUE_Poison); split; [reflexivity | left; reflexivity]).
   - destruct op; cbn;
       try (right; exists (DVALUE_Base DVALUE_Poison); split; [reflexivity | left; reflexivity]);
-      destruct (Z.eq_dec (@Integers.signed w ir) (-1)%Z); cbn;
-      [left; eexists; reflexivity | right; exists (DVALUE_Base DVALUE_Poison); split; [reflexivity | left; reflexivity]].
+      (destruct (Z.eq_dec (@Integers.signed w ir) (-1)%Z); cbn;
+       [left; eexists; reflexivity | right; exists (DVALUE_Base DVALUE_Poison); split; [reflexivity | left; reflexivity]]).
   - destruct op; cbn;
       try (left; eexists; reflexivity);
-      right; exists (DVALUE_Base DVALUE_Poison); split; [reflexivity | left; reflexivity].
+      (right; exists (DVALUE_Base DVALUE_Poison); split; [reflexivity | left; reflexivity]).
   - unfold eval_iop; rewrite eval_iop_integer_base_same_width.
     destruct op; unfold cert_to_ibinop, eval_int_op; cbn;
       repeat match goal with
@@ -1054,9 +1054,7 @@ Proof.
              end;
       cbn;
       try (left; eexists; reflexivity);
-      right; eexists; split; [reflexivity |];
-      try (left; reflexivity);
-      right; eexists; reflexivity.
+      (right; eexists; split; [reflexivity | first [left; reflexivity | right; eexists; reflexivity]]).
 Qed.
 
 Lemma eval_icmp_wf_scalar :
@@ -1077,8 +1075,7 @@ Proof.
       repeat match goal with
              | |- context [if ?b then _ else _] => destruct b
              end;
-      cbn; eexists; split; [reflexivity |];
-      first [left; reflexivity | right; eexists; reflexivity].
+      cbn; (eexists; split; [reflexivity | first [left; reflexivity | right; eexists; reflexivity]]).
 Qed.
 
 Lemma eval_cast_wf_scalar :
@@ -1096,18 +1093,18 @@ Lemma eval_cast_wf_scalar :
 Proof.
   intros Pa k fw tw fl vo Hk [-> | [io ->]].
   - destruct k; cbn; exists (DVALUE_Base DVALUE_Poison);
-      split; [reflexivity | left; reflexivity].
+      (split; [reflexivity | left; reflexivity]).
   - destruct k; cbn in Hk |- *; rewrite !andb_true_iff in Hk.
     + destruct Hk as ([Hlt _] & _); rewrite Pos.eqb_refl, Hlt; cbn.
       destruct (ccf_nneg fl && (@Integers.signed fw io <? 0)%Z); cbn;
-        eexists; split; [reflexivity |];
-        [left; reflexivity | right; eexists; reflexivity].
+        [eexists; split; [reflexivity | left; reflexivity]
+        | eexists; split; [reflexivity | right; eexists; reflexivity]].
     + destruct Hk as (([Hlt _] & _) & _); rewrite Pos.eqb_refl, Hlt; cbn.
       eexists; split; [reflexivity | right; eexists; reflexivity].
     + destruct Hk as [Hlt _]; rewrite Pos.eqb_refl, Hlt; cbn.
       match goal with |- context [if ?b then _ else _] => destruct b end; cbn;
-        eexists; split; [reflexivity |];
-        [left; reflexivity | right; eexists; reflexivity].
+        [eexists; split; [reflexivity | left; reflexivity]
+        | eexists; split; [reflexivity | right; eexists; reflexivity]].
 Qed.
 
 Lemma eval_select_wf_scalar :
@@ -1297,7 +1294,7 @@ Proof.
       [left; exists msgo; reflexivity | cbn [eou_bind]].
     rewrite Hwo in Hwfo.
     destruct Hwfo as [-> | [io ->]];
-      right; eexists; split; [reflexivity | right; eexists; reflexivity].
+      (right; eexists; split; [reflexivity | right; eexists; reflexivity]).
   - cbn [wt_cert_expr collect_free_vars eval_cert_expr cert_expr_bit_width] in *.
     destruct (wf_let_binds_step wt_cert_expr let_widths [] bs) as [env' |] eqn:Hbs;
       [| discriminate].
@@ -1497,19 +1494,18 @@ Lemma eval_iop_non_div_rem_no_ub :
 Proof.
   intros Pa op fl w vl vr Hop [-> | [il ->]] [-> | [ir ->]].
   - destruct op; cbn in Hop; try discriminate; cbn;
-      exists (DVALUE_Base DVALUE_Poison); split; [reflexivity | left; reflexivity].
+      exists (DVALUE_Base DVALUE_Poison); (split; [reflexivity | left; reflexivity]).
   - destruct op; cbn in Hop; try discriminate; cbn;
-      exists (DVALUE_Base DVALUE_Poison); split; [reflexivity | left; reflexivity].
+      exists (DVALUE_Base DVALUE_Poison); (split; [reflexivity | left; reflexivity]).
   - destruct op; cbn in Hop; try discriminate; cbn;
-      exists (DVALUE_Base DVALUE_Poison); split; [reflexivity | left; reflexivity].
+      exists (DVALUE_Base DVALUE_Poison); (split; [reflexivity | left; reflexivity]).
   - unfold eval_iop; rewrite eval_iop_integer_base_same_width.
     destruct op; cbn in Hop; try discriminate;
       unfold cert_to_ibinop, eval_int_op; cbn;
       repeat match goal with
              | |- context [if ?b then _ else _] => destruct b
              end;
-      cbn; eexists; split; [reflexivity |];
-      first [left; reflexivity | right; eexists; reflexivity].
+      cbn; (eexists; split; [reflexivity | first [left; reflexivity | right; eexists; reflexivity]]).
 Qed.
 
 Lemma check_scalar_width_not_ub :
