@@ -1518,7 +1518,7 @@ Definition parse_tagged_nonempty_str_sexp (expected_tag : string) (sx : sexp)
 Lemma parse_tagged_nonempty_str_ok : forall tag sx s,
   parse_tagged_nonempty_str_sexp tag sx = inr s -> negb (String.eqb s "") = true.
 Proof.
-  intros tag [| | [| [t0 | |] [| val_sx [| ? ?]]]] s H; cbn in H; try discriminate.
+  intros tag [? | ? | [| [t0 | |] [| val_sx [| ? ?]]]] s H; cbn in H; try discriminate.
   destruct (String.eqb t0 tag); [| discriminate].
   exact (parse_nonempty_str_ok val_sx s H).
 Qed.
@@ -1535,7 +1535,7 @@ Definition parse_tagged_sha256_sexp (expected_tag : string) (sx : sexp)
 Lemma parse_tagged_sha256_ok : forall tag sx s,
   parse_tagged_sha256_sexp tag sx = inr s -> is_sha256_hex s = true.
 Proof.
-  intros tag [| | [| [t0 | |] [| d_sx [| ? ?]]]] s H; cbn in H; try discriminate.
+  intros tag [? | ? | [| [t0 | |] [| d_sx [| ? ?]]]] s H; cbn in H; try discriminate.
   destruct (String.eqb t0 tag); [| discriminate].
   exact (parse_sha256_atom_ok d_sx s H).
 Qed.

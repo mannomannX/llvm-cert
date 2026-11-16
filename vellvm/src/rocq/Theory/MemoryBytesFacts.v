@@ -4438,7 +4438,7 @@ Section MemoryByteFacts.
       destruct (@Forall2_nth_error_r _ _ dvalue_has_dtyp fields dts idx ft HF2 Hnth_t)
         as (fv & Hnth_v & _).
       destruct (@padded_struct_field_slice_round_trip
-                  packed p dts fields ta mb idx ft fv Hser HF2 Hw Hnth_t Hnth_v)
+                  packed packed dts fields ta mb idx ft fv Hser HF2 Hw Hnth_t Hnth_v)
         as (foff & Hfoff & Hbound & Hrd).
       exists foff, fv; split; [exact Hfoff | split; [exact Hnth_v | split; assumption]].
     - inversion Htyp.

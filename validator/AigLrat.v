@@ -703,7 +703,7 @@ Proof.
   inversion Hemit; subst; clear Hemit.
   split; [discriminate |].
   intros rem Hsat.
-  rewrite <- app_assoc in Hsat; rewrite eval_cnf_app in Hsat.
+  cbn [bs_cnf] in Hsat; rewrite <- app_assoc in Hsat; rewrite eval_cnf_app in Hsat.
   apply andb_true_iff in Hsat as [Hst Hnew_rem].
   rewrite eval_cnf_app in Hnew_rem; apply andb_true_iff in Hnew_rem as [Hnew _].
   assert (Hcls : eval_cnf assign (bs_cnf (add_clauses
@@ -751,7 +751,7 @@ Proof.
   inversion Hemit; subst; clear Hemit.
   split; [discriminate |].
   intros rem Hsat.
-  rewrite <- app_assoc in Hsat; rewrite eval_cnf_app in Hsat.
+  cbn [bs_cnf] in Hsat; rewrite <- app_assoc in Hsat; rewrite eval_cnf_app in Hsat.
   apply andb_true_iff in Hsat as [Hst Hnew_rem].
   rewrite eval_cnf_app in Hnew_rem; apply andb_true_iff in Hnew_rem as [Hnew _].
   assert (Hcls : eval_cnf assign (bs_cnf (add_clauses
@@ -802,7 +802,7 @@ Proof.
   inversion Hemit; subst; clear Hemit.
   split; [discriminate |].
   intros rem Hsat.
-  rewrite <- app_assoc in Hsat; rewrite eval_cnf_app in Hsat.
+  cbn [bs_cnf] in Hsat; rewrite <- app_assoc in Hsat; rewrite eval_cnf_app in Hsat.
   apply andb_true_iff in Hsat as [Hst Hnew_rem].
   rewrite eval_cnf_app in Hnew_rem; apply andb_true_iff in Hnew_rem as [Hnew _].
   assert (Hcls : eval_cnf assign (bs_cnf (add_clauses
@@ -856,7 +856,7 @@ Proof.
   inversion Hemit; subst; clear Hemit.
   split; [discriminate |].
   intros rem Hsat.
-  rewrite <- app_assoc in Hsat; rewrite eval_cnf_app in Hsat.
+  cbn [bs_cnf] in Hsat; rewrite <- app_assoc in Hsat; rewrite eval_cnf_app in Hsat.
   apply andb_true_iff in Hsat as [Hst Hnew_rem].
   rewrite eval_cnf_app in Hnew_rem; apply andb_true_iff in Hnew_rem as [Hnew _].
   assert (Hcls : eval_cnf assign (bs_cnf (add_clauses
