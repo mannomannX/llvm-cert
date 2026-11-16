@@ -11002,12 +11002,12 @@ Section MemoryAndSerialization.
          | _ => raise "dvalue_to_dvalue_base: non-base dvalue"
          end).
   Proof using.
-    unfold mk_store_val_exp; cbn [denote_exp].
+    unfold mk_store_val_exp; cbn [denote_exp Monads.bind Monads.ret Monad_itree].
     rewrite !Eqit.bind_ret_l, !Eqit.bind_bind.
     eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
     intros [db | pk flds | vec elts] _ <-.
-    - cbn [dvalue_to_dvalue_base Monads.ret Monad_eitherT Monad_sum EOU_to_itree].
-      rewrite !Eqit.bind_ret_l.
+    - cbn [dvalue_to_dvalue_base EOU_monad Monads.ret Monad_eitherT Monad_sum EOU_to_itree Monads.bind Monad_itree].
+      rewrite !Eqit.bind_ret_l, ?Eqit.bind_bind, ?Eqit.bind_ret_l.
       unfold insert_element, extract_element, dvalue_to_Z, VellvmIntegers.signed, VellvmIntegers.zero;
         cbn; rewrite ?Eqit.bind_ret_l; reflexivity.
     - cbn [dvalue_to_dvalue_base EOU_to_itree].

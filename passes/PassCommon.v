@@ -231,14 +231,15 @@ Definition mk_copy_exp {T : Set} (ty_i1 : T) (t : T) (e : exp T) : exp T :=
 Lemma denote_mk_copy_exp {Pa : Params} (top : option dtyp) (ty_i1 t : dtyp) (e : exp dtyp) :
   denote_exp top (mk_copy_exp ty_i1 t e) ≅ denote_exp (Some t) e.
 Proof.
-  cbn [denote_exp mk_copy_exp].
+  cbn [denote_exp mk_copy_exp Monads.bind Monads.ret Monad_itree].
   rewrite Eqit.bind_ret_l.
   rewrite <- (Eqit.bind_ret_r (denote_exp (Some t) e)) at 2.
   eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
   intros v _ <-.
-  rewrite !Eqit.bind_ret_l.
+  rewrite Eqit.bind_ret_l.
   cbn [eval_select eval_select_base_dvalue].
   replace (@Integers.unsigned 1 VellvmIntegers.one =? 1)%Z with true by reflexivity.
+  cbn [EOU_to_itree EOU_monad Monads.ret Monad_itree].
   reflexivity.
 Qed.
 

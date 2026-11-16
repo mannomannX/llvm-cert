@@ -408,7 +408,9 @@ Lemma I2F_denote_instr :
         - intros and1 and2 Hand.
           inversion Hand as [db1 db2 Hdb | | ]; subst; cbn; try repeat constructor.
           inversion Hdb; subst; cbn; try repeat constructor.
-          destruct (Pos.eq_dec _ _) as [<- | ?]; cbn; repeat constructor.
+          destruct (Pos.eq_dec _ _) as [Heq | ?];
+            [subst; unfold eq_rec_r, eq_rec, eq_rect, eq_sym; cbn; repeat constructor
+            | cbn; repeat constructor].
       }
       all: erbind; [apply I2F_refine_lift', I2F_eval_fop; eauto | intros].
       all: rbind (fun _ _ => True); [rstep; cbnn; easy | intros].

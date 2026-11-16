@@ -846,7 +846,7 @@ Proof.
   intros assign sz val first_aux rem Hinit.
   destruct (init_blast_state_true_const assign first_aux rem Hinit) as [Ht Hf].
   repeat split.
-  - unfold blast_const_rail; cbn; rewrite map_length, seq_length; reflexivity.
+  - unfold blast_const_rail; cbn; rewrite length_map, length_seq; reflexivity.
   - unfold blast_const_rail, wf_lits_nonzero; cbn.
     apply Forall_forall; intros x Hin.
     apply in_map_iff in Hin as [k [<- _]].
@@ -860,12 +860,12 @@ Proof.
     rewrite map_map.
     assert (Hlt : (Z.to_nat i < Pos.to_nat sz)%nat)
       by (unfold Integers.zwordsize in Hi; lia).
-    rewrite (nth_indep _ false
-               ((fun x => eval_lit assign (if Z.testbit (Z.of_N val) (Z.of_nat x)
-                                           then lit_true else lit_false)) 0%nat))
-      by (rewrite map_length, seq_length; exact Hlt).
+    set (f := fun x : nat => eval_lit assign (if Z.testbit (Z.of_N val) (Z.of_nat x)
+                                              then lit_true else lit_false)).
+    rewrite (nth_indep _ false (f 0%nat))
+      by (subst f; rewrite length_map, length_seq; exact Hlt).
     rewrite map_nth, seq_nth by exact Hlt.
-    cbn [Nat.add]; rewrite Z2Nat.id by lia.
+    subst f; cbn [Nat.add]; rewrite Z2Nat.id by lia.
     destruct (Z.testbit (Z.of_N val) i); [exact Ht | exact Hf].
 Qed.
 

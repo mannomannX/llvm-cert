@@ -2913,7 +2913,9 @@ Proof.
   intros src_fattrs tgt_fattrs H; unfold check_fn_attrs_contract in H.
   rewrite !andb_true_iff in H.
   destruct H as (((((Hu1 & Hu2) & Hsem) & Hnr) & Hnuw) & Hnc).
-  apply implb_true_iff in Hnr; apply implb_true_iff in Hnuw; apply implb_true_iff in Hnc.
+  apply (proj1 (implb_true_iff _ _)) in Hnr.
+  apply (proj1 (implb_true_iff _ _)) in Hnuw.
+  apply (proj1 (implb_true_iff _ _)) in Hnc.
   repeat split; assumption.
 Qed.
 
@@ -3404,5 +3406,5 @@ Proof.
   pose proof Hra as Hra_copy; unfold ret_attrs_refine_b in Hra_copy.
   apply andb_true_iff in Hra_copy as [Hra_param _].
   split; [exact Hnm |].
-  exists sret, sargs; cbn; repeat split; assumption.
+  exists sret, sargs; cbn [fst snd]; repeat split; assumption.
 Qed.
