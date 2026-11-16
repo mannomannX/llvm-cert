@@ -89,7 +89,7 @@ Lemma raw_id_eqb_neq (x y : raw_id) :
 Proof.
   unfold raw_id_eqb.
   destruct (RawIDOrd.eq_dec x y) as [Heq | Hneq]; split; intros H;
-    try discriminate; try contradiction; reflexivity.
+    try exact Hneq; try discriminate; try contradiction; reflexivity.
 Qed.
 
 Lemma raw_id_eqb_sym (x y : raw_id) :

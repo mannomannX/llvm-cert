@@ -821,9 +821,9 @@ Proof.
   - eapply I2F_EOU_map_monad2; [exact HS | intros; apply I2F_dvalue_to_dvalue_base; assumption].
   - intros e1 e2 FE.
     eapply I2F_EOU_bind.
-    + eapply I2F_EOU_vec_loop.
+    + eapply I2F_EOU_vec_loop with (RA := I2F_dvalue_base) (RB := I2F_dvalue_base) (RC := I2F_dvalue_base).
       * eapply Forall2_combine.
-        -- rewrite (Forall2_length FE); apply Forall2_repeat; constructor.
+        -- rewrite (Forall2_length FE); apply Forall2_repeat; apply I2F_dvalue_Poison.
         -- exact FE.
       * intros; apply HF; assumption.
     + intros ans1 ans2 FANS; constructor; apply I2F_canonicalize_vector, Forall2_map_Base, FANS.
@@ -849,10 +849,10 @@ Proof.
   - eapply I2F_EOU_map_monad2; [exact HS | intros; apply I2F_dvalue_to_dvalue_base; assumption].
   - intros e1 e2 FE.
     eapply I2F_EOU_bind.
-    + eapply I2F_EOU_vec_loop.
+    + eapply I2F_EOU_vec_loop with (RA := I2F_dvalue_base) (RB := I2F_dvalue_base) (RC := I2F_dvalue_base).
       * eapply Forall2_combine.
         -- exact FE.
-        -- rewrite (Forall2_length FE); apply Forall2_repeat; constructor.
+        -- rewrite (Forall2_length FE); apply Forall2_repeat; apply I2F_dvalue_Poison.
       * intros; apply HF; assumption.
     + intros ans1 ans2 FANS; constructor; apply I2F_canonicalize_vector, Forall2_map_Base, FANS.
 Qed.

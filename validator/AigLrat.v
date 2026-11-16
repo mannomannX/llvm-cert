@@ -711,7 +711,7 @@ Proof.
                     [neg_lit (Z.pos (bs_next_var st)); b];
                     [Z.pos (bs_next_var st); neg_lit a; neg_lit b]]
                    (snd (alloc_var st)))) = true).
-  { unfold add_clauses; cbn [alloc_var snd bs_next_cid bs_cnf].
+  { unfold add_clauses; cbn [alloc_var snd bs_next_cid bs_cnf neg_lit].
     rewrite Happ; cbn [bs_cnf]; rewrite eval_cnf_app, Hst, Hnew; reflexivity. }
   destruct (add_clauses_sat_split assign _ _ Hcls) as [_ Hin].
   pose proof (Hin _ (or_introl eq_refl)) as C1.
@@ -759,7 +759,7 @@ Proof.
                     [Z.pos (bs_next_var st); neg_lit b];
                     [neg_lit (Z.pos (bs_next_var st)); a; b]]
                    (snd (alloc_var st)))) = true).
-  { unfold add_clauses; cbn [alloc_var snd bs_next_cid bs_cnf].
+  { unfold add_clauses; cbn [alloc_var snd bs_next_cid bs_cnf neg_lit].
     rewrite Happ; cbn [bs_cnf]; rewrite eval_cnf_app, Hst, Hnew; reflexivity. }
   destruct (add_clauses_sat_split assign _ _ Hcls) as [_ Hin].
   pose proof (Hin _ (or_introl eq_refl)) as C1.
@@ -811,7 +811,7 @@ Proof.
                     [Z.pos (bs_next_var st); neg_lit a; b];
                     [Z.pos (bs_next_var st); a; neg_lit b]]
                    (snd (alloc_var st)))) = true).
-  { unfold add_clauses; cbn [alloc_var snd bs_next_cid bs_cnf].
+  { unfold add_clauses; cbn [alloc_var snd bs_next_cid bs_cnf neg_lit].
     rewrite Happ; cbn [bs_cnf]; rewrite eval_cnf_app, Hst, Hnew; reflexivity. }
   destruct (add_clauses_sat_split assign _ _ Hcls) as [_ Hin].
   pose proof (Hin _ (or_introl eq_refl)) as C1.
@@ -865,7 +865,7 @@ Proof.
                     [sel; neg_lit (Z.pos (bs_next_var st)); fl];
                     [sel; Z.pos (bs_next_var st); neg_lit fl]]
                    (snd (alloc_var st)))) = true).
-  { unfold add_clauses; cbn [alloc_var snd bs_next_cid bs_cnf].
+  { unfold add_clauses; cbn [alloc_var snd bs_next_cid bs_cnf neg_lit].
     rewrite Happ; cbn [bs_cnf]; rewrite eval_cnf_app, Hst, Hnew; reflexivity. }
   destruct (add_clauses_sat_split assign _ _ Hcls) as [_ Hin].
   pose proof (Hin _ (or_introl eq_refl)) as C1.

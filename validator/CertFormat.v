@@ -1515,12 +1515,12 @@ Definition parse_tagged_nonempty_str_sexp (expected_tag : string) (sx : sexp)
   | _ => inl "expected tagged string S-expression"
   end.
 
-Lemma parse_tagged_nonempty_str_ok : forall tag sx s,
-  parse_tagged_nonempty_str_sexp tag sx = inr s -> negb (String.eqb s "") = true.
+Lemma parse_tagged_nonempty_str_ok : forall tag sx out,
+  parse_tagged_nonempty_str_sexp tag sx = inr out -> negb (String.eqb out "") = true.
 Proof.
-  intros tag [? | ? | [| [t0 | |] [| val_sx [| ? ?]]]] s H; cbn in H; try discriminate.
+  intros tag [? | ? | [| [t0 | ? | ?] [| val_sx [| ? ?]]]] out H; cbn in H; try discriminate.
   destruct (String.eqb t0 tag); [| discriminate].
-  exact (parse_nonempty_str_ok val_sx s H).
+  exact (parse_nonempty_str_ok val_sx out H).
 Qed.
 
 Definition parse_tagged_sha256_sexp (expected_tag : string) (sx : sexp)
@@ -1532,12 +1532,12 @@ Definition parse_tagged_sha256_sexp (expected_tag : string) (sx : sexp)
   | _ => inl "expected tagged SHA-256 S-expression"
   end.
 
-Lemma parse_tagged_sha256_ok : forall tag sx s,
-  parse_tagged_sha256_sexp tag sx = inr s -> is_sha256_hex s = true.
+Lemma parse_tagged_sha256_ok : forall tag sx out,
+  parse_tagged_sha256_sexp tag sx = inr out -> is_sha256_hex out = true.
 Proof.
-  intros tag [? | ? | [| [t0 | |] [| d_sx [| ? ?]]]] s H; cbn in H; try discriminate.
+  intros tag [? | ? | [| [t0 | ? | ?] [| d_sx [| ? ?]]]] out H; cbn in H; try discriminate.
   destruct (String.eqb t0 tag); [| discriminate].
-  exact (parse_sha256_atom_ok d_sx s H).
+  exact (parse_sha256_atom_ok d_sx out H).
 Qed.
 
 Definition parse_tagged_expr_sexp (expected_tag : string) (sx : sexp)
