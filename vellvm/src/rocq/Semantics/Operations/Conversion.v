@@ -1,3 +1,5 @@
+From Flocq.IEEE754 Require Import Binary.
+
 From Vellvm Require Import
      Syntax
      Numeric
@@ -114,6 +116,27 @@ Section Convert.
    *)
   Definition double_to_float : ll_double -> ll_float := Float.to_single.
 
+  (* Arbitrary-width integer to IEEE-754 float/double conversion via Flocq
+     [IEEE754_extra.BofZ] (round-to-nearest-ties-to-even). Per LLVM LangRef,
+     if the rounded value cannot fit in the destination floating-point type
+     (i.e. overflows to +/-Inf, such as [uitofp i128 -1 to float]), the result
+     is [poison]. *)
+  Definition z_to_float32 (z : Z) : ll_float :=
+    IEEE754_extra.BofZ 24%Z 128%Z Logic.eq_refl Logic.eq_refl z.
+  Arguments z_to_float32 : simpl never.
+
+  Definition z_is_finite_float32 (z : Z) : bool :=
+    Binary.is_finite 24%Z 128%Z (z_to_float32 z).
+  Arguments z_is_finite_float32 : simpl never.
+
+  Definition z_to_float64 (z : Z) : ll_double :=
+    IEEE754_extra.BofZ 53%Z 1024%Z Logic.eq_refl Logic.eq_refl z.
+  Arguments z_to_float64 : simpl never.
+
+  Definition z_is_finite_float64 (z : Z) : bool :=
+    Binary.is_finite 53%Z 1024%Z (z_to_float64 z).
+  Arguments z_is_finite_float64 : simpl never.
+
   (** ** Typed conversion
         Performs a dynamic conversion of a [dvalue] of type [t1] to one of type [t2].
         For instance, convert an integer over 8 bits to one over 1 bit by truncation.
@@ -179,7 +202,9 @@ Section Convert.
             then
               if (nneg && (signed i1 <? 0)%Z)%bool
               then ret (dvp t2)
-              else ret (DVALUE_Float (Float32.of_intu (repr (unsigned i1))))
+              else if z_is_finite_float32 (unsigned i1)
+                   then ret (DVALUE_Float (z_to_float32 (unsigned i1)))
+                   else ret (dvp t2)
             else raise_error "i-to-float ill-typed Uitofp"
 
         | DTYPE_I sz_t, DVALUE_I sz_from i1, DTYPE_FP FP_double =>
@@ -187,7 +212,9 @@ Section Convert.
             then
               if (nneg && (signed i1 <? 0)%Z)%bool
               then ret (dvp t2)
-              else ret (DVALUE_Double (Float.of_longu (repr (unsigned i1))))
+              else if z_is_finite_float64 (unsigned i1)
+                   then ret (DVALUE_Double (z_to_float64 (unsigned i1)))
+                   else ret (dvp t2)
             else raise_error "i-to-double ill-typed Uitofp"
 
         | DTYPE_I sz_t, DVALUE_Poison, DTYPE_FP _ =>
@@ -200,12 +227,18 @@ Section Convert.
         match t1, x, t2 with
         | DTYPE_I sz_t, DVALUE_I sz_from i1, DTYPE_FP FP_float =>
             if Pos.eqb sz_t sz_from
-            then ret (DVALUE_Float (Float32.of_int (repr (signed i1))))
+            then
+              if z_is_finite_float32 (signed i1)
+              then ret (DVALUE_Float (z_to_float32 (signed i1)))
+              else ret (dvp t2)
             else raise_error "i-to-float ill-typed Sitofp"
 
         | DTYPE_I sz_t, DVALUE_I sz_from i1, DTYPE_FP FP_double =>
             if Pos.eqb sz_t sz_from
-            then ret (DVALUE_Double (Float.of_long (repr (signed i1))))
+            then
+              if z_is_finite_float64 (signed i1)
+              then ret (DVALUE_Double (z_to_float64 (signed i1)))
+              else ret (dvp t2)
             else raise_error "i-to-double ill-typed Sitofp"
 
         | DTYPE_I sz_t, DVALUE_Poison, DTYPE_FP _ =>
@@ -318,7 +351,12 @@ Section Convert.
         | Some (t_from', t_to') =>
             DVALUE_Base <$> (convert_pure_base conv t_from' dv t_to')
         | None =>
-            raise_error "convert_pure: type mismatch"
+            match get_vector_conversion_type t_from t_to, dv with
+            | Some (t_from', t_to'), DVALUE_Poison =>
+                DVALUE_Base <$> (convert_pure_base conv t_from' DVALUE_Poison t_to')
+            | _, _ =>
+                raise_error "convert_pure: type mismatch"
+            end
         end
           
     | (DVALUE_Array true elts1) =>
@@ -326,7 +364,7 @@ Section Convert.
         | Some (t_from', t_to') =>
               elts1' <- map_monad dvalue_to_dvalue_base elts1 ;;
               val <- map_monad (fun v => convert_pure_base conv t_from' v t_to') elts1' ;;
-              ret (DVALUE_Array true (List.map DVALUE_Base val))
+              ret (canonicalize_vector (List.map DVALUE_Base val))
 
         | None =>
             raise_error "convert_pure: type or vector size mismatch"

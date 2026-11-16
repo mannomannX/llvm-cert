@@ -64,7 +64,7 @@ Section withParams.
              then
                let x8 : int8 := repr (unsigned x32) in
                io_stdout [x8] ;;
-               ret (DVALUE_Base (DVALUE_I 8 x8))
+               ret (DVALUE_Base (DVALUE_I 32 (@Integers.repr 32 (@Integers.unsigned 8 x8))))
              else
                raiseUB ("putc got non-i32 integer argument")
          | bad => raiseUB ("putc got non-i32 argument " ++ show_dvalue bad)
@@ -97,7 +97,7 @@ Section withParams.
               )
               (char, [], 1%Z) ;;
           v <- io_stdout (DList.rev_tail_rec bytes) ;;
-          ret (DVALUE_Base (DVALUE_I 8 (@Integers.zero 8)))
+          ret (DVALUE_Base (DVALUE_I 32 (@Integers.zero 32)))
       | bad => raiseUB ("puts got non-address argument " ++ show_dvalue bad)
       end
     in

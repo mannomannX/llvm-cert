@@ -53,9 +53,39 @@ copyrights and open-source licenses:
     For commercial distributions, LLVMCert elects the `LGPL-2.1-or-later`
     option as indicated in each file header.
 
+  * Flocq formal floating-point library for Rocq (`coq-flocq >= 4.2.0`, declared
+    in `vellvm/rocq-vellvm.opam` and statically extracted into the isolated
+    OCaml subprocess executables `verified-opt-fallback` and `cert-validator`):
+    Copyright Sylvie Boldo, Guillaume Melquiond, and contributors, distributed
+    under the GNU Lesser General Public License v3.0 or later
+    (`LGPL-3.0-or-later`).
+
+  * Rocq core standard library and Equations plugin (`rocq-stdlib`,
+    `rocq-equations`, extracted into `verified-opt-fallback` and
+    `cert-validator`):
+    Distributed under the GNU Lesser General Public License v2.1
+    (`LGPL-2.1-only` / `LGPL-2.1-or-later`).
+
+LGPL Combined-Work Notice for Isolated Subprocess Executables:
+The standalone executables `verified-opt-fallback` and `cert-validator` link
+OCaml code extracted from `coq-flocq` (`LGPL-3.0-or-later`), CompCert `Numeric`
+(`LGPL-2.1-or-later`), and `rocq-stdlib` (`LGPL-2.1-only`) alongside LLVMCert
+verification modules, and are invoked strictly as separate OS subprocesses over
+standard files/pipes. Binary distributions of `verified-opt-fallback` and
+`cert-validator` are accompanied by complete corresponding source code for the
+LGPL libraries together with relinkable OCaml object/archive files (`.cmi`,
+`.cmx`, `.cmxa`, `.cma`, `.a`/`.o`) enabling recipients to modify those LGPL
+libraries and relink updated `verified-opt-fallback` and `cert-validator`
+executables pursuant to LGPL-2.1 Section 6 and LGPL-3.0 Section 4(d)-(e). The
+main `cert-llvm` driver, `ir-bridge`, Z3 certificate search engine, and
+`.proof.json` audit signer contain zero LGPL code, do not link statically or
+dynamically against any LGPL library, and remain governed exclusively by the
+LLVMCert Dual-License terms.
+
 Nothing in the LLVMCert Non-Commercial Evaluation & Research License Agreement
-restricts your rights under the applicable upstream open-source licenses solely
-with respect to unmodified third-party files listed above.
+restricts your rights under the applicable upstream open-source licenses
+(including LGPL-2.1 and LGPL-3.0) with respect to the third-party components and
+LGPL Combined Works listed above.
 
 ================================================================================
 LLVMCERT NON-COMMERCIAL EVALUATION & RESEARCH LICENSE AGREEMENT
@@ -91,13 +121,35 @@ SOFTWARE WITHOUT A SEPARATE COMMERCIAL LICENSE AGREEMENT.
          cloud service, SaaS platform, CI/CD service, verification-as-a-service,
          or competing commercial compiler/verifier product; or
      (d) remove, alter, or obscure any copyright, license, or attribution
-         notices.
+         notices; PROVIDED, HOWEVER, that nothing in this Section 2 or elsewhere
+         in this Agreement prohibits Licensee from (i) modifying the
+         LGPL-licensed libraries (`coq-flocq` under `LGPL-3.0-or-later`,
+         CompCert `Numeric` under `LGPL-2.1-or-later`, and `rocq-stdlib` under
+         `LGPL-2.1-only`) linked into the isolated subprocess executables
+         `verified-opt-fallback` and `cert-validator`, (ii) relinking modified
+         versions of those LGPL libraries with the provided relinkable
+         object/archive artifacts to produce updated `verified-opt-fallback` and
+         `cert-validator` executables for Licensee's permitted use, or (iii)
+         performing reverse engineering, decompilation, or disassembly strictly
+         limited to `verified-opt-fallback` and `cert-validator` and solely to
+         the extent required to debug Licensee's modifications to those LGPL
+         libraries pursuant to LGPL-2.1 Section 6 and LGPL-3.0 Section 4(d)-(e)
+         (this narrow LGPL Combined-Work carve-out does not apply to `cert-llvm`
+         or any other LLVMCert Proprietary Software component that does not link
+         LGPL code).
 
-3. Redistribution Restrictions.
+3. Redistribution Restrictions & LGPL Combined-Work Compliance.
    Licensee may redistribute verbatim copies or non-commercial academic
    Derivative Works of the Software ONLY under the exact terms of this
    Agreement, accompanied by a complete copy of this `LICENSE` file, and may
-   not grant any broader rights or charge any fee for the Software.
+   not grant any broader rights or charge any fee for the Software. Upstream
+   LGPL libraries (`coq-flocq`, CompCert `Numeric`, `rocq-stdlib`) remain
+   governed by their respective LGPL-3.0-or-later and LGPL-2.1-or-later
+   licenses, and distributions of the isolated subprocess executables
+   `verified-opt-fallback` and `cert-validator` include corresponding LGPL
+   source code and relinkable object/archive files in compliance with LGPL-2.1
+   Section 6 and LGPL-3.0 Section 4(d)-(e) without granting any license or
+   redistribution rights to separate proprietary `cert-llvm` components.
 
 4. Intellectual Property & Reservation of Rights.
    The Software is licensed, not sold. Licensor retains all right, title, and
@@ -113,8 +165,17 @@ SOFTWARE WITHOUT A SEPARATE COMMERCIAL LICENSE AGREEMENT.
 6. Automatic Termination.
    This Agreement and all rights granted hereunder terminate automatically and
    immediately without notice if Licensee breaches any term of this Agreement.
-   Upon termination, Licensee must immediately cease all use of the Software
-   and destroy all copies and compiled binaries in Licensee's possession.
+   Exercising any right expressly guaranteed by LGPL-2.1 (including Section 6)
+   or LGPL-3.0 (including Section 4(d)-(e)) with respect to the LGPL libraries
+   linked into the isolated subprocess executables `verified-opt-fallback` and
+   `cert-validator` — including modifying those LGPL libraries, relinking those
+   two isolated executables using provided object/archive artifacts, or
+   debugging such LGPL modifications — shall never constitute a breach of this
+   Agreement or trigger termination under this Section 6. Upon termination for
+   breach, Licensee must immediately cease all use of the Software and destroy
+   all copies and compiled binaries of the LLVMCert Proprietary Software in
+   Licensee's possession (without prejudice to Licensee's continuing rights in
+   upstream third-party open-source components).
 
 7. Disclaimer of Warranty.
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR

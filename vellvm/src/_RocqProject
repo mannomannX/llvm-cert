@@ -1,4 +1,6 @@
 -R rocq Vellvm
+-R ../../passes CertPasses
+-R ../../validator CertValidator
 
 -arg -w -arg -masking-absolute-name
 -arg -w -arg -deprecated-hint-without-locality
@@ -99,3 +101,19 @@
 ./rocq/Theory/I2F/I2F_toplevel.v
 
 ./rocq/Theory/Equational.v
+
+../../passes/PassCommon.v
+../../passes/SimplifyCFG.v
+../../passes/DCE.v
+../../passes/SCCP.v
+../../passes/Mem2Reg.v
+../../passes/Inline.v
+../../passes/Pipeline.v
+../../passes/McfgExport.v
+../../passes/ModuleMerge.v
+
+../../validator/CertFormat.v
+../../validator/AigLrat.v
+../../validator/AlgRules.v
+../../validator/CertValidator.v
+../../validator/CheckAssumptions.v

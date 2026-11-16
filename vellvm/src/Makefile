@@ -1,9 +1,11 @@
 ## Vellvm Project Makefile (Clean MIT/LGPL-2.1 Library & Extraction Build)
 
 ROCQDIR = rocq
+PASSESDIR = ../../passes
+VALIDATORDIR = ../../validator
 EXTRACTDIR = ml/extracted
 
-ROCQINCLUDES=$(foreach d, $(ROCQDIR), -R $(d) Vellvm) -R $(EXTRACTDIR) Extract
+ROCQINCLUDES=$(foreach d, $(ROCQDIR), -R $(d) Vellvm) -R $(PASSESDIR) CertPasses -R $(VALIDATORDIR) CertValidator -R $(EXTRACTDIR) Extract
 ROCQEXEC="$(ROCQBIN)rocq" top -q -w none $(ROCQINCLUDES) -batch -load-vernac-source
 ROCQMAKEFILE="$(ROCQBIN)rocq" makefile
 
@@ -13,6 +15,8 @@ ROCQFILES_FRONTEND := Syntax/ShowAST Syntax/ReprAST Utils/ParserHelper Syntax/LL
 ROCQFILES_EXEC := $(ROCQFILES_FRONTEND) Semantics
 FRONTEND_VOFILES := $(ROCQFILES_FRONTEND:%=rocq/%.vo)
 EXEC_VOFILES := $(ROCQFILES_EXEC:%=rocq/%.vo)
+PASS_VOFILES := $(PASSESDIR)/Pipeline.vo $(PASSESDIR)/McfgExport.vo $(PASSESDIR)/ModuleMerge.vo
+VALIDATOR_VOFILES := $(VALIDATORDIR)/CertFormat.vo $(VALIDATORDIR)/AigLrat.vo $(VALIDATORDIR)/AlgRules.vo $(VALIDATORDIR)/CertValidator.vo $(VALIDATORDIR)/CheckAssumptions.vo
 
 .DEFAULT_GOAL := all
 
@@ -31,7 +35,7 @@ rocq: real-all
 .PHONY: extracted
 extracted: $(EXTRACTDIR)/STAMP
 
-$(EXTRACTDIR)/STAMP: $(EXEC_VOFILES) $(EXTRACTDIR)/Extract.v
+$(EXTRACTDIR)/STAMP: $(EXEC_VOFILES) $(PASS_VOFILES) $(VALIDATOR_VOFILES) $(EXTRACTDIR)/Extract.v
 	@echo "Extracting"
 	$(ROCQEXEC) $(EXTRACTDIR)/Extract.v
 	@echo "Post-processing extraction: unbox the itree node wrapper"
@@ -41,7 +45,7 @@ $(EXTRACTDIR)/STAMP: $(EXEC_VOFILES) $(EXTRACTDIR)/Extract.v
 .PHONY: clean
 clean: extractedclean clean-rocqmakefile
 	rm -rf output
-	find rocq -name ".*.aux" -delete
+	find rocq $(PASSESDIR) $(VALIDATORDIR) -name ".*.aux" -delete
 	dune clean
 
 .PHONY: extractedclean
@@ -73,14 +77,14 @@ ml/dune ml/extracted/dune ml/IO.ml: ;
 
 .PHONY: rocqmakefile-exec
 rocqmakefile-exec:
-	+$(MAKE) -j --no-print-directory -f RocqMakefile $(EXEC_VOFILES)
+	+$(MAKE) -j --no-print-directory -f RocqMakefile $(EXEC_VOFILES) $(PASS_VOFILES) $(VALIDATOR_VOFILES)
 
 .PHONY: rocqmakefile-frontend
 rocqmakefile-frontend:
 	+$(MAKE) -j --no-print-directory -f RocqMakefile $(FRONTEND_VOFILES)
 
 $(FRONTEND_VOFILES): RocqMakefile rocqmakefile-frontend ;
-$(filter-out $(FRONTEND_VOFILES),$(EXEC_VOFILES)): RocqMakefile rocqmakefile-exec ;
+$(filter-out $(FRONTEND_VOFILES),$(EXEC_VOFILES)) $(PASS_VOFILES) $(VALIDATOR_VOFILES): RocqMakefile rocqmakefile-exec ;
 
 .PHONY: invoke-rocqmakefile
 invoke-rocqmakefile: RocqMakefile

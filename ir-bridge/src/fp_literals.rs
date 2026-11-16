@@ -54,6 +54,73 @@ pub fn f32_bits_to_f64_bits(bits32: u32) -> u64 {
     }
 }
 
+const fn u64_low_u32_exact(val: u64) -> Option<u32> {
+    let [b0, b1, b2, b3, 0, 0, 0, 0] = val.to_le_bytes() else {
+        return None;
+    };
+    Some(u32::from_le_bytes([b0, b1, b2, b3]))
+}
+
+/// Reconstructs the exact original IEEE-754 binary32 (`u32`) bit pattern from a widened
+/// binary64 (`u64`) bit pattern in the image of [`f32_bits_to_f64_bits`].
+///
+/// Handles `+-0.0`, normalized finite values, binary32 subnormals encoded as normal binary64
+/// values (`exp64` in `874..=896` with zero trailing mantissa bits, while `873` = `2^-150`
+/// and `1..=873` strictly underflow binary32), `+-inf`, and quiet/signaling NaNs with lossless
+/// 23-bit mantissa recovery when the low 29 mantissa bits are zero. Returns `None` for any `u64`
+/// bit pattern outside the exact image of binary32.
+#[must_use]
+pub const fn f64_bits_to_f32_bits_exact(bits: u64) -> Option<u32> {
+    let sign32 = (bits >> 63) << 31;
+    let exp64 = (bits >> 52) & 0x7FF;
+    let frac64 = bits & 0x000F_FFFF_FFFF_FFFF;
+
+    let bits32_u64 = match exp64 {
+        0 => {
+            if frac64 != 0 {
+                return None;
+            }
+            sign32
+        }
+        874..=896 => {
+            let shift = 897 - exp64;
+            let low_zero_bits = 29 + shift;
+            let low_mask = (1_u64 << low_zero_bits) - 1;
+            if (frac64 & low_mask) != 0 {
+                return None;
+            }
+            let frac32 = (1_u64 << (23 - shift)) | (frac64 >> low_zero_bits);
+            sign32 | frac32
+        }
+        897..=1150 => {
+            if (frac64 & 0x1FFF_FFFF) != 0 {
+                return None;
+            }
+            let exp32 = exp64 - 896;
+            let frac32 = frac64 >> 29;
+            sign32 | (exp32 << 23) | frac32
+        }
+        0x7FF => {
+            if (frac64 & 0x1FFF_FFFF) != 0 {
+                return None;
+            }
+            let frac32 = frac64 >> 29;
+            sign32 | (0xFF_u64 << 23) | frac32
+        }
+        _ => return None,
+    };
+
+    u64_low_u32_exact(bits32_u64)
+}
+
+fn format_llvm_128_hex(prefix: &str, bits128: u128) -> String {
+    // LLVM `LLLexer::HexToIntPair` (`0xL` / `0xM`) encodes the low 64-bit word (`Pair[0]`)
+    // in the first 16 hex digits and the high 64-bit word (`Pair[1]`) in the last 16 hex digits.
+    let low64 = bits128 & u128::from(u64::MAX);
+    let high64 = bits128 >> 64;
+    format!("{prefix}{low64:016X}{high64:016X}")
+}
+
 fn convert_f0x_token(
     full_token: &str,
     hex_digits: &str,
@@ -112,7 +179,7 @@ fn convert_f0x_token(
                 Some(FpScalarType::PpcFp128) => "0xM",
                 _ => "0xL",
             };
-            Ok(format!("{prefix}{bits128:032X}"))
+            Ok(format_llvm_128_hex(prefix, bits128))
         }
         _ => Err(BridgeError::InvalidFloatLiteral {
             token: full_token.to_owned(),
@@ -217,7 +284,7 @@ fn convert_special_fp_token(
             } else {
                 "0xL"
             };
-            Ok(format!("{prefix}{bits128:032X}"))
+            Ok(format_llvm_128_hex(prefix, bits128))
         }
         FpScalarType::X86Fp80 => Err(BridgeError::InvalidFloatLiteral {
             token: full_token.to_owned(),
@@ -288,15 +355,12 @@ pub fn normalize_llvm23_fp_and_comments(ir: &str) -> Result<String, BridgeError>
             break;
         };
 
-        // Preserve double-quoted strings verbatim (including `\"` / `\XX` escapes).
+        // Preserve double-quoted strings verbatim (in LLVM IR, quotes use `\22` hex escapes and
+        // `"` unconditionally terminates the string literal).
         if b == b'"' {
             let start = i;
             i += 1;
             while let Some(&ch) = bytes.get(i) {
-                if ch == b'\\' {
-                    i = (i + 2).min(len);
-                    continue;
-                }
                 i += 1;
                 if ch == b'"' {
                     break;
@@ -358,10 +422,6 @@ pub fn normalize_llvm23_fp_and_comments(ir: &str) -> Result<String, BridgeError>
             if bytes.get(i) == Some(&b'"') {
                 i += 1;
                 while let Some(&ch) = bytes.get(i) {
-                    if ch == b'\\' {
-                        i = (i + 2).min(len);
-                        continue;
-                    }
                     i += 1;
                     if ch == b'"' {
                         break;
@@ -487,4 +547,59 @@ fn try_parse_signed_special_fp(
     }
 
     Ok(None)
+}
+
+/// Pure proof/property predicate verifying IEEE-754 `f32 -> f64 -> f32` bijectivity,
+/// sign-bit preservation, and quiet/signaling NaN payload fidelity for a single `u32` bit pattern.
+#[must_use]
+pub fn verify_f32_f64_roundtrip_invariants(bits32: u32) -> bool {
+    let bits64 = f32_bits_to_f64_bits(bits32);
+    if f64_bits_to_f32_bits_exact(bits64) != Some(bits32) {
+        return false;
+    }
+    if (bits64 >> 63) != u64::from(bits32 >> 31) {
+        return false;
+    }
+    if (bits64 & 0x1FFF_FFFF) != 0 {
+        return false;
+    }
+
+    let abs32 = bits32 & 0x7FFF_FFFF;
+    if abs32 == 0x7F80_0000 {
+        // +-Infinity maps to binary64 +-Infinity (`exp64 == 0x7FF`, `frac64 == 0`).
+        return (bits64 & 0x7FFF_FFFF_FFFF_FFFF) == (0x7FF_u64 << 52);
+    }
+    if abs32 > 0x7F80_0000 {
+        // Quiet and signaling NaNs preserve exponent 0x7FF, quiet/signaling MSB, and 22-bit payload.
+        let exp_ok = ((bits64 >> 52) & 0x7FF) == 0x7FF;
+        let non_zero_frac = (bits64 & 0x000F_FFFF_FFFF_FFFF) != 0;
+        let quiet_ok = ((bits64 >> 51) & 1) == u64::from((bits32 >> 22) & 1);
+        let payload_ok = ((bits64 >> 29) & 0x003F_FFFF) == u64::from(bits32 & 0x003F_FFFF);
+        return exp_ok && non_zero_frac && quiet_ok && payload_ok;
+    }
+    true
+}
+
+/// Pure proof/property predicate verifying exact right-inverse soundness on `u64` bit patterns:
+/// `f64_bits_to_f32_bits_exact(bits64) == Some(bits32)` implies `f32_bits_to_f64_bits(bits32) == bits64`.
+#[must_use]
+pub fn verify_f64_f32_exact_image_invariants(bits64: u64) -> bool {
+    match f64_bits_to_f32_bits_exact(bits64) {
+        Some(bits32) => f32_bits_to_f64_bits(bits32) == bits64,
+        None => true,
+    }
+}
+
+/// Pure proof/property predicate exercising `normalize_llvm23_fp_and_comments` and
+/// `check_fast_path_eligibility` over arbitrary UTF-8 byte slices without panics or out-of-bounds slicing.
+#[must_use]
+pub fn verify_utf8_scanner_panic_freedom(bytes: &[u8]) -> bool {
+    let Ok(ir) = std::str::from_utf8(bytes) else {
+        return true;
+    };
+    let _elig = crate::vellvm_sanitize::check_fast_path_eligibility(ir);
+    match normalize_llvm23_fp_and_comments(ir) {
+        Ok(norm) => normalize_llvm23_fp_and_comments(&norm).ok().as_deref() == Some(norm.as_str()),
+        Err(_) => true,
+    }
 }

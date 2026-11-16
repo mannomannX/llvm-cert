@@ -113,7 +113,7 @@ let mk_metadata (m : ('a metadata list option)) : 'a metadata list =
 
 %}
 
-%token<Parse_util.lexed_id> GLOBAL LOCAL
+%token<Parse_util.lexed_id> GLOBAL LOCAL COMDAT_VAR
 %token LPAREN RPAREN LCURLY RCURLY LTLCURLY RCURLYGT LSQUARE RSQUARE LT GT EQ COMMA EOF STAR COLON DOTDOTDOT
 
 %token<string> COMMENT
@@ -490,6 +490,7 @@ let mk_metadata (m : ('a metadata list option)) : 'a metadata list =
 %token KW_SEQ_CST
 
 %token KW_RANGE
+%token KW_INRANGE
 %token KW_INITIALIZES
 %token KW_SPLAT
 %token KW_SAMESIGN
@@ -679,7 +680,7 @@ c_partition:
   | l=c_comdat { l }
 
 c_comdat:
-  | csep KW_COMDAT LPAREN lid=lident RPAREN l=c_align { (ANN_comdat lid) :: l }
+  | csep KW_COMDAT LPAREN lid=comdat_ident RPAREN l=c_align { (ANN_comdat lid) :: l }
   | l=c_align { l }
 
 c_align:
@@ -789,7 +790,7 @@ partition:
 
 %inline
 comdat:
-  | KW_COMDAT LPAREN l=lident RPAREN { ANN_comdat l }
+  | KW_COMDAT LPAREN l=comdat_ident RPAREN { ANN_comdat l }
 
 %inline
 align_ann:
@@ -860,7 +861,9 @@ declaration:
     LPAREN args = dc_args RPAREN 
 
     u = unnamed_addr?
+    ad = addrspace?
     dc_attrs = fn_attr*
+    sec = section?
     a = align_ann?
     g = gc?
     pre = prefix?
@@ -879,6 +882,8 @@ declaration:
 	     @ (opt_list d)
 	     @ (opt_list c)
 	     @ (opt_list u)
+	     @ (opt_list ad)
+	     @ (opt_list sec)
 	     @ (opt_list a)
 	     @ (opt_list g)
 	     @ (opt_list pre)
@@ -1189,6 +1194,7 @@ non_function_type:
   | n=B                                               { TYPE_B n              }
   | KW_IPTR                                           { TYPE_Iptr             }
   | KW_PTR                                            { TYPE_Pointer (None)   }
+  | KW_PTR KW_ADDRSPACE LPAREN INTEGER RPAREN         { TYPE_Pointer (None)   }
   | KW_HALF                                           { TYPE_FP FP_half       }
   | KW_BFLOAT                                         { TYPE_FP FP_bfloat     }
   | KW_FLOAT                                          { TYPE_FP FP_float      }
@@ -1264,6 +1270,9 @@ gep_flag:
   | KW_NUSW     { fun f -> { f with gep_nusw = true } }
   | KW_NUW      { fun f -> { f with gep_nuw = true } }
 
+gep_inrange:
+  | KW_INRANGE LPAREN INTEGER COMMA INTEGER RPAREN { () }
+
 (* The class names of nofpclass(...).  "ninf" and "sub" are also keywords
    (a fast-math flag and an instruction). *)
 nofpclass_word:
@@ -1304,6 +1313,7 @@ call_arg:
 
 fn_attr:
   | KW_ALIGNSTACK LPAREN p=INTEGER RPAREN { FNATTR_Alignstack p     }
+  | KW_ALIGNSTACK EQ p=INTEGER            { FNATTR_Alignstack p     }
   (*  KW_ALLOC_FAMILY - quoted KeyValue *)
   | KW_ALLOCKIND LPAREN s=STRING RPAREN   { FNATTR_Allockind (str s) }
   | KW_ALLOCSIZE LPAREN l=separated_nonempty_list(csep, INTEGER) RPAREN
@@ -1315,7 +1325,7 @@ fn_attr:
 
                                           }
   | KW_ALWAYSINLINE                       { FNATTR_Alwaysinline     }
-  | KW_BUILTIN                            { FNATTR_Nobuiltin        }
+  | KW_BUILTIN                            { FNATTR_Builtin          }
   | KW_COLD                               { FNATTR_Cold             }
   | KW_CONVERGENT                         { FNATTR_Convergent       }
   | KW_DISABLE_SANITIZER_INSTRUMENTATION  { FNATTR_Disable_sanitizer_instrumentation }
@@ -1579,21 +1589,21 @@ expr_op:
     { OP_FBinop (op, f, t, o1, o2) }
 
   // special case, coerced to fsub
-  | KW_FNEG f=fast_math* t=typ o=exp
-     { OP_Fneg(f, (t, o)) }
+  | KW_FNEG f=fast_math* arg=fneg_expr_arg
+     { OP_Fneg(f, arg) }
 
-  | KW_FCMP op=fcmp LPAREN t=typ o1=exp COMMA typ o2=exp RPAREN
-    { OP_FCmp (op, [], t, o1, o2) }
+  | KW_FCMP f=fast_math* op=fcmp LPAREN t=typ o1=exp COMMA typ o2=exp RPAREN
+    { OP_FCmp (op, f, t, o1, o2) }
 
   | c=conversion LPAREN t1=typ v=exp KW_TO t2=typ RPAREN
     { OP_Conversion (c, t1, v, t2) }
 
     (* SAZ: TODO - record the inbounds, nuw, nusw flags, also allow inrange(S,E) *) 
-  | KW_GETELEMENTPTR fl=gep_flag* LPAREN t=typ COMMA ptr=texp idx=preceded(COMMA, texp)* RPAREN
+  | KW_GETELEMENTPTR fl=gep_flag* gep_inrange? LPAREN t=typ COMMA ptr=texp idx=preceded(COMMA, texp)* RPAREN
     { OP_GetElementPtr (gep_flags_of fl, t, ptr, idx) }
 
-  | KW_SELECT LPAREN if_=texp COMMA then_=texp COMMA else_= texp RPAREN
-    { OP_Select ([], if_, then_, else_) }
+  | KW_SELECT f=fast_math* LPAREN if_=texp COMMA then_=texp COMMA else_= texp RPAREN
+    { OP_Select (f, if_, then_, else_) }
 
   | KW_FREEZE LPAREN v=texp RPAREN
     { OP_Freeze v }
@@ -1625,7 +1635,7 @@ instr_path:
       (INSTR_Op (OP_InsertValue (agg, new_val, idx)), f_info::md) }
 
     (* SAZ: TODO - allow inrange(S,E) *) 
-  | KW_GETELEMENTPTR fl=gep_flag* t=typ COMMA ptr=texp im=comma_path_with_instr_metadata(texp)
+  | KW_GETELEMENTPTR fl=gep_flag* gep_inrange? t=typ COMMA ptr=texp im=comma_path_with_instr_metadata(texp)
     { let f_info = metadata_file_info $startpos $endpos in
       let (idx, md) = im in
       (INSTR_Op(OP_GetElementPtr (gep_flags_of fl, t, ptr, idx)), f_info::md) }
@@ -1964,6 +1974,14 @@ switch_table_entry:
 %inline csep:
   COMMA { }
 
+
+fneg_expr_arg:
+  | LPAREN t=typ o=exp RPAREN { (t, o) }
+  | t=typ o=exp               { (t, o) }
+
+comdat_ident:
+  | c=COMDAT_VAR { (lexed_id_to_raw_id c) }
+  | l=lident     { l }
 
 lident:
   | l=LOCAL  { (lexed_id_to_raw_id l) }

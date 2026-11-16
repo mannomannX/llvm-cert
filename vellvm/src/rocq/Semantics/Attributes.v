@@ -149,13 +149,32 @@ Section Attributes.
     | _, _ => v
     end.
 
-  Definition value_attr_range (attrs : list param_attr) (v : dvalue) : dvalue :=
-    match v, find_option attr_range attrs with
-    | DVALUE_Base (DVALUE_I sz x), Some (lo, hi) =>
-        if in_wrapping_range sz (unsigned x) (denote_int_syntax lo) (denote_int_syntax hi)
-        then v else DVALUE_Base DVALUE_Poison
-    | _, _ => v
+  (** ** Metadata without an attribute counterpart
+
+      [!range] on a load, call, or invoke: LangRef "If the loaded or returned
+      value is not in the specified range, a poison value is returned
+      instead. ... The loaded value or the value returned is known to be in
+      the union of the ranges defined by each consecutive pair. ... For
+      vector-typed instructions, the range is applied element-wise." *)
+  Definition in_metadata_ranges (sz : positive) (x : Z) (ranges : list (int_syntax * int_syntax)) : bool :=
+    existsb (fun '(lo, hi) => in_wrapping_range sz x (denote_int_syntax lo) (denote_int_syntax hi)) ranges.
+
+  Definition value_metadata_range_base (ranges : list (int_syntax * int_syntax)) (v : dvalue) : dvalue :=
+    match v with
+    | DVALUE_Base (DVALUE_I sz x) =>
+        if in_metadata_ranges sz (unsigned x) ranges then v else DVALUE_Base DVALUE_Poison
+    | _ => v
     end.
+
+  Definition value_metadata_range (ranges : option (list (int_syntax * int_syntax))) (v : dvalue) : dvalue :=
+    match ranges, v with
+    | None, _ => v
+    | Some rs, DVALUE_Array true elts => DVALUE_Array true (List.map (value_metadata_range_base rs) elts)
+    | Some rs, _ => value_metadata_range_base rs v
+    end.
+
+  Definition value_attr_range (attrs : list param_attr) (v : dvalue) : dvalue :=
+    value_metadata_range (option_map (fun p => [p]) (find_option attr_range attrs)) v.
 
   Definition fp_class (v : dvalue_base) : option Z :=
     match v with
@@ -199,30 +218,6 @@ Section Attributes.
     if existsb attr_is_noundef attrs && negb (dvalue_well_defined v)
     then raise_ub msg
     else ret v.
-
-  (** ** Metadata without an attribute counterpart
-
-      [!range] on a load, call, or invoke: LangRef "If the loaded or returned
-      value is not in the specified range, a poison value is returned
-      instead. ... The loaded value or the value returned is known to be in
-      the union of the ranges defined by each consecutive pair. ... For
-      vector-typed instructions, the range is applied element-wise." *)
-  Definition in_metadata_ranges (sz : positive) (x : Z) (ranges : list (int_syntax * int_syntax)) : bool :=
-    existsb (fun '(lo, hi) => in_wrapping_range sz x (denote_int_syntax lo) (denote_int_syntax hi)) ranges.
-
-  Definition value_metadata_range_base (ranges : list (int_syntax * int_syntax)) (v : dvalue) : dvalue :=
-    match v with
-    | DVALUE_Base (DVALUE_I sz x) =>
-        if in_metadata_ranges sz (unsigned x) ranges then v else DVALUE_Base DVALUE_Poison
-    | _ => v
-    end.
-
-  Definition value_metadata_range (ranges : option (list (int_syntax * int_syntax))) (v : dvalue) : dvalue :=
-    match ranges, v with
-    | None, _ => v
-    | Some rs, DVALUE_Array true elts => DVALUE_Array true (List.map (value_metadata_range_base rs) elts)
-    | Some rs, _ => value_metadata_range_base rs v
-    end.
 
   (** ** How a call ends
 

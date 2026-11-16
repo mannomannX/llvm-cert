@@ -15,6 +15,7 @@ From Vellvm Require Import
   Interfaces.Memory
   Semantics.DynamicValues
   Semantics.LLVMEvents
+  Semantics.Attributes
   Semantics.Denotation
   Semantics.Operations
   Semantics.IntrinsicsDefinitions
@@ -131,7 +132,7 @@ Section withParams.
       (* Aliases don't allocate new storage space. *)
       ret tt 
     else
-      v <- alloca (g_typ g) 1%N None;;
+      v <- alloca (g_typ g) 1%N (option_map (fun a => Z.to_N (denote_int_syntax a)) (g_align g));;
       gwrite (g_ident g) v.
 
   Definition allocate_globals (gs:list (global dtyp)) : MCFGtop unit :=

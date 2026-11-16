@@ -1,0 +1,23 @@
+(executable
+ (name verified_opt_fallback)
+ (modules verified_opt_fallback)
+ (libraries vellvmLib libvellvm extracted))
+
+(executable
+ (name cert_validator)
+ (modules cert_validator)
+ (libraries vellvmLib libvellvm extracted))
+
+(rule
+ (target verified-opt-fallback)
+ (deps verified_opt_fallback.exe)
+ (action (copy %{deps} %{target})))
+
+(rule
+ (target cert-validator)
+ (deps cert_validator.exe)
+ (action (copy %{deps} %{target})))
+
+(alias
+ (name default)
+ (deps verified_opt_fallback.exe verified-opt-fallback cert_validator.exe cert-validator))

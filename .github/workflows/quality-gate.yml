@@ -35,18 +35,41 @@ jobs:
         run: python3 scripts/verify_repo_integrity.py --base "$BASE_SHA" --head "$HEAD_SHA"
 
       - name: CERT C / MISRA C check on custom C runtime & qualification code (read-only)
+        shell: bash
         run: |
-          C_FILES=$(find runtime c-quality -type f \( -name '*.c' -o -name '*.h' \) 2>/dev/null || true)
-          if [ -z "$C_FILES" ]; then
+          mapfile -d '' C_FILES < <(find runtime c-quality -type f \( -name '*.c' -o -name '*.h' \) -print0 2>/dev/null || true)
+          if [ "${#C_FILES[@]}" -eq 0 ]; then
             echo "No custom C runtime files present yet; skipping clang-format / clang-tidy."
             exit 0
           fi
-          clang-format --style=file:c-quality/.clang-format --dry-run --Werror $C_FILES
-          for f in $C_FILES; do
+          clang-format --style=file:c-quality/.clang-format --dry-run --Werror "${C_FILES[@]}"
+          COMMON_CFLAGS=(
+            -std=c17
+            -ffreestanding
+            -fno-builtin
+            -Wall
+            -Wextra
+            -Wvla
+            -Wstrict-prototypes
+            -Wconversion
+            -Wsign-conversion
+            -Wundef
+            -Werror
+          )
+          for f in "${C_FILES[@]}"; do
             case "$f" in
-              *.c) clang-tidy --config-file=c-quality/.clang-tidy "$f" -- -std=c17 -Wall -Wextra -Werror ;;
+              *.h) clang-tidy --config-file=c-quality/.clang-tidy "$f" -- -xc-header "${COMMON_CFLAGS[@]}" ;;
+              *.c) clang-tidy --config-file=c-quality/.clang-tidy "$f" -- "${COMMON_CFLAGS[@]}" ;;
             esac
           done
+          if [ -f "runtime/tests/runtime_selfcheck.c" ]; then
+            SELFCHECK_BIN="$(mktemp /tmp/cert-runtime-selfcheck-XXXXXX)"
+            clang -std=c17 -O2 -fno-builtin -Wall -Wextra -Werror \
+              runtime/src/mem_builtins.c runtime/src/int128_builtins.c runtime/tests/runtime_selfcheck.c \
+              -o "$SELFCHECK_BIN"
+            "$SELFCHECK_BIN"
+            rm -f "$SELFCHECK_BIN"
+          fi
 
       - name: Install Rust toolchain for ir-bridge
         if: hashFiles('ir-bridge/Cargo.toml') != ''

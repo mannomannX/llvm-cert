@@ -776,30 +776,115 @@ Proof.
   intros l1 l2 F; induction F; cbn; constructor; auto.
 Qed.
 
-(* The [eval_*] wrappers share their vector plumbing: coerce both
-     element lists to base values, run the base dispatcher pointwise,
-     and rewrap. *)
-Ltac i2f_vec_wrap base_lemma :=
-  i2f_vec_flags;
-  try (repeat constructor);
-  repeat match goal with
-    | F : Forall2 I2F_dvalue _ _ |- _ =>
-        rewrite (Forall2_length_N F); revert F
-    end;
-  intros F1 F2;
-  break_match_goal; cbn; auto;
-  (eapply I2F_EOU_bind;
-   [eapply I2F_EOU_map_monad2;
-    [eauto | intros; apply I2F_dvalue_to_dvalue_base; auto]|]);
-  intros ? ? ?;
-    (eapply I2F_EOU_bind;
-     [eapply I2F_EOU_map_monad2;
-      [eauto | intros; apply I2F_dvalue_to_dvalue_base; auto]|]);
-  intros ? ? ?;
-    (eapply I2F_EOU_bind;
-     [ eapply I2F_EOU_vec_loop; [eapply Forall2_combine; eauto|];
-       intros; apply base_lemma; auto
-     | intros; do 2 constructor; apply Forall2_map_Base; auto ]).
+Lemma I2F_dvalue_is_poison : forall v1 v2,
+    I2F_dvalue v1 v2 ->
+    @dvalue_is_poison PInf v1 = @dvalue_is_poison PFin v2.
+Proof.
+  intros * H; destruct H; [destruct H |..]; auto.
+Qed.
+
+Lemma I2F_forallb_is_poison : forall l1 l2,
+    Forall2 I2F_dvalue l1 l2 ->
+    forallb (@dvalue_is_poison PInf) l1 = forallb (@dvalue_is_poison PFin) l2.
+Proof.
+  induction 1 as [| x y xs ys Hxy H IH]; cbn; auto.
+  now rewrite (I2F_dvalue_is_poison Hxy), IH.
+Qed.
+
+Lemma I2F_canonicalize_vector : forall l1 l2,
+    Forall2 I2F_dvalue l1 l2 ->
+    I2F_dvalue (@canonicalize_vector PInf l1) (@canonicalize_vector PFin l2).
+Proof.
+  intros l1 l2 HF; unfold canonicalize_vector.
+  rewrite (I2F_forallb_is_poison HF).
+  destruct (forallb (@dvalue_is_poison PFin) l2);
+    [repeat constructor | apply I2F_dvalue_Array; exact HF].
+Qed.
+
+Lemma I2F_vec_pois_l
+  (f1 : @dvalue_base PInf -> @dvalue_base PInf -> EOU (@dvalue_base PInf))
+  (f2 : @dvalue_base PFin -> @dvalue_base PFin -> EOU (@dvalue_base PFin))
+  (HF : forall x1 x2 y1 y2,
+      I2F_dvalue_base x1 y1 -> I2F_dvalue_base x2 y2 ->
+      I2F_EOU I2F_dvalue_base (f1 x1 x2) (f2 y1 y2))
+  (s1 : list (@dvalue PInf)) (s2 : list (@dvalue PFin))
+  (HS : Forall2 I2F_dvalue s1 s2) :
+  I2F_EOU I2F_dvalue
+    (elts2' <- map_monad (@dvalue_to_dvalue_base PInf) s1 ;;
+     ans <- vec_loop f1 (List.combine (repeat (@DVALUE_Poison PInf) (Datatypes.length elts2')) elts2') ;;
+     ret (@canonicalize_vector PInf (List.map (@DVALUE_Base PInf) ans)))
+    (elts2' <- map_monad (@dvalue_to_dvalue_base PFin) s2 ;;
+     ans <- vec_loop f2 (List.combine (repeat (@DVALUE_Poison PFin) (Datatypes.length elts2')) elts2') ;;
+     ret (@canonicalize_vector PFin (List.map (@DVALUE_Base PFin) ans))).
+Proof.
+  eapply I2F_EOU_bind.
+  - eapply I2F_EOU_map_monad2; [exact HS | intros; apply I2F_dvalue_to_dvalue_base; assumption].
+  - intros e1 e2 FE.
+    eapply I2F_EOU_bind.
+    + eapply I2F_EOU_vec_loop.
+      * eapply Forall2_combine.
+        -- rewrite (Forall2_length FE); apply Forall2_repeat; constructor.
+        -- exact FE.
+      * intros; apply HF; assumption.
+    + intros ans1 ans2 FANS; constructor; apply I2F_canonicalize_vector, Forall2_map_Base, FANS.
+Qed.
+
+Lemma I2F_vec_pois_r
+  (f1 : @dvalue_base PInf -> @dvalue_base PInf -> EOU (@dvalue_base PInf))
+  (f2 : @dvalue_base PFin -> @dvalue_base PFin -> EOU (@dvalue_base PFin))
+  (HF : forall x1 x2 y1 y2,
+      I2F_dvalue_base x1 y1 -> I2F_dvalue_base x2 y2 ->
+      I2F_EOU I2F_dvalue_base (f1 x1 x2) (f2 y1 y2))
+  (s1 : list (@dvalue PInf)) (s2 : list (@dvalue PFin))
+  (HS : Forall2 I2F_dvalue s1 s2) :
+  I2F_EOU I2F_dvalue
+    (elts1' <- map_monad (@dvalue_to_dvalue_base PInf) s1 ;;
+     ans <- vec_loop f1 (List.combine elts1' (repeat (@DVALUE_Poison PInf) (Datatypes.length elts1'))) ;;
+     ret (@canonicalize_vector PInf (List.map (@DVALUE_Base PInf) ans)))
+    (elts1' <- map_monad (@dvalue_to_dvalue_base PFin) s2 ;;
+     ans <- vec_loop f2 (List.combine elts1' (repeat (@DVALUE_Poison PFin) (Datatypes.length elts1'))) ;;
+     ret (@canonicalize_vector PFin (List.map (@DVALUE_Base PFin) ans))).
+Proof.
+  eapply I2F_EOU_bind.
+  - eapply I2F_EOU_map_monad2; [exact HS | intros; apply I2F_dvalue_to_dvalue_base; assumption].
+  - intros e1 e2 FE.
+    eapply I2F_EOU_bind.
+    + eapply I2F_EOU_vec_loop.
+      * eapply Forall2_combine.
+        -- exact FE.
+        -- rewrite (Forall2_length FE); apply Forall2_repeat; constructor.
+      * intros; apply HF; assumption.
+    + intros ans1 ans2 FANS; constructor; apply I2F_canonicalize_vector, Forall2_map_Base, FANS.
+Qed.
+
+Lemma I2F_vec_arr_arr
+  (f1 : @dvalue_base PInf -> @dvalue_base PInf -> EOU (@dvalue_base PInf))
+  (f2 : @dvalue_base PFin -> @dvalue_base PFin -> EOU (@dvalue_base PFin))
+  (HF : forall x1 x2 y1 y2,
+      I2F_dvalue_base x1 y1 -> I2F_dvalue_base x2 y2 ->
+      I2F_EOU I2F_dvalue_base (f1 x1 x2) (f2 y1 y2))
+  (s1 s2 : list (@dvalue PInf)) (s1' s2' : list (@dvalue PFin))
+  (HS1 : Forall2 I2F_dvalue s1 s1') (HS2 : Forall2 I2F_dvalue s2 s2') :
+  I2F_EOU I2F_dvalue
+    (elts1' <- map_monad (@dvalue_to_dvalue_base PInf) s1 ;;
+     elts2' <- map_monad (@dvalue_to_dvalue_base PInf) s2 ;;
+     ans <- vec_loop f1 (List.combine elts1' elts2') ;;
+     ret (@canonicalize_vector PInf (List.map (@DVALUE_Base PInf) ans)))
+    (elts1' <- map_monad (@dvalue_to_dvalue_base PFin) s1' ;;
+     elts2' <- map_monad (@dvalue_to_dvalue_base PFin) s2' ;;
+     ans <- vec_loop f2 (List.combine elts1' elts2') ;;
+     ret (@canonicalize_vector PFin (List.map (@DVALUE_Base PFin) ans))).
+Proof.
+  eapply I2F_EOU_bind;
+    [eapply I2F_EOU_map_monad2; [exact HS1 | intros; apply I2F_dvalue_to_dvalue_base; assumption] |].
+  intros e1 e1' FE1.
+  eapply I2F_EOU_bind;
+    [eapply I2F_EOU_map_monad2; [exact HS2 | intros; apply I2F_dvalue_to_dvalue_base; assumption] |].
+  intros e2 e2' FE2.
+  eapply I2F_EOU_bind.
+  - eapply I2F_EOU_vec_loop; [eapply Forall2_combine; eassumption | intros; apply HF; assumption].
+  - intros ans1 ans2 FANS; constructor; apply I2F_canonicalize_vector, Forall2_map_Base, FANS.
+Qed.
 
 (** Layer 4: [eval_iop] adds the pointwise vector case on top of the
       scalar dispatcher. *)
@@ -809,13 +894,27 @@ Lemma I2F_eval_iop a1 a2 b1 b2 iop :
   I2F_EOU I2F_dvalue (eval_iop iop a1 a2) (eval_iop iop b1 b2).
 Proof.
   intros H1 H2.
-  induction H1; subst; induction H2; subst; cbn; repeat constructor.
-  2,3: break_goal_fast; eauto.
+  inversion H1 as [db1 db1' HB1 | p1 s1 s1' HS1 | v1 s1 s1' HS1]; subst;
+    inversion H2 as [db2 db2' HB2 | p2 s2 s2' HS2 | v2 s2 s2' HS2]; subst;
+    cbn [eval_iop fmap Functor_Monad]; try constructor.
   - (* Base × Base *)
-    eapply I2F_EOU_bind; [apply I2F_eval_iop_integer_base; auto|].
-    intros; eauto.
+    eapply I2F_EOU_bind; [apply I2F_eval_iop_integer_base; assumption |].
+    intros ? ? ?; do 2 constructor; assumption.
+  - (* Base × Array *)
+    destruct v2; cbn [eval_iop]; [| constructor].
+    inversion HB1; subst; cbn [eval_iop]; try constructor.
+    apply I2F_vec_pois_l; [intros; apply I2F_eval_iop_integer_base; assumption | exact HS2].
+  - (* Array × Base *)
+    destruct v1; cbn [eval_iop]; [| constructor].
+    inversion HB2; subst; cbn [eval_iop]; try constructor.
+    apply I2F_vec_pois_r; [intros; apply I2F_eval_iop_integer_base; assumption | exact HS1].
+  - (* Array × Struct *)
+    destruct v1; cbn [eval_iop]; constructor.
   - (* Array × Array *)
-    i2f_vec_wrap I2F_eval_iop_integer_base.
+    destruct v1, v2; cbn [eval_iop]; try constructor.
+    rewrite (Forall2_length_N HS1), (Forall2_length_N HS2).
+    destruct (N.length s1' =? N.length s2')%N; [| constructor].
+    apply I2F_vec_arr_arr; [intros; apply I2F_eval_iop_integer_base; assumption | exact HS1 | exact HS2].
 Qed.
 
 (* The float operations are parameter-independent: related inputs have
@@ -833,11 +932,11 @@ Lemma I2F_eval_fneg a b :
   I2F_EOU I2F_dvalue (eval_fneg a) (eval_fneg b).
 Proof.
   intros H.
-  inversion H; subst; cbn; eauto.
+  inversion H; subst; cbn [eval_fneg fmap Functor_Monad]; try constructor.
   - (* Base *)
-    eapply I2F_EOU_bind; [apply I2F_eval_fneg_base; auto| eauto].
+    eapply I2F_EOU_bind; [apply I2F_eval_fneg_base; auto | intros; repeat constructor; auto].
   - (* Array: only the vector flavour computes *)
-    match goal with v : bool |- _ => destruct v end; cbn; eauto.
+    match goal with v : bool |- _ => destruct v end; cbn [eval_fneg]; [| constructor].
     eapply I2F_EOU_bind;
       [eapply I2F_EOU_map_monad2;
        [eauto | intros; apply I2F_dvalue_to_dvalue_base; auto]|].
@@ -845,7 +944,7 @@ Proof.
     eapply I2F_EOU_bind;
       [eapply I2F_EOU_map_monad2;
        [eauto | intros; apply I2F_eval_fneg_base; auto]|].
-    intros; do 2 constructor; apply Forall2_map_Base; auto.
+    intros; constructor; apply I2F_canonicalize_vector, Forall2_map_Base; auto.
 Qed.
 
 (* The infinite side's same-sign test is always true on unsigned values;
@@ -914,13 +1013,27 @@ Lemma I2F_eval_icmp a1 a2 b1 b2 samesign cmp :
     (eval_icmp samesign cmp b1 b2).
 Proof.
   intros H1 H2.
-  induction H1; induction H2; cbn; eauto.
-  all: try (i2f_vec_flags; eauto).
+  inversion H1 as [db1 db1' HB1 | p1 s1 s1' HS1 | v1 s1 s1' HS1]; subst;
+    inversion H2 as [db2 db2' HB2 | p2 s2 s2' HS2 | v2 s2 s2' HS2]; subst;
+    cbn [eval_icmp fmap Functor_Monad]; try constructor.
   - (* Base × Base *)
-    eapply I2F_EOU_bind; [apply I2F_eval_icmp_base; auto|].
-    intros; eauto.
+    eapply I2F_EOU_bind; [apply I2F_eval_icmp_base; assumption |].
+    intros ? ? ?; do 2 constructor; assumption.
+  - (* Base × Array *)
+    destruct v2; cbn [eval_icmp]; [| constructor].
+    inversion HB1; subst; cbn [eval_icmp]; try constructor.
+    apply I2F_vec_pois_l; [intros; apply I2F_eval_icmp_base; assumption | exact HS2].
+  - (* Array × Base *)
+    destruct v1; cbn [eval_icmp]; [| constructor].
+    inversion HB2; subst; cbn [eval_icmp]; try constructor.
+    apply I2F_vec_pois_r; [intros; apply I2F_eval_icmp_base; assumption | exact HS1].
+  - (* Array × Struct *)
+    destruct v1; cbn [eval_icmp]; constructor.
   - (* Array × Array *)
-    i2f_vec_wrap I2F_eval_icmp_base.
+    destruct v1, v2; cbn [eval_icmp]; try constructor.
+    rewrite (Forall2_length_N HS1), (Forall2_length_N HS2).
+    destruct (N.length s1' =? N.length s2')%N; [| constructor].
+    apply I2F_vec_arr_arr; [intros; apply I2F_eval_icmp_base; assumption | exact HS1 | exact HS2].
 Qed.
 
 Lemma I2F_eval_fop_base : forall c v1 v2 v1' v2',
@@ -941,13 +1054,27 @@ Lemma I2F_eval_fop a1 a2 b1 b2 fop :
   I2F_EOU I2F_dvalue (eval_fop fop a1 a2) (eval_fop fop b1 b2).
 Proof.
   intros H1 H2.
-  induction H1; induction H2; cbn; eauto.
-  all: try (i2f_vec_flags; repeat constructor).
+  inversion H1 as [db1 db1' HB1 | p1 s1 s1' HS1 | v1 s1 s1' HS1]; subst;
+    inversion H2 as [db2 db2' HB2 | p2 s2 s2' HS2 | v2 s2 s2' HS2]; subst;
+    cbn [eval_fop fmap Functor_Monad]; try constructor.
   - (* Base × Base *)
-    eapply I2F_EOU_bind; [apply I2F_eval_fop_base; auto|].
-    intros; eauto.
+    eapply I2F_EOU_bind; [apply I2F_eval_fop_base; assumption |].
+    intros ? ? ?; do 2 constructor; assumption.
+  - (* Base × Array *)
+    destruct v2; cbn [eval_fop]; [| constructor].
+    inversion HB1; subst; cbn [eval_fop]; try constructor.
+    apply I2F_vec_pois_l; [intros; apply I2F_eval_fop_base; assumption | exact HS2].
+  - (* Array × Base *)
+    destruct v1; cbn [eval_fop]; [| constructor].
+    inversion HB2; subst; cbn [eval_fop]; try constructor.
+    apply I2F_vec_pois_r; [intros; apply I2F_eval_fop_base; assumption | exact HS1].
+  - (* Array × Struct *)
+    destruct v1; cbn [eval_fop]; constructor.
   - (* Array × Array *)
-    i2f_vec_wrap I2F_eval_fop_base.
+    destruct v1, v2; cbn [eval_fop]; try constructor.
+    rewrite (Forall2_length_N HS1), (Forall2_length_N HS2).
+    destruct (N.length s1' =? N.length s2')%N; [| constructor].
+    apply I2F_vec_arr_arr; [intros; apply I2F_eval_fop_base; assumption | exact HS1 | exact HS2].
 Qed.
 
 Lemma I2F_eval_fcmp_base : forall c v1 v2 v1' v2',
@@ -970,14 +1097,27 @@ Lemma I2F_eval_fcmp a1 a2 b1 b2 cmp :
     (eval_fcmp cmp b1 b2).
 Proof.
   intros H1 H2.
-  inversion H1; subst; inversion H2; subst; cbn;
-    try (repeat constructor).
-  all: try (i2f_vec_flags; repeat constructor).
+  inversion H1 as [db1 db1' HB1 | p1 s1 s1' HS1 | v1 s1 s1' HS1]; subst;
+    inversion H2 as [db2 db2' HB2 | p2 s2 s2' HS2 | v2 s2 s2' HS2]; subst;
+    cbn [eval_fcmp fmap Functor_Monad]; try constructor.
   - (* Base × Base *)
-    eapply I2F_EOU_bind; [apply I2F_eval_fcmp_base; auto|].
-    intros; do 2 constructor; auto.
+    eapply I2F_EOU_bind; [apply I2F_eval_fcmp_base; assumption |].
+    intros ? ? ?; do 2 constructor; assumption.
+  - (* Base × Array *)
+    destruct v2; cbn [eval_fcmp]; [| constructor].
+    inversion HB1; subst; cbn [eval_fcmp]; try constructor.
+    apply I2F_vec_pois_l; [intros; apply I2F_eval_fcmp_base; assumption | exact HS2].
+  - (* Array × Base *)
+    destruct v1; cbn [eval_fcmp]; [| constructor].
+    inversion HB2; subst; cbn [eval_fcmp]; try constructor.
+    apply I2F_vec_pois_r; [intros; apply I2F_eval_fcmp_base; assumption | exact HS1].
+  - (* Array × Struct *)
+    destruct v1; cbn [eval_fcmp]; constructor.
   - (* Array × Array *)
-    i2f_vec_wrap I2F_eval_fcmp_base.
+    destruct v1, v2; cbn [eval_fcmp]; try constructor.
+    rewrite (Forall2_length_N HS1), (Forall2_length_N HS2).
+    destruct (N.length s1' =? N.length s2')%N; [| constructor].
+    apply I2F_vec_arr_arr; [intros; apply I2F_eval_fcmp_base; assumption | exact HS1 | exact HS2].
 Qed.
 
 (** * Bitcast: relating the byte-serialization round-trip.
@@ -1771,16 +1911,6 @@ Proof. reflexivity. Qed.
 
 (** Deserialization: related byte lists deserialize to related values;
       aggregates recurse through the [Forall2] list combinators. *)
-(** [dvalue_is_poison] is a shallow test, so related values answer it
-    identically; lifting that through [forallb] is what lets the reader's
-    [canonicalize_agg] step commute with refinement. *)
-Lemma I2F_dvalue_is_poison : forall v1 v2,
-    I2F_dvalue v1 v2 ->
-    @dvalue_is_poison PInf v1 = @dvalue_is_poison PFin v2.
-Proof.
-  intros * H; destruct H; [destruct H |..]; auto.
-Qed.
-
 (** Related values are equally well defined: poison and poison bits sit at
     the same places on both sides. *)
 Lemma I2F_dvalue_well_defined : forall v1 v2,
@@ -1795,14 +1925,6 @@ Proof.
     destruct Hxy; cbn; auto.
   - induction IH; cbn; congruence.
   - induction IH; cbn; congruence.
-Qed.
-
-Lemma I2F_forallb_is_poison : forall l1 l2,
-    Forall2 I2F_dvalue l1 l2 ->
-    forallb (@dvalue_is_poison PInf) l1 = forallb (@dvalue_is_poison PFin) l2.
-Proof.
-  induction 1 as [| x y xs ys Hxy H IH]; cbn; auto.
-  now rewrite (I2F_dvalue_is_poison Hxy), IH.
 Qed.
 
 Lemma I2F_canonicalize_agg :
@@ -2444,24 +2566,25 @@ Lemma I2F_convert_pure cv t_from t_to a b :
   I2F_EOU I2F_dvalue (convert_pure cv t_from a t_to) (convert_pure cv t_from b t_to).
 Proof.
   intros R.
-  inversion R; subst; cbn; auto.
-  - destruct (get_base_conversion_type t_from t_to) as [[? ?]|]; cbn; auto.
-    specialize (@I2F_convert_pure_base cv d d0 b0 b' H) as HV.
-    inversion HV; subst; auto.
-  - (* The vector flavour: [i2f_vec_flags] discharges the scalar-array
-       flag (a non-vector array is a diagonal error), leaving the
-       [get_vector_conversion_type] guard. *)
-    i2f_vec_flags; auto.
-    destruct (get_vector_conversion_type t_from t_to) as [[? ?]|]; cbn; auto.
-    (eapply I2F_EOU_bind;
-        [ eapply I2F_EOU_map_monad2;
-          [ eauto | intros; apply I2F_dvalue_to_dvalue_base; eauto ] |]).
-    intros ? ? ?.
+  inversion R as [db db' HB | p s1 s2 HS | v s1 s2 HS]; subst;
+    cbn [convert_pure fmap Functor_Monad].
+  - destruct (get_base_conversion_type t_from t_to) as [[tf tt] |].
+    + eapply I2F_EOU_bind; [apply I2F_convert_pure_base; exact HB |].
+      intros ? ? ?; do 2 constructor; assumption.
+    + destruct (get_vector_conversion_type t_from t_to) as [[tf tt] |]; [| constructor].
+      inversion HB; subst; try constructor.
+      eapply I2F_EOU_bind; [apply I2F_convert_pure_base; constructor |].
+      intros ? ? ?; do 2 constructor; assumption.
+  - constructor.
+  - destruct v; [| constructor].
+    destruct (get_vector_conversion_type t_from t_to) as [[tf tt] |]; [| constructor].
     eapply I2F_EOU_bind;
-      [ eapply I2F_EOU_map_monad2 with (RB := I2F_dvalue_base); eauto |].
-    intros. apply I2F_convert_pure_base; auto.
-    intros. constructor. constructor.
-    apply Forall2_map_Base; auto.
+      [eapply I2F_EOU_map_monad2; [exact HS | intros; apply I2F_dvalue_to_dvalue_base; assumption] |].
+    intros e1 e2 FE.
+    eapply I2F_EOU_bind;
+      [eapply I2F_EOU_map_monad2 with (RB := I2F_dvalue_base);
+       [exact FE | intros; apply I2F_convert_pure_base; assumption] |].
+    intros val1 val2 FV; constructor; apply I2F_canonicalize_vector, Forall2_map_Base, FV.
 Qed.
 
 Lemma I2F_convert ct t_from t_to a b :
@@ -2925,7 +3048,7 @@ Proof.
         | HB : I2F_dvalue_base _ _ |- _ =>
             inversion HB; subst; cbn; repeat constructor
         end.
-      * match goal with v : bool |- _ => destruct v end; cbn;
+      * match goal with v : bool |- _ => destruct v end; cbn -[canonicalize_vector];
           [| repeat constructor].
         eapply I2F_EOU_bind.
         { eapply I2F_EOU_vec_loop with (RB := prod_rel I2F_dvalue I2F_dvalue).
@@ -2934,14 +3057,14 @@ Proof.
           - intros c p c' p' HC HP;
               destruct p as [x y], p' as [x' y'], HP as [HX HY]; cbn.
             apply I2F_eval_select_base_dvalue; auto. }
-        intros; do 2 constructor; auto.
+        intros; constructor; apply I2F_canonicalize_vector; auto.
     + (* v1 vector *)
-      match goal with v : bool |- _ => destruct v end; cbn;
+      match goal with v : bool |- _ => destruct v end; cbn -[canonicalize_vector];
         [| repeat constructor].
-      inversion R3; subst; cbn; try (repeat constructor).
+      inversion R3; subst; cbn -[canonicalize_vector]; try (repeat constructor).
       * match goal with
         | HB : I2F_dvalue_base _ _ |- _ =>
-            inversion HB; subst; cbn; try (repeat constructor)
+            inversion HB; subst; cbn -[canonicalize_vector]; try (repeat constructor)
         end.
         eapply I2F_EOU_bind.
         { eapply I2F_EOU_vec_loop with (RB := prod_rel I2F_dvalue I2F_dvalue).
@@ -2950,8 +3073,8 @@ Proof.
           - intros c p c' p' HC HP;
               destruct p as [x y], p' as [x' y'], HP as [HX HY]; cbn.
             apply I2F_eval_select_base_dvalue; auto. }
-        intros; do 2 constructor; auto.
-      * match goal with v : bool |- _ => destruct v end; cbn;
+        intros; constructor; apply I2F_canonicalize_vector; auto.
+      * match goal with v : bool |- _ => destruct v end; cbn -[canonicalize_vector];
           [| repeat constructor].
         eapply I2F_EOU_bind.
         { eapply I2F_EOU_vec_loop with (RB := prod_rel I2F_dvalue I2F_dvalue).
@@ -2960,7 +3083,7 @@ Proof.
           - intros c p c' p' HC HP;
               destruct p as [x y], p' as [x' y'], HP as [HX HY]; cbn.
             apply I2F_eval_select_base_dvalue; auto. }
-        intros; do 2 constructor; auto.
+        intros; constructor; apply I2F_canonicalize_vector; auto.
 Qed.
     
 Lemma I2F_denote_exp :

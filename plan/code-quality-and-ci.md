@@ -11,8 +11,8 @@ Because `LLVMCert` is a certified compiler targeting ISO 26262 / DO-178C / IEC 6
 | Layer / Directory | Language | Role | Enforced "MISRA-Grade" Standard & Tooling |
 | :--- | :--- | :--- | :--- |
 | `llvm/`, `clang/`, `lld/` | C++17 (Upstream) | Frozen `llvmorg-23.1.5` compiler & `AArch64`/`RISCV` backends | **Frozen Upstream Rule:** `scripts/verify_repo_integrity.py` rejects any diff unless commit carries `[allow-upstream-patch]`. Never custom-reformatted. |
-| `vellvm/`, `passes/`, `validator/` | **Rocq `9.1`** | Formal IR semantics, Safe-Path passes, `cert-validator` proof checker | **Mathematical MISRA:** `0` `Admitted`/`admit`/`give_up`/`Abort` and `0` unapproved `Axiom`s (`verify_repo_integrity.py`) + independent kernel check (`rocq chk`). |
-| `llvm-cert-enterprise` & `ir-bridge/` | **Rust (`edition = "2024"`)** | CLI driver, Z3 witness synthesis, `.proof.json` signing, Phase 1.3 IR bridge | **High-Assurance Rust:** `unsafe_code = "forbid"`, `unwrap`/`expect`/`panic`/`todo`/`indexing_slicing`/lossy casts = `"deny"`, `rustfmt --check`, `cargo-deny` license/CVE gate. |
+| `vellvm/`, `passes/`, `validator/` | **Rocq `9.1`** | Formal IR semantics, Safe-Path passes, `cert-validator` proof checker | **Mathematical MISRA:** `0` `Admitted`/`admit`/`give_up`/`Abort` and `0` unapproved `Axiom`s (`verify_repo_integrity.py`) + independent kernel check (`rocq check -o`). |
+| `llvm-cert-enterprise` & `ir-bridge/` | **Rust (`edition = "2024"`)** | CLI driver, Z3 witness synthesis, `.proof.json` signing, Phase 1.3 IR bridge | **High-Assurance Rust:** `unsafe_code = "forbid"`, `unwrap`/`expect`/`panic`/`todo`/`indexing_slicing`/lossy casts = `"deny"`, `proptest` + `llvm-as` round-trips, targeted `#[cfg(kani)]` harnesses, `rustfmt --check`, `cargo-deny`. |
 | `vellvm/src/ml/` | **OCaml (`4.14+`)** | **Minimal extraction glue ONLY** (`Camlcoq.ml`, Menhir lexer/parser, CLI shims) | **Hard TCB Budget:** Capped at `<= 750` handwritten LOC repository-wide (`verify_repo_integrity.py`) + `.ocamlformat`. Zero unverified passes or drivers in OCaml. |
 | `runtime/`, `c-quality/` | **C17** | Freestanding target runtime shims & qualification suites | **SEI CERT C & MISRA C Alignment:** `c-quality/.clang-tidy` (`cert-*`, `bugprone-*`, `clang-analyzer-*`, `WarningsAsErrors: '*'`) + `clang-format --dry-run --Werror`. |
 
@@ -49,7 +49,7 @@ Directly addressing stateless GitHub Actions runner bottlenecks (cold VM startup
 
 ### Tier 2 — Formal Verification CI (`rocq-ci.yml`, PRs touching `vellvm/passes/validator`, milestone tags & manual dispatch)
 - Respects incremental build discipline: routine documentation or Rust commits never trigger 87-file Rocq builds.
-- Caches both the full `opam` switch (`ocaml/setup-ocaml@v3` pinned to `vellvm/rocq-vellvm.opam`) and compiled `.vo` proof objects (`actions/cache@v4`), followed by `rocq chk` kernel verification.
+- Caches both the full `opam` switch (`ocaml/setup-ocaml@v3` pinned to `vellvm/rocq-vellvm.opam`) and compiled `.vo` proof objects (`actions/cache@v6`), followed by `rocq check -o` kernel verification.
 
 ### Tier 3 — LLVM 23.1.5 SDK Release Build (`llvm-toolchain-build.yml`, `toolchain-*` tags & manual dispatch ONLY)
 - Runs `jlumbroso/free-disk-space` (guarded by `vars.CERT_RUNNER == ''` so self-hosted servers are never touched), `hendrikmuhs/ccache-action@v1.2` (`2 GB`), `-DLLVM_USE_LINKER=lld`, and `-DLLVM_PARALLEL_LINK_JOBS=1` (`AArch64;RISCV`), packaging `llvm-cert-sdk-23.1.5-linux-x86_64.tar.zst`.
@@ -61,4 +61,17 @@ runs-on: ${{ vars.CERT_RUNNER || 'ubuntu-latest' }}
 ```
 - **Default (`CERT_RUNNER` unset):** Uses GitHub's free `ubuntu-latest` (4 vCPU / 16 GB RAM) on the public repo and cached fast checks on the private repo.
 - **Dedicated NVMe Server Upgrade:** Registering your Linux server as a GitHub Self-Hosted Runner and setting repository variable `CERT_RUNNER=self-hosted` switches builds to persistent local NVMe `target/` and `ccache` storage with **zero workflow file changes**.
+
+---
+
+## 4. Rust TCB Minimization & Verification Strategy
+
+Rather than adopting SMT-backed deductive Rust verifiers (`Verus`, `Creusot`), which require pinned custom nightly compilers, place `Z3` inside the verification TCB (contradicting `cert-llvm`'s core Rocq-kernel assurance model), and cannot reason about external LLVM 23 C++ `LLParser` or Menhir grammars, `LLVMCert` enforces a three-part, high-ROI Rust assurance strategy:
+
+1. **`proptest` + Differential `llvm-as` Round-Trip Gate (Phase 2.3):**
+   - Textual IR normalizations in [`ir-bridge/src/vellvm_sanitize.rs`](../ir-bridge/src/vellvm_sanitize.rs) (`f0x<hex>` / `±inf` / `±s?nan` IEEE-754 hex rewrites and `/* immarg */` / debug stripping) are tested against randomized `proptest` inputs AND assembled via upstream `llvm-as` to verify bit-identical LLVM 23 constant/module semantics directly against the real LLVM parser.
+2. **Targeted `#[cfg(kani)]` Bounded Model Checking (Phases 2.3 & 4.3):**
+   - Pure bit-manipulation and index-remapping kernels (`vellvm_sanitize.rs` IEEE-754 bit-packing, `#N`/`!N` attribute/metadata bijections, and `cert-attestation` canonical `.proof.json` digest framing) carry isolated `#[cfg(kani)]` proof harnesses verifying panic-, slice-bounds-, and arithmetic-overflow-freedom symbolically over all bit patterns while keeping 100% standard Stable Rust source code.
+3. **Rocq `[PS-10]` Split/Merge Certificate Check (Phase 4.1 — TCB Elimination):**
+   - Instead of proving textual Rust IR surgery in `splitter.rs` / `merger.rs`, Phase 4 validates module splitting and re-linking with a compact Rocq-proven boolean checker (`check_module_merge` over `CFG.mcfg`), moving semantic module composition into the existing Rocq 9.1 kernel and removing `splitter.rs` / `merger.rs` from the soundness TCB.
 

@@ -251,6 +251,15 @@ Section ShowInstances.
   #[global] Instance showLinkage : Show linkage
     := {| show := show_linkage |}.
 
+  Definition show_preemption_specifier (p : preemption_specifier) : string :=
+    match p with
+    | PREEMPTION_Dso_preemptable => "dso_preemptable"
+    | PREEMPTION_Dso_local => "dso_local"
+    end.
+
+  #[global] Instance showPreemptionSpecifier : Show preemption_specifier
+    := {| show := show_preemption_specifier |}.
+
   Definition show_dll_storage (d : dll_storage) : string :=
     match d with
     | DLLSTORAGE_Dllimport => "dllimport"
@@ -388,7 +397,7 @@ Section ShowInstances.
     | FNATTR_Cold => "cold"
     | FNATTR_Convergent => "convergent"
     | FNATTR_Disable_sanitizer_instrumentation => "disable_sanitizer_instrumentation"
-    | FNATTR_Fn_ret_thunk_extern => "fun_ret_thunk_extern"
+    | FNATTR_Fn_ret_thunk_extern => "fn_ret_thunk_extern"
     | FNATTR_Hot => "hot"
     | FNATTR_Inaccessiblememonly => "inaccessiblememonly"
     | FNATTR_Inaccessiblemem_or_argmemonly => "inaccessiblemem_or_argmemonly"
@@ -459,6 +468,12 @@ Section ShowInstances.
 
   #[global] Instance showFnAttr : Show fn_attr
     := {| show := show_fn_attr |}.
+
+  Definition show_fn_attr_in_group (f : fn_attr) : string :=
+    match f with
+    | FNATTR_Alignstack a => "alignstack=" ++ show a
+    | _ => show_fn_attr f
+    end.
 
   Definition show_thread_local_storage (tls : thread_local_storage) : string :=
     match tls with
@@ -730,7 +745,7 @@ Section ShowInstances.
       concat_DString (sd ", ")
         (map (fun '(ty, ex) =>
                 DList_join [dshow ty ; sd " "] @@
-                  dshow_exp false ex) vals)
+                  dshow_exp true ex) vals)
     in
     match v with
     | EXP_Ident id => dshow id
@@ -817,8 +832,9 @@ Section ShowInstances.
         let (type1, expression1) := vec1 in
         let (type2, expression2) := vec2 in
         let (type3, expression3) := idxmask in
-        sd "shufflevector " @@ add_parens b (dshow type1 @@ dshow_exp true expression1 @@ sd ", " @@ dshow type2 @@ dshow_exp true expression2 @@
-                                                              sd ", " @@ dshow type3 @@ dshow_exp true expression3)
+        sd "shufflevector " @@ add_parens b (dshow type1 @@ sd " " @@ dshow_exp true expression1 @@ sd ", " @@
+                                             dshow type2 @@ sd " " @@ dshow_exp true expression2 @@ sd ", " @@
+                                             dshow type3 @@ sd " " @@ dshow_exp true expression3)
     (* This one, extractValue *)
     | OP_ExtractValue vec idxs =>
         let (tptr, exp) := vec in
@@ -829,8 +845,8 @@ Section ShowInstances.
     | OP_InsertValue vec elt idxs =>
         let (tptr, exp) := vec in
         let (telt, eexp) := elt in
-        sd "insertvalue " @@ add_parens b (dshow tptr @@ sd " " @@ dshow_exp false exp @@ sd ", " @@ dshow telt @@ sd " " @@
-                                                            dshow_exp false eexp @@ sd ", " @@ concat_DString (sd ", ") (map (fun x => sd (show x)) idxs))
+        sd "insertvalue " @@ add_parens b (dshow tptr @@ sd " " @@ dshow_exp true exp @@ sd ", " @@ dshow telt @@ sd " " @@
+                                                            dshow_exp true eexp @@ sd ", " @@ concat_DString (sd ", ") (map (fun x => sd (show x)) idxs))
 
     | OP_Select fmath (tc, cnd) (t1, v1) (t2, v2) =>
         let fmath_string := fast_math_list_to_dstring fmath in
@@ -875,7 +891,7 @@ Section ShowInstances.
     { dshow := dshow_metadata }.
   
   #[global] Instance dshowTExp : DShow (texp T) :=
-    {| dshow te := let '(t, e) := te in dshow t @@ sd " " @@ dshow e |}.
+    {| dshow te := let '(t, e) := te in dshow t @@ sd " " @@ dshow_exp true e |}.
 
   Definition show_phi_block (p : block_id * exp T) : DString :=
     let '(bid, e) := p in
@@ -1063,9 +1079,13 @@ Section ShowInstances.
   Definition show_call_arg (x : texp T * list param_attr) : DString :=
     let '(te, atts) := x in
     let '(t, e) := te in
-    let attrs := concat_DString (sd " ") (map dshow atts) @@ sd " " in
-    dshow t @@ sd  " " @@
-    attrs @@ dshow_exp true e.
+    let attrs :=
+      match atts with
+      | [] => sd " "
+      | _ => sd " " @@ concat_DString (sd " ") (map dshow atts) @@ sd " "
+      end
+    in
+    dshow t @@ attrs @@ dshow_exp true e.
 
   #[global] Instance dshowCallArg : DShow (texp T * list param_attr) :=
     { dshow := show_call_arg }.
@@ -1088,7 +1108,7 @@ bundle operand ::= SSA value | metadata string
 tag ::= string constant
  *)
 
-  Definition show_syncscope str : string := "syncscope(""" ++ str ++ """)".
+  Definition show_syncscope str : string := "syncscope(" ++ show str ++ ")".
 
   Definition ann_str {A B} (l : list A) (k:A -> option B) (to_str : B -> string) : string :=
   match find_option k l with
@@ -1125,7 +1145,7 @@ tag ::= string constant
       (map (fun x => sd (show_fast_math x)) fast_math_flags
        ++ map sd (show_opt_list cconv)
        ++ map show_param_attr ret_attrs
-       ++ map sd (show_opt_list addrspace)
+       ++ map (fun s => sd ("addrspace(" ++ s ++ ")")) (show_opt_list addrspace)
        ++ [dshow_texp fn]).
 
   (* What a call or invoke prints after its argument list: function
@@ -1200,7 +1220,7 @@ tag ::= string constant
 
        | INSTR_Fence syncscope ordering => let printable_sync := match syncscope with
                                                                  | None => ""
-                                                                 | Some x => "[syncscope(""" ++ show x ++ """)]"
+                                                                 | Some x => "syncscope(" ++ show x ++ ") "
                                                                  end in
                                           list_to_DString ["fence " ; printable_sync ] @@
                                             dshow ordering @@
@@ -1403,9 +1423,10 @@ Definition maybe_dshow {X} `{DShow X} (ox : option X) : DString :=
 
 Definition dshow_definition (defn : definition typ (block typ * list (block typ))) : DString
   :=
-  let name  := defn.(df_prototype).(dc_name) in
-  let ftype := defn.(df_prototype).(dc_type) in
-  let '(return_attributes, argument_attributes) := defn.(df_prototype).(dc_param_attrs) in
+  let proto := defn.(df_prototype) in
+  let name  := proto.(dc_name) in
+  let ftype := proto.(dc_type) in
+  let '(return_attributes, argument_attributes) := proto.(dc_param_attrs) in
 
   match ftype with
   | TYPE_Function ret_t args_t vararg =>
@@ -1425,46 +1446,112 @@ Definition dshow_definition (defn : definition typ (block typ * list (block typ)
           concat_DString dnewline (map dshow (b::bs))
         in
 
-        let ret_attributes := concat_DString (sd " ") (map (fun x => dshow x) (return_attributes)) @@
-        sd " " in
-        let printable_ret_attrs := ret_attributes in
+        let printable_ret_attrs :=
+          DList_join (map (fun x => dshow x @@ sd " ") return_attributes)
+        in
 
-        let linkage := maybe_show (dc_linkage defn.(df_prototype)) in
-        let visibility := maybe_show (dc_visibility defn.(df_prototype)) in
-        let dll_storage := maybe_show (dc_dll_storage defn.(df_prototype)) in
-        let cconv := maybe_show (dc_cconv defn.(df_prototype)) in
+        let linkage := maybe_show (dc_linkage proto) in
+        let preempt := maybe_show (find_option ann_preemption_specifier (dc_annotations proto)) in
+        let visibility := maybe_show (dc_visibility proto) in
+        let dll_storage := maybe_show (dc_dll_storage proto) in
+        let cconv := maybe_show (dc_cconv proto) in
 
+        let unnamed_addr :=
+          match dc_unnamed_addr proto with
+          | None => ""%string
+          | Some u => concatStr [" "; show u]
+          end
+        in
+        let addrspace :=
+          match dc_addrspace proto with
+          | None => ""%string
+          | Some a => concatStr [" addrspace("; show a; ")"]
+          end
+        in
+        let fn_attrs :=
+          DList_join (map (fun a => sd (concatStr [" "; show a])) (dc_attrs proto))
+        in
         let section :=
-          maybe_to_string
-            (fun s => concatStr ["section """; s; """ "])
-            (dc_section defn.(df_prototype))
+          match dc_section proto with
+          | None => ""%string
+          | Some s => concatStr [" section """; s; """"]
+          end
+        in
+        let partition :=
+          match dc_partition proto with
+          | None => ""%string
+          | Some p => concatStr [" partition """; p; """"]
+          end
+        in
+        let comdat :=
+          match dc_comdat proto with
+          | None => DList_empty
+          | Some l => sd " comdat($" @@ dshow l @@ sd ")"
+          end
         in
         let align :=
-          maybe_to_string
-            (fun a => concatStr ["align "; show a; " "])
-            (dc_align defn.(df_prototype))
+          match dc_align proto with
+          | None => ""%string
+          | Some a => concatStr [" align "; show a]
+          end
         in
-        let gc := maybe_show (dc_gc defn.(df_prototype))
+        let gc :=
+          match dc_gc proto with
+          | None => ""%string
+          | Some g => concatStr [" gc """; g; """"]
+          end
+        in
+        let prefix :=
+          match dc_prefix proto with
+          | None => DList_empty
+          | Some t => sd " prefix " @@ dshow t
+          end
+        in
+        let prologue :=
+          match dc_prologue proto with
+          | None => DList_empty
+          | Some t => sd " prologue " @@ dshow t
+          end
         in
         let personality :=
-          maybe_to_string
-            (fun t => concatStr [" personality "; show t; " "])
-            (dc_personality defn.(df_prototype))
+          match dc_personality proto with
+          | None => DList_empty
+          | Some t => sd " personality " @@ dshow t
+          end
+        in
+        let meta :=
+          DList_join (map (fun ml => sd " " @@ dshow_metadata_list ml) (dc_metadata proto))
         in
 
-
-        DList_join [ list_to_DString ["define "; linkage; visibility; dll_storage ; cconv] @@
-                       printable_ret_attrs @@ dshow ret_t] @@ sd " @" @@ dshow name @@
-                     dshow_arg_list args vararg @@
-                     list_to_DString [section ; align ; gc ; personality ; " {"; newline] @@
-                     blocks @@
-                     list_to_DString ["}";  newline]
+        list_to_DString ["define "; linkage; preempt; visibility; dll_storage; cconv] @@
+          printable_ret_attrs @@ dshow ret_t @@ sd " @" @@ dshow name @@
+          dshow_arg_list args vararg @@
+          list_to_DString [unnamed_addr; addrspace] @@
+          fn_attrs @@
+          list_to_DString [section; partition] @@
+          comdat @@
+          list_to_DString [align; gc] @@
+          prefix @@ prologue @@ personality @@ meta @@
+          list_to_DString [" {"; newline] @@
+          blocks @@
+          list_to_DString ["}"; newline]
 
   | _ => sd "Invalid type on function: " @@ dshow name
   end.
 
 #[global] Instance dshowDefinition: DShow (definition typ (block typ * list (block typ))) :=
   {| dshow := dshow_definition |}.
+
+Fixpoint zip_decl_args (ts : list typ) (attrss : list (list param_attr))
+  : list (typ * list param_attr) :=
+  match ts with
+  | [] => []
+  | t :: ts' =>
+      match attrss with
+      | [] => (t, []) :: zip_decl_args ts' []
+      | pas :: attrss' => (t, pas) :: zip_decl_args ts' attrss'
+      end
+  end.
 
 (* Why can I not make show functions implicit?  *)
 Definition dshow_declaration (decl: declaration typ) : DString :=
@@ -1473,43 +1560,83 @@ Definition dshow_declaration (decl: declaration typ) : DString :=
   match decl.(dc_type) with
   | TYPE_Function ret_t args_t vararg =>
       let link := maybe_show (dc_linkage decl) in
+      let preempt := maybe_show (find_option ann_preemption_specifier (dc_annotations decl)) in
       let vis := maybe_show (dc_visibility decl) in
       let dll := maybe_show (dc_dll_storage decl) in
-      let cc := maybe_show (dc_cconv decl)in
+      let cc := maybe_show (dc_cconv decl) in
+
+      let ret_attrs_d :=
+        DList_join (map (fun x => dshow x @@ sd " ") ret_attrs)
+      in
+      let unnamed_addr :=
+        match dc_unnamed_addr decl with
+        | None => ""%string
+        | Some u => concatStr [" "; show u]
+        end
+      in
+      let addrspace :=
+        match dc_addrspace decl with
+        | None => ""%string
+        | Some a => concatStr [" addrspace("; show a; ")"]
+        end
+      in
+      let fn_attrs_d :=
+        DList_join (map (fun a => sd (concatStr [" "; show a])) (dc_attrs decl))
+      in
 
       let section :=
-        maybe_to_string
-          (fun s => concatStr ["section \"; s; "\"; " "])
-          (dc_section decl) in
+        match dc_section decl with
+        | None => ""%string
+        | Some s => concatStr [" section """; s; """"]
+        end in
 
       let align :=
-        maybe_to_string
-          (fun a => concatStr [", align "; show a; " "])
-          (dc_align decl) in
-
-      let gc := maybe_show (dc_gc decl) in
+        match dc_align decl with
+        | None => ""%string
+        | Some a => concatStr [" align "; show a]
+        end
+      in
+      let gc :=
+        match dc_gc decl with
+        | None => ""%string
+        | Some g => concatStr [" gc """; g; """"]
+        end
+      in
+      let prefix :=
+        match dc_prefix decl with
+        | None => DList_empty
+        | Some t => sd " prefix " @@ dshow t
+        end
+      in
+      let prologue :=
+        match dc_prologue decl with
+        | None => DList_empty
+        | Some t => sd " prologue " @@ dshow t
+        end
+      in
 
       let vararg_str :=
         if Nat.eqb (List.length args_t) 0 then
-          (if vararg then "..." else "")
+          (if vararg then "..."%string else ""%string)
         else
-          (if vararg then ", ..." else "")
+          (if vararg then ", ..."%string else ""%string)
       in
-      sd
-        (concatStr ["declare "; link; vis; dll; cc]) @@
-        DList_join [dintersperse (sd " ") (map dshow ret_attrs)] @@
-        sd " " @@
+      sd (concatStr ["declare "; link; preempt; vis; dll; cc]) @@
+        ret_attrs_d @@
         dshow ret_t @@ sd " @" @@ dshow name @@ sd "(" @@
-        dconcat (sd ", ") (map (fun '(x, y) =>
-                                                 DList_join
-                                                   [dshow x; sd " ";
-                                                    match y with
-                                                    | [] => sd ""
-                                                    | z :: tl => dshow z
-                                                    end ])
-                       (List.combine args_t args_attrs)) @@
+        dconcat (sd ", ")
+          (map (fun '(x, y) =>
+                  match y with
+                  | [] => dshow x
+                  | _ => dshow x @@ sd " " @@ concat_DString (sd " ") (map dshow y)
+                  end)
+               (zip_decl_args args_t args_attrs)) @@
         sd vararg_str @@
-        sd ")" @@ sd section @@ sd align @@ sd gc
+        sd ")" @@
+        list_to_DString [unnamed_addr; addrspace] @@
+        fn_attrs_d @@
+        list_to_DString [section; align; gc] @@
+        prefix @@ prologue
   | _ => sd "Invalid type on function: " @@ dshow name
   end.
 
@@ -1520,60 +1647,121 @@ Definition dshow_global (g : global typ) : DString :=
   let name  := g.(g_ident) in
   let gtype := g.(g_typ) in
   let linkage := maybe_show (g_linkage g) in
+  let preempt := maybe_show (find_option ann_preemption_specifier (g_annotations g)) in
   let visibility := maybe_show (g_visibility g) in
   let dll_storage := maybe_show (g_dll_storage g) in
   let thread_local := maybe_show (g_thread_local_storage g) in
-  let g_exp := match g.(g_exp) with
-               | None => sd ""
-               | Some e => dshow_exp true e
-               end
-  in
   let unnamed_addr := maybe_show (g_unnamed_addr g) in
-  let addrspace := maybe_show (g_addrspace g) in
-  let externally_initialized := if g.(g_externally_initialized) then "external " else "" in
-  let g_or_c := if g.(g_constant) then "constant " else "global " in
+  let addrspace :=
+    match g_addrspace g with
+    | None => ""%string
+    | Some a => concatStr ["addrspace("; show a; ") "]
+    end
+  in
+  let externally_initialized :=
+    if g.(g_externally_initialized) then "externally_initialized "%string else ""%string
+  in
+  let g_or_c := if g.(g_constant) then "constant "%string else "global "%string in
 
   let section :=
-    maybe_to_string
-      (fun s => concatStr [", section """; s; """"])
-      (g_section g) in
-
-  let align :=
-    maybe_to_string
-      (fun a => concatStr [", align "; show a; " "])
-      (g_align g) in
-
+    match g_section g with
+    | None => ""%string
+    | Some s => concatStr [", section """; s; """"]
+    end
+  in
   let partition :=
-    maybe_to_string
-      (fun a => concatStr [", partition "; show a; " "])
-      (g_partition g) in
-  
-  (DList_join
-    [sd "@"; dshow name; sd " = ";
-     sd linkage ; sd visibility;
-     sd dll_storage ; sd thread_local;
-     sd unnamed_addr; sd addrspace;
-     sd externally_initialized])
-    @@
-    (if (g.(g_alias)) then
-       DList_join
-         [ sd "alias ";
-           dshow gtype;
-           sd ", ";
-           dshow gtype;
-           sd "* ";
-           g_exp;
-           sd partition
-         ]
-     else
-       DList_join
-       [ sd g_or_c;
+    match g_partition g with
+    | None => ""%string
+    | Some a => concatStr [", partition """; a; """"]
+    end
+  in
+  let comdat :=
+    match g_comdat g with
+    | None => DList_empty
+    | Some l => sd ", comdat($" @@ dshow l @@ sd ")"
+    end
+  in
+  let align :=
+    match g_align g with
+    | None => ""%string
+    | Some a => concatStr [", align "; show a]
+    end
+  in
+  let no_sanitize :=
+    match g_no_sanitize g with
+    | None => ""%string
+    | Some _ => ", no_sanitize"%string
+    end
+  in
+  let no_sanitize_address :=
+    match g_no_sanitize_address g with
+    | None => ""%string
+    | Some _ => ", no_sanitize_address"%string
+    end
+  in
+  let no_sanitize_hwaddress :=
+    match g_no_sanitize_hwaddress g with
+    | None => ""%string
+    | Some _ => ", no_sanitize_hwaddress"%string
+    end
+  in
+  let sanitize_address_dyninit :=
+    match g_sanitize_address_dyninit g with
+    | None => ""%string
+    | Some _ => ", sanitize_address_dyninit"%string
+    end
+  in
+  let meta :=
+    DList_join (map (fun ml => sd ", " @@ dshow_metadata_list ml) (g_metadata g))
+  in
+  let prefix_common :=
+    DList_join
+      [sd "@"; dshow name; sd " = ";
+       sd linkage; sd preempt; sd visibility;
+       sd dll_storage; sd thread_local;
+       sd unnamed_addr]
+  in
+  if g.(g_alias) then
+    let alias_exp :=
+      match g.(g_exp) with
+      | None => DList_empty
+      | Some e => dshow_exp true e
+      end
+    in
+    let alias_ptr :=
+      match g_addrspace g with
+      | None => sd "ptr "
+      | Some a => sd (concatStr ["ptr addrspace("; show a; ") "])
+      end
+    in
+    prefix_common @@
+      DList_join
+        [sd "alias ";
          dshow gtype;
-         sd " ";
-         g_exp;
-         sd section ;
-         sd align
-       ]).
+         sd ", ";
+         alias_ptr;
+         alias_exp;
+         sd partition]
+  else
+    let g_init :=
+      match g.(g_exp) with
+      | None => DList_empty
+      | Some e => sd " " @@ dshow_exp true e
+      end
+    in
+    prefix_common @@
+      sd addrspace @@
+      sd externally_initialized @@
+      sd g_or_c @@
+      dshow gtype @@
+      g_init @@
+      list_to_DString [section; partition] @@
+      comdat @@
+      list_to_DString
+        [align;
+         no_sanitize; no_sanitize_address;
+         no_sanitize_hwaddress; sanitize_address_dyninit] @@
+      meta.
 
 #[global] Instance dshowGlobal : DShow (global typ) :=
   {| dshow := dshow_global |}.
@@ -1598,7 +1786,7 @@ Definition dshow_tle (tle : toplevel_entity typ (block typ * list (block typ))) 
      | TLE_Attribute_group i attrs =>
          DList_join
            [sd "attributes #"; sd (show i); sd " = { " ;
-            dconcat (sd " ") (map (fun x => sd (show x)) (attrs)); sd " }"
+            dconcat (sd " ") (map (fun x => sd (show_fn_attr_in_group x)) (attrs)); sd " }"
            ]
      end.
 

@@ -586,6 +586,23 @@ Section DValue.
 
   End DecidableEquality.
 
+  (* Collapse a vector whose lanes are all poison to canonical [DVALUE_Base DVALUE_Poison],
+     preserving the [forallb dvalue_is_poison xs = false] invariant of [DVALUE_Array_typ]. *)
+  Definition canonicalize_vector (xs : list dvalue) : dvalue :=
+    if forallb dvalue_is_poison xs
+    then DVALUE_Base DVALUE_Poison
+    else DVALUE_Array true xs.
+
+  Lemma canonicalize_vector_all_poison_base : forall (ans : list dvalue_base),
+      Forall (fun b => b = DVALUE_Poison) ans ->
+      canonicalize_vector (List.map DVALUE_Base ans) = DVALUE_Base DVALUE_Poison.
+  Proof.
+    intros ans HF; unfold canonicalize_vector.
+    assert (Hp : forallb dvalue_is_poison (List.map DVALUE_Base ans) = true).
+    { induction HF as [| b bs -> _ IH]; cbn; auto. }
+    rewrite Hp; reflexivity.
+  Qed.
+
   (* SAZ: Not sure why these are needed *)
   (*
   Definition is_DVALUE_I1 (d:dvalue) : bool :=
@@ -856,6 +873,10 @@ Section DValue.
            _
        | DVALUE_Iptr i1, DVALUE_Iptr i2 =>
            eval_int_op iop i1 i2
+       | _, DVALUE_Poison             =>
+           if iop_is_div iop
+           then raise_ub "Division by poison."
+           else ret DVALUE_Poison
        | DVALUE_Poison, _             =>
            match iop with
            (* A poison dividend could be INT_MIN, and INT_MIN / -1 is UB for
@@ -872,12 +893,8 @@ Section DValue.
                then raise_ub "Signed division/remainder poison overflow"
                else ret DVALUE_Poison
            | _ =>
-               ret DVALUE_Poison 
+               ret DVALUE_Poison
            end
-       | _, DVALUE_Poison             =>
-           if iop_is_div iop
-           then raise_ub "Division by poison."
-           else ret DVALUE_Poison
        | _, _                           => raise_error "ill_typed-iop"
        end).
     destruct (Pos.eq_dec sz1 sz2); subst.
@@ -890,19 +907,39 @@ Section DValue.
      but rocq can't find a fixpoint. *)
   Definition eval_iop iop v1 v2 : EOU dvalue :=
     match v1, v2 with
-    | (DVALUE_Base v1), (DVALUE_Base v2) =>
-        DVALUE_Base <$> (eval_iop_integer_base iop v1 v2)
-                           
+    | (DVALUE_Base dv1), (DVALUE_Base dv2) =>
+        DVALUE_Base <$> (eval_iop_integer_base iop dv1 dv2)
+
+    | (DVALUE_Base dv1), (DVALUE_Array true elts2) =>
+        match dv1 with
+        | DVALUE_Poison =>
+            elts2' <- map_monad dvalue_to_dvalue_base elts2 ;;
+            ans <- vec_loop (eval_iop_integer_base iop)
+                     (List.combine (repeat DVALUE_Poison (Datatypes.length elts2')) elts2') ;;
+            ret (canonicalize_vector (List.map DVALUE_Base ans))
+        | _ => raise_error "eval_iop called on illegal dvalue"
+        end
+
+    | (DVALUE_Array true elts1), (DVALUE_Base dv2) =>
+        match dv2 with
+        | DVALUE_Poison =>
+            elts1' <- map_monad dvalue_to_dvalue_base elts1 ;;
+            ans <- vec_loop (eval_iop_integer_base iop)
+                     (List.combine elts1' (repeat DVALUE_Poison (Datatypes.length elts1'))) ;;
+            ret (canonicalize_vector (List.map DVALUE_Base ans))
+        | _ => raise_error "eval_iop called on illegal dvalue"
+        end
+
     | (DVALUE_Array true elts1), (DVALUE_Array true elts2) =>
         let n := N.length elts1 in
         let m := N.length elts2 in
-        if n =? m  then
+        if n =? m then
           elts1' <- map_monad dvalue_to_dvalue_base elts1 ;;
           elts2' <- map_monad dvalue_to_dvalue_base elts2 ;;
           ans <- vec_loop (eval_iop_integer_base iop) (List.combine elts1' elts2') ;;
-          ret (DVALUE_Array true (List.map DVALUE_Base ans))
+          ret (canonicalize_vector (List.map DVALUE_Base ans))
         else
-          raise_ub ("iop: " ++ (show iop) ++  " of different-length vectors")
+          raise_ub ("iop: " ++ (show iop) ++ " of different-length vectors")
 
     | _, _ => raise_error "eval_iop called on illegal dvalue"
     end.
@@ -978,17 +1015,37 @@ Section DValue.
     match v1, v2 with
     | (DVALUE_Base dv1), (DVALUE_Base dv2) =>
         DVALUE_Base <$> (eval_fop_base fop dv1 dv2)
-      
+
+    | (DVALUE_Base dv1), (DVALUE_Array true elts2) =>
+        match dv1 with
+        | DVALUE_Poison =>
+            elts2' <- map_monad dvalue_to_dvalue_base elts2 ;;
+            ans <- vec_loop (eval_fop_base fop)
+                     (List.combine (repeat DVALUE_Poison (Datatypes.length elts2')) elts2') ;;
+            ret (canonicalize_vector (List.map DVALUE_Base ans))
+        | _ => raise_error "eval_fop got illegal value"
+        end
+
+    | (DVALUE_Array true elts1), (DVALUE_Base dv2) =>
+        match dv2 with
+        | DVALUE_Poison =>
+            elts1' <- map_monad dvalue_to_dvalue_base elts1 ;;
+            ans <- vec_loop (eval_fop_base fop)
+                     (List.combine elts1' (repeat DVALUE_Poison (Datatypes.length elts1'))) ;;
+            ret (canonicalize_vector (List.map DVALUE_Base ans))
+        | _ => raise_error "eval_fop got illegal value"
+        end
+
     | (DVALUE_Array true elts1), (DVALUE_Array true elts2) =>
         let n := N.length elts1 in
         let m := N.length elts2 in
-        if n =? m  then
+        if n =? m then
           elts1' <- map_monad dvalue_to_dvalue_base elts1 ;;
           elts2' <- map_monad dvalue_to_dvalue_base elts2 ;;
           ans <- vec_loop (eval_fop_base fop) (List.combine elts1' elts2') ;;
-          ret (DVALUE_Array true (List.map DVALUE_Base ans))
+          ret (canonicalize_vector (List.map DVALUE_Base ans))
         else
-        raise_ub ("fop: " ++ (show fop) ++  " different-length vectors of type "
+        raise_ub ("fop: " ++ (show fop) ++ " different-length vectors of type "
                   ++ "v1 = " ++ (show v1) ++ "v2 = " ++ (show v2)
           )
     | _, _ => raise_error "eval_fop got illegal value"
@@ -1010,7 +1067,7 @@ Section DValue.
     | DVALUE_Array true elts =>
         elts' <- map_monad dvalue_to_dvalue_base elts ;;        
         ans <- map_monad (eval_fneg_base) elts' ;;
-        ret (DVALUE_Array true (List.map DVALUE_Base ans))
+        ret (canonicalize_vector (List.map DVALUE_Base ans))
     | _ => raise_error "eval_fneg got illegal value"
     end.
   
@@ -1086,15 +1143,35 @@ Section DValue.
     match v1, v2 with
     | (DVALUE_Base dv1), (DVALUE_Base dv2) =>
         DVALUE_Base <$> (eval_fcmp_base fcmp dv1 dv2)
-                    
+
+    | (DVALUE_Base dv1), (DVALUE_Array true elts2) =>
+        match dv1 with
+        | DVALUE_Poison =>
+            elts2' <- map_monad dvalue_to_dvalue_base elts2 ;;
+            ans <- vec_loop (eval_fcmp_base fcmp)
+                     (List.combine (repeat DVALUE_Poison (Datatypes.length elts2')) elts2') ;;
+            ret (canonicalize_vector (List.map DVALUE_Base ans))
+        | _ => raise_error "eval_fcmp got illegal value"
+        end
+
+    | (DVALUE_Array true elts1), (DVALUE_Base dv2) =>
+        match dv2 with
+        | DVALUE_Poison =>
+            elts1' <- map_monad dvalue_to_dvalue_base elts1 ;;
+            ans <- vec_loop (eval_fcmp_base fcmp)
+                     (List.combine elts1' (repeat DVALUE_Poison (Datatypes.length elts1'))) ;;
+            ret (canonicalize_vector (List.map DVALUE_Base ans))
+        | _ => raise_error "eval_fcmp got illegal value"
+        end
+
     | (DVALUE_Array true elts1), (DVALUE_Array true elts2) =>
         let n := N.length elts1 in
         let m := N.length elts2 in
-        if n =? m  then
+        if n =? m then
           elts1' <- map_monad dvalue_to_dvalue_base elts1 ;;
           elts2' <- map_monad dvalue_to_dvalue_base elts2 ;;
           ans <- vec_loop (eval_fcmp_base fcmp) (List.combine elts1' elts2') ;;
-          ret (DVALUE_Array true (List.map DVALUE_Base ans))
+          ret (canonicalize_vector (List.map DVALUE_Base ans))
         else
           raise_ub "fcmp of different-length vectors"
     | _, _ => raise_error "eval_fcmp got illegal value"
@@ -1409,6 +1486,18 @@ Section DValue.
   Set Elimination Schemes.
 
   Hint Constructors dvalue_has_dtyp : dvalue.
+
+  Lemma canonicalize_vector_has_dtyp : forall xs sz dt,
+      NO_VOID dt ->
+      Forall (fun x => dvalue_has_dtyp x dt) xs ->
+      length xs = N.to_nat sz ->
+      dvalue_has_dtyp (canonicalize_vector xs) (DTYPE_Array true sz dt).
+  Proof.
+    intros xs sz dt Hnv Hall Hlen; unfold canonicalize_vector.
+    destruct (forallb dvalue_is_poison xs) eqn:Ep.
+    - apply DVALUE_Poison_typ_agg.
+    - apply DVALUE_Array_typ; assumption.
+  Qed.
 
   Definition default_dvalue_of_dtyp_i (sz : positive) : dvalue_base :=
     @DVALUE_I sz (repr 0).

@@ -245,6 +245,16 @@ fn cmd_merge(args: &[String]) -> Result<(), BridgeError> {
         serde_json::from_str(&mf_text).map_err(BridgeError::ManifestJson)?;
 
     let mut verified_slices = BTreeMap::new();
+    for whole_mod_candidate in [
+        s_dir.join("__module__.verified.ll"),
+        s_dir.join("__module__.opt_safe.ll"),
+    ] {
+        if whole_mod_candidate.is_file() {
+            verified_slices.insert("__module__".to_owned(), read_utf8(&whole_mod_candidate)?);
+            break;
+        }
+    }
+
     for f in &manifest.functions {
         let stem = sanitize_filename(&f.name);
         let candidate_paths = [
@@ -255,6 +265,9 @@ fn cmd_merge(args: &[String]) -> Result<(), BridgeError> {
         ];
         let found = candidate_paths.iter().find(|p| p.is_file());
         let Some(p) = found else {
+            if !f.splittable || verified_slices.contains_key("__module__") {
+                continue;
+            }
             return Err(BridgeError::MissingVerifiedSlice {
                 function_name: f.name.clone(),
             });

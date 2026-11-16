@@ -74,7 +74,16 @@ PROPRIETARY_LEAK_MARKERS = (
 )
 
 PROOF_HOLE_RE = re.compile(r"\b(Admitted|admit|give_up|Abort)\b")
-AXIOM_DECL_RE = re.compile(r"\b(Axiom|Conjecture)\s+([A-Za-z0-9_']+)")
+AXIOM_DECL_RE = re.compile(r"\b(Axiom|Axioms|Conjecture|Conjectures)\s+\(*([A-Za-z0-9_']+)")
+STMT_END_RE = re.compile(r"\.(?=\s|$)")
+STMT_PREFIX_ATTR_RE = re.compile(r"^(?:#\[[^\]]*\]\s*|Local\s+|Global\s+|Export\s+)+")
+SECTION_OPEN_RE = re.compile(r"^Section\s+([A-Za-z0-9_']+)")
+MODTYPE_OPEN_RE = re.compile(r"^Module\s+Type\s+([A-Za-z0-9_']+)")
+MODULE_OPEN_RE = re.compile(r"^Module\s+(?!Type\b)([A-Za-z0-9_']+)")
+END_SCOPE_RE = re.compile(r"^End\s+([A-Za-z0-9_']+)")
+ASSUMPTION_STMT_RE = re.compile(
+    r"^(Axiom|Axioms|Conjecture|Conjectures|Parameter|Parameters|Variable|Variables|Hypothesis|Hypotheses)\s+\(*([A-Za-z0-9_']+)"
+)
 FORBIDDEN_AXIOM_IMPORT_RE = re.compile(
     r"\b(EqAxiom|bisimulation_is_eq|JMeq|JMeq_eq|ProofIrrelevance|proof_irrelevance)\b"
 )
@@ -219,7 +228,12 @@ def check_code_licenses_and_leaks(root: pathlib.Path, errors: list[str]) -> None
         if not base.exists():
             continue
         for path in base.rglob("*"):
-            if not path.is_file() or "_build" in path.parts or "target" in path.parts:
+            if (
+                not path.is_file()
+                or "_build" in path.parts
+                or "target" in path.parts
+                or "__pycache__" in path.parts
+            ):
                 continue
             rel = path.relative_to(root).as_posix()
             if rel == self_rel:
@@ -311,19 +325,64 @@ def check_rocq_proofs(root: pathlib.Path, errors: list[str]) -> int:
                     errors.append(
                         f"Forbidden Rocq proof hole `{hole.group(1)}` in {rel}:{lineno}"
                     )
-                for ax in AXIOM_DECL_RE.finditer(line):
-                    kind, ident = ax.group(1), ax.group(2)
-                    if (rel, ident) not in ALLOWED_ROCQ_AXIOMS:
-                        errors.append(
-                            f"Unapproved Rocq `{kind} {ident}` in {rel}:{lineno} "
-                            "(prove as Lemma or document in ALLOWED_ROCQ_AXIOMS after TCB review)"
-                        )
                 bad_import = FORBIDDEN_AXIOM_IMPORT_RE.search(line)
                 if bad_import:
                     errors.append(
                         f"Forbidden axiom-backed helper/import `{bad_import.group(1)}` in {rel}:{lineno} "
                         "(use Eqdep_dec.inj_pair2_eq_dec / Integers.mkint_eq / eutt instead)"
                     )
+
+            scope_stack: list[tuple[str, str]] = []
+            pos = 0
+            line_cursor = 1
+            for m_end in STMT_END_RE.finditer(stripped):
+                chunk = stripped[pos : m_end.start()]
+                lead_len = len(chunk) - len(chunk.lstrip())
+                stmt_lineno = line_cursor + chunk[:lead_len].count("\n")
+                line_cursor += stripped[pos : m_end.end()].count("\n")
+                pos = m_end.end()
+
+                st = chunk.strip()
+                if not st:
+                    continue
+                st_clean = STMT_PREFIX_ATTR_RE.sub("", st)
+
+                msec = SECTION_OPEN_RE.match(st_clean)
+                mmt = MODTYPE_OPEN_RE.match(st_clean)
+                mmod = MODULE_OPEN_RE.match(st_clean)
+                mend = END_SCOPE_RE.match(st_clean)
+                if msec:
+                    scope_stack.append(("Section", msec.group(1)))
+                    continue
+                if mmt and ":=" not in st_clean:
+                    scope_stack.append(("ModuleType", mmt.group(1)))
+                    continue
+                if mmod and ":=" not in st_clean:
+                    scope_stack.append(("Module", mmod.group(1)))
+                    continue
+                if mend:
+                    if scope_stack and scope_stack[-1][1] == mend.group(1):
+                        scope_stack.pop()
+                    continue
+
+                massump = ASSUMPTION_STMT_RE.match(st_clean)
+                if massump:
+                    kind, ident = massump.group(1), massump.group(2)
+                    in_sec_or_modtype = any(
+                        sk in ("Section", "ModuleType") for sk, _ in scope_stack
+                    )
+                    is_global_axiom_kw = kind in (
+                        "Axiom",
+                        "Axioms",
+                        "Conjecture",
+                        "Conjectures",
+                    )
+                    if is_global_axiom_kw or not in_sec_or_modtype:
+                        if (rel, ident) not in ALLOWED_ROCQ_AXIOMS:
+                            errors.append(
+                                f"Unapproved Rocq `{kind} {ident}` in {rel}:{stmt_lineno} "
+                                "(prove as Lemma/Definition or document in ALLOWED_ROCQ_AXIOMS after TCB review)"
+                            )
     return checked_files
 
 

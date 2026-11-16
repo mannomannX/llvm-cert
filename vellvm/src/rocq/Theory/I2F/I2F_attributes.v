@@ -90,13 +90,37 @@ Proof.
   end.
 Qed.
 
+(** Load and call metadata [!range] (and parameter/return [range]): both
+    sides test the same integer, lane by lane for vectors. *)
+Lemma I2F_value_metadata_range_base rs v1 v2 :
+  I2F_dvalue v1 v2 ->
+  I2F_dvalue (@value_metadata_range_base PInf rs v1) (@value_metadata_range_base PFin rs v2).
+Proof.
+  intros H; pose proof H as H'; unfold value_metadata_range_base.
+  inv H; [inv H0 | |]; cbn; auto.
+  repeat break_match_goal; auto.
+Qed.
+
+Lemma I2F_value_metadata_range r v1 v2 :
+  I2F_dvalue v1 v2 ->
+  I2F_dvalue (@value_metadata_range PInf r v1) (@value_metadata_range PFin r v2).
+Proof.
+  intros H.
+  destruct r as [rs|]; cbn; auto.
+  inversion H; subst; try (apply I2F_value_metadata_range_base; auto).
+  destruct v; [| apply I2F_value_metadata_range_base; auto].
+  constructor.
+  match goal with
+  | HF : Forall2 I2F_dvalue _ _ |- _ =>
+      induction HF; cbn; constructor; auto using I2F_value_metadata_range_base
+  end.
+Qed.
+
 Lemma I2F_value_attr_range attrs v1 v2 :
   I2F_dvalue v1 v2 ->
   I2F_dvalue (@value_attr_range PInf attrs v1) (@value_attr_range PFin attrs v2).
 Proof.
-  intros H; pose proof H as H'; unfold value_attr_range.
-  inv H; [inv H0 | |]; cbn; auto.
-  repeat break_match_goal; auto.
+  unfold value_attr_range; apply I2F_value_metadata_range.
 Qed.
 
 (** [nofpclass]: related floats are equal, so both sides test the same
@@ -150,32 +174,6 @@ Proof.
         by (f_equal; f_equal; apply I2F_dvalue_well_defined; exact HP);
       rewrite EQ; destruct b2
   end; now constructor.
-Qed.
-
-(** Load and call metadata [!range]: both sides test the same integer,
-    lane by lane for vectors. *)
-Lemma I2F_value_metadata_range_base rs v1 v2 :
-  I2F_dvalue v1 v2 ->
-  I2F_dvalue (@value_metadata_range_base PInf rs v1) (@value_metadata_range_base PFin rs v2).
-Proof.
-  intros H; pose proof H as H'; unfold value_metadata_range_base.
-  inv H; [inv H0 | |]; cbn; auto.
-  repeat break_match_goal; auto.
-Qed.
-
-Lemma I2F_value_metadata_range r v1 v2 :
-  I2F_dvalue v1 v2 ->
-  I2F_dvalue (@value_metadata_range PInf r v1) (@value_metadata_range PFin r v2).
-Proof.
-  intros H.
-  destruct r as [rs|]; cbn; auto.
-  inversion H; subst; try (apply I2F_value_metadata_range_base; auto).
-  destruct v; [| apply I2F_value_metadata_range_base; auto].
-  constructor.
-  match goal with
-  | HF : Forall2 I2F_dvalue _ _ |- _ =>
-      induction HF; cbn; constructor; auto using I2F_value_metadata_range_base
-  end.
 Qed.
 
 Lemma I2F_forallb_well_defined vs1 vs2 :

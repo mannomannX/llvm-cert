@@ -3,17 +3,24 @@
 
 pub mod error;
 pub mod fp_literals;
+#[cfg(kani)]
+mod kani_proofs;
 pub mod split_merge;
 pub mod vellvm_sanitize;
 
 pub use error::BridgeError;
-pub use fp_literals::{FpScalarType, f32_bits_to_f64_bits, normalize_llvm23_fp_and_comments};
+pub use fp_literals::{
+    FpScalarType, f32_bits_to_f64_bits, f64_bits_to_f32_bits_exact,
+    normalize_llvm23_fp_and_comments, verify_f32_f64_roundtrip_invariants,
+    verify_f64_f32_exact_image_invariants, verify_utf8_scanner_panic_freedom,
+};
 pub use split_merge::{
     DeclRecord, FunctionManifestEntry, GlobalRecord, ModuleManifest, SplitOutput, TypeDefRecord,
-    merge_module, split_module, split_module_for_vellvm,
+    merge_module, split_module, split_module_for_vellvm, validate_target_datalayout,
 };
 pub use vellvm_sanitize::{
-    FastPathEligibility, SliceRole, check_fast_path_eligibility, sanitize_for_vellvm,
+    FastPathEligibility, SliceRole, check_fast_path_eligibility, is_verified_vellvm_intrinsic,
+    sanitize_for_vellvm,
 };
 
 #[cfg(test)]
@@ -44,6 +51,50 @@ mod tests {
         }
         // Signaling NaN preserves quiet=0 bit and exact shifted payload (unlike CPU fcvt!)
         assert_eq!(f32_bits_to_f64_bits(0x7F80_0001), 0x7FF0_0000_2000_0000);
+    }
+
+    #[test]
+    fn test_f64_to_f32_exact_inverse_and_shared_kani_kernels() {
+        const POS_ZERO_RT: Option<u32> = f64_bits_to_f32_bits_exact(0x0000_0000_0000_0000);
+        const NEG_ZERO_RT: Option<u32> = f64_bits_to_f32_bits_exact(0x8000_0000_0000_0000);
+        assert_eq!(POS_ZERO_RT, Some(0x0000_0000));
+        assert_eq!(NEG_ZERO_RT, Some(0x8000_0000));
+
+        for bits32 in [
+            0x0000_0000_u32,
+            0x8000_0000,
+            0x0000_0001, // min subnormal -> exp64 = 874
+            0x8000_0001,
+            0x007F_FFFF, // max subnormal -> exp64 = 896
+            0x0080_0000, // min normal    -> exp64 = 897
+            0x3DCC_CCCD,
+            0x7F7F_FFFF, // max normal    -> exp64 = 1150
+            0x7F80_0000, // +inf
+            0xFF80_0000, // -inf
+            0x7F80_0001, // +snan(0x1)
+            0xFFBF_FFFF, // -snan(max payload)
+            0x7FC0_0000, // +qnan
+            0xFFFF_FFFF, // -qnan(max payload)
+        ] {
+            assert!(verify_f32_f64_roundtrip_invariants(bits32));
+        }
+
+        // Exact-image boundary rejections (`None` for out-of-image f64 bit patterns):
+        for non_f32_bits64 in [
+            0x0000_0000_0000_0001_u64,       // f64 subnormal
+            873_u64 << 52,                   // 2^-150 (half of min f32 subnormal)
+            (874_u64 << 52) | (1_u64 << 51), // 1.5 * 2^-149 (inexact subnormal mantissa)
+            0x3FB9_9999_9999_999A,           // 0.1f64 (non-zero low 29 mantissa bits)
+            1151_u64 << 52,                  // 2^128 (overflows finite f32)
+            0x7FF0_0000_0000_0001,           // f64 sNaN with payload only in low 29 bits
+        ] {
+            assert_eq!(f64_bits_to_f32_bits_exact(non_f32_bits64), None);
+            assert!(verify_f64_f32_exact_image_invariants(non_f32_bits64));
+        }
+
+        assert!(verify_utf8_scanner_panic_freedom(
+            b"float f0x3DCCCCCD /* c */"
+        ));
     }
 
     #[test]
@@ -111,6 +162,44 @@ define double @clean_conv(i32 %x, i32 %y) !dbg !4 {
         assert!(text.contains("zext nneg i32 %x to i64"));
         assert!(text.contains("trunc nuw nsw i64 %ext to i32"));
         assert!(text.contains("uitofp nneg i32 %sel to double"));
+    }
+
+    #[test]
+    fn test_half_value_ops_route_to_safe_path_without_false_positives() {
+        let half_slice = "\
+define half @fp16_step(half %x) {
+entry:
+  %y = fadd half %x, f0x3C00
+  ret half %y
+}
+";
+        assert!(!check_fast_path_eligibility(half_slice).is_eligible());
+        assert!(matches!(
+            sanitize_for_vellvm(half_slice, SliceRole::TargetFastPath),
+            Err(BridgeError::FastPathIneligible { .. })
+        ));
+        // Source role still normalizes `f0x3C00` -> `0xH3C00` cleanly without rejecting:
+        let source_norm = sanitize_for_vellvm(half_slice, SliceRole::Source);
+        assert!(source_norm.is_ok());
+        assert!(
+            source_norm
+                .unwrap_or_default()
+                .contains("%y = fadd half %x, 0xH3C00")
+        );
+
+        let fast_eligible_slice = "\
+declare i32 @half_fn(i32)
+
+define i32 @int_step(i32 %a, i32 %half_val) {
+entry:
+  %half_width = add i32 %a, 1
+  %called = call i32 @half_fn(i32 %half_val)
+  %out = add i32 %half_width, %called
+  ret i32 %out
+}
+";
+        assert!(check_fast_path_eligibility(fast_eligible_slice).is_eligible());
+        assert!(sanitize_for_vellvm(fast_eligible_slice, SliceRole::TargetFastPath).is_ok());
     }
 
     #[test]
@@ -224,5 +313,198 @@ attributes #1 = { nounwind }
         // Synthesized `@llvm.memcpy` declaration included without duplicating sibling `@helper` as declare!
         assert!(merged.contains("declare void @llvm.memcpy.p0.p0.i64("));
         assert!(!merged.contains("declare noundef i32 @helper("));
+        // F-19: Unverified `-O2` `!tbaa` metadata stripped from merged function body!
+        assert!(!merged.contains("!tbaa"));
+    }
+
+    #[test]
+    fn test_wp1_f19_strips_inferred_attrs_and_alias_metadata_on_merge() {
+        let input_ir = "\
+source_filename = \"f19.c\"
+target datalayout = \"e-m:e-p:64:64-i64:64-n32:64-S128\"
+target triple = \"aarch64-unknown-none-elf\"
+
+define dso_local i32 @sensor_step(ptr %buf, i32 %n) #0 {
+entry:
+  %v = load i32, ptr %buf, align 4
+  %s = add i32 %v, %n
+  ret i32 %s
+}
+
+attributes #0 = { nounwind }
+";
+        let split = split_module_for_vellvm(input_ir);
+        assert!(split.is_ok());
+        let split = split.unwrap_or_else(|_| SplitOutput {
+            manifest: ModuleManifest {
+                source_filename: None,
+                target_datalayout: None,
+                target_triple: None,
+                module_asm_lines: Vec::new(),
+                comdats: Vec::new(),
+                type_defs: Vec::new(),
+                globals: Vec::new(),
+                declarations: Vec::new(),
+                functions: Vec::new(),
+                attr_groups: BTreeMap::new(),
+                named_metadata: Vec::new(),
+                numbered_metadata: BTreeMap::new(),
+            },
+            slices: BTreeMap::new(),
+        });
+
+        // Simulate aggressive `opt -O2` inferring unverified return/param/fn attrs + alias metadata:
+        let opt_fast_slice = "\
+define dso_local noundef range(i32 0, 256) i32 @sensor_step(ptr noalias nocapture nonnull readonly dereferenceable(4) %0, i32 noundef %1) local_unnamed_addr #0 {
+entry:
+  %v = load i32, ptr %0, align 4, !tbaa !0, !alias.scope !3, !noalias !4, !invariant.load !{}
+  %s = add nsw i32 %v, %1, !prof !5
+  ret i32 %s
+}
+
+attributes #0 = { mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: read) }
+!0 = !{!1, !1, i64 0}
+!1 = !{!\"int\", !2, i64 0}
+!2 = !{!\"omnipotent char\"}
+!3 = !{!\"scope\"}
+!4 = !{!\"noalias_scope\"}
+!5 = !{!\"branch_weights\", i32 16}
+";
+        let mut verified = BTreeMap::new();
+        verified.insert("sensor_step".to_owned(), opt_fast_slice.to_owned());
+        let merged = merge_module(&split.manifest, &verified).unwrap_or_default();
+
+        // Original `input.ll` signature & `#0` (`{ nounwind }`) restored with `%0, %1` SSA names:
+        assert!(merged.contains("define dso_local i32 @sensor_step(ptr %0, i32 %1) #0 {"));
+        assert!(!merged.contains("willreturn"));
+        assert!(!merged.contains("mustprogress"));
+        assert!(!merged.contains("memory("));
+        assert!(!merged.contains("dereferenceable"));
+        assert!(!merged.contains("local_unnamed_addr"));
+        assert!(!merged.contains("!tbaa"));
+        assert!(!merged.contains("!alias.scope"));
+        assert!(!merged.contains("!noalias"));
+        assert!(!merged.contains("!invariant.load"));
+        assert!(!merged.contains("omnipotent char"));
+        // Benign non-alias `!prof` metadata preserved and remapped:
+        assert!(merged.contains("!prof !0"));
+    }
+
+    #[test]
+    fn test_wp1_f22_datalayout_and_f24_f33_f34_non_splittable_passthrough() {
+        // F-22: Reject big-endian and 32-bit pointer layouts fail-fast:
+        for bad_dl in [
+            "target datalayout = \"E-m:e-p:64:64-i64:64-S128\"",
+            "target datalayout = \"e-m:e-p:32:32-i64:64-n32-S128\"",
+            "target datalayout = \"e-m:e-p0:32:32-i64:64-S128\"",
+            "target datalayout = \"m:e-i64:64-S128\"",
+        ] {
+            let ir = format!("{bad_dl}\ndefine void @f() {{\n  ret void\n}}\n");
+            assert!(matches!(
+                split_module(&ir),
+                Err(BridgeError::UnsupportedDataLayout { .. })
+            ));
+            assert!(matches!(
+                sanitize_for_vellvm(&ir, SliceRole::Source),
+                Err(BridgeError::UnsupportedDataLayout { .. })
+            ));
+        }
+        assert!(validate_target_datalayout("e-m:e-p0:64:64-p270:32:32-i64:64-S128").is_ok());
+
+        // F-24, F-33, F-34: `thread_local`, `@llvm.global_ctors`/`@llvm.used` elision, `extern_weak`,
+        // `invoke`, and cross-function `blockaddress` non-splittable pass-through!
+        let complex_mod = "\
+source_filename = \"runtime_init.c\"
+target datalayout = \"e-m:e-p:64:64-i64:64-n32:64-S128\"
+target triple = \"riscv64-unknown-none-elf\"
+
+@tls_errno = internal thread_local(initialexec) global i32 0, align 4
+@weak_board_id = extern_weak global i32, align 4
+@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @pure_worker, ptr null }]
+@llvm.used = appending global [1 x ptr] [ptr @pure_worker], section \"llvm.metadata\"
+
+declare extern_weak i32 @opt_probe()
+declare i32 @__gxx_personality_v0(...)
+declare void @callee_may_throw()
+
+define dso_local void @pure_worker() #0 {
+entry:
+  store i32 1, ptr @tls_errno, align 4
+  %w = load i32, ptr @weak_board_id, align 4
+  %p = call i32 @opt_probe()
+  ret void
+}
+
+define dso_local void @eh_runner() personality ptr @__gxx_personality_v0 {
+entry:
+  invoke void @callee_may_throw() to label %cont unwind label %lpad
+cont:
+  ret void
+lpad:
+  %lp = landingpad { ptr, i32 } cleanup
+  resume { ptr, i32 } %lp
+}
+
+define dso_local ptr @addr_taker() {
+entry:
+  ret ptr blockaddress(@label_owner, %target_bb)
+}
+
+define dso_local i32 @label_owner() {
+entry:
+  br label %target_bb
+target_bb:
+  ret i32 42
+}
+
+attributes #0 = { nounwind }
+";
+        let split = split_module_for_vellvm(complex_mod).expect_or_panic_free();
+        // Only `@pure_worker` is splittable; `@eh_runner`, `@addr_taker`, and `@label_owner` are non-splittable!
+        assert_eq!(split.slices.len(), 1);
+        let worker_slice = split.slices.get("pure_worker").cloned().unwrap_or_default();
+        assert!(
+            worker_slice
+                .contains("@tls_errno = external thread_local(initialexec) global i32, align 4")
+        );
+        assert!(worker_slice.contains("@weak_board_id = extern_weak global i32, align 4"));
+        assert!(worker_slice.contains("declare extern_weak i32 @opt_probe()"));
+        assert!(!worker_slice.contains("@llvm.global_ctors"));
+        assert!(!worker_slice.contains("@llvm.used"));
+
+        // Merging with ONLY `pure_worker` in `verified_slices` succeeds cleanly via F-24 pass-through!
+        let merged = merge_module(&split.manifest, &split.slices).unwrap_or_default();
+        assert!(merged.contains("@llvm.global_ctors = appending global"));
+        assert!(merged.contains("@llvm.used = appending global"));
+        assert!(merged.contains("define dso_local void @eh_runner()"));
+        assert!(merged.contains("define dso_local ptr @addr_taker()"));
+        assert!(merged.contains("define dso_local i32 @label_owner()"));
+    }
+
+    trait ResultTestExt<T> {
+        fn expect_or_panic_free(self) -> T;
+    }
+
+    impl ResultTestExt<SplitOutput> for Result<SplitOutput, BridgeError> {
+        fn expect_or_panic_free(self) -> SplitOutput {
+            assert!(self.is_ok());
+            self.unwrap_or_else(|_| SplitOutput {
+                manifest: ModuleManifest {
+                    source_filename: None,
+                    target_datalayout: None,
+                    target_triple: None,
+                    module_asm_lines: Vec::new(),
+                    comdats: Vec::new(),
+                    type_defs: Vec::new(),
+                    globals: Vec::new(),
+                    declarations: Vec::new(),
+                    functions: Vec::new(),
+                    attr_groups: BTreeMap::new(),
+                    named_metadata: Vec::new(),
+                    numbered_metadata: BTreeMap::new(),
+                },
+                slices: BTreeMap::new(),
+            })
+        }
     }
 }

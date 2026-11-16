@@ -17,6 +17,10 @@ pub enum BridgeError {
     MalformedModule {
         detail: String,
     },
+    UnsupportedDataLayout {
+        datalayout: String,
+        reason: String,
+    },
     FastPathIneligible {
         reasons: Vec<String>,
     },
@@ -49,6 +53,12 @@ impl fmt::Display for BridgeError {
                 )
             }
             Self::MalformedModule { detail } => write!(f, "malformed LLVM IR module: {detail}"),
+            Self::UnsupportedDataLayout { datalayout, reason } => {
+                write!(
+                    f,
+                    "unsupported LLVM target datalayout `{datalayout}`: {reason}"
+                )
+            }
             Self::FastPathIneligible { reasons } => {
                 write!(
                     f,

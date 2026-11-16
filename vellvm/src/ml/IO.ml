@@ -18,8 +18,14 @@ let write_file (file : string) (out : string) =
 let output_file filename ast =
   let open Llvm_printer in
   let channel = open_out filename in
-  toplevel_entities (Format.formatter_of_out_channel channel) ast ;
-  close_out channel
+  let fmt = Format.formatter_of_out_channel channel in
+  try
+    toplevel_entities fmt ast ;
+    Format.pp_print_flush fmt () ;
+    close_out channel
+  with exn ->
+    close_out_noerr channel ;
+    raise exn
 
 let print_ast ast = Llvm_printer.toplevel_entities Format.std_formatter ast
 

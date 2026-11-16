@@ -53,6 +53,7 @@ module Z = struct
   let of_sint64 (n : int64) : coq_Z =
     if n = 0L then Z0
     else if Int64.compare n 0L > 0 then Zpos (P.of_int64 n)
+    else if n = Int64.min_int then Zneg (Coq_xO (P.of_int64 0x4000000000000000L))
     else Zneg (P.of_int64 (Int64.neg n))
 
   let of_uint64 (n : int64) : coq_Z =

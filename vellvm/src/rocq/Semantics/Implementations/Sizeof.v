@@ -47,7 +47,9 @@ Definition Dtyp_base_alignment (dt : dtyp_base) : alignment :=
              then Build_alignment 2 2
              else if Pos.leb sz 32
                   then Build_alignment 4 4
-                  else Build_alignment 4 8
+                  else if Pos.leb sz 64
+                       then Build_alignment 4 8
+                       else Build_alignment 16 16
     | DTYPE_Iptr => Build_alignment 8 8
     | DTYPE_Pointer => Build_alignment 8 8
     | DTYPE_Void => Build_alignment 1 1
@@ -70,7 +72,9 @@ Definition Dtyp_base_alignment (dt : dtyp_base) : alignment :=
              then Build_alignment 2 2
              else if Pos.leb sz 32
                   then Build_alignment 4 4
-                  else Build_alignment 4 8
+                  else if Pos.leb sz 64
+                       then Build_alignment 4 8
+                       else Build_alignment 16 16
   end.  
 
 (* The component-wise maximum of two alignments (used for structs). *)

@@ -24,8 +24,25 @@ Import ListNotations.
 From Vellvm Require
      Semantics.TopLevel
      Utils.ParserHelper
+     Syntax.ModuleRefs
      Syntax.ShowAST
      Syntax.ReprAST.
+
+From CertPasses Require
+     SimplifyCFG
+     DCE
+     SCCP
+     Mem2Reg
+     Inline
+     Pipeline
+     McfgExport
+     ModuleMerge.
+
+From CertValidator Require
+     CertFormat
+     AigLrat
+     AlgRules
+     CertValidator.
 
 Set Extraction AccessOpaque.
 
@@ -123,4 +140,19 @@ Extract Inlined Constant Archi.ppc64 => "false".
 Cd "ml/extracted".
 
 Separate Extraction ExtrOcamlIntConv TopLevel AstLib ParserHelper ShowAST ReprAST Handlers Numeric.Floats BinNums BinPos
-  LLVMAst.nofpclass_mask LLVMAst.nofpclass_mask_valid (* QCVellvm *).
+  LLVMAst.nofpclass_mask LLVMAst.nofpclass_mask_valid
+  SimplifyCFG.simplifycfg_mcfg SimplifyCFG.simplifycfg_mcfg_typ
+  DCE.dce_mcfg DCE.dce_mcfg_typ
+  SCCP.sccp_mcfg SCCP.sccp_mcfg_typ
+  Mem2Reg.mem2reg_mcfg Mem2Reg.mem2reg_mcfg_typ
+  Inline.inline_mcfg Inline.inline_mcfg_typ
+  Pipeline.optimize_mcfg Pipeline.optimize_mcfg_typ
+  ModuleRefs.resolve_module_refs
+  McfgExport.resolve_for_opt_tle
+  McfgExport.export_mcfg_to_tle McfgExport.export_mcfg_with_typ McfgExport.export_mcfg_with_tle
+  ModuleMerge.validate_module_merge ModuleMerge.validate_module_merge_parsed ModuleMerge.validate_module_merge_tle
+  CertFormat.parse_sexp CertFormat.parse_cert CertFormat.check_validator_syntax_gates CertFormat.check_prototype_contract
+  AigLrat.check_lrat_unsat
+  AlgRules.check_expr_refines AlgRules.check_expr_refines_with_lrat
+  CertValidator.check_cert_cfg CertValidator.check_cert_cfg_with_lrat CertValidator.check_cert_defn
+  CertValidator.validate_mcfg_with_cert CertValidator.validate_tle_pair_with_cert CertValidator.validate_tle_pair_with_cert_str (* QCVellvm *).

@@ -43,6 +43,10 @@
   let of_str = Camlcoq.camlstring_of_coqstring
   let coq_N_of_int = Camlcoq.N.of_int
   let coq_P_of_int = Camlcoq.P.of_int
+  let parse_bitwidth_pos prefix s =
+    match int_of_string_opt s with
+    | Some n when n >= 1 && n <= 8388608 -> coq_P_of_int n
+    | _ -> failwith (Printf.sprintf "invalid integer bitwidth %s%s" prefix s)
   let coq_of_int = Camlcoq.Z.of_sint
   let coq_of_int64 = Camlcoq.Z.of_sint64
   let coqfloat_of_float f = Floats.Float.of_bits(Camlcoq.coqint_of_camlint64(Int64.bits_of_float f))
@@ -479,6 +483,7 @@
   ("zeroinitializer" , KW_ZEROINITIALIZER);
   ("c" , KW_C);
   ("range", KW_RANGE);
+  ("inrange", KW_INRANGE);
   ("initializes", KW_INITIALIZES);
 
   ("splat", KW_SPLAT);
@@ -561,6 +566,7 @@ rule token = parse
   (* identifier *)
   | '@' { GLOBAL (lexed_id lexbuf) }
   | '%' { LOCAL  (lexed_id lexbuf) }
+  | '$' { COMDAT_VAR (lexed_id lexbuf) }
 
   (* "DI" metadata has special, nested structure, but we just ignore it all *)
   | "!DI" (kwletter*  as di) '('
@@ -611,8 +617,8 @@ rule token = parse
   | '"'                         { STRING (string (Buffer.create 10) lexbuf) }
 
   (* types *)
-  | 'i' (digit+ as i) { I (coq_P_of_int (int_of_string i)) }
-  | 'b' (digit+ as i) { B (coq_P_of_int (int_of_string i)) }  
+  | 'i' (digit+ as i) { I (parse_bitwidth_pos "i" i) }
+  | 'b' (digit+ as i) { B (parse_bitwidth_pos "b" i) }  
   | '*' { STAR }
 
   (* labels *)

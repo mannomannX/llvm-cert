@@ -1,7 +1,7 @@
 # Master Plan & Roadmap (`cert-llvm`)
 
 **Target Baseline:** LLVM `23.1.5` (`llvmorg-23.1.5`, released 2026-11-03) + Vellvm (`main` on Rocq `9.1`)  
-**Last Updated:** 2026-11-11
+**Last Updated:** 2026-11-15
 
 ---
 
@@ -9,10 +9,11 @@
 
 | Phase | Timeframe | Status | Completion |
 | :--- | :--- | :--- | :--- |
-| **Phase 1: Repository Setup & Minimal Build** | Weeks 1–2 | **In Progress** | **~90%** (1.1, 1.1b, 1.1c & 1.3 Rust `ir-bridge` Done; 1.2 LLVM 23.1.5 SDK & Rocq 9.1 CI running) |
-| **Phase 2: Verified Fallback Core (Rocq)** | Months 1–3 | Not Started *(Foundation Ready)* | **~10%** (Vellvm 3.0/`main` already includes Opaque Pointers `TYPE_Pointer None` & `Theory/`) |
-| **Phase 3: Verified Translation Validator** | Months 3–6 | Not Started | **~5%** (`cert-z3-engine` & `cert-llvm` Rust workspace scaffolded in `llvm-cert-enterprise`) |
-| **Phase 4: Orchestration, Backend Check & Audit** | Months 6–9 | Not Started | **~10%** (`cert-attestation` `.proof.json` schema & unit tests scaffolded in `llvm-cert-enterprise`) |
+| **Phase 1: Repository Setup & Minimal Build** | Weeks 1–2 | **Completed** | **100%** (1.1, 1.1b, 1.1c, 1.2 LLVM 23.1.5 SDK & Rocq 9.1 CI, and 1.3 Rust `ir-bridge` Done) |
+| **Phase 2: Verified Fallback Core (Rocq)** | Months 1–3 | **Completed** | **100%** (2.1a, 2.1b, 2.2 5 Rocq passes + `Pipeline.v`, 2.3 `verified-opt-fallback` CLI + `ir-bridge` hardening, & `F-37` vector poison Done) |
+| **Phase 3: Verified Translation Validator** | Months 3–6 | **In Progress** | **~75%** (3.1 deterministic `cert-v1` + `Z3` `QF_BV` engine & 3.2 Rocq `cert-validator` `19,144` LOC / `411` `Qed.` Done; 3.3 loop/alias rule expansion next) |
+| **Phase 4: Orchestration, Backend Check & Audit** | Months 6–9 | **Completed** | **100%** (4.1a `cert-llvm` + `runtime/`, 4.1b Rocq [`ModuleMerge.v`](../passes/ModuleMerge.v), 4.2 `cert-backend-check`, & 4.3 Ed25519 `.proof.json` Done) |
+| **Phase 5: Two-Stage Hardening & Assurance** | Continuous | **In Progress** | **~90%** ([`CheckAssumptions.v`](../validator/CheckAssumptions.v) Layer 1, forged-cert/Wycheproof/CLI Layer 2, Red-Team Personas 1/3/4 `F-50`..`F-57` + `E-15`..`E-18`, & Stage B `cert-qual-suite` `E-19` Done; Persona 2 post-CI audit next) |
 
 ---
 
@@ -61,11 +62,12 @@ See:
 - [`business-model-and-ip-strategy.md`](./business-model-and-ip-strategy.md) — CompCert-style Dual-License & Open-Core 2-repository split (`llvm-cert` + private `llvm-cert-enterprise`).
 - [`code-quality-and-ci.md`](./code-quality-and-ci.md) — "MISRA-Grade" Rust, Mathematical Rocq, CERT C / MISRA C, Minimal-OCaml (`<= 750 LOC`), and optimized multi-tier CI (`mold`, `cargo-nextest`, `Swatinem/rust-cache`, `ccache`).
 - [`rocq-proof-strategies.md`](./rocq-proof-strategies.md) — Fast-compute Rocq 9.1 & Vellvm 3.0 proof playbook (`[PS-01]`..`[PS-08]`).
+- [`hardening-and-assurance-strategy.md`](./hardening-and-assurance-strategy.md) — Two-stage, 4-layer security, soundness, forged-certificate, and QEMU differential assurance strategy.
 - [`feedback.csv`](./feedback.csv) — Structured agent audit & findings ledger (`F-XX`).
 
 ---
 
-## 3. 4-Phase Implementation Plan & Task Checklist
+## 3. Implementation & Hardening Roadmap
 
 ### Phase 1: Repository Setup & Minimal Build (Weeks 1–2)
 
@@ -93,27 +95,30 @@ See:
 
 - [x] **2.1a Close Vellvm 3.0 Conversion/Compare Poison Holes & Lexer Gaps (`F-08`):**
   - Implemented exact poison semantics and kernel-checked `Qed.` lemmas for `trunc nuw/nsw`, `zext nneg`, and `uitofp nneg` in [`Conversion.v`](../vellvm/src/rocq/Semantics/Operations/Conversion.v), forwarded `samesign` in [`Compare.v`](../vellvm/src/rocq/Semantics/Operations/Compare.v), added `"bfloat"` (`KW_BFLOAT`) to [`llvm_lexer.mll`](../vellvm/src/ml/libvellvm/llvm_lexer.mll) / [`llvm_parser.mly`](../vellvm/src/ml/libvellvm/llvm_parser.mly), and preserved `I2F` (`Theory/I2F/I2F_exp.v`) while gating bare-metal MMIO pointer `icmp samesign` (`F-15`).
-- [ ] **2.1b (`TODO`) Target-Specific `fp128` & Intrinsic Extensions:**
-  - Evaluate `Flocq` `fp128` (`binary128`) value denotation for `AArch64`/`RISCV` `long double` and extend `IntrinsicsDefinitions.v` as required by target workloads.
-- [ ] **2.2 (`TODO`) Implement & Prove 5 Core Optimization Passes in Rocq:**
-  1. `mem2reg` — Promote stack allocations (`alloca` + `load`/`store`) into SSA registers (highest-impact pass).
-  2. `sccp` — Sparse Conditional Constant Propagation.
-  3. `dce` — Dead Code Elimination.
-  4. `simplifycfg` — Control-Flow Graph simplification (dead blocks, constant branches, block merging).
-  5. `inline` — Non-recursive / bounded function inlining.
-- [ ] **2.3 (`TODO`) Extract Standalone `verified-opt-fallback` Binary:**
-  - Extract proven Rocq passes to OCaml and compile into the standalone CLI tool `verified-opt-fallback` (`input.ll -> opt_safe.ll`).
+- [x] **2.1b Target-Specific `fp128` Gate & 98 Pure Intrinsic Extensions:**
+  - Routed non-IEEE-32/64 floating-point types (`half`, `bfloat`, `fp128`, `x86_fp80`, `ppc_fp128`) deterministically to the Safe-Path pass-through in [`vellvm_sanitize.rs`](../ir-bridge/src/vellvm_sanitize.rs) (avoiding a high-risk invasive fork of Vellvm's `DynamicTypes`/`MemoryBytes` `dvalue` core while keeping `f32`/`f64` on the Fast-Path).
+  - Implemented and proved `I2F` refinement for 98 pure LLVM 23 intrinsics (`10` `f32`/`f64` floating-point + `88` width-indexed `i8`/`i16`/`i32`/`i64` bit-manipulation, saturating, min/max, abs, and overflow intrinsics) across [`IntrinsicsDefinitions.v`](../vellvm/src/rocq/Semantics/IntrinsicsDefinitions.v) and [`I2F_interp.v`](../vellvm/src/rocq/Theory/I2F/I2F_interp.v).
+- [x] **2.2 Implement & Prove 5 Core Optimization Passes in Rocq ([`../passes/`](../passes)):**
+  - Built [`PassCommon.v`](../passes/PassCommon.v): axiom-free whole-module semantic refinement framework (`prog_refines`, provenance-aware `refine_prov`, per-CFG `lift_cfg_pass`, and local-state `lift_cfg_with_args_local_pass` / `lift_cfg_local_pass`).
+  1. `mem2reg` ([`Mem2Reg.v`](../passes/Mem2Reg.v)) — Promotes non-escaping scalar `alloca` stack slots + `load`/`store`s into SSA registers and `phi` nodes.
+  2. `sccp` ([`SCCP.v`](../passes/SCCP.v)) — Sparse Conditional Constant Propagation over SSA definitions and executable CFG edges.
+  3. `dce` ([`DCE.v`](../passes/DCE.v)) — Liveness-driven Dead Code Elimination for side-effect- and failure-free instructions and `phi` nodes.
+  4. `simplifycfg` ([`SimplifyCFG.v`](../passes/SimplifyCFG.v)) — Constant branch/switch folding, unreachable block & dead `phi`-edge pruning, and single-predecessor block coalescing.
+  5. `inline` ([`Inline.v`](../passes/Inline.v)) — Bounded multi-round call-site inlining with fresh SSA/block α-renaming and block splitting.
+  - Composed all passes via [`Pipeline.v`](../passes/Pipeline.v) (`optimize_mcfg_refines`, `0 Admitted`, verified by `rocq check -o`) and wired OCaml extraction in [`Extract.v`](../vellvm/src/ml/extracted/Extract.v).
+- [x] **2.3 Extract Standalone `verified-opt-fallback` Binary & Harden `ir-bridge` Boundary:**
+  - Built [`McfgExport.v`](../passes/McfgExport.v) (`0 Admitted`, verified entry-block placement + fail-fast `reify_dtyp` + `#N`/`!N` & `TYPE_Function` prototype preservation) and compiled the standalone CLI binary [`verified_opt_fallback.ml`](../vellvm/src/ml/bin/verified_opt_fallback.ml) (`input.ll -> opt_safe.ll`).
+  - Added `proptest` (3,584 cases across 7 fallible suites, fixing 128-bit `0xL<low64><high64>` word order `F-29`), differential `llvm-as` bitcode round-trip checks, and `#[cfg(kani)]` bounded model-checking harnesses on [`../ir-bridge/`](../ir-bridge).
 
 ---
 
 ### Phase 3: Verified Translation Validator (Months 3–6)
 
-- [ ] **3.1 (`TODO`) Certificate Format & SMT Certificate Generator (`Z3`):**
-  - Design a compact, deterministic proof certificate schema (`.cert`) capturing SSA value equivalence, memory state refinement, and UB/poison non-increase (Alive2-style encoding).
-  - Build the untrusted `Z3`-backed certificate generator comparing `input.ll` and `opt_fast.ll` per function.
-- [ ] **3.2 (`TODO`) 100% Rocq-Proven Proof Checker (`cert-validator`):**
-  - Implement and prove soundness in Rocq against Vellvm's `Theory/Equational.v` & `Refinement.v`: if `check_cert fn_src fn_tgt cert = true`, then `fn_tgt` refines `fn_src`.
-  - Extract to standalone native CLI binary `cert-validator`.
+- [x] **3.1 Certificate Format & SMT Certificate Generator (`Z3`):**
+  - Implemented deterministic canonical S-expression `.cert` (`cert-v1`) schema ([`cert.rs`](../../LLVMCert-Enterprise/crates/cert-z3-engine/src/cert.rs), including `entry`/`cutpoint`/`return` block structure, FIPS 180-4 SHA-256 digests, UB assumptions, SSA equivalences, and memory slot refinements) with `0` external crate dependencies.
+  - Built the Alive2-style `(bv, poison)` + `reach` + `ub` `QF_BV` SMT-LIB2 encoder and `Z3` witness generator ([`smt.rs`](../../LLVMCert-Enterprise/crates/cert-z3-engine/src/smt.rs), [`ir_model.rs`](../../LLVMCert-Enterprise/crates/cert-z3-engine/src/ir_model.rs)) verified end-to-end against live `Z3` and pure-Rust `QF_BV` boundary tests.
+- [x] **3.2 100% Rocq-Proven Proof Checker (`cert-validator`):**
+  - Implemented and proved [`CertFormat.v`](../validator/CertFormat.v), [`AigLrat.v`](../validator/AigLrat.v), [`AlgRules.v`](../validator/AlgRules.v), and [`CertValidator.v`](../validator/CertValidator.v) (`19,144` LOC, `411` `Qed.` theorems, `0 Admitted`, `0` axioms): total `cert-v1` parser + syntax/prototype contract gates (`F-17`, `F-18`, `F-19`, `F-21`, `F-30`..`F-34`), 2-rail `(val, poison)` AIG+LRAT checker, algebraic normalizer, and open-world `CallE` (`F-33`) + relational `DrawE` (`F-44`) CFG refinement validator (`validate_tle_pair_with_cert_str_sound`), extracted to standalone CLI [`cert_validator.ml`](../vellvm/src/ml/bin/cert_validator.ml).
 - [ ] **3.3 (`TODO`) Iterative Rule Expansion (AI-Assisted Proof Loop):**
   - Extend validator rules step-by-step for loop unrolling/rotation, alias/memory forwarding, and `AArch64`/`RISCV` vector idioms.
 
@@ -121,11 +126,25 @@ See:
 
 ### Phase 4: Orchestration, Backend Assurance & Productization (Months 6–9)
 
-- [ ] **4.1 (`TODO`) Rust Orchestrator (`cert-llvm`):**
-  - Build the drop-in CLI driver (`cert-clang` / `cert-llvm`) accepting C, C++, and Rust inputs.
-  - Split modules per function (`llvm-extract` / bitcode splitter), run Fast-Path + `cert-validator` in parallel, fall back seamlessly to `verified-opt-fallback` on rejection, and re-link verified functions.
-- [ ] **4.2 (`TODO`) Symbolic Backend Checker (IR-to-Assembly for `AArch64` & `RISCV`):**
-  - Implement a symbolic disassembler/MC equivalence check validating that emitted `AArch64` and `RISCV` machine instructions match the verified IR semantics.
-- [ ] **4.3 (`TODO`) Cryptographically Signed Customer Audit Report (`.proof.json`):**
-  - Emit a deterministic, signed per-build verification manifest (e.g., *"97.4% of functions verified via Fast-Path, 2.6% compiled via Rocq Fallback Core — 0 unproven transformations"*), ready for ISO 26262 / DO-178C / IEC 61508 qualification artifacts.
+- [x] **4.1a Rust Orchestrator (`cert-llvm`) & Freestanding MISRA/CERT C Runtime:**
+  - Built pure-`std` 4-stage CLI orchestrator (`cert-llvm` in `llvm-cert-enterprise`, `0` external crates) supporting deterministic `--jobs=N` per-function parallel scheduling (`opt -O2` + `Z3` + `cert-validator` Fast-Path with fail-closed `verified-opt-fallback` Safe-Path), locked `SafetyDriverProfile`, and freestanding [`../runtime/`](../runtime/include/cert_runtime.h) builtins (`F-27`, `E-14`).
+- [x] **4.1b Rocq-Checked Split/Merge Boundary (`check_module_merge`):**
+  - Implemented and proved [`ModuleMerge.v`](../passes/ModuleMerge.v) (`4,349` lines, `0 Admitted`, `0` axioms): decidable `check_module_merge` / `validate_module_merge_parsed` (with bidirectional `METADATA_File_info` span normalization), proving global/alignment/declaration stability (`F-33`, `F-47`), prototype contract preservation (`F-19`), open-world `CallE` compositional whole-module refinement (`check_module_merge_refines` & `check_module_merge_I2F_model_refine`), and heterogeneous TV + Safe-Path `Pipeline.optimize_mcfg` splicing (`F-20`, `F-24`).
+- [x] **4.2 Symbolic Backend Checker (IR-to-Assembly for `AArch64` & `RISCV`):**
+  - Implemented pure-`std` [`cert-backend-check`](../../LLVMCert-Enterprise/crates/cert-backend-check/src/lib.rs) (`0` external crates): bounds-checked ELF64 `EM_AARCH64` & `EM_RISCV` inspector, `F-27` `R_RISCV_RELAX`/`R_RISCV_ALIGN` & call-relocation allowlist gate, A64 & `RV64IMAFDC`+`RVC` decoders, 16B-`sp`/callee-saved/`.stack_sizes`/`F-32` `sret` (`x8` vs `a0`) ABI gates, and 3-tier `QF_BV` post-IR-to-MC symbolic equivalence upgrading proven functions to `McValidated` (`E-18`).
+- [x] **4.3 Cryptographically Signed Customer Audit Report (`.proof.json`):**
+  - Implemented deterministic `cert-llvm-proof-v1` verification manifests (`unproven_ir_optimizations: 0`, full artifact/CLI/datalayout/8-tool SHA-256 bindings, ELF64/assembly `.stack_sizes` frame accounting, RFC 8032 Ed25519 signing & round-trip verification, and atomic file emission) in [`cert-attestation`](../../LLVMCert-Enterprise/crates/cert-attestation/src/lib.rs) and [`orchestrator.rs`](../../LLVMCert-Enterprise/crates/cert-llvm/src/orchestrator.rs), backed by 5,000-case property sweeps and `#[cfg(kani)]` harnesses (`E-01`, `E-05`, `E-06`, `E-13`, `E-14`).
+
+---
+
+### Phase 5: Two-Stage Hardening & Continuous Assurance ([`hardening-and-assurance-strategy.md`](./hardening-and-assurance-strategy.md))
+
+- [ ] **5.1 (`TODO`) Stage A — TCB Assumption Gate, Forged-Cert/Wycheproof Suites & 4-Persona Red-Team:**
+  - **Layer 1:** Add `CheckAssumptions.v` (`Print Assumptions` gate) to `rocq-ci.yml` and audit `Extract.v` / `Camlcoq.ml`.
+  - **Layer 2:** Build adversarial negative/forged-certificate suite for `cert-validator` + Wycheproof Ed25519 & CLI/TOCTOU security tests for `cert-attestation` / `cert-llvm`.
+  - **Layer 4:** Execute domain-isolated 4-persona Red-Team audit (`Theorem/Extraction`, `Certificate Forger`, `Parser/IR-Bridge Desync`, `Orchestrator/Crypto Security`), logging every finding in `feedback.csv` and converting each into a permanent CI regression test.
+- [x] **5.2 Stage B — Differential Execution Fuzzing, Embedded Safety Corpus & `ISO 26262` / `DO-330` Qualification Suite (`E-19`):**
+  - **Layer 3a:** Built [`cert-qual-suite`](../../LLVMCert-Enterprise/crates/cert-qual-suite/src/lib.rs) (`0` external crates): seeded UB-free scalar & diamond-CFG IR fuzzer ([`fuzzer.rs`](../../LLVMCert-Enterprise/crates/cert-qual-suite/src/fuzzer.rs)), delta-debugging reducer ([`reduce.rs`](../../LLVMCert-Enterprise/crates/cert-qual-suite/src/reduce.rs)), 4-way differential oracle (`ir_interp` + live `Z3` `cert-v1` + concrete `AArch64` & `RISC-V+RVC` ELF64 executors + `cert-backend-check`), and 3-way `QEMU` harness ([`qemu.rs`](../../LLVMCert-Enterprise/crates/cert-qual-suite/src/qemu.rs)).
+  - **Layer 3b:** 20 license-clean embedded safety kernels ([`corpus.rs`](../../LLVMCert-Enterprise/crates/cert-qual-suite/src/corpus.rs): `100%` Fast-Path on eligible acyclic kernels, `90%` `McValidated`, `<= 256`B stack bound), `.proof.json` telemetry gates ([`telemetry.rs`](../../LLVMCert-Enterprise/crates/cert-qual-suite/src/telemetry.rs)), and 10-case `ISO 26262 TCL3` / `DO-330 TQL-1` fault-injection suite (`100%` mutation kill rate, [`qualification.rs`](../../LLVMCert-Enterprise/crates/cert-qual-suite/src/qualification.rs)).
+
 

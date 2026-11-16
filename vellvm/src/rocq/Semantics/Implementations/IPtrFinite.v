@@ -43,7 +43,7 @@ Definition from_Z_bits {sz : positive} : Z -> EOU (@bit_int sz) :=
     mmul :=
       fun x y =>
         let res := ((Integers.unsigned x) * (Integers.unsigned y))%Z in
-        if (res >? @Integers.max_unsigned 64)
+        if (res >? @Integers.max_unsigned sz)
         then raise_oom "IPBit multiplication overflow."
         else ret (@Integers.repr sz res);
 

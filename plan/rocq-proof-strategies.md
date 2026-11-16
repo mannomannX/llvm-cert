@@ -156,6 +156,13 @@ This living knowledge base collects **fast-computing, extraction-clean, kernel-f
   - **Strict `#[local]` attribute scoping & selective `Require`:** Never add bare `Hint Resolve`, `Hint Rewrite`, `Hint Unfold`, or `Opaque` (which leak globally across downstream imports; note `_RocqProject` lines 4–5). Always prefix with `#[local]` (or `#[export]` inside a dedicated `*Hints` module), and prefer `From Vellvm Require Syntax.CFG Theory.Equational` over importing umbrella modules you do not need.
   - **`Equations` (`rocq-equations`) scope:** Use `Equations` strictly for **indexed `Prop` relations** (`prerel` / `postrel` over `CallE T` / `MemoryE T`, stepped via `simp RelName` as in [`Refinement.v`](../vellvm/src/rocq/Theory/I2F/Refinement.v)) and `depelim` in proofs — **never** for executable functions extracted to OCaml (where `Equations` obligation dictionaries bloat extracted code; use plain `Fixpoint` + explicit `fuel` per `[PS-06]`).
 
+### `[PS-14]` Axiom-Free Whole-Module Pass Lifting (`PassCommon.v`: `refine_prov`, `cfg_local_sim`, `decomp_*`)
+- **Context:** Lifting per-function or whole-module transformations in [`passes/`](../passes) across Vellvm 3.0's full handler stack (`mrec` -> `interp_intrinsics` -> `interp_vellvm_prov_h` -> `library_functions`) without `Prop`-to-`Type` choice axioms or bespoke stack invariants in every pass.
+- **Fast Strategy:**
+  - **Explicit `ProvE` (`FreshProv`) handler (`run_mcfg_model` / `refine_prov`):** Expose provenance allocation as an uninterpreted `FreshProv` event in `ProvBotE` so passes that eliminate stack allocations (`Mem2Reg`) or call frames (`Inline`) step asynchronously on `FreshProv` (`RP_Step` left-step) while keeping external I/O, UB cutoff, and OOM refinement exact.
+  - **Constructive `ITree` decomposition (`decomp_intr`, `decomp_model`) for coinductive handler morphisms:** When proving simulation across `interp_intrinsics` or `interp_state`, avoid existential `Vis` witnesses inside `Prop` that fail guardedness or require choice; instead write a one-step computable classifier (`Ret | Tau | Cut | SyncVis | AsyncStep`) with an `eq_itree eq` spec lemma, and use a two-branch coinductive carrier (`Branch A: pre-bind` $\lor$ `Branch B: active-bind`).
+  - **Entry-parameter definedness via `lift_cfg_with_args_local_pass`:** Passes that delete dead expressions or fold constants (`DCE`, `SCCP`) require knowing `df_args df` are bound in `local_env` at entry to `denote_cfg`; use `lift_cfg_with_args_local_pass` (`PassCommon.v`), which discharges `combine_lists_varargs` + `init_local_env` once for all passes and provides `forall x, In x fargs -> exists v, Maps.lookup x env = Some v` directly.
+
 ---
 
 ## Evaluated & Rejected Anti-Patterns (Do Not Re-Introduce)

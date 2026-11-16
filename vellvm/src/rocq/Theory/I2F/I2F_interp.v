@@ -70,7 +70,20 @@ Proof.
   destruct Hans; apply I2F_EOU_ret; constructor; constructor; auto.
 Qed.
 
-(** ** The 11 leaf [pure_base_function]s: none of these touch [DVALUE_Pointer] or [DVALUE_Iptr] *)
+Lemma I2F_pure_to_semantic :
+  forall (f1 : @pure_function PInf) (f2 : @pure_function PFin),
+    (forall args1 args2, Forall2 I2F_dvalue args1 args2 ->
+       I2F_EOU (sum_rel I2F_dvalue I2F_dvalue) (f1 args1) (f2 args2)) ->
+    forall args1 args2 va1 va2,
+      Forall2 I2F_dvalue args1 args2 ->
+      I2F_refine_MCFG (sum_rel I2F_dvalue I2F_dvalue)
+        (pure_to_semantic f1 args1 va1) (pure_to_semantic f2 args2 va2).
+Proof.
+  intros f1 f2 Hf args1 args2 va1 va2 Hargs.
+  unfold pure_to_semantic; apply I2F_refine_lift, Hf, Hargs.
+Qed.
+
+(** ** The leaf [pure_base_function]s: none of these touch [DVALUE_Pointer] or [DVALUE_Iptr] *)
 
 Lemma I2F_llvm_fabs_f32 : forall args1 args2,
     Forall2 I2F_dvalue_base args1 args2 ->
@@ -272,6 +285,414 @@ Proof.
   intros; unfold llvm_va_end; apply ruttc_ret; repeat constructor.
 Qed.
 
+(** ** Generic poison-propagating FP and width-polymorphic integer combinators *)
+
+Lemma I2F_is_f32_or_poison {v1 : @dvalue_base PInf} {v2 : @dvalue_base PFin}
+  (Hv : I2F_dvalue_base v1 v2) :
+  is_f32_or_poison v1 = is_f32_or_poison v2.
+Proof.
+  destruct Hv; reflexivity.
+Qed.
+
+Lemma I2F_is_f64_or_poison {v1 : @dvalue_base PInf} {v2 : @dvalue_base PFin}
+  (Hv : I2F_dvalue_base v1 v2) :
+  is_f64_or_poison v1 = is_f64_or_poison v2.
+Proof.
+  destruct Hv; reflexivity.
+Qed.
+
+Lemma I2F_is_int_sz_or_poison (sz : positive) {v1 : @dvalue_base PInf} {v2 : @dvalue_base PFin}
+  (Hv : I2F_dvalue_base v1 v2) :
+  is_int_sz_or_poison sz v1 = is_int_sz_or_poison sz v2.
+Proof.
+  destruct Hv; reflexivity.
+Qed.
+
+Lemma I2F_llvm_f32_binop (err : string) (op : Floats.float32 -> Floats.float32 -> Floats.float32) :
+  forall args1 args2,
+    Forall2 I2F_dvalue_base args1 args2 ->
+    I2F_EOU (sum_rel I2F_dvalue_base I2F_dvalue_base)
+      (llvm_f32_binop err op args1) (llvm_f32_binop err op args2).
+Proof.
+  intros args1 args2 Hargs.
+  destruct Hargs as [| v1 v1' l1 l2 Hv1 Hargs]; [constructor |].
+  destruct Hargs as [| v2 v2' l1' l2' Hv2 Hargs]; [constructor |].
+  destruct Hargs; [| constructor].
+  cbn [llvm_f32_binop].
+  destruct Hv1 as [| | | | a | | |]; try constructor.
+  - destruct Hv2 as [| | | | b | | |]; constructor; repeat constructor.
+  - rewrite (I2F_is_f32_or_poison Hv2).
+    destruct (is_f32_or_poison v2'); constructor; repeat constructor.
+Qed.
+
+Lemma I2F_llvm_f64_binop (err : string) (op : Floats.float -> Floats.float -> Floats.float) :
+  forall args1 args2,
+    Forall2 I2F_dvalue_base args1 args2 ->
+    I2F_EOU (sum_rel I2F_dvalue_base I2F_dvalue_base)
+      (llvm_f64_binop err op args1) (llvm_f64_binop err op args2).
+Proof.
+  intros args1 args2 Hargs.
+  destruct Hargs as [| v1 v1' l1 l2 Hv1 Hargs]; [constructor |].
+  destruct Hargs as [| v2 v2' l1' l2' Hv2 Hargs]; [constructor |].
+  destruct Hargs; [| constructor].
+  cbn [llvm_f64_binop].
+  destruct Hv1 as [| | | a | | | |]; try constructor.
+  - destruct Hv2 as [| | | b | | | |]; constructor; repeat constructor.
+  - rewrite (I2F_is_f64_or_poison Hv2).
+    destruct (is_f64_or_poison v2'); constructor; repeat constructor.
+Qed.
+
+Lemma I2F_llvm_f32_ternop (err : string)
+  (op : Floats.float32 -> Floats.float32 -> Floats.float32 -> Floats.float32) :
+  forall args1 args2,
+    Forall2 I2F_dvalue_base args1 args2 ->
+    I2F_EOU (sum_rel I2F_dvalue_base I2F_dvalue_base)
+      (llvm_f32_ternop err op args1) (llvm_f32_ternop err op args2).
+Proof.
+  intros args1 args2 Hargs.
+  destruct Hargs as [| v1 v1' l1 l2 Hv1 Hargs]; [constructor |].
+  destruct Hargs as [| v2 v2' l1' l2' Hv2 Hargs]; [constructor |].
+  destruct Hargs as [| v3 v3' l1'' l2'' Hv3 Hargs]; [constructor |].
+  destruct Hargs; [| constructor].
+  cbn [llvm_f32_ternop].
+  destruct Hv1 as [| | | | a | | |]; try constructor.
+  - destruct Hv2 as [| | | | b | | |]; try constructor.
+    + destruct Hv3 as [| | | | c | | |]; constructor; repeat constructor.
+    + rewrite (I2F_is_f32_or_poison Hv3).
+      destruct (is_f32_or_poison v3'); constructor; repeat constructor.
+  - rewrite (I2F_is_f32_or_poison Hv2), (I2F_is_f32_or_poison Hv3).
+    destruct (andb (is_f32_or_poison v2') (is_f32_or_poison v3'));
+      constructor; repeat constructor.
+Qed.
+
+Lemma I2F_llvm_f64_ternop (err : string)
+  (op : Floats.float -> Floats.float -> Floats.float -> Floats.float) :
+  forall args1 args2,
+    Forall2 I2F_dvalue_base args1 args2 ->
+    I2F_EOU (sum_rel I2F_dvalue_base I2F_dvalue_base)
+      (llvm_f64_ternop err op args1) (llvm_f64_ternop err op args2).
+Proof.
+  intros args1 args2 Hargs.
+  destruct Hargs as [| v1 v1' l1 l2 Hv1 Hargs]; [constructor |].
+  destruct Hargs as [| v2 v2' l1' l2' Hv2 Hargs]; [constructor |].
+  destruct Hargs as [| v3 v3' l1'' l2'' Hv3 Hargs]; [constructor |].
+  destruct Hargs; [| constructor].
+  cbn [llvm_f64_ternop].
+  destruct Hv1 as [| | | a | | | |]; try constructor.
+  - destruct Hv2 as [| | | b | | | |]; try constructor.
+    + destruct Hv3 as [| | | c | | | |]; constructor; repeat constructor.
+    + rewrite (I2F_is_f64_or_poison Hv3).
+      destruct (is_f64_or_poison v3'); constructor; repeat constructor.
+  - rewrite (I2F_is_f64_or_poison Hv2), (I2F_is_f64_or_poison Hv3).
+    destruct (andb (is_f64_or_poison v2') (is_f64_or_poison v3'));
+      constructor; repeat constructor.
+Qed.
+
+Lemma I2F_llvm_int_unop (err : string) (sz : positive)
+  (op : forall w : positive, @bit_int w -> @bit_int w) :
+  forall args1 args2,
+    Forall2 I2F_dvalue_base args1 args2 ->
+    I2F_EOU (sum_rel I2F_dvalue_base I2F_dvalue_base)
+      (llvm_int_unop err sz op args1) (llvm_int_unop err sz op args2).
+Proof.
+  intros args1 args2 Hargs.
+  destruct Hargs as [| v1 v1' l1 l2 Hv1 Hargs]; [constructor |].
+  destruct Hargs; [| constructor].
+  cbn [llvm_int_unop].
+  destruct Hv1 as [| w a | | | | | |]; try (constructor; repeat constructor).
+  destruct (Pos.eqb w sz); constructor; repeat constructor.
+Qed.
+
+Lemma I2F_llvm_int_unop_flag (err : string) (sz : positive)
+  (op : forall w : positive, @bit_int w -> bool -> option (@bit_int w)) :
+  forall args1 args2,
+    Forall2 I2F_dvalue_base args1 args2 ->
+    I2F_EOU (sum_rel I2F_dvalue_base I2F_dvalue_base)
+      (llvm_int_unop_flag err sz op args1) (llvm_int_unop_flag err sz op args2).
+Proof.
+  intros args1 args2 Hargs.
+  destruct Hargs as [| v1 v1' l1 l2 Hv1 Hargs]; [constructor |].
+  destruct Hargs as [| v2 v2' l1' l2' Hv2 Hargs]; [constructor |].
+  destruct Hargs; [| constructor].
+  cbn [llvm_int_unop_flag].
+  destruct Hv1 as [| w1 a | | | | | |]; try constructor.
+  - destruct (Pos.eqb w1 sz); [| constructor].
+    destruct Hv2 as [| w2 flag | | | | | |]; try (constructor; repeat constructor).
+    destruct (Pos.eqb w2 1%positive); [| constructor].
+    destruct (op w1 a (negb (@Integers.eq w2 flag (@Integers.zero w2))));
+      constructor; repeat constructor.
+  - rewrite (I2F_is_int_sz_or_poison 1%positive Hv2).
+    destruct (is_int_sz_or_poison 1%positive v2'); constructor; repeat constructor.
+Qed.
+
+Lemma I2F_llvm_int_binop (err : string) (sz : positive)
+  (op : forall w : positive, @bit_int w -> @bit_int w -> @bit_int w) :
+  forall args1 args2,
+    Forall2 I2F_dvalue_base args1 args2 ->
+    I2F_EOU (sum_rel I2F_dvalue_base I2F_dvalue_base)
+      (llvm_int_binop err sz op args1) (llvm_int_binop err sz op args2).
+Proof.
+  intros args1 args2 Hargs.
+  destruct Hargs as [| v1 v1' l1 l2 Hv1 Hargs]; [constructor |].
+  destruct Hargs as [| v2 v2' l1' l2' Hv2 Hargs]; [constructor |].
+  destruct Hargs; [| constructor].
+  cbn [llvm_int_binop].
+  destruct Hv1 as [| w1 a | | | | | |]; try constructor.
+  - destruct (Pos.eq_dec w1 sz) as [H1 | _]; [| constructor].
+    destruct Hv2 as [| w2 b | | | | | |]; try (constructor; repeat constructor).
+    destruct (Pos.eq_dec w2 sz) as [H2 | _]; constructor; repeat constructor.
+  - rewrite (I2F_is_int_sz_or_poison sz Hv2).
+    destruct (is_int_sz_or_poison sz v2'); constructor; repeat constructor.
+Qed.
+
+Lemma I2F_llvm_expect_int (err : string) (sz : positive) :
+  forall args1 args2,
+    Forall2 I2F_dvalue_base args1 args2 ->
+    I2F_EOU (sum_rel I2F_dvalue_base I2F_dvalue_base)
+      (llvm_expect_int err sz args1) (llvm_expect_int err sz args2).
+Proof.
+  intros args1 args2 Hargs.
+  destruct Hargs as [| v1 v1' l1 l2 Hv1 Hargs]; [constructor |].
+  destruct Hargs as [| v2 v2' l1' l2' Hv2 Hargs]; [constructor |].
+  destruct Hargs; [| constructor].
+  cbn [llvm_expect_int].
+  rewrite (I2F_is_int_sz_or_poison sz Hv2).
+  destruct Hv1 as [| w1 a | | | | | |]; try constructor.
+  - destruct (andb (Pos.eqb w1 sz) (is_int_sz_or_poison sz v2'));
+      constructor; repeat constructor.
+  - destruct (is_int_sz_or_poison sz v2'); constructor; repeat constructor.
+Qed.
+
+Lemma I2F_llvm_int_ternop (err : string) (sz : positive)
+  (op : forall w : positive, @bit_int w -> @bit_int w -> @bit_int w -> @bit_int w) :
+  forall args1 args2,
+    Forall2 I2F_dvalue_base args1 args2 ->
+    I2F_EOU (sum_rel I2F_dvalue_base I2F_dvalue_base)
+      (llvm_int_ternop err sz op args1) (llvm_int_ternop err sz op args2).
+Proof.
+  intros args1 args2 Hargs.
+  destruct Hargs as [| v1 v1' l1 l2 Hv1 Hargs]; [constructor |].
+  destruct Hargs as [| v2 v2' l1' l2' Hv2 Hargs]; [constructor |].
+  destruct Hargs as [| v3 v3' l1'' l2'' Hv3 Hargs]; [constructor |].
+  destruct Hargs; [| constructor].
+  cbn [llvm_int_ternop].
+  destruct Hv1 as [| w1 a | | | | | |]; try constructor.
+  - destruct (Pos.eq_dec w1 sz) as [H1 | _]; [| constructor].
+    destruct Hv2 as [| w2 b | | | | | |]; try constructor.
+    + destruct (Pos.eq_dec w2 sz) as [H2 | _]; [| constructor].
+      destruct Hv3 as [| w3 c | | | | | |]; try (constructor; repeat constructor).
+      destruct (Pos.eq_dec w3 sz) as [H3 | _]; constructor; repeat constructor.
+    + rewrite (I2F_is_int_sz_or_poison sz Hv3).
+      destruct (is_int_sz_or_poison sz v3'); constructor; repeat constructor.
+  - rewrite (I2F_is_int_sz_or_poison sz Hv2), (I2F_is_int_sz_or_poison sz Hv3).
+    destruct (andb (is_int_sz_or_poison sz v2') (is_int_sz_or_poison sz v3'));
+      constructor; repeat constructor.
+Qed.
+
+Lemma I2F_llvm_int_ovf_binop (err : string) (sz : positive)
+  (op : forall w : positive, @bit_int w -> @bit_int w -> @bit_int w * bool) :
+  forall args1 args2,
+    Forall2 I2F_dvalue args1 args2 ->
+    I2F_EOU (sum_rel I2F_dvalue I2F_dvalue)
+      (llvm_int_ovf_binop err sz op args1) (llvm_int_ovf_binop err sz op args2).
+Proof.
+  intros args1 args2 Hargs; unfold llvm_int_ovf_binop.
+  eapply I2F_EOU_bind.
+  { eapply I2F_EOU_map_monad2; [exact Hargs | intros; apply I2F_dvalue_to_dvalue_base; auto]. }
+  intros args1' args2' Hargs'.
+  destruct Hargs' as [| v1 v1' l1 l2 Hv1 Hargs']; [constructor |].
+  destruct Hargs' as [| v2 v2' l1' l2' Hv2 Hargs']; [constructor |].
+  destruct Hargs'; [| constructor].
+  destruct Hv1 as [| w1 a | | | | | |];
+    cbn -[Pos.eq_dec is_int_sz_or_poison Integers.one Integers.zero]; try constructor.
+  - destruct (Pos.eq_dec w1 sz) as [H1 | _]; [| constructor].
+    destruct Hv2 as [| w2 b | | | | | |]; try (constructor; repeat constructor).
+    destruct (Pos.eq_dec w2 sz) as [H2 | _]; constructor; repeat constructor.
+  - rewrite (I2F_is_int_sz_or_poison sz Hv2).
+    destruct (is_int_sz_or_poison sz v2'); constructor; repeat constructor.
+Qed.
+
+(** ** Structural [Forall2] lifting over [defined_intrinsics] and [assoc] *)
+
+Definition I2F_semantic_function
+  (f1 : semantic_function (Pa := PInf) (E := @MCFGEtop PInf))
+  (f2 : semantic_function (Pa := PFin) (E := @MCFGEtop PFin)) : Prop :=
+  forall args1 args2 va1 va2,
+    Forall2 I2F_dvalue args1 args2 ->
+    option_rel I2F_Addr va1 va2 ->
+    I2F_refine_MCFG (sum_rel I2F_dvalue I2F_dvalue) (f1 args1 va1) (f2 args2 va2).
+
+Lemma I2F_pure_base_semantic_fn (f1 : @pure_base_function PInf) (f2 : @pure_base_function PFin) :
+  (forall args1 args2, Forall2 I2F_dvalue_base args1 args2 ->
+     I2F_EOU (sum_rel I2F_dvalue_base I2F_dvalue_base) (f1 args1) (f2 args2)) ->
+  I2F_semantic_function
+    (pure_base_to_semantic (Pa := PInf) (E := @MCFGEtop PInf) f1)
+    (pure_base_to_semantic (Pa := PFin) (E := @MCFGEtop PFin) f2).
+Proof.
+  intros Hf args1 args2 va1 va2 Hargs _.
+  apply I2F_pure_base_to_semantic; [exact Hf | exact Hargs].
+Qed.
+
+Lemma I2F_mk_int_unop_defs (op_name : string) (widths : list positive)
+  (op : forall w : positive, @bit_int w -> @bit_int w) :
+  Forall2 (prod_rel eq I2F_semantic_function)
+    (mk_int_unop_defs (Pa := PInf) (E := @MCFGEtop PInf) op_name widths op)
+    (mk_int_unop_defs (Pa := PFin) (E := @MCFGEtop PFin) op_name widths op).
+Proof.
+  unfold mk_int_unop_defs; apply Forall2_map2.
+  intros sz _; constructor; [reflexivity |].
+  apply I2F_pure_base_semantic_fn, I2F_llvm_int_unop.
+Qed.
+
+Lemma I2F_mk_int_unop_flag_defs (op_name : string) (widths : list positive)
+  (op : forall w : positive, @bit_int w -> bool -> option (@bit_int w)) :
+  Forall2 (prod_rel eq I2F_semantic_function)
+    (mk_int_unop_flag_defs (Pa := PInf) (E := @MCFGEtop PInf) op_name widths op)
+    (mk_int_unop_flag_defs (Pa := PFin) (E := @MCFGEtop PFin) op_name widths op).
+Proof.
+  unfold mk_int_unop_flag_defs; apply Forall2_map2.
+  intros sz _; constructor; [reflexivity |].
+  apply I2F_pure_base_semantic_fn, I2F_llvm_int_unop_flag.
+Qed.
+
+Lemma I2F_mk_int_binop_defs (op_name : string) (widths : list positive)
+  (op : forall w : positive, @bit_int w -> @bit_int w -> @bit_int w) :
+  Forall2 (prod_rel eq I2F_semantic_function)
+    (mk_int_binop_defs (Pa := PInf) (E := @MCFGEtop PInf) op_name widths op)
+    (mk_int_binop_defs (Pa := PFin) (E := @MCFGEtop PFin) op_name widths op).
+Proof.
+  unfold mk_int_binop_defs; apply Forall2_map2.
+  intros sz _; constructor; [reflexivity |].
+  apply I2F_pure_base_semantic_fn, I2F_llvm_int_binop.
+Qed.
+
+Lemma I2F_mk_expect_int_defs (widths : list positive) :
+  Forall2 (prod_rel eq I2F_semantic_function)
+    (mk_expect_int_defs (Pa := PInf) (E := @MCFGEtop PInf) widths)
+    (mk_expect_int_defs (Pa := PFin) (E := @MCFGEtop PFin) widths).
+Proof.
+  unfold mk_expect_int_defs; apply Forall2_map2.
+  intros sz _; constructor; [reflexivity |].
+  apply I2F_pure_base_semantic_fn, I2F_llvm_expect_int.
+Qed.
+
+Lemma I2F_mk_int_ternop_defs (op_name : string) (widths : list positive)
+  (op : forall w : positive, @bit_int w -> @bit_int w -> @bit_int w -> @bit_int w) :
+  Forall2 (prod_rel eq I2F_semantic_function)
+    (mk_int_ternop_defs (Pa := PInf) (E := @MCFGEtop PInf) op_name widths op)
+    (mk_int_ternop_defs (Pa := PFin) (E := @MCFGEtop PFin) op_name widths op).
+Proof.
+  unfold mk_int_ternop_defs; apply Forall2_map2.
+  intros sz _; constructor; [reflexivity |].
+  apply I2F_pure_base_semantic_fn, I2F_llvm_int_ternop.
+Qed.
+
+Lemma I2F_mk_int_ovf_binop_defs (op_name : string) (widths : list positive)
+  (op : forall w : positive, @bit_int w -> @bit_int w -> @bit_int w * bool) :
+  Forall2 (prod_rel eq I2F_semantic_function)
+    (mk_int_ovf_binop_defs (Pa := PInf) (E := @MCFGEtop PInf) op_name widths op)
+    (mk_int_ovf_binop_defs (Pa := PFin) (E := @MCFGEtop PFin) op_name widths op).
+Proof.
+  unfold mk_int_ovf_binop_defs; apply Forall2_map2.
+  intros sz _; constructor; [reflexivity |].
+  intros args1 args2 va1 va2 Hargs _.
+  apply I2F_pure_to_semantic; [apply I2F_llvm_int_ovf_binop | exact Hargs].
+Qed.
+
+Lemma I2F_extra_fp_intrinsics :
+  Forall2 (prod_rel eq I2F_semantic_function)
+    (extra_fp_intrinsics (Pa := PInf) (E := @MCFGEtop PInf))
+    (extra_fp_intrinsics (Pa := PFin) (E := @MCFGEtop PFin)).
+Proof.
+  unfold extra_fp_intrinsics,
+    llvm_minnum_f32, llvm_minnum_f64,
+    llvm_maximum_f32, llvm_maximum_f64,
+    llvm_copysign_f32, llvm_copysign_f64,
+    llvm_fma_f32, llvm_fma_f64,
+    llvm_fmuladd_f32, llvm_fmuladd_f64.
+  repeat (apply Forall2_cons; [constructor; [reflexivity | apply I2F_pure_base_semantic_fn] |]).
+  all: try apply Forall2_nil.
+  all: first [ apply I2F_llvm_f32_binop
+             | apply I2F_llvm_f64_binop
+             | apply I2F_llvm_f32_ternop
+             | apply I2F_llvm_f64_ternop ].
+Qed.
+
+Lemma I2F_extra_int_intrinsics :
+  Forall2 (prod_rel eq I2F_semantic_function)
+    (extra_int_intrinsics (Pa := PInf) (E := @MCFGEtop PInf))
+    (extra_int_intrinsics (Pa := PFin) (E := @MCFGEtop PFin)).
+Proof.
+  unfold extra_int_intrinsics.
+  repeat apply Forall2_app;
+    first [ apply I2F_mk_int_binop_defs
+          | apply I2F_mk_int_unop_flag_defs
+          | apply I2F_mk_int_ovf_binop_defs
+          | apply I2F_mk_int_unop_defs
+          | apply I2F_mk_int_ternop_defs
+          | apply I2F_mk_expect_int_defs ].
+Qed.
+
+Lemma I2F_defined_intrinsics :
+  Forall2 (prod_rel eq I2F_semantic_function)
+    (defined_intrinsics (Pa := PInf) (E := @MCFGEtop PInf))
+    (defined_intrinsics (Pa := PFin) (E := @MCFGEtop PFin)).
+Proof.
+  unfold defined_intrinsics.
+  apply Forall2_app.
+  - repeat (apply Forall2_cons; [constructor; [reflexivity | apply I2F_pure_base_semantic_fn] |]).
+    all: try apply Forall2_nil.
+    all: first [ apply I2F_llvm_fabs_f32
+               | apply I2F_llvm_fabs_f64
+               | apply I2F_llvm_maxnum_f32
+               | apply I2F_llvm_maxnum_f64
+               | apply I2F_llvm_minimum_f32
+               | apply I2F_llvm_minimum_f64
+               | apply I2F_llvm_ushl_sat_1
+               | apply I2F_llvm_ushl_sat_8
+               | apply I2F_llvm_ushl_sat_16
+               | apply I2F_llvm_ushl_sat_32
+               | apply I2F_llvm_ushl_sat_64 ].
+  - apply Forall2_app; [exact I2F_extra_fp_intrinsics |].
+    apply Forall2_app; [exact I2F_extra_int_intrinsics |].
+    apply Forall2_cons;
+      [constructor; [reflexivity | apply I2F_pure_base_semantic_fn, I2F_llvm_vellvm_internal_throw] |].
+    apply Forall2_cons;
+      [constructor; [reflexivity | apply I2F_pure_base_semantic_fn, I2F_llvm_assume] |].
+    apply Forall2_cons; [constructor; [reflexivity | exact I2F_llvm_va_start] |].
+    apply Forall2_cons;
+      [constructor; [reflexivity | intros args1 args2 va1 va2 _ _; apply I2F_llvm_va_end] |].
+    apply Forall2_cons;
+      [constructor; [reflexivity | intros args1 args2 va1 va2 Hargs _; apply I2F_llvm_va_copy; exact Hargs] |].
+    apply Forall2_nil.
+Qed.
+
+Lemma I2F_defs_assoc :
+  Forall2 (prod_rel eq I2F_semantic_function)
+    (defs_assoc (Pa := PInf) (E := @MCFGEtop PInf))
+    (defs_assoc (Pa := PFin) (E := @MCFGEtop PFin)).
+Proof.
+  unfold defs_assoc.
+  pose proof I2F_defined_intrinsics as H.
+  induction H as [| x y l1 l2 Hxy H IH]; cbn; [constructor |].
+  destruct x as [d1 f1], y as [d2 f2], Hxy as [Hd Hf]; cbn in Hd, Hf; subst d2.
+  destruct (dc_name d1); (constructor; [constructor; [reflexivity | exact Hf] | exact IH]).
+Qed.
+
+Lemma I2F_assoc_lookup {A B1 B2 : Type} {RD : RelDec.RelDec (@eq A)}
+  {RB : B1 -> B2 -> Prop} {l1 : list (A * B1)} {l2 : list (A * B2)}
+  (k : A) (H : Forall2 (prod_rel eq RB) l1 l2) :
+  match assoc k l1, assoc k l2 with
+  | Some v1, Some v2 => RB v1 v2
+  | None, None => True
+  | _, _ => False
+  end.
+Proof.
+  induction H as [| x y l1 l2 Hxy H IH]; cbn; [exact I |].
+  destruct x as [k1 v1], y as [k2 v2], Hxy as [Hk Hv]; cbn in Hk, Hv; subst k2.
+  destruct (RelDec.rel_dec k k1); [exact Hv | exact IH].
+Qed.
+
 Lemma I2F_handle_intrinsics A1 A2 (e1 : @IntrinsicE PInf A1) (e2 : @IntrinsicE PFin A2):
   I2FE_Intrinsic e1 e2 ->
   I2F_refine_MCFG (fun (a1 : A1) (a2 : A2) => I2FA_Intrinsic e1 a1 e2 a2) (handle_intrinsics e1) (handle_intrinsics e2).
@@ -280,46 +701,21 @@ Proof.
   destruct e1 as [t1 f1 args1 va1]; destruct e2 as [t2 f2 args2 va2].
   simp I2FE_Intrinsic in HI; cbn in HI.
   destruct HI as [Ht [Hf [Hargs Hva]]]; subst.
-  cbn.
-  destruct (RelDec.rel_dec f2 "llvm.fabs.f32");
-    [ simp I2FA_Intrinsic; apply I2F_pure_base_to_semantic; [apply I2F_llvm_fabs_f32 | exact Hargs] | ].
-  destruct (RelDec.rel_dec f2 "llvm.fabs.f64");
-    [ simp I2FA_Intrinsic; apply I2F_pure_base_to_semantic; [apply I2F_llvm_fabs_f64 | exact Hargs] | ].
-  destruct (RelDec.rel_dec f2 "llvm.maxnum.f32");
-    [ simp I2FA_Intrinsic; apply I2F_pure_base_to_semantic; [apply I2F_llvm_maxnum_f32 | exact Hargs] | ].
-  destruct (RelDec.rel_dec f2 "llvm.maxnum.f64");
-    [ simp I2FA_Intrinsic; apply I2F_pure_base_to_semantic; [apply I2F_llvm_maxnum_f64 | exact Hargs] | ].
-  destruct (RelDec.rel_dec f2 "llvm.minimum.f32");
-    [ simp I2FA_Intrinsic; apply I2F_pure_base_to_semantic; [apply I2F_llvm_minimum_f32 | exact Hargs] | ].
-  destruct (RelDec.rel_dec f2 "llvm.minimum.f64");
-    [ simp I2FA_Intrinsic; apply I2F_pure_base_to_semantic; [apply I2F_llvm_minimum_f64 | exact Hargs] | ].
-  destruct (RelDec.rel_dec f2 "llvm.ushl.sat.i1");
-    [ simp I2FA_Intrinsic; apply I2F_pure_base_to_semantic; [apply I2F_llvm_ushl_sat_1 | exact Hargs] | ].
-  destruct (RelDec.rel_dec f2 "llvm.ushl.sat.i8");
-    [ simp I2FA_Intrinsic; apply I2F_pure_base_to_semantic; [apply I2F_llvm_ushl_sat_8 | exact Hargs] | ].
-  destruct (RelDec.rel_dec f2 "llvm.ushl.sat.i16");
-    [ simp I2FA_Intrinsic; apply I2F_pure_base_to_semantic; [apply I2F_llvm_ushl_sat_16 | exact Hargs] | ].
-  destruct (RelDec.rel_dec f2 "llvm.ushl.sat.i32");
-    [ simp I2FA_Intrinsic; apply I2F_pure_base_to_semantic; [apply I2F_llvm_ushl_sat_32 | exact Hargs] | ].
-  destruct (RelDec.rel_dec f2 "llvm.ushl.sat.i64");
-    [ simp I2FA_Intrinsic; apply I2F_pure_base_to_semantic; [apply I2F_llvm_ushl_sat_64 | exact Hargs] | ].
-  destruct (RelDec.rel_dec f2 "llvm.vellvm.internal.throw");
-    [ simp I2FA_Intrinsic; apply I2F_pure_base_to_semantic; [apply I2F_llvm_vellvm_internal_throw | exact Hargs] | ].
-  destruct (RelDec.rel_dec f2 "llvm.assume");
-    [ simp I2FA_Intrinsic; apply I2F_pure_base_to_semantic; [apply I2F_llvm_assume | exact Hargs] | ].
-  destruct (RelDec.rel_dec f2 "llvm.va_start");
-    [ simp I2FA_Intrinsic; apply I2F_llvm_va_start; auto | ].
-  destruct (RelDec.rel_dec f2 "llvm.va_end");
-    [ simp I2FA_Intrinsic; apply I2F_llvm_va_end | ].
-  destruct (RelDec.rel_dec f2 "llvm.va_copy");
-    [ simp I2FA_Intrinsic; apply I2F_llvm_va_copy; auto | ].
-  cbn.
-  apply ruttc_trigger; cbnn.
-  - simp I2FE_Intrinsic; repeat (split; auto).
-  - intros a b Hab.
-    cbn in Hab; unfold resum, ReSum_id, id_, Id_IFun in Hab.
-    simp I2FA_Intrinsic in Hab.
+  unfold handle_intrinsics; cbn -[assoc defs_assoc].
+  pose proof (I2F_assoc_lookup f2 I2F_defs_assoc) as Hlkp.
+  destruct (assoc f2 (defs_assoc (Pa := PInf) (E := @MCFGEtop PInf))) as [g1 |],
+           (assoc f2 (defs_assoc (Pa := PFin) (E := @MCFGEtop PFin))) as [g2 |];
+    try contradiction.
+  - cbn.
     simp I2FA_Intrinsic.
+    apply Hlkp; auto.
+  - cbn.
+    apply ruttc_trigger; cbnn.
+    + simp I2FE_Intrinsic; repeat (split; auto).
+    + intros a b Hab.
+      cbn in Hab; unfold resum, ReSum_id, id_, Id_IFun in Hab.
+      simp I2FA_Intrinsic in Hab.
+      simp I2FA_Intrinsic.
 Qed.
 
 

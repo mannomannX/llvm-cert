@@ -28,7 +28,7 @@ Definition align_int64 := 8%Z.
 Definition align_float64 := 8%Z.
 
 (** Can we use the 64-bit extensions to the PowerPC architecture? *)
-Parameter ppc64 : bool.
+Definition ppc64 : bool := false.
 
 Definition splitlong := negb ppc64.
 

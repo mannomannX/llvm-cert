@@ -461,3 +461,21 @@ Proof.
   intros.
   apply I2F_interpreter_gen, I2F_build_main_args.
 Qed.
+
+Theorem model_refine :
+  forall (ret_typ : dtyp) (entry : function_id)
+    (args1 : list (@dvalue PInf)) (args2 : list (@dvalue PFin))
+    (mcfg : CFG.mcfg dtyp)
+    (s1 : @FusedS PInf) (s2 : @FusedS PFin),
+    Forall2 I2F_dvalue args1 args2 ->
+    I2F_FusedS s1 s2 ->
+    I2F_refine_MCFGbot (prod_rel I2F_FusedS I2F_dvalue)
+      (interp_mcfg (@denote_vellvm PInf ret_typ entry args1 mcfg) s1)
+      (interp_mcfg (@denote_vellvm PFin ret_typ entry args2 mcfg) s2).
+Proof.
+  intros ret_typ entry args1 args2 mcfg s1 s2 Hargs Hs.
+  unfold interp_mcfg.
+  apply ruttc_interp_state_specialized; [exact Hs |].
+  apply I2F_interp_intrinsics.
+  apply I2F_denote_vellvm, Hargs.
+Qed.

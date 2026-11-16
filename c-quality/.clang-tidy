@@ -6,10 +6,10 @@ Checks: >
   bugprone-*,
   clang-analyzer-*,
   misc-const-correctness,
+  misc-no-recursion,
   misc-redundant-expression,
   readability-braces-around-statements,
   readability-isolate-declaration
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*'
-AnalyzeTemporaryDtors: false
 FormatStyle: file

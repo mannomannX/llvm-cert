@@ -13,7 +13,7 @@ authors: [
   "Irene Yoon <euisuny@cis.upenn.edu>"
   "Gary (Hanxi) Chen <hanxic@seas.upenn.edu>"
 ]
-license: "MIT"
+license: "LicenseRef-LLVMCert-Dual-License AND MIT AND ISC AND LGPL-2.1-or-later AND LGPL-3.0-or-later"
 
 build: [make "-C" "src" "all" "-j%{jobs}%"]
 install: [make "-C" "src" "install"]
