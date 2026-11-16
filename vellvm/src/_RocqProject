@@ -1,6 +1,7 @@
 -R rocq Vellvm
 -R ../../passes CertPasses
 -R ../../validator CertValidator
+-docroot LLVMCert
 
 -arg -w -arg -masking-absolute-name
 -arg -w -arg -deprecated-hint-without-locality

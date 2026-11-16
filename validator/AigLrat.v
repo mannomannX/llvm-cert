@@ -1218,7 +1218,7 @@ Lemma mux_bits_list_pref : forall sel ts fs st ms st',
   mux_bits_list sel ts fs st = (ms, st') -> exists d, bs_cnf st' = bs_cnf st ++ d.
 Proof.
   intros sel ts.
-  induction ts as [| t rt IH]; intros [| f rf] st ms st' H; cbn in H.
+  induction ts as [| t rt IH]; intros [| f rf] st ms st' H; cbn [mux_bits_list] in H.
   - inversion H; subst; exists []; rewrite app_nil_r; reflexivity.
   - inversion H; subst; exists []; rewrite app_nil_r; reflexivity.
   - inversion H; subst; exists []; rewrite app_nil_r; reflexivity.
@@ -1247,7 +1247,7 @@ Lemma mux_bits_list_sound : forall assign sel ts fs st ms st' rem,
 Proof.
   intros assign sel ts.
   induction ts as [| t rt IH]; intros [| f rf] st ms st' rem Hsel Hlen Hwt Hwf Hm Hsat;
-    try discriminate; cbn in Hm.
+    try discriminate; cbn [mux_bits_list] in Hm.
   - inversion Hm; subst; repeat split; [constructor | destruct (eval_lit assign sel); reflexivity].
   - inversion Hwt as [| ? ? Ht Hwrt]; subst.
     inversion Hwf as [| ? ? Hf Hwrf]; subst.
@@ -2019,7 +2019,7 @@ Lemma alloc_fresh_bits_sat : forall bs asg st lits st',
     wf_lits_bound (bs_next_var st') lits /\
     List.map (eval_lit asg') lits = bs.
 Proof.
-  induction bs as [| b br IH]; intros asg st lits st' Hsat Hal; cbn in Hal.
+  induction bs as [| b br IH]; intros asg st lits st' Hsat Hal; cbn [alloc_fresh_bits List.length] in Hal.
   - inversion Hal; subst; exists asg;
       split; [lia | split; [apply agree_below_refl | split; [exact Hsat |
       split; [reflexivity | split; [constructor | reflexivity]]]]].
@@ -2346,7 +2346,7 @@ Lemma mux_bits_list_sat : forall ts fs sel asg st ms st',
     wf_lits_bound (bs_next_var st') ms.
 Proof.
   induction ts as [| t rt IH]; intros [| f rf] sel asg st ms st' Hlen Hsel Hwt Hwf Hsat Hm;
-    try discriminate; cbn in Hm.
+    try discriminate; cbn [mux_bits_list] in Hm.
   - inversion Hm; subst; exists asg;
       split; [lia | split; [apply agree_below_refl | split; [exact Hsat |
       split; [reflexivity | constructor]]]].
@@ -2724,7 +2724,7 @@ Lemma emit_or_list_opt_step : forall ls asg st out st',
     wf_lit_bound (bs_next_var st') out /\
     eval_lit asg' out = existsb (fun b : bool => b) (List.map (eval_lit asg) ls).
 Proof.
-  induction ls as [| x rest IH]; intros asg st out st' Hwf Hsat Hemit; cbn in Hemit.
+  induction ls as [| x rest IH]; intros asg st out st' Hwf Hsat Hemit; cbn [emit_or_list_opt] in Hemit.
   - inversion Hemit; subst; exists asg; split;
       [exact (step_spec_refl st asg Hsat) | split;
        [exact (wf_lit_bound_false _ (proj1 (proj1 Hsat))) | exact (sat_eval_lit_false asg st Hsat)]].
@@ -2769,7 +2769,7 @@ Lemma mux_bits_list_opt_step : forall ts fs sel asg st ms st',
     (if eval_lit asg sel then List.map (eval_lit asg) ts else List.map (eval_lit asg) fs).
 Proof.
   induction ts as [| t rt IH]; intros [| f rf] sel asg st ms st' Hlen Hsel Hwt Hwf Hsat Hm;
-    try discriminate; cbn in Hm.
+    try discriminate; cbn [mux_bits_list_opt] in Hm.
   - inversion Hm; subst; exists asg; split;
       [exact (step_spec_refl st asg Hsat) | split; [reflexivity | split;
        [constructor | destruct (eval_lit asg sel); reflexivity]]].
@@ -3578,7 +3578,7 @@ Lemma emit_ripple_add_step : forall xs ys cin asg st sums cout st',
      b2z (eval_lit asg cin))%Z.
 Proof.
   induction xs as [| x rx IH]; intros [| y ry] cin asg st sums cout st' Hlen Hcin Hwx Hwy Hsat Hrip;
-    try discriminate; cbn in Hrip.
+    try discriminate; cbn [emit_ripple_add] in Hrip.
   - inversion Hrip; subst; exists asg; split;
       [exact (step_spec_refl st asg Hsat) | split; [reflexivity | split; [constructor |
        split; [exact Hcin | cbn; lia]]]].
@@ -4076,7 +4076,7 @@ Lemma emit_xor_const_lits_step : forall s hs asg st xhs st',
     List.map (eval_lit asg') xhs =
     List.map (xorb (eval_lit asg s)) (List.map (eval_lit asg) hs).
 Proof.
-  intros s hs; induction hs as [| h rest IH]; intros asg st xhs st' Hws Hwh Hsat He; cbn in He.
+  intros s hs; induction hs as [| h rest IH]; intros asg st xhs st' Hws Hwh Hsat He; cbn [emit_xor_const_lits] in He.
   - inversion He; subst; exists asg; split;
       [exact (step_spec_refl st asg Hsat) | split; [constructor | reflexivity]].
   - inversion Hwh as [| ? ? Hh Hwrest]; subst.
@@ -4140,7 +4140,7 @@ Lemma emit_eq_const_bits_step : forall bs k_val asg st out st',
     wf_lit_bound (bs_next_var st') out /\
     eval_lit asg' out = eq_Z_bools k_val (List.map (eval_lit asg) bs).
 Proof.
-  induction bs as [| b rest IH]; intros k_val asg st out st' Hwf Hsat He; cbn in He.
+  induction bs as [| b rest IH]; intros k_val asg st out st' Hwf Hsat He; cbn [emit_eq_const_bits] in He.
   - inversion He; subst; exists asg; split;
       [exact (step_spec_refl st asg Hsat) | split;
        [exact (wf_lit_bound_true _ (proj1 (proj1 Hsat))) | exact (sat_eval_lit_true asg st Hsat)]].
@@ -5293,7 +5293,7 @@ Lemma emit_ult_borrow_step : forall xs ys bin asg st out st',
        bools_to_Z (List.map (eval_lit asg) ys) + b2z (eval_lit asg bin))%Z.
 Proof.
   induction xs as [| x rx IH]; intros [| y ry] bin asg st out st' Hlen Hbin Hwx Hwy Hsat He;
-    try discriminate; cbn in He.
+    try discriminate; cbn [emit_ult_borrow] in He.
   - inversion He; subst; exists asg; split;
       [exact (step_spec_refl st asg Hsat) | split; [exact Hbin |]].
     destruct (eval_lit asg bin); reflexivity.

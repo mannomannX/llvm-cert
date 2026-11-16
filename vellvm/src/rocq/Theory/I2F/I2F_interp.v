@@ -684,7 +684,7 @@ Proof.
                   Forall2 (prod_rel Logic.eq I2F_semantic_function) l1' l2')
       by (inversion H; subst; split; assumption).
     destruct Hhd as ([Hd Hf] & Htl); cbn in Hd, Hf |- *; subst d2.
-    destruct (dc_name d1); constructor; [constructor; [reflexivity | exact Hf] | exact (IH l2' Htl)].
+    destruct (dc_name d1); (constructor; [constructor; [reflexivity | exact Hf] | exact (IH l2' Htl)]).
 Qed.
 
 Lemma I2F_defs_assoc :
