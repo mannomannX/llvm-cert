@@ -4331,7 +4331,8 @@ Section MemoryByteFacts.
     destruct (Hslice idx ft fv foff [] Hnth_t Hnth_v Hfoff) as (_ & Hbound & Hrd).
     exists foff; split; [exact Hfoff | split].
     - rewrite Ebs, app_nil_r, rev_append_rev, app_nil_r, length_rev; lia.
-    - rewrite Ebs, app_nil_r, rev_append_rev, !app_nil_r, N.sub_0_r in Hrd |- *.
+    - rewrite app_nil_r, N.sub_0_r in Hrd.
+      rewrite Ebs, app_nil_r, rev_append_rev, app_nil_r.
       exact Hrd.
   Qed.
 

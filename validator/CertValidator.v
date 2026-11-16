@@ -93,6 +93,15 @@ Unset Implicit Arguments.
 Unset Strict Implicit.
 Set Default Goal Selector "!".
 
+#[local] Arguments Pos.ltb _ _ : simpl nomatch.
+#[local] Arguments Pos.leb _ _ : simpl nomatch.
+#[local] Arguments N.ltb _ _ : simpl nomatch.
+#[local] Arguments N.leb _ _ : simpl nomatch.
+#[local] Arguments Z.ltb _ _ : simpl nomatch.
+#[local] Arguments Z.leb _ _ : simpl nomatch.
+#[local] Arguments Z.gtb _ _ : simpl nomatch.
+#[local] Arguments Z.geb _ _ : simpl nomatch.
+
 Local Open Scope bool_scope.
 Local Open Scope list_scope.
 Local Open Scope string_scope.
