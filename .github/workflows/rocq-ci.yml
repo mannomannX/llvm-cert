@@ -13,6 +13,7 @@ on:
       - "vellvm/rocq-vellvm.opam"
       - "passes/**"
       - "validator/**"
+      - "scripts/run_forged_cert_suite.py"
       - ".github/workflows/rocq-ci.yml"
 
 concurrency:
@@ -81,7 +82,9 @@ jobs:
           key: vellvm-vo-${{ runner.os }}-${{ hashFiles('vellvm/rocq-vellvm.opam', 'vellvm/src/_RocqProject', 'vellvm/src/rocq/**/*.v', 'passes/**/*.v', 'validator/**/*.v', 'vellvm/src/ml/extracted/Extract.v') }}
 
       - name: Compile Rocq 9.1 theories, extract OCaml & build libvellvm
-        run: opam exec -- make -C vellvm/src all -j$(nproc)
+        run: |
+          opam exec -- make -C vellvm/src rocq -k -j$(nproc)
+          opam exec -- make -C vellvm/src all -j$(nproc)
 
       - name: Independent Rocq kernel proof-checker gate (rocq check)
         run: cd vellvm/src && opam exec -- rocq check -o -R rocq Vellvm -R ../../passes CertPasses -R ../../validator CertValidator Vellvm.Semantics.TopLevel Vellvm.Theory.Equational CertPasses.Pipeline CertPasses.McfgExport CertPasses.ModuleMerge CertValidator.CertValidator CertValidator.CheckAssumptions
@@ -95,6 +98,7 @@ jobs:
           Print Assumptions CertPasses.Pipeline.optimize_mcfg_I2F_model_refine.
           Print Assumptions CertPasses.ModuleMerge.validate_module_merge_parsed_I2F_model_refine.
           Print Assumptions CertPasses.ModuleMerge.validate_module_merge_tle_refines.
+          Print Assumptions CertPasses.ModuleMerge.validate_module_merge_certified_tle_refines.
           Print Assumptions CertValidator.AigLrat.check_lrat_unsat_sound.
           Print Assumptions CertValidator.AlgRules.check_expr_refines_with_lrat_sound.
           Print Assumptions CertValidator.CertValidator.validate_tle_pair_with_cert_str_sound.
@@ -105,10 +109,7 @@ jobs:
           import sys
           out = sys.argv[1]
           allowed_markers = (
-              "Axioms:",
               "Closed under the global context",
-              "wordsize_not_zero",
-              "Zlog2_log_inf",
           )
           for raw in out.splitlines():
               if not raw.strip() or raw.startswith(" "):
@@ -141,79 +142,9 @@ jobs:
 
       - name: Layer-2 positive & adversarial forged-certificate gate on cert-validator
         run: |
-          VBIN="vellvm/src/_build/default/ml/bin/cert-validator"
-          test -x "$VBIN"
-          WORKDIR="$(mktemp -d /tmp/cert-val-gate-XXXXXX)"
-          trap 'rm -rf "$WORKDIR"' EXIT
-
-          cat > "$WORKDIR/src.ll" <<'EOF'
-          define i32 @smoke_fold(i32 %x) {
-          entry:
-            %t0 = add i32 %x, 0
-            %res = add i32 %t0, 42
-            ret i32 %res
-          }
-          EOF
-
-          cat > "$WORKDIR/tgt_ok.ll" <<'EOF'
-          define i32 @smoke_fold(i32 %x) {
-          entry:
-            %res = add i32 %x, 42
-            ret i32 %res
-          }
-          EOF
-
-          cat > "$WORKDIR/cert_ok.cert" <<'EOF'
-          (cert-v1
-            (fn "smoke_fold")
-            (src-sha256 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef)
-            (tgt-sha256 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef)
-            (blocks
-              (block
-                (src-bb "entry")
-                (tgt-bb "entry")
-                (kind entry)
-                (ub-assumptions)
-                (value-equivs)
-                (mem-invariants)))
-            (return
-              (scalar-refines
-                (width 32)
-                (src (binop add 32 (flags 0 0 0 0) (binop add 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 0)) (bv 32 42)))
-                (tgt (binop add 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 42)))
-                (smt-verified true))))
-          EOF
-
-          # 1. Valid equivalence + valid --check-merge MUST succeed (exit 0)
-          "$VBIN" --src "$WORKDIR/src.ll" --tgt "$WORKDIR/tgt_ok.ll" --cert "$WORKDIR/cert_ok.cert"
-          "$VBIN" --check-merge --orig "$WORKDIR/src.ll" --merged "$WORKDIR/tgt_ok.ll" --slice smoke_fold "$WORKDIR/src.ll" "$WORKDIR/tgt_ok.ll"
-
-          # 2. Forged wrong-constant miscompilation MUST fail closed (exit != 0)
-          sed 's/42/43/' "$WORKDIR/tgt_ok.ll" > "$WORKDIR/tgt_bad_const.ll"
-          if "$VBIN" --src "$WORKDIR/src.ll" --tgt "$WORKDIR/tgt_bad_const.ll" --cert "$WORKDIR/cert_ok.cert"; then
-            echo "FAIL: cert-validator accepted miscompiled constant!" >&2
-            exit 1
-          fi
-
-          # 3. Forged target-invented nsw poison injection MUST fail closed (exit != 0)
-          sed 's/add i32/add nsw i32/' "$WORKDIR/tgt_ok.ll" > "$WORKDIR/tgt_bad_nsw.ll"
-          if "$VBIN" --src "$WORKDIR/src.ll" --tgt "$WORKDIR/tgt_bad_nsw.ll" --cert "$WORKDIR/cert_ok.cert"; then
-            echo "FAIL: cert-validator accepted target-invented nsw!" >&2
-            exit 1
-          fi
-
-          # 4. Forged prototype attribute smuggling in --check-merge (F-19) MUST fail closed
-          cat > "$WORKDIR/merged_smuggled_attr.ll" <<'EOF'
-          define i32 @smoke_fold(i32 noundef %x) {
-          entry:
-            %res = add i32 %x, 42
-            ret i32 %res
-          }
-          EOF
-          if "$VBIN" --check-merge --orig "$WORKDIR/src.ll" --merged "$WORKDIR/merged_smuggled_attr.ll" --slice smoke_fold "$WORKDIR/src.ll" "$WORKDIR/tgt_ok.ll"; then
-            echo "FAIL: cert-validator --check-merge accepted smuggled noundef prototype!" >&2
-            exit 1
-          fi
+          python3 scripts/run_forged_cert_suite.py \
+            vellvm/src/_build/default/ml/bin/cert-validator \
+            vellvm/src/_build/default/ml/bin/verified-opt-fallback
 
       - name: Persist compiled Rocq 9.1 & Vellvm opam dependencies (even if downstream fails)
         if: always() && steps.opam-deps-cache.outputs.cache-hit != 'true' && hashFiles('_opam/bin/rocq') != ''

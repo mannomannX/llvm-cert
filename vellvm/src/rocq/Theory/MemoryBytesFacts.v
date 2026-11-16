@@ -4020,4 +4020,427 @@ Section MemoryByteFacts.
     rewrite app_nil_r, rev_append_rev, app_nil_r; exact Hs.
   Qed.
 
+  (** ** Padded-Aggregate & Contiguous Byte-Slice Field Forwarding Theory *)
+
+  Lemma padded_slice_extract_eq :
+    forall (pre fld_mb post : list memory_byte) (off sz : N),
+      N.of_nat (List.length pre) = off ->
+      N.of_nat (List.length fld_mb) = sz ->
+      take sz (drop off (pre ++ fld_mb ++ post)) = fld_mb.
+  Proof.
+    intros pre fld_mb post off sz Hpre Hfld.
+    rewrite drop_app_exact by exact Hpre.
+    apply take_app_exact; exact Hfld.
+  Qed.
+
+  Theorem padded_slice_forwarding_any :
+    forall (ft : dtyp) (fv : dvalue) (pre fld_mb post : list memory_byte) (off : N),
+      N.of_nat (List.length pre) = off ->
+      N.of_nat (List.length fld_mb) = store_size_dtyp ft ->
+      memory_bytes_to_dvalue fld_mb ft = ret fv ->
+      memory_bytes_to_dvalue
+        (take (store_size_dtyp ft) (drop off (pre ++ fld_mb ++ post))) ft
+      = ret fv.
+  Proof.
+    intros ft fv pre fld_mb post off Hpre Hfld Hrd.
+    rewrite (@padded_slice_extract_eq pre fld_mb post off (store_size_dtyp ft) Hpre Hfld).
+    exact Hrd.
+  Qed.
+
+  Theorem padded_slice_round_trip :
+    forall (ft : dtyp) (fv : dvalue) (pre fld_mb post : list memory_byte) (off : N),
+      serializable ft ->
+      dvalue_has_dtyp fv ft ->
+      dvalue_to_memory_bytes ft fv None = ret fld_mb ->
+      N.of_nat (List.length pre) = off ->
+      memory_bytes_to_dvalue
+        (take (store_size_dtyp ft) (drop off (pre ++ fld_mb ++ post))) ft
+      = ret fv.
+  Proof.
+    intros ft fv pre fld_mb post off Hser Htyp Hser_eq Hpre.
+    pose proof (@dvalue_to_memory_bytes_sizeof ft fv None fld_mb Htyp Hser_eq) as Hlen.
+    apply (@padded_slice_forwarding_any ft fv pre fld_mb post off Hpre Hlen).
+    exact (@memory_bytes_round_trip1 ft fv None fld_mb Hser Htyp Hser_eq).
+  Qed.
+
+  Theorem base_dvalue_trailing_padding_round_trip :
+    forall (dtb : dtyp_base) (fv : dvalue) (fld_mb post : list memory_byte),
+      serializable_base dtb ->
+      dvalue_has_dtyp fv (DTYPE_Base dtb) ->
+      dvalue_to_memory_bytes (DTYPE_Base dtb) fv None = ret fld_mb ->
+      memory_bytes_to_dvalue (fld_mb ++ post) (DTYPE_Base dtb) = ret fv.
+  Proof.
+    intros dtb fv fld_mb post Hser Htyp Hser_eq.
+    pose proof (@dvalue_to_memory_bytes_sizeof (DTYPE_Base dtb) fv None fld_mb Htyp Hser_eq)
+      as Hlen.
+    pose proof (@memory_bytes_round_trip1 (DTYPE_Base dtb) fv None fld_mb Hser Htyp Hser_eq)
+      as Hrt.
+    cbn [memory_bytes_to_dvalue] in Hrt |- *.
+    rewrite take_app_exact by exact Hlen.
+    rewrite take_all in Hrt by lia.
+    exact Hrt.
+  Qed.
+
+  Fixpoint struct_field_offset_from
+    (pad : option N) (offset : N) (dts : list dtyp) (idx : nat) : option N :=
+    match dts, idx with
+    | [], _ => None
+    | dt :: _, O =>
+        Some (tapad (if pad then Some (preferred_alignment (dtyp_alignment dt)) else None) offset)
+    | dt :: dts', S idx' =>
+        struct_field_offset_from pad (sfe_step pad offset dt) dts' idx'
+    end.
+
+  Definition struct_field_offset (packed : bool) (dts : list dtyp) (idx : nat) : option N :=
+    let pad := if packed then None else Some (max_preferred_dtyp_alignment dts) in
+    struct_field_offset_from pad 0%N dts idx.
+
+  Lemma struct_field_offset_from_firstn :
+    forall (pad : option N) (dts : list dtyp) (idx : nat) (offset : N) (ft : dtyp),
+      nth_error dts idx = Some ft ->
+      struct_field_offset_from pad offset dts idx =
+        Some (tapad (if pad then Some (preferred_alignment (dtyp_alignment ft)) else None)
+                    (fold_left (sfe_step pad) (firstn idx dts) offset)).
+  Proof.
+    intros pad dts; induction dts as [| dt dts' IH];
+      intros [| idx'] offset ft Hnth; try discriminate Hnth.
+    - cbn [nth_error struct_field_offset_from firstn fold_left] in Hnth |- *.
+      inversion Hnth; subst ft; reflexivity.
+    - cbn [nth_error struct_field_offset_from firstn fold_left] in Hnth |- *.
+      apply (IH idx' (sfe_step pad offset dt) ft Hnth).
+  Qed.
+
+  Lemma struct_field_offset_firstn :
+    forall (packed : bool) (dts : list dtyp) (idx : nat) (ft : dtyp),
+      nth_error dts idx = Some ft ->
+      let pad := if packed then None else Some (max_preferred_dtyp_alignment dts) in
+      struct_field_offset packed dts idx =
+        Some (tapad (if pad then Some (preferred_alignment (dtyp_alignment ft)) else None)
+                    (fold_left (sfe_step pad) (firstn idx dts) 0%N)).
+  Proof.
+    intros packed dts idx ft Hnth; unfold struct_field_offset.
+    apply (@struct_field_offset_from_firstn
+             (if packed then None else Some (max_preferred_dtyp_alignment dts))
+             dts idx 0%N ft Hnth).
+  Qed.
+
+  Lemma fold_left_sfe_step_ge :
+    forall (pad : option N) (dts : list dtyp) (offset : N),
+      (offset <= fold_left (sfe_step pad) dts offset)%N.
+  Proof.
+    intros pad dts; induction dts as [| dt dts' IH]; intros offset;
+      cbn [fold_left]; [lia |].
+    eapply N.le_trans; [| apply IH].
+    unfold sfe_step.
+    pose proof (tapad_ge (if pad then Some (preferred_alignment (dtyp_alignment dt)) else None)
+                         offset).
+    lia.
+  Qed.
+
+  Lemma struct_field_offset_from_bounds :
+    forall (pad : option N) (dts : list dtyp) (idx : nat) (offset : N) (ft : dtyp),
+      nth_error dts idx = Some ft ->
+      exists foff,
+        struct_field_offset_from pad offset dts idx = Some foff
+        /\ (offset <= foff)%N
+        /\ (foff + store_size_dtyp ft <= tapad pad (fold_left (sfe_step pad) dts offset))%N.
+  Proof.
+    intros pad dts; induction dts as [| dt dts' IH];
+      intros [| idx'] offset ft Hnth; try discriminate Hnth.
+    - cbn [nth_error struct_field_offset_from fold_left] in Hnth |- *.
+      inversion Hnth; subst ft.
+      eexists; split; [reflexivity | split].
+      + apply tapad_ge.
+      + pose proof (store_le_alloc dt).
+        pose proof (fold_left_sfe_step_ge pad dts' (sfe_step pad offset dt)).
+        pose proof (tapad_ge pad (fold_left (sfe_step pad) dts' (sfe_step pad offset dt))).
+        unfold sfe_step in *; lia.
+    - cbn [nth_error struct_field_offset_from fold_left] in Hnth |- *.
+      destruct (IH idx' (sfe_step pad offset dt) ft Hnth) as (foff & Heq & Hge & Hle).
+      exists foff; split; [exact Heq | split; [| exact Hle]].
+      unfold sfe_step in Hge.
+      pose proof (tapad_ge (if pad then Some (preferred_alignment (dtyp_alignment dt)) else None)
+                           offset).
+      lia.
+  Qed.
+
+  Lemma struct_field_offset_bounds :
+    forall (packed : bool) (dts : list dtyp) (idx : nat) (ft : dtyp),
+      nth_error dts idx = Some ft ->
+      exists foff,
+        struct_field_offset packed dts idx = Some foff
+        /\ (foff + store_size_dtyp ft <= store_size_dtyp (DTYPE_Struct packed dts))%N.
+  Proof.
+    intros packed dts idx ft Hnth; unfold struct_field_offset.
+    destruct (@struct_field_offset_from_bounds
+                (if packed then None else Some (max_preferred_dtyp_alignment dts))
+                dts idx 0%N ft Hnth)
+      as (foff & Hfoff & _ & Hle).
+    replace (tapad (if packed then None else Some (max_preferred_dtyp_alignment dts))
+                   (fold_left
+                      (sfe_step
+                         (if packed then None else Some (max_preferred_dtyp_alignment dts)))
+                      dts 0%N))
+      with (store_size_dtyp (DTYPE_Struct packed dts)) in Hle
+      by (destruct packed;
+          [rewrite store_size_dtyp_Packed_struct; reflexivity
+          | rewrite store_size_dtyp_Struct; reflexivity]).
+    exists foff; split; assumption.
+  Qed.
+
+  Lemma struct_loop_field_slice_extract :
+    forall (fields : list dvalue) (dts : list dtyp),
+      Forall2 dvalue_has_dtyp fields dts ->
+      FORALL serializable dts ->
+      forall (ta pad : option N) (offset : N) (acc : list memory_byte)
+             (offset' : N) (bs : list memory_byte),
+        struct_bytes_loop acc_dvalue_to_memory_bytes_h ta pad fields dts offset acc
+          = raise_ret (offset', bs) ->
+        exists w,
+          bs = w ++ acc
+          /\ N.of_nat (List.length w) = (offset' - offset)%N
+          /\ (offset <= offset')%N
+          /\ (forall idx ft fv foff extra,
+                nth_error dts idx = Some ft ->
+                nth_error fields idx = Some fv ->
+                struct_field_offset_from pad offset dts idx = Some foff ->
+                (offset <= foff)%N
+                /\ (foff + store_size_dtyp ft <= offset')%N
+                /\ memory_bytes_to_dvalue
+                     (take (store_size_dtyp ft) (drop (foff - offset) (rev w ++ extra))) ft
+                   = ret fv).
+  Proof.
+    intros fields dts HF2; induction HF2 as [| f dt fs dts' Hfdt HF2 IHl];
+      intros HSer ta pad offset acc offset' bs Heq.
+    - rewrite struct_bytes_loop_nil, accumulate_padding_shape in Heq.
+      cbv beta iota in Heq.
+      rewrite accumulate_padding_shape in Heq.
+      inversion Heq; subst; clear Heq.
+      pose proof (tapad_ge pad offset) as G1.
+      pose proof (tapad_ge ta (tapad pad offset)) as G2.
+      exists (List.repeat poison_memory_byte
+                (N.to_nat (tapad ta (tapad pad offset) - tapad pad offset))
+              ++ List.repeat poison_memory_byte
+                   (N.to_nat (tapad pad offset - offset))).
+      split; [now rewrite <- app_assoc | split; [| split]].
+      + rewrite length_app, !repeat_length; lia.
+      + lia.
+      + intros [| idx'] ft fv foff extra Hnth; discriminate Hnth.
+    - destruct HSer as [HSdt HSdts].
+      rewrite struct_bytes_loop_cons, accumulate_padding_shape in Heq.
+      cbv beta iota in Heq.
+      set (q := if pad then Some (preferred_alignment (dtyp_alignment dt)) else None)
+        in Heq |- *.
+      set (o1 := tapad q offset) in Heq |- *.
+      set (p1 := List.repeat poison_memory_byte (N.to_nat (o1 - offset)))
+        in Heq |- *.
+      destruct (acc_dvalue_to_memory_bytes_h dt f 0%N None (p1 ++ acc))
+        as [ | | | [coff cbs] ] eqn:EF;
+        cbn -[acc_dvalue_to_memory_bytes_h accumulate_padding
+              accumulate_padding_bytes struct_bytes_loop store_size_dtyp
+              alloc_size_dtyp pad_to_align dtyp_alignment preferred_alignment
+              max_preferred_dtyp_alignment] in Heq;
+        try discriminate.
+      destruct (@round_trip_h f dt Hfdt HSdt None (p1 ++ acc) coff cbs EF)
+        as (wf & Ecbs & Lwf & Hrdf & _).
+      destruct (@acc_dvalue_to_memory_bytes_h_spec f dt Hfdt None (p1 ++ acc) coff cbs EF)
+        as [Ecoff _].
+      cbn [tapad] in Ecoff, Lwf; subst coff.
+      rewrite accumulate_padding_bytes_shape in Heq; cbv beta iota in Heq.
+      set (p2 := List.repeat poison_memory_byte
+                   (N.to_nat (alloc_size_dtyp dt - store_size_dtyp dt)))
+        in Heq |- *.
+      pose proof (store_le_alloc dt) as SA.
+      assert (Esfe : (o1 + store_size_dtyp dt + (alloc_size_dtyp dt - store_size_dtyp dt))%N
+                     = sfe_step pad offset dt)
+        by (unfold sfe_step; subst o1 q; lia).
+      rewrite Esfe in Heq.
+      destruct (IHl HSdts ta pad (sfe_step pad offset dt) (p2 ++ cbs) offset' bs Heq)
+        as (wr & Ebs & Lwr & Hler & Hslice_r).
+      pose proof (tapad_ge q offset) as G1.
+      assert (Eo2 : sfe_step pad offset dt = (o1 + alloc_size_dtyp dt)%N)
+        by (unfold sfe_step; subst o1 q; reflexivity).
+      assert (Lp1 : N.of_nat (List.length p1) = (o1 - offset)%N)
+        by (subst p1; rewrite repeat_length; lia).
+      assert (Lwf' : N.of_nat (List.length (rev wf)) = store_size_dtyp dt)
+        by (rewrite length_rev; exact Lwf).
+      assert (Lp2 : N.of_nat (List.length p2) = (alloc_size_dtyp dt - store_size_dtyp dt)%N)
+        by (subst p2; rewrite repeat_length; lia).
+      exists (wr ++ p2 ++ wf ++ p1).
+      assert (Erev : rev (wr ++ p2 ++ wf ++ p1) = p1 ++ rev wf ++ p2 ++ rev wr)
+        by (rewrite !rev_app_distr, !app_assoc; subst p1 p2; rewrite !rev_repeat; reflexivity).
+      split; [rewrite Ebs, Ecbs; rewrite <- !app_assoc; reflexivity | split; [| split]].
+      + rewrite !length_app; lia.
+      + lia.
+      + intros [| idx'] ft fv foff extra Hnth_t Hnth_v Hfoff.
+        * cbn [nth_error struct_field_offset_from] in Hnth_t, Hnth_v, Hfoff.
+          inversion Hnth_t; inversion Hnth_v; subst ft fv; clear Hnth_t Hnth_v.
+          fold q o1 in Hfoff; inversion Hfoff; subst foff; clear Hfoff.
+          split; [exact G1 | split; [lia |]].
+          rewrite Erev; rewrite <- !app_assoc.
+          rewrite drop_app_exact by exact Lp1.
+          rewrite take_app_exact by exact Lwf'.
+          exact Hrdf.
+        * cbn [nth_error struct_field_offset_from] in Hnth_t, Hnth_v, Hfoff.
+          destruct (Hslice_r idx' ft fv foff extra Hnth_t Hnth_v Hfoff)
+            as (Hge2 & Hle2 & Hrd2).
+          split; [lia | split; [exact Hle2 |]].
+          rewrite Erev.
+          assert (Hstep_len : N.of_nat (List.length (p1 ++ rev wf ++ p2))
+                              = (sfe_step pad offset dt - offset)%N)
+            by (rewrite !length_app; lia).
+          replace (foff - offset)%N
+            with ((sfe_step pad offset dt - offset) + (foff - sfe_step pad offset dt))%N
+            by lia.
+          rewrite <- drop_drop.
+          replace (p1 ++ rev wf ++ p2 ++ rev wr ++ extra)
+            with ((p1 ++ rev wf ++ p2) ++ (rev wr ++ extra))
+            by (rewrite !app_assoc; reflexivity).
+          rewrite drop_app_exact by exact Hstep_len.
+          exact Hrd2.
+  Qed.
+
+  Theorem padded_struct_field_slice_round_trip :
+    forall (packed p : bool) (dts : list dtyp) (fields : list dvalue)
+           (ta : option N) (mb : list memory_byte)
+           (idx : nat) (ft : dtyp) (fv : dvalue),
+      serializable (DTYPE_Struct packed dts) ->
+      Forall2 dvalue_has_dtyp fields dts ->
+      dvalue_to_memory_bytes (DTYPE_Struct packed dts) (DVALUE_Struct p fields) ta = ret mb ->
+      nth_error dts idx = Some ft ->
+      nth_error fields idx = Some fv ->
+      exists foff,
+        struct_field_offset packed dts idx = Some foff
+        /\ (foff + store_size_dtyp ft <= N.of_nat (List.length mb))%N
+        /\ memory_bytes_to_dvalue (take (store_size_dtyp ft) (drop foff mb)) ft = ret fv.
+  Proof.
+    intros packed p dts fields ta mb idx ft fv Hser HF2 Hw Hnth_t Hnth_v.
+    unfold dvalue_to_memory_bytes in Hw.
+    destruct (acc_dvalue_to_memory_bytes_h (DTYPE_Struct packed dts)
+                (DVALUE_Struct p fields) 0%N ta [])
+      as [ | | | [off bs] ] eqn:E; cbn in Hw; try discriminate.
+    inversion Hw; subst mb; clear Hw.
+    rewrite ser_struct_unfold in E.
+    destruct (@struct_loop_field_slice_extract
+                fields dts HF2 Hser ta
+                (if packed then None else Some (max_preferred_dtyp_alignment dts))
+                0%N [] off bs E)
+      as (w & Ebs & Lw & _ & Hslice).
+    destruct (@struct_field_offset_bounds packed dts idx ft Hnth_t)
+      as (foff & Hfoff & _).
+    destruct (Hslice idx ft fv foff [] Hnth_t Hnth_v Hfoff) as (_ & Hbound & Hrd).
+    exists foff; split; [exact Hfoff | split].
+    - rewrite Ebs, app_nil_r, rev_append_rev, app_nil_r, length_rev; lia.
+    - rewrite Ebs, app_nil_r, rev_append_rev, !app_nil_r, N.sub_0_r in Hrd |- *.
+      exact Hrd.
+  Qed.
+
+  Lemma repeat_add_app : forall {A} (x : A) (a b : nat),
+      List.repeat x (a + b) = List.repeat x a ++ List.repeat x b.
+  Proof.
+    intros A x a b; induction a as [| a IH]; cbn; [reflexivity | rewrite IH; reflexivity].
+  Qed.
+
+  Lemma take_drop_repeat_exact : forall {A} (x : A) (off sz : N) (k : nat),
+      (off + sz <= N.of_nat k)%N ->
+      take sz (drop off (List.repeat x k)) = List.repeat x (N.to_nat sz).
+  Proof.
+    intros A x off sz k Hle.
+    replace k with (N.to_nat off + (N.to_nat sz + (k - N.to_nat (off + sz))))%nat by lia.
+    rewrite !repeat_add_app.
+    rewrite drop_app_exact by (rewrite repeat_length; lia).
+    apply take_app_exact; rewrite repeat_length; lia.
+  Qed.
+
+  Lemma read_repeat_poison_serializable : forall (ft : dtyp),
+      serializable ft ->
+      memory_bytes_to_dvalue
+        (List.repeat poison_memory_byte (N.to_nat (store_size_dtyp ft))) ft
+      = ret (DVALUE_Base DVALUE_Poison).
+  Proof.
+    intros [dtb | pk ts | vv sz t] Hser.
+    - cbn [memory_bytes_to_dvalue].
+      rewrite take_all by (rewrite repeat_length; lia).
+      rewrite read_base_block_poison by exact Hser; reflexivity.
+    - apply read_repeat_poison_agg; exact I.
+    - apply read_repeat_poison_agg; exact I.
+  Qed.
+
+  Lemma FORALL_nth_error : forall (P : dtyp -> Prop) (dts : list dtyp) (idx : nat) (ft : dtyp),
+      FORALL P dts ->
+      nth_error dts idx = Some ft ->
+      P ft.
+  Proof.
+    intros P dts; induction dts as [| dt dts' IH]; intros [| idx'] ft HP Hnth;
+      try discriminate Hnth; destruct HP as [Hdt Hdts].
+    - cbn [nth_error] in Hnth; inversion Hnth; subst ft; exact Hdt.
+    - apply (IH idx' ft Hdts Hnth).
+  Qed.
+
+  Lemma Forall2_nth_error_r :
+    forall {A B} (R : A -> B -> Prop) (xs : list A) (ys : list B) (idx : nat) (y : B),
+      Forall2 R xs ys ->
+      nth_error ys idx = Some y ->
+      exists x, nth_error xs idx = Some x /\ R x y.
+  Proof.
+    intros A B R xs ys idx y HF2; revert idx.
+    induction HF2 as [| x0 y0 xs' ys' Hxy HF2' IH]; intros [| idx'] Hnth;
+      try discriminate Hnth.
+    - cbn [nth_error] in Hnth; inversion Hnth; subst y0.
+      exists x0; split; [reflexivity | exact Hxy].
+    - cbn [nth_error] in Hnth |- *; apply (IH idx' Hnth).
+  Qed.
+
+  Definition project_struct_field (dv : dvalue) (idx : nat) : option dvalue :=
+    match dv with
+    | DVALUE_Struct _ fields => nth_error fields idx
+    | DVALUE_Base DVALUE_Poison => Some (DVALUE_Base DVALUE_Poison)
+    | _ => None
+    end.
+
+  Theorem padded_struct_dvalue_field_slice_round_trip :
+    forall (packed : bool) (dts : list dtyp) (dv : dvalue)
+           (ta : option N) (mb : list memory_byte)
+           (idx : nat) (ft : dtyp),
+      serializable (DTYPE_Struct packed dts) ->
+      dvalue_has_dtyp dv (DTYPE_Struct packed dts) ->
+      dvalue_to_memory_bytes (DTYPE_Struct packed dts) dv ta = ret mb ->
+      nth_error dts idx = Some ft ->
+      exists foff fv,
+        struct_field_offset packed dts idx = Some foff
+        /\ project_struct_field dv idx = Some fv
+        /\ (foff + store_size_dtyp ft <= N.of_nat (List.length mb))%N
+        /\ memory_bytes_to_dvalue (take (store_size_dtyp ft) (drop foff mb)) ft = ret fv.
+  Proof.
+    intros packed dts dv ta mb idx ft Hser Htyp Hw Hnth_t.
+    destruct dv as [db | p fields | v elts].
+    - inversion Htyp; subst.
+      destruct (@struct_field_offset_bounds packed dts idx ft Hnth_t)
+        as (foff & Hfoff & Hbound0).
+      unfold dvalue_to_memory_bytes in Hw.
+      rewrite (@ser_poison_agg (DTYPE_Struct packed dts) ta [] I) in Hw.
+      cbn [bind ret EOU_monad] in Hw; inversion Hw; subst mb; clear Hw.
+      rewrite app_nil_r, rev_append_rev, app_nil_r, rev_repeat.
+      pose proof (tapad_ge ta (store_size_dtyp (DTYPE_Struct packed dts))) as Gta.
+      assert (Hlen_rep :
+                (foff + store_size_dtyp ft <=
+                 N.of_nat (List.length
+                             (List.repeat poison_memory_byte
+                                (N.to_nat (tapad ta (store_size_dtyp (DTYPE_Struct packed dts)))))))%N)
+        by (rewrite repeat_length; lia).
+      exists foff, (DVALUE_Base DVALUE_Poison).
+      split; [exact Hfoff | split; [reflexivity | split; [exact Hlen_rep |]]].
+      rewrite (@take_drop_repeat_exact _ poison_memory_byte foff (store_size_dtyp ft) _ Hlen_rep).
+      apply read_repeat_poison_serializable.
+      exact (@FORALL_nth_error serializable dts idx ft Hser Hnth_t).
+    - inversion Htyp as [| | pp ffs ddts HNP HF2 |]; subst.
+      destruct (@Forall2_nth_error_r _ _ dvalue_has_dtyp fields dts idx ft HF2 Hnth_t)
+        as (fv & Hnth_v & _).
+      destruct (@padded_struct_field_slice_round_trip
+                  packed p dts fields ta mb idx ft fv Hser HF2 Hw Hnth_t Hnth_v)
+        as (foff & Hfoff & Hbound & Hrd).
+      exists foff, fv; split; [exact Hfoff | split; [exact Hnth_v | split; assumption]].
+    - inversion Htyp.
+  Qed.
+
 End MemoryByteFacts.

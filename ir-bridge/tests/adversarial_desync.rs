@@ -692,3 +692,72 @@ fn f55_tab_call_operand_bundles_gated_and_declare_trailing_metadata_stripped() -
 
     Ok(())
 }
+
+#[test]
+fn f39_fp_to_int_bitcast_gated_on_target_fast_path_for_nan_payload_portability()
+-> Result<(), String> {
+    let scalar_f32_ir = concat!(
+        "define i32 @nan_bits32(float %a, float %b) {\n",
+        "entry:\n",
+        "  %sum = fadd float %a, %b\n",
+        "  %bits = bitcast float %sum to i32\n",
+        "  ret i32 %bits\n",
+        "}\n",
+    );
+    ensure_ineligible_with(scalar_f32_ir, "F-39")?;
+
+    let scalar_f64_ir = concat!(
+        "define i64 @nan_bits64(double %a) {\n",
+        "entry:\n",
+        "  %bits = bitcast double %a to i64\n",
+        "  ret i64 %bits\n",
+        "}\n",
+    );
+    ensure_ineligible_with(scalar_f64_ir, "F-39")?;
+
+    let vec_and_alias_ir = concat!(
+        "%VecF = type <4 x float>\n",
+        "%VecI = type <4 x i32>\n",
+        "define %VecI @nan_vec_alias(%VecF %v) {\n",
+        "entry:\n",
+        "  %bits = bitcast %VecF %v to %VecI\n",
+        "  ret %VecI %bits\n",
+        "}\n",
+    );
+    ensure_ineligible_with(vec_and_alias_ir, "F-39")?;
+
+    let constexpr_ir = concat!(
+        "define i32 @nan_constexpr(i32 %x) {\n",
+        "entry:\n",
+        "  %y = add i32 %x, bitcast (float 0x7FF8000000000000 to i32)\n",
+        "  ret i32 %y\n",
+        "}\n",
+    );
+    ensure_ineligible_with(constexpr_ir, "F-39")?;
+
+    let cross_lane_ir = concat!(
+        "define i64 @nan_cross_lane(<2 x float> %v) {\n",
+        "entry:\n",
+        "  %bits = bitcast <2 x float> %v to i64\n",
+        "  ret i64 %bits\n",
+        "}\n",
+    );
+    ensure_ineligible_with(cross_lane_ir, "F-39")?;
+
+    // Source slices may still sanitize FP-to-integer bitcast cleanly for Safe-Path fallback,
+    // and integer-to-FP bitcast does not observe hardware-chosen NaN output payloads.
+    sanitize_for_vellvm(scalar_f32_ir, SliceRole::Source).map_err(|e| e.to_string())?;
+    let int_to_fp_ir = concat!(
+        "define float @from_bits(i32 %bits) {\n",
+        "entry:\n",
+        "  %f = bitcast i32 %bits to float\n",
+        "  ret float %f\n",
+        "}\n",
+    );
+    ensure(
+        check_fast_path_eligibility(int_to_fp_ir) == FastPathEligibility::Eligible,
+        "integer-to-FP `bitcast` was unexpectedly rejected",
+    )?;
+
+    Ok(())
+}

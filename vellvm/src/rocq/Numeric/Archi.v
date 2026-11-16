@@ -67,3 +67,66 @@ Global Opaque ptr64 big_endian splitlong
               default_nan_32 choose_nan_32
               fma_order fma_invalid_mul_is_nan
               float_of_single_preserves_sNaN.
+
+(** Target-parameterized IEEE-754 NaN payload profiles for AArch64 and RISC-V. *)
+
+Variant target_nan_profile : Type :=
+  | NaN_CompCert_Legacy
+  | NaN_AArch64_DefaultNaN0
+  | NaN_AArch64_DefaultNaN1
+  | NaN_RISCV_Canonical.
+
+Definition riscv_canonical_nan_64 : bool * positive :=
+  (false, iter_nat 51 _ xO xH).
+
+Definition riscv_canonical_nan_32 : bool * positive :=
+  (false, iter_nat 22 _ xO xH).
+
+Definition choose_nan_64_profile
+  (prof : target_nan_profile) (l : list (bool * positive)) : bool * positive :=
+  match prof with
+  | NaN_CompCert_Legacy | NaN_AArch64_DefaultNaN0 =>
+      match l with
+      | nil => riscv_canonical_nan_64
+      | n :: _ => n
+      end
+  | NaN_AArch64_DefaultNaN1 | NaN_RISCV_Canonical =>
+      riscv_canonical_nan_64
+  end.
+
+Definition choose_nan_32_profile
+  (prof : target_nan_profile) (l : list (bool * positive)) : bool * positive :=
+  match prof with
+  | NaN_CompCert_Legacy | NaN_AArch64_DefaultNaN0 =>
+      match l with
+      | nil => riscv_canonical_nan_32
+      | n :: _ => n
+      end
+  | NaN_AArch64_DefaultNaN1 | NaN_RISCV_Canonical =>
+      riscv_canonical_nan_32
+  end.
+
+Definition float_of_single_preserves_sNaN_profile (prof : target_nan_profile) : bool :=
+  match prof with
+  | NaN_CompCert_Legacy => true
+  | NaN_AArch64_DefaultNaN0 | NaN_AArch64_DefaultNaN1 | NaN_RISCV_Canonical => false
+  end.
+
+Lemma choose_nan_64_riscv_canonical : forall l,
+  choose_nan_64_profile NaN_RISCV_Canonical l = riscv_canonical_nan_64.
+Proof.
+  reflexivity.
+Qed.
+
+Lemma choose_nan_32_riscv_canonical : forall l,
+  choose_nan_32_profile NaN_RISCV_Canonical l = riscv_canonical_nan_32.
+Proof.
+  reflexivity.
+Qed.
+
+Lemma float_of_single_quiets_on_aarch64_and_riscv : forall prof,
+  prof <> NaN_CompCert_Legacy ->
+  float_of_single_preserves_sNaN_profile prof = false.
+Proof.
+  intros [] Hne; [contradiction Hne; reflexivity | reflexivity | reflexivity | reflexivity].
+Qed.

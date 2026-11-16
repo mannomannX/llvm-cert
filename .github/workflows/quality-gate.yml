@@ -70,6 +70,17 @@ jobs:
             "$SELFCHECK_BIN"
             rm -f "$SELFCHECK_BIN"
           fi
+          if [ -f "runtime/tests/stage1_conformance.c" ]; then
+            STAGE1_BIN="$(mktemp /tmp/cert-stage1-conformance-XXXXXX)"
+            clang -std=c17 -O0 -Xclang -disable-O0-optnone \
+              -fno-finite-loops -fwrapv -fno-strict-aliasing \
+              -ftrivial-auto-var-init=zero -ffp-contract=off -fno-fast-math -fno-exceptions \
+              -Wall -Wextra -Werror \
+              runtime/tests/stage1_conformance.c \
+              -o "$STAGE1_BIN"
+            "$STAGE1_BIN"
+            rm -f "$STAGE1_BIN"
+          fi
 
       - name: Install Rust toolchain for ir-bridge
         if: hashFiles('ir-bridge/Cargo.toml') != ''

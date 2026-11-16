@@ -261,4 +261,118 @@ Section GEP.
     | DVALUE_Base DVALUE_Poison => ret (DVALUE_Base DVALUE_Poison)
     | _ => raise_error "non-ptr"%string
     end.
+
+  (** ** 64-Bit Modular Two's-Complement GEP Reassociation & Inbounds Theory *)
+
+  Definition wrap_ptr64 (addr : Z) : Z :=
+    addr mod (2 ^ 64).
+
+  Lemma wrap_ptr64_range : forall addr : Z,
+    0 <= wrap_ptr64 addr < 2 ^ 64.
+  Proof.
+    intros addr; unfold wrap_ptr64.
+    apply Z.mod_pos_bound; reflexivity.
+  Qed.
+
+  Lemma wrap_ptr64_small : forall addr : Z,
+    0 <= addr < 2 ^ 64 ->
+    wrap_ptr64 addr = addr.
+  Proof.
+    intros addr H; unfold wrap_ptr64; apply Z.mod_small, H.
+  Qed.
+
+  Lemma gep_offset_fold_shift : forall steps init,
+    fold_left (fun off '(k, size) => off + k * size) steps init = init + gep_offset steps.
+  Proof.
+    unfold gep_offset; intros steps.
+    induction steps as [| [k sz] steps' IH]; intros init; cbn [fold_left]; [lia |].
+    rewrite (IH (init + k * sz)), (IH (0 + k * sz)); lia.
+  Qed.
+
+  Lemma gep_offset_cons : forall k sz steps,
+    gep_offset ((k, sz) :: steps) = k * sz + gep_offset steps.
+  Proof.
+    intros k sz steps; unfold gep_offset at 1; cbn [fold_left].
+    rewrite gep_offset_fold_shift; lia.
+  Qed.
+
+  Lemma gep_offset_app : forall s1 s2,
+    gep_offset (s1 ++ s2) = gep_offset s1 + gep_offset s2.
+  Proof.
+    intros s1 s2; unfold gep_offset at 1; rewrite fold_left_app.
+    apply gep_offset_fold_shift.
+  Qed.
+
+  Lemma gep_offset_wrap64_reassoc : forall base off1 off2 : Z,
+    wrap_ptr64 (wrap_ptr64 (base + off1) + off2) = wrap_ptr64 (base + (off1 + off2)).
+  Proof.
+    intros base off1 off2; unfold wrap_ptr64.
+    pose proof (Z.div_mod (base + off1) (2 ^ 64) ltac:(discriminate)) as Hdm.
+    replace (base + (off1 + off2))
+      with (((base + off1) mod (2 ^ 64) + off2) + ((base + off1) / (2 ^ 64)) * (2 ^ 64))
+      by lia.
+    symmetry; apply Z_mod_plus_full.
+  Qed.
+
+  Lemma gep_steps_wrap64_reassoc : forall base steps1 steps2,
+    wrap_ptr64 (wrap_ptr64 (base + gep_offset steps1) + gep_offset steps2) =
+      wrap_ptr64 (base + gep_offset (steps1 ++ steps2)).
+  Proof.
+    intros base steps1 steps2; rewrite gep_offset_app.
+    apply gep_offset_wrap64_reassoc.
+  Qed.
+
+  Lemma gep_inbounds_implies_wrap64_eq : forall base off : Z,
+    0 <= base + off < 2 ^ 64 ->
+    wrap_ptr64 (base + off) = base + off.
+  Proof.
+    intros base off H; apply wrap_ptr64_small, H.
+  Qed.
+
+  Lemma gep_nusw_ok_nonempty_range : forall steps addr off,
+    steps <> [] ->
+    gep_nusw_ok addr off steps = true ->
+    in_unsigned_index_range (addr + (off + gep_offset steps)) = true.
+  Proof.
+    induction steps as [| [k sz] steps' IH]; intros addr off Hne Hok;
+      [contradiction Hne; reflexivity |].
+    cbn [gep_nusw_ok] in Hok.
+    apply Bool.andb_true_iff in Hok as [Hok Hrest].
+    apply Bool.andb_true_iff in Hok as [_ Hin_u].
+    destruct steps' as [| p2 steps''].
+    - unfold gep_offset; cbn [fold_left].
+      replace (addr + (off + (0 + k * sz))) with (addr + (off + k * sz)) by lia.
+      exact Hin_u.
+    - assert (Hne' : p2 :: steps'' <> []) by discriminate.
+      specialize (IH addr (off + k * sz) Hne' Hrest).
+      rewrite gep_offset_cons.
+      replace (addr + (off + (k * sz + gep_offset (p2 :: steps''))))
+        with (addr + (off + k * sz + gep_offset (p2 :: steps'')))
+        by lia.
+      exact IH.
+  Qed.
+
+  Lemma gep_inbounds_flags_implies_wrap64_eq : forall flags base steps,
+    pointer_size = 8%N ->
+    0 <= base < 2 ^ 64 ->
+    steps <> [] ->
+    gep_inbounds flags = true ->
+    gep_flags_violated flags base steps = false ->
+    0 <= base + gep_offset steps < 2 ^ 64
+    /\ wrap_ptr64 (base + gep_offset steps) = base + gep_offset steps.
+  Proof.
+    intros flags base steps Hptr64 Hbase Hne Hinb Hok.
+    assert (Hbits : gep_index_bits = 64)
+      by (unfold gep_index_bits; rewrite Hptr64; reflexivity).
+    assert (Hnusw_ok : gep_nusw_ok base 0 steps = true).
+    { unfold gep_flags_violated in Hok; cbv zeta in Hok.
+      rewrite Hbits, (Z.mod_small base (2 ^ 64) Hbase), Hinb in Hok.
+      destruct (gep_nusw_ok base 0 steps); [reflexivity | cbn in Hok; discriminate Hok]. }
+    pose proof (@gep_nusw_ok_nonempty_range steps base 0 Hne Hnusw_ok) as Hrng.
+    unfold in_unsigned_index_range in Hrng.
+    rewrite Hbits, Z.add_0_l in Hrng.
+    apply Bool.andb_true_iff in Hrng as [Hlo Hhi].
+    apply Z.leb_le in Hlo; apply Z.ltb_lt in Hhi.
+    split; [lia | apply gep_inbounds_implies_wrap64_eq; lia].
+  Qed.
 End GEP.

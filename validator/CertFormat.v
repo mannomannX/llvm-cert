@@ -19,12 +19,15 @@
     3. Computable IR syntax and prototype contract soundness gates
        ([check_validator_syntax_gates], [check_prototype_contract]) enforcing
        [F-17] (no target fast-math flags), [F-18] (no volatile/atomic/ordering
-       or fences), [F-19]/[F-32] (matching prototype/calling-convention/ABI
-       attributes and rejection of unmodeled [byval]/[inalloca]/[preallocated]/
-       [byref]/[initializes]), [F-21] (no target-invented [gep] [inbounds]/
-       [nusw]/[nuw] flags), and [F-30]/[F-31]/[F-34] (verified intrinsic
-       allowlist, non-variadic IR, and no [invoke]/[landingpad]/[resume]),
-       together with [Qed.] inversion lemmas for every gate. *)
+       or fences), [F-19]/[F-32]/[F-60] (matching prototype/calling-convention/
+       ABI/function attributes, forbidding target-invented [noreturn]/
+       [nocreateundeforpoison]/[nounwind]/[memory] attributes, and rejecting
+       unmodeled [byval]/[inalloca]/[preallocated]/[byref]/[initializes]/
+       [naked]/[strictfp]/[returns_twice]), [F-21] (no target-invented [gep]
+       [inbounds]/[nusw]/[nuw] flags), [F-39] (no target-invented FP-to-integer
+       [bitcast] exposing NaN payload bits), and [F-30]/[F-31]/[F-34] (verified
+       intrinsic allowlist, non-variadic IR, and no [invoke]/[landingpad]/
+       [resume]), together with [Qed.] inversion lemmas for every gate. *)
 
 From Stdlib Require Import
   ZArith
@@ -46,6 +49,7 @@ From Vellvm Require Import
   Syntax.AstLib
   Syntax.CFG
   Syntax.DynamicTypes
+  Semantics.Attributes
   Semantics.IntrinsicsDefinitions.
 
 Unset Implicit Arguments.
@@ -333,7 +337,7 @@ Proof.
   - intros H; inversion H; repeat split; reflexivity.
 Qed.
 
-Fixpoint cert_expr_eqb (e1 e2 : cert_expr) : bool :=
+Fixpoint cert_expr_eqb (e1 e2 : cert_expr) {struct e1} : bool :=
   match e1, e2 with
   | CE_BvConst w1 v1, CE_BvConst w2 v2 =>
       Pos.eqb w1 w2 && N.eqb v1 v2
@@ -355,7 +359,7 @@ Fixpoint cert_expr_eqb (e1 e2 : cert_expr) : bool :=
   | CE_Freeze w1 o1, CE_Freeze w2 o2 =>
       Pos.eqb w1 w2 && cert_expr_eqb o1 o2
   | CE_Let bs1 b1, CE_Let bs2 b2 =>
-      let fix eqb_binds (xs ys : list (string * cert_expr)) : bool :=
+      let fix eqb_binds (xs ys : list (string * cert_expr)) {struct xs} : bool :=
           match xs, ys with
           | [], [] => true
           | (k1, x1) :: rx, (k2, x2) :: ry =>
@@ -468,14 +472,14 @@ Definition starts_with_dollar (s : string) : bool :=
   | EmptyString => false
   end.
 
-Fixpoint lookup_let_width (env : list (string * positive)) (nm : string)
+Fixpoint lookup_let_width (env : list (string * positive)) (nm : string) {struct env}
   : option positive :=
   match env with
   | [] => None
   | (k, w) :: rest => if String.eqb k nm then Some w else lookup_let_width rest nm
   end.
 
-Fixpoint string_in_list (s : string) (xs : list string) : bool :=
+Fixpoint string_in_list (s : string) (xs : list string) {struct xs} : bool :=
   match xs with
   | [] => false
   | x :: rest => if String.eqb s x then true else string_in_list s rest
@@ -506,7 +510,7 @@ Section WfLetBinds.
   Variable wf_sub : list (string * positive) -> cert_expr -> bool.
 
   Fixpoint wf_let_binds_step (env : list (string * positive)) (seen : list string)
-                             (xs : list (string * cert_expr))
+                             (xs : list (string * cert_expr)) {struct xs}
     : option (list (string * positive)) :=
     match xs with
     | [] => Some env
@@ -519,7 +523,7 @@ Section WfLetBinds.
     end.
 End WfLetBinds.
 
-Fixpoint wf_cert_expr (let_env : list (string * positive)) (e : cert_expr) : bool :=
+Fixpoint wf_cert_expr (let_env : list (string * positive)) (e : cert_expr) {struct e} : bool :=
   match e with
   | CE_BvConst w val =>
       is_supported_bit_width w && (val <? N.shiftl 1 (N.pos w))%N
@@ -640,17 +644,45 @@ Definition wf_alias_witness (aw : alias_witness) : bool :=
   negb (String.eqb (aw_lhs_ptr aw) "") &&
   negb (String.eqb (aw_rhs_ptr aw) "").
 
-Fixpoint str_to_chars (s : string) : list ascii :=
+Definition rev_tr {A : Type} (xs : list A) : list A :=
+  List.rev_append xs [].
+
+Lemma rev_tr_eq {A : Type} : forall (xs : list A), rev_tr xs = List.rev xs.
+Proof.
+  intros xs; unfold rev_tr; rewrite List.rev_append_rev, app_nil_r; reflexivity.
+Qed.
+
+Fixpoint str_to_chars_rev_acc (acc : list ascii) (s : string) {struct s} : list ascii :=
   match s with
-  | EmptyString => []
-  | String c rest => c :: str_to_chars rest
+  | EmptyString => acc
+  | String c rest => str_to_chars_rev_acc (c :: acc) rest
   end.
 
-Fixpoint chars_to_str (cs : list ascii) : string :=
-  match cs with
-  | [] => EmptyString
-  | c :: rest => String c (chars_to_str rest)
+Definition str_to_chars (s : string) : list ascii :=
+  List.rev_append (str_to_chars_rev_acc [] s) [].
+
+Fixpoint rev_chars_to_str_acc (acc : string) (rev_cs : list ascii) {struct rev_cs} : string :=
+  match rev_cs with
+  | [] => acc
+  | c :: rest => rev_chars_to_str_acc (String c acc) rest
   end.
+
+Definition chars_to_str (cs : list ascii) : string :=
+  rev_chars_to_str_acc EmptyString (List.rev_append cs []).
+
+Lemma str_to_chars_rev_acc_spec : forall s acc,
+  List.rev_append (str_to_chars_rev_acc acc s) [] =
+  List.rev_append acc (list_ascii_of_string s).
+Proof.
+  induction s as [| c rest IH]; intros acc; cbn.
+  - reflexivity.
+  - rewrite (IH (c :: acc)); reflexivity.
+Qed.
+
+Lemma str_to_chars_spec : forall s, str_to_chars s = list_ascii_of_string s.
+Proof.
+  intros s; unfold str_to_chars; exact (str_to_chars_rev_acc_spec s []).
+Qed.
 
 Definition is_lower_hex_char (c : ascii) : bool :=
   let n := nat_of_ascii c in
@@ -714,14 +746,14 @@ Definition is_valid_atom_char (c : ascii) : bool :=
   negb (Nat.eqb n 41) &&
   negb (Nat.eqb n 59).
 
-Fixpoint tokenize_loop (mode : tok_mode) (rev_toks : list sexp_tok) (cs : list ascii)
+Fixpoint tokenize_loop (mode : tok_mode) (rev_toks : list sexp_tok) (cs : list ascii) {struct cs}
   : string + list sexp_tok :=
   match cs with
   | [] =>
       match mode with
-      | TM_Normal => inr (List.rev rev_toks)
+      | TM_Normal => inr (rev_tr rev_toks)
       | TM_InAtom rev_acc =>
-          inr (List.rev (TOK_Atom (chars_to_str (List.rev rev_acc)) :: rev_toks))
+          inr (rev_tr (TOK_Atom (rev_chars_to_str_acc EmptyString rev_acc) :: rev_toks))
       | TM_InString _ => inl "unterminated string literal in S-expression"
       | TM_InEscape _ => inl "unterminated escape sequence in S-expression"
       end
@@ -738,7 +770,7 @@ Fixpoint tokenize_loop (mode : tok_mode) (rev_toks : list sexp_tok) (cs : list a
       | TM_InString rev_acc =>
           if Nat.eqb n 34 then
             tokenize_loop TM_Normal
-              (TOK_Str (chars_to_str (List.rev rev_acc)) :: rev_toks) rest
+              (TOK_Str (rev_chars_to_str_acc EmptyString rev_acc) :: rev_toks) rest
           else if Nat.eqb n 92 then
             tokenize_loop (TM_InEscape rev_acc) rev_toks rest
           else if (n <? 32)%nat || Nat.eqb n 127 then
@@ -759,7 +791,7 @@ Fixpoint tokenize_loop (mode : tok_mode) (rev_toks : list sexp_tok) (cs : list a
           else
             inl "unsupported escape sequence in S-expression string literal"
       | TM_InAtom rev_acc =>
-          let done_atom := TOK_Atom (chars_to_str (List.rev rev_acc)) in
+          let done_atom := TOK_Atom (rev_chars_to_str_acc EmptyString rev_acc) in
           if is_sexp_ws c then
             tokenize_loop TM_Normal (done_atom :: rev_toks) rest
           else if Nat.eqb n 40 then
@@ -783,13 +815,13 @@ Definition push_sexp_item (item : sexp) (stack : list (list sexp)) (top_rev : li
   end.
 
 Fixpoint parse_sexp_toks (stack : list (list sexp)) (top_rev : list sexp)
-                         (toks : list sexp_tok) : string + sexp :=
+                         (toks : list sexp_tok) {struct toks} : string + sexp :=
   match toks with
   | [] =>
       match stack with
       | _ :: _ => inl "unclosed opening parenthesis in S-expression"
       | [] =>
-          match List.rev top_rev with
+          match rev_tr top_rev with
           | [root] => inr root
           | [] => inl "empty S-expression input"
           | _ :: _ :: _ => inl "trailing tokens after root S-expression"
@@ -812,7 +844,7 @@ Fixpoint parse_sexp_toks (stack : list (list sexp)) (top_rev : list sexp)
           match stack with
           | [] => inl "unexpected closing parenthesis in S-expression"
           | cur_rev :: parents =>
-              let '(st', top') := push_sexp_item (SList (List.rev cur_rev)) parents top_rev in
+              let '(st', top') := push_sexp_item (SList (rev_tr cur_rev)) parents top_rev in
               parse_sexp_toks st' top' rest
           end
       end
@@ -826,7 +858,7 @@ Definition parse_sexp (input : string) : string + sexp :=
 
 (** ** 5. Canonical [cert-v1] S-Expression Deserializer ([parse_cert]) *)
 
-Fixpoint parse_digits_acc (acc : N) (cs : list ascii) : option N :=
+Fixpoint parse_digits_acc (acc : N) (cs : list ascii) {struct cs} : option N :=
   match cs with
   | [] => Some acc
   | c :: rest =>
@@ -1008,7 +1040,7 @@ Section ParseLetBinds.
   Variable rec_parse : list (string * positive) -> sexp -> string + cert_expr.
 
   Fixpoint parse_let_binds (cur_env : list (string * positive)) (seen : list string)
-                           (bs : list sexp)
+                           (bs : list sexp) {struct bs}
     : string + (list (string * cert_expr) * list (string * positive)) :=
     match bs with
     | [] => inr ([], cur_env)
@@ -1070,6 +1102,7 @@ Proof.
 Qed.
 
 Fixpoint parse_cert_expr_fueled (fuel : nat) (let_env : list (string * positive)) (sx : sexp)
+                                {struct fuel}
   : string + cert_expr :=
   match fuel with
   | O => inl "cert-v1 expression fuel exhausted"
@@ -1404,17 +1437,49 @@ Proof.
   intros sx let_env e Hp; exact (parse_cert_expr_fueled_wf (sexp_depth sx) let_env sx e Hp).
 Qed.
 
-Fixpoint map_parse_list {A : Set} (f : sexp -> string + A) (xs : list sexp)
+Fixpoint map_parse_list_acc {A : Set} (f : sexp -> string + A)
+                            (acc : list A) (xs : list sexp) {struct xs}
   : string + list A :=
   match xs with
-  | [] => inr []
+  | [] => inr (List.rev_append acc [])
   | x :: rest =>
-      match f x, map_parse_list f rest with
-      | inr y, inr ys => inr (y :: ys)
-      | inl err, _ => inl err
-      | _, inl err => inl err
+      match f x with
+      | inl err => inl err
+      | inr y => map_parse_list_acc f (y :: acc) rest
       end
   end.
+
+Definition map_parse_list {A : Set} (f : sexp -> string + A) (xs : list sexp)
+  : string + list A :=
+  map_parse_list_acc f [] xs.
+
+Lemma forallb_rev_append {A : Type} :
+  forall (p : A -> bool) (xs acc : list A),
+    forallb p xs = true ->
+    forallb p acc = true ->
+    forallb p (List.rev_append xs acc) = true.
+Proof.
+  intros p xs; induction xs as [| x rest IH]; intros acc Hxs Hacc; cbn in *.
+  - exact Hacc.
+  - apply andb_true_iff in Hxs as [Hx Hrest].
+    apply IH; [exact Hrest | cbn; rewrite Hx, Hacc; reflexivity].
+Qed.
+
+Lemma map_parse_list_acc_forallb {A : Set} :
+  forall (f : sexp -> string + A) (wf : A -> bool)
+         (Hwf : forall sx y, f sx = inr y -> wf y = true)
+         xs acc ys,
+    forallb wf acc = true ->
+    map_parse_list_acc f acc xs = inr ys ->
+    forallb wf ys = true.
+Proof.
+  intros f wf Hwf xs.
+  induction xs as [| x rest IH]; intros acc ys Hacc Hp; cbn in Hp.
+  - inversion Hp; subst; exact (forallb_rev_append wf acc [] Hacc eq_refl).
+  - destruct (f x) as [| y] eqn:Hy; [discriminate |].
+    apply (IH (y :: acc) ys); [| exact Hp].
+    cbn; rewrite (Hwf x y Hy), Hacc; reflexivity.
+Qed.
 
 Lemma map_parse_list_forallb {A : Set} :
   forall (f : sexp -> string + A) (wf : A -> bool)
@@ -1422,13 +1487,8 @@ Lemma map_parse_list_forallb {A : Set} :
          xs ys,
     map_parse_list f xs = inr ys -> forallb wf ys = true.
 Proof.
-  intros f wf Hwf xs.
-  induction xs as [| x rest IH]; intros ys Hp; cbn in Hp.
-  - inversion Hp; subst; reflexivity.
-  - destruct (f x) as [| y] eqn:Hy; [discriminate |].
-    destruct (map_parse_list f rest) as [| yr] eqn:Hyr; [discriminate |].
-    inversion Hp; subst; cbn.
-    rewrite (Hwf x y Hy), (IH yr Hyr); reflexivity.
+  intros f wf Hwf xs ys Hp.
+  exact (map_parse_list_acc_forallb f wf Hwf xs [] ys eq_refl Hp).
 Qed.
 
 Definition parse_tagged_nonempty_str_sexp (expected_tag : string) (sx : sexp)
@@ -2167,8 +2227,8 @@ Proof.
   intros [] []; cbn; split; intros H; try reflexivity; discriminate.
 Qed.
 
-Fixpoint typ_eqb (t1 t2 : typ) : bool :=
-  let fix list_typ_eqb (xs ys : list typ) : bool :=
+Fixpoint typ_eqb (t1 t2 : typ) {struct t1} : bool :=
+  let fix list_typ_eqb (xs ys : list typ) {struct xs} : bool :=
       match xs, ys with
       | [], [] => true
       | x :: rx, y :: ry => typ_eqb x y && list_typ_eqb rx ry
@@ -2302,7 +2362,7 @@ Definition dtyp_eqb (d1 d2 : dtyp) : bool :=
 Definition int_syntax_val_eqb (a b : int_syntax) : bool :=
   Z.eqb (BinIntDef.Z.of_num_int a) (BinIntDef.Z.of_num_int b).
 
-Fixpoint simple_exp_dtyp_eqb (e1 e2 : exp dtyp) : bool :=
+Fixpoint simple_exp_dtyp_eqb (e1 e2 : exp dtyp) {struct e1} : bool :=
   match e1, e2 with
   | EXP_Ident i1, EXP_Ident i2 => ident_eqb i1 i2
   | EXP_Integer n1, EXP_Integer n2 => int_syntax_val_eqb n1 n2
@@ -2312,7 +2372,7 @@ Fixpoint simple_exp_dtyp_eqb (e1 e2 : exp dtyp) : bool :=
   | EXP_Undef, EXP_Undef
   | EXP_Poison, EXP_Poison => true
   | OP_GetElementPtr f1 t1 (pt1, pe1) idxs1, OP_GetElementPtr f2 t2 (pt2, pe2) idxs2 =>
-      let fix eqb_idxs (xs ys : list (dtyp * exp dtyp)) : bool :=
+      let fix eqb_idxs (xs ys : list (dtyp * exp dtyp)) {struct xs} : bool :=
           match xs, ys with
           | [], [] => true
           | (xt, xe) :: rx, (yt, ye) :: ry =>
@@ -2381,7 +2441,7 @@ with metadata_no_fast_math {T : Set} (md : metadata T) : bool :=
       | m :: r => metadata_no_fast_math m && md_list_ok r
       end in
   match md with
-  | METADATA_Null | METADATA_Id _ | METADATA_File_info _ => true
+  | METADATA_Null | METADATA_Id _ | METADATA_Debug _ _ | METADATA_File_info _ => true
   | METADATA_Const (_, e) => exp_no_fast_math e
   | METADATA_Node ms => md_list_ok ms
   | METADATA_Pair m1 m2 => metadata_no_fast_math m1 && metadata_no_fast_math m2
@@ -2516,7 +2576,14 @@ Definition block_no_concurrency {T : Set} (b : block T) : bool :=
 Definition cfg_no_concurrency {T : Set} (G : CFG.cfg T) : bool :=
   forallb block_no_concurrency (blks G).
 
-(** *** 6.4 [F-19] & [F-32]: Prototype Contract, Calling Conventions, and ABI Parameter Attributes *)
+(** *** 6.4 [F-19], [F-32] & [F-60]: Prototype Contract, Calling Conventions, ABI Parameter Attributes, and Function Attributes *)
+
+Fixpoint forallb2 {A B : Type} (f : A -> B -> bool) (xs : list A) (ys : list B) {struct xs} : bool :=
+  match xs, ys with
+  | [], [] => true
+  | x :: rx, y :: ry => f x y && forallb2 f rx ry
+  | _, _ => false
+  end.
 
 Definition is_unmodeled_param_attr (pa : param_attr) : bool :=
   match pa with
@@ -2580,15 +2647,63 @@ Definition param_attr_eqb (a b : param_attr) : bool :=
       int_syntax_val_eqb n1 n2
   | PARAMATTR_Range t1 l1 h1, PARAMATTR_Range t2 l2 h2 =>
       typ_eqb t1 t2 && int_syntax_val_eqb l1 l2 && int_syntax_val_eqb h1 h2
+  | PARAMATTR_Initializes xs1, PARAMATTR_Initializes xs2 =>
+      forallb2 (fun '(a1, b1) '(a2, b2) => int_syntax_val_eqb a1 a2 && int_syntax_val_eqb b1 b2)
+               xs1 xs2
+  | PARAMATTR_Captures (l1, r1), PARAMATTR_Captures (l2, r2) =>
+      forallb2 String.eqb l1 l2 && forallb2 String.eqb r1 r2
   | _, _ => false
   end.
 
-Fixpoint forallb2 {A B : Type} (f : A -> B -> bool) (xs : list A) (ys : list B) : bool :=
-  match xs, ys with
-  | [], [] => true
-  | x :: rx, y :: ry => f x y && forallb2 f rx ry
+Definition opt_int_syntax_val_eqb (o1 o2 : option int_syntax) : bool :=
+  match o1, o2 with
+  | None, None => true
+  | Some x1, Some x2 => int_syntax_val_eqb x1 x2
   | _, _ => false
   end.
+
+Definition opt_range_val_eqb (o1 o2 : option (int_syntax * int_syntax)) : bool :=
+  match o1, o2 with
+  | None, None => true
+  | Some (l1, h1), Some (l2, h2) => int_syntax_val_eqb l1 l2 && int_syntax_val_eqb h1 h2
+  | _, _ => false
+  end.
+
+Definition opt_Z_eqb (o1 o2 : option Z) : bool :=
+  match o1, o2 with
+  | None, None => true
+  | Some z1, Some z2 => Z.eqb z1 z2
+  | _, _ => false
+  end.
+
+Definition opt_deref_refines_b (src_d tgt_d : option (bool * int_syntax)) : bool :=
+  match tgt_d with
+  | None => true
+  | Some (t_ornull, t_n) =>
+      match src_d with
+      | None => false
+      | Some (s_ornull, s_n) =>
+          Bool.eqb s_ornull t_ornull && int_syntax_val_eqb s_n t_n
+      end
+  end.
+
+Definition opt_is_some {A : Type} (o : option A) : bool :=
+  match o with
+  | Some _ => true
+  | None => false
+  end.
+
+Definition value_attrs_poison_match_b (src_attrs tgt_attrs : list param_attr) : bool :=
+  implb (existsb attr_is_noundef tgt_attrs) (existsb attr_is_noundef src_attrs) &&
+  Bool.eqb (existsb attr_is_nonnull src_attrs) (existsb attr_is_nonnull tgt_attrs) &&
+  opt_int_syntax_val_eqb (find_option attr_align src_attrs)
+                         (find_option attr_align tgt_attrs) &&
+  opt_range_val_eqb (find_option attr_range src_attrs)
+                    (find_option attr_range tgt_attrs) &&
+  opt_Z_eqb (find_option attr_nofpclass src_attrs)
+            (find_option attr_nofpclass tgt_attrs) &&
+  opt_deref_refines_b (find_option attr_dereferenceable src_attrs)
+                      (find_option attr_dereferenceable tgt_attrs).
 
 Definition attr_subset_b (sub sup : list param_attr) : bool :=
   forallb (fun a => existsb (param_attr_eqb a) sup) sub.
@@ -2602,7 +2717,190 @@ Definition param_attrs_refine_b (src_attrs tgt_attrs : list param_attr) : bool :
   forallb (fun a => negb (is_unmodeled_param_attr a)) src_attrs &&
   forallb (fun a => negb (is_unmodeled_param_attr a)) tgt_attrs &&
   abi_attrs_match_b src_attrs tgt_attrs &&
-  attr_subset_b tgt_attrs src_attrs.
+  attr_subset_b tgt_attrs src_attrs &&
+  value_attrs_poison_match_b src_attrs tgt_attrs.
+
+Definition ret_attrs_refine_b (src_rattrs tgt_rattrs : list param_attr) : bool :=
+  param_attrs_refine_b src_rattrs tgt_rattrs &&
+  implb (opt_is_some (find_option attr_dereferenceable tgt_rattrs))
+        (existsb attr_is_noundef src_rattrs).
+
+Definition mem_loc_eqb (x y : mem_loc) : bool :=
+  match x, y with
+  | LOC_Default, LOC_Default
+  | LOC_Argmem, LOC_Argmem
+  | LOC_Inaccessiblemem, LOC_Inaccessiblemem
+  | LOC_Errnomem, LOC_Errnomem => true
+  | _, _ => false
+  end.
+
+Definition mem_access_kind_eqb (x y : mem_access_kind) : bool :=
+  match x, y with
+  | ACC_None, ACC_None
+  | ACC_Read, ACC_Read
+  | ACC_Write, ACC_Write
+  | ACC_Readwrite, ACC_Readwrite => true
+  | _, _ => false
+  end.
+
+Definition fn_attr_nullary_tag (x : fn_attr) : option positive :=
+  match x with
+  | FNATTR_Alwaysinline => Some 1%positive
+  | FNATTR_Builtin => Some 2%positive
+  | FNATTR_Cold => Some 3%positive
+  | FNATTR_Convergent => Some 4%positive
+  | FNATTR_Disable_sanitizer_instrumentation => Some 5%positive
+  | FNATTR_Fn_ret_thunk_extern => Some 6%positive
+  | FNATTR_Hot => Some 7%positive
+  | FNATTR_Inaccessiblememonly => Some 8%positive
+  | FNATTR_Inaccessiblemem_or_argmemonly => Some 9%positive
+  | FNATTR_Inlinehint => Some 10%positive
+  | FNATTR_Jumptable => Some 11%positive
+  | FNATTR_Minsize => Some 12%positive
+  | FNATTR_Naked => Some 13%positive
+  | FNATTR_No_jump_tables => Some 14%positive
+  | FNATTR_Nobuiltin => Some 15%positive
+  | FNATTR_Noduplicate => Some 16%positive
+  | FNATTR_Nofree => Some 17%positive
+  | FNATTR_Noimplicitfloat => Some 18%positive
+  | FNATTR_Noinline => Some 19%positive
+  | FNATTR_Nomerge => Some 20%positive
+  | FNATTR_Nonlazybind => Some 21%positive
+  | FNATTR_Noprofile => Some 22%positive
+  | FNATTR_Noredzone => Some 23%positive
+  | FNATTR_Indirect_tls_seg_refs => Some 24%positive
+  | FNATTR_Noreturn => Some 25%positive
+  | FNATTR_Norecurse => Some 26%positive
+  | FNATTR_Willreturn => Some 27%positive
+  | FNATTR_Nosync => Some 28%positive
+  | FNATTR_Nounwind => Some 29%positive
+  | FNATTR_Nocreateundeforpoison => Some 30%positive
+  | FNATTR_Nosanitize_bounds => Some 31%positive
+  | FNATTR_Nosanitize_coverage => Some 32%positive
+  | FNATTR_Null_pointer_is_valid => Some 33%positive
+  | FNATTR_Optforfuzzing => Some 34%positive
+  | FNATTR_Optnone => Some 35%positive
+  | FNATTR_Optsize => Some 36%positive
+  | FNATTR_Readnone => Some 37%positive
+  | FNATTR_Readonly => Some 38%positive
+  | FNATTR_Writeonly => Some 39%positive
+  | FNATTR_Argmemonly => Some 40%positive
+  | FNATTR_Returns_twice => Some 41%positive
+  | FNATTR_Safestack => Some 42%positive
+  | FNATTR_Sanitize_address => Some 43%positive
+  | FNATTR_Sanitize_memory => Some 44%positive
+  | FNATTR_Sanitize_thread => Some 45%positive
+  | FNATTR_Sanitize_hwaddress => Some 46%positive
+  | FNATTR_Sanitize_memtag => Some 47%positive
+  | FNATTR_Speculative_load_hardening => Some 48%positive
+  | FNATTR_Speculatable => Some 49%positive
+  | FNATTR_Ssp => Some 50%positive
+  | FNATTR_Sspstrong => Some 51%positive
+  | FNATTR_Sspreq => Some 52%positive
+  | FNATTR_Strictfp => Some 53%positive
+  | FNATTR_Tls_load_hoist => Some 54%positive
+  | FNATTR_Nocf_check => Some 55%positive
+  | FNATTR_Shadowcallstack => Some 56%positive
+  | FNATTR_Mustprogress => Some 57%positive
+  | _ => None
+  end.
+
+Definition fn_attr_eqb (x y : fn_attr) : bool :=
+  match fn_attr_nullary_tag x, fn_attr_nullary_tag y with
+  | Some t1, Some t2 => Pos.eqb t1 t2
+  | None, None =>
+      match x, y with
+      | FNATTR_Alignstack a1, FNATTR_Alignstack a2 => int_syntax_val_eqb a1 a2
+      | FNATTR_Allockind k1, FNATTR_Allockind k2 => String.eqb k1 k2
+      | FNATTR_Allocsize a1 b1, FNATTR_Allocsize a2 b2 =>
+          int_syntax_val_eqb a1 a2 && opt_int_syntax_val_eqb b1 b2
+      | FNATTR_Uwtable None, FNATTR_Uwtable None => true
+      | FNATTR_Uwtable (Some s1), FNATTR_Uwtable (Some s2) => Bool.eqb s1 s2
+      | FNATTR_Vscale_range lo1 hi1, FNATTR_Vscale_range lo2 hi2 =>
+          int_syntax_val_eqb lo1 lo2 && opt_int_syntax_val_eqb hi1 hi2
+      | FNATTR_String s1, FNATTR_String s2 => String.eqb s1 s2
+      | FNATTR_Key_value (k1, v1), FNATTR_Key_value (k2, v2) =>
+          String.eqb k1 k2 && String.eqb v1 v2
+      | FNATTR_Attr_grp g1, FNATTR_Attr_grp g2 => Z.eqb g1 g2
+      | FNATTR_Memory e1, FNATTR_Memory e2 =>
+          forallb2 (fun '(l1, a1) '(l2, a2) => mem_loc_eqb l1 l2 && mem_access_kind_eqb a1 a2)
+                   e1 e2
+      | FNATTR_UNKNOWN s1, FNATTR_UNKNOWN s2 => String.eqb s1 s2
+      | _, _ => false
+      end
+  | _, _ => false
+  end.
+
+Definition is_unmodeled_fn_attr (fa : fn_attr) : bool :=
+  match fa with
+  | FNATTR_Naked
+  | FNATTR_Strictfp
+  | FNATTR_Returns_twice
+  | FNATTR_Attr_grp _
+  | FNATTR_UNKNOWN _ => true
+  | _ => false
+  end.
+
+Definition is_semantic_fn_attr (fa : fn_attr) : bool :=
+  match fa with
+  | FNATTR_Noreturn
+  | FNATTR_Nocreateundeforpoison
+  | FNATTR_Nounwind
+  | FNATTR_Willreturn
+  | FNATTR_Mustprogress
+  | FNATTR_Norecurse
+  | FNATTR_Nosync
+  | FNATTR_Nofree
+  | FNATTR_Convergent
+  | FNATTR_Noduplicate
+  | FNATTR_Nomerge
+  | FNATTR_Readnone
+  | FNATTR_Readonly
+  | FNATTR_Writeonly
+  | FNATTR_Argmemonly
+  | FNATTR_Inaccessiblememonly
+  | FNATTR_Inaccessiblemem_or_argmemonly
+  | FNATTR_Memory _
+  | FNATTR_Null_pointer_is_valid
+  | FNATTR_Speculatable
+  | FNATTR_Alignstack _
+  | FNATTR_Allockind _
+  | FNATTR_Allocsize _ _
+  | FNATTR_Nobuiltin
+  | FNATTR_Builtin => true
+  | _ => false
+  end.
+
+Definition check_fn_attrs_contract (src_fattrs tgt_fattrs : list fn_attr) : bool :=
+  forallb (fun a => negb (is_unmodeled_fn_attr a)) src_fattrs &&
+  forallb (fun a => negb (is_unmodeled_fn_attr a)) tgt_fattrs &&
+  forallb (fun a => implb (is_semantic_fn_attr a) (existsb (fn_attr_eqb a) src_fattrs)) tgt_fattrs &&
+  implb (existsb fn_attr_is_noreturn tgt_fattrs)
+        (existsb fn_attr_is_noreturn src_fattrs) &&
+  implb (existsb fn_attr_is_nounwind tgt_fattrs)
+        (existsb fn_attr_is_nounwind src_fattrs) &&
+  implb (existsb fn_attr_is_nocreateundeforpoison tgt_fattrs)
+        (existsb fn_attr_is_nocreateundeforpoison src_fattrs).
+
+Lemma check_fn_attrs_contract_inv :
+  forall src_fattrs tgt_fattrs,
+    check_fn_attrs_contract src_fattrs tgt_fattrs = true ->
+    forallb (fun a => negb (is_unmodeled_fn_attr a)) src_fattrs = true /\
+    forallb (fun a => negb (is_unmodeled_fn_attr a)) tgt_fattrs = true /\
+    forallb (fun a => implb (is_semantic_fn_attr a) (existsb (fn_attr_eqb a) src_fattrs)) tgt_fattrs = true /\
+    (existsb fn_attr_is_noreturn tgt_fattrs = true ->
+     existsb fn_attr_is_noreturn src_fattrs = true) /\
+    (existsb fn_attr_is_nounwind tgt_fattrs = true ->
+     existsb fn_attr_is_nounwind src_fattrs = true) /\
+    (existsb fn_attr_is_nocreateundeforpoison tgt_fattrs = true ->
+     existsb fn_attr_is_nocreateundeforpoison src_fattrs = true).
+Proof.
+  intros src_fattrs tgt_fattrs H; unfold check_fn_attrs_contract in H.
+  rewrite !andb_true_iff in H.
+  destruct H as (((((Hu1 & Hu2) & Hsem) & Hnr) & Hnuw) & Hnc).
+  apply implb_true_iff in Hnr; apply implb_true_iff in Hnuw; apply implb_true_iff in Hnc.
+  repeat split; assumption.
+Qed.
 
 Definition decl_ann_supported {T : Set} (a : annotation T) : bool :=
   match a with
@@ -2610,6 +2908,7 @@ Definition decl_ann_supported {T : Set} (a : annotation T) : bool :=
   | ANN_volatile | ANN_atomic | ANN_syncscope _ | ANN_ordering _
   | ANN_fast_math_flag _ => false
   | ANN_ret_attribute pa => negb (is_unmodeled_param_attr pa)
+  | ANN_fun_attribute fa => negb (is_unmodeled_fn_attr fa)
   | _ => true
   end.
 
@@ -2625,8 +2924,12 @@ Definition check_prototype_contract (src_decl tgt_decl : declaration typ) : bool
       Nat.eqb (List.length t_pattrs) (List.length targs) &&
       cconv_eqb (anns_cconv (dc_annotations src_decl))
                 (anns_cconv (dc_annotations tgt_decl)) &&
-      param_attrs_refine_b s_rattrs t_rattrs &&
+      ret_attrs_refine_b s_rattrs t_rattrs &&
       forallb2 param_attrs_refine_b s_pattrs t_pattrs &&
+      check_fn_attrs_contract (dc_attrs src_decl) (dc_attrs tgt_decl) &&
+      check_fn_attrs_contract
+        (dc_attrs src_decl ++ ann_fun_attributes (dc_annotations src_decl))
+        (dc_attrs tgt_decl ++ ann_fun_attributes (dc_annotations tgt_decl)) &&
       forallb decl_ann_supported (dc_annotations src_decl) &&
       forallb decl_ann_supported (dc_annotations tgt_decl)
   | _, _ => false
@@ -2810,6 +3113,118 @@ Definition block_no_exceptions {T : Set} (b : block T) : bool :=
 Definition cfg_no_exceptions {T : Set} (G : CFG.cfg T) : bool :=
   forallb block_no_exceptions (blks G).
 
+(** *** 6.6b [F-39]: Reject Target-Invented FP-to-Integer [CONV_Bitcast] *)
+
+Fixpoint dtyp_contains_fp (dt : dtyp) {struct dt} : bool :=
+  let fix any_fp (xs : list dtyp) {struct xs} : bool :=
+      match xs with
+      | [] => false
+      | x :: r => dtyp_contains_fp x || any_fp r
+      end in
+  match dt with
+  | DTYPE_Base (DTYPE_FP _) => true
+  | DTYPE_Base _ => false
+  | DTYPE_Struct _ fs => any_fp fs
+  | DTYPE_Array _ _ u => dtyp_contains_fp u
+  end.
+
+Fixpoint dtyp_contains_int (dt : dtyp) {struct dt} : bool :=
+  let fix any_int (xs : list dtyp) {struct xs} : bool :=
+      match xs with
+      | [] => false
+      | x :: r => dtyp_contains_int x || any_int r
+      end in
+  match dt with
+  | DTYPE_Base (DTYPE_I _)
+  | DTYPE_Base DTYPE_Iptr
+  | DTYPE_Base (DTYPE_B _) => true
+  | DTYPE_Base _ => false
+  | DTYPE_Struct _ fs => any_int fs
+  | DTYPE_Array _ _ u => dtyp_contains_int u
+  end.
+
+Record bitcast_site : Set :=
+  mk_bitcast_site {
+    bcs_from : dtyp;
+    bcs_val : exp dtyp;
+    bcs_to : dtyp;
+  }.
+
+Fixpoint collect_exp_bitcasts (e : exp dtyp) {struct e} : list bitcast_site :=
+  let fix collect_texps (xs : list (dtyp * exp dtyp)) {struct xs} : list bitcast_site :=
+      match xs with
+      | [] => []
+      | (_, x) :: r => collect_exp_bitcasts x ++ collect_texps r
+      end in
+  match e with
+  | EXP_Ident _ | EXP_Integer _ | EXP_Float _ | EXP_Bool _
+  | EXP_Null | EXP_Zero_initializer | EXP_Undef | EXP_Poison
+  | EXP_Asm _ _ _ _ _ _ | EXP_BlockAddress _ _ | EXP_Metadata _ => []
+  | EXP_Cstring elts | EXP_Struct elts | EXP_Packed_struct elts
+  | EXP_Array elts | EXP_Vector elts => collect_texps elts
+  | OP_IBinop _ _ v1 v2 | OP_ICmp _ _ _ v1 v2
+  | OP_FBinop _ _ _ v1 v2 | OP_FCmp _ _ _ v1 v2 =>
+      collect_exp_bitcasts v1 ++ collect_exp_bitcasts v2
+  | OP_Conversion CONV_Bitcast tf v tt_ty =>
+      mk_bitcast_site tf v tt_ty :: collect_exp_bitcasts v
+  | OP_Fneg _ (_, v) | OP_Conversion _ _ v _
+  | OP_ExtractValue (_, v) _ | OP_Freeze (_, v) | EXP_Splat (_, v) =>
+      collect_exp_bitcasts v
+  | OP_GetElementPtr _ _ (_, pv) idxs =>
+      collect_exp_bitcasts pv ++ collect_texps idxs
+  | OP_ExtractElement (_, v1) (_, v2) | OP_InsertValue (_, v1) (_, v2) _ =>
+      collect_exp_bitcasts v1 ++ collect_exp_bitcasts v2
+  | OP_InsertElement (_, v1) (_, v2) (_, v3)
+  | OP_ShuffleVector (_, v1) (_, v2) (_, v3)
+  | OP_Select _ (_, v1) (_, v2) (_, v3) =>
+      collect_exp_bitcasts v1 ++ collect_exp_bitcasts v2 ++ collect_exp_bitcasts v3
+  end.
+
+Definition collect_instr_bitcasts (ins : instr dtyp) : list bitcast_site :=
+  match ins with
+  | INSTR_Op e => collect_exp_bitcasts e
+  | INSTR_Call (_, fn_e) args _ _ =>
+      collect_exp_bitcasts fn_e ++ flat_map (fun '((_, ae), _) => collect_exp_bitcasts ae) args
+  | INSTR_Load _ (_, pe) _ => collect_exp_bitcasts pe
+  | INSTR_Store (_, ve) (_, pe) _ => collect_exp_bitcasts ve ++ collect_exp_bitcasts pe
+  | INSTR_VAArg (_, ve) _ => collect_exp_bitcasts ve
+  | _ => []
+  end.
+
+Definition collect_term_bitcasts (tm : terminator dtyp) : list bitcast_site :=
+  match tm with
+  | TERM_Ret (_, e) | TERM_Br (_, e) _ _ | TERM_Switch (_, e) _ _
+  | TERM_IndirectBr (_, e) _ _ | TERM_Resume (_, e) => collect_exp_bitcasts e
+  | TERM_Invoke (_, fn_e) args _ _ _ _ =>
+      collect_exp_bitcasts fn_e ++ flat_map (fun '((_, ae), _) => collect_exp_bitcasts ae) args
+  | _ => []
+  end.
+
+Definition collect_block_bitcasts (b : block dtyp) : list bitcast_site :=
+  flat_map (fun '(_, Phi _ _ args, _) => flat_map (fun '(_, e) => collect_exp_bitcasts e) args)
+           (blk_phis b) ++
+  flat_map (fun '(_, ins, _) => collect_instr_bitcasts ins) (blk_code b) ++
+  let '(_, tm, _) := blk_term b in collect_term_bitcasts tm.
+
+Definition collect_cfg_bitcasts (G : CFG.cfg dtyp) : list bitcast_site :=
+  flat_map collect_block_bitcasts (blks G).
+
+Definition bitcast_site_eqb (b1 b2 : bitcast_site) : bool :=
+  dtyp_eqb (bcs_from b1) (bcs_from b2) &&
+  dtyp_eqb (bcs_to b1) (bcs_to b2) &&
+  simple_exp_dtyp_eqb (bcs_val b1) (bcs_val b2).
+
+Definition is_fp_to_int_bitcast (b : bitcast_site) : bool :=
+  dtyp_contains_fp (bcs_from b) && dtyp_contains_int (bcs_to b).
+
+Definition bitcast_site_justified_by (src_bcs : list bitcast_site) (tb : bitcast_site) : bool :=
+  negb (is_fp_to_int_bitcast tb) ||
+  existsb (bitcast_site_eqb tb) src_bcs.
+
+Definition cfg_no_invented_fp_int_bitcast (src_cfg tgt_cfg : CFG.cfg dtyp) : bool :=
+  let src_bcs := collect_cfg_bitcasts src_cfg in
+  forallb (bitcast_site_justified_by src_bcs) (collect_cfg_bitcasts tgt_cfg).
+
 (** *** 6.7 Combined Syntax Gate & [Qed.] Inversion Lemmas *)
 
 Definition check_validator_syntax_gates (src_cfg tgt_cfg : CFG.cfg dtyp) : bool :=
@@ -2824,7 +3239,8 @@ Definition check_validator_syntax_gates (src_cfg tgt_cfg : CFG.cfg dtyp) : bool 
   cfg_no_vaarg src_cfg &&
   cfg_no_vaarg tgt_cfg &&
   cfg_no_exceptions src_cfg &&
-  cfg_no_exceptions tgt_cfg.
+  cfg_no_exceptions tgt_cfg &&
+  cfg_no_invented_fp_int_bitcast src_cfg tgt_cfg.
 
 Theorem check_validator_syntax_gates_inv :
   forall src_cfg tgt_cfg,
@@ -2840,11 +3256,12 @@ Theorem check_validator_syntax_gates_inv :
     cfg_no_vaarg src_cfg = true /\
     cfg_no_vaarg tgt_cfg = true /\
     cfg_no_exceptions src_cfg = true /\
-    cfg_no_exceptions tgt_cfg = true.
+    cfg_no_exceptions tgt_cfg = true /\
+    cfg_no_invented_fp_int_bitcast src_cfg tgt_cfg = true.
 Proof.
   intros src_cfg tgt_cfg H; unfold check_validator_syntax_gates in H.
   rewrite !andb_true_iff in H.
-  destruct H as (((((((((((H1 & H2) & H3) & H4) & H5) & H6) & H7) & H8) & H9) & H10) & H11) & H12).
+  destruct H as ((((((((((((H1 & H2) & H3) & H4) & H5) & H6) & H7) & H8) & H9) & H10) & H11) & H12) & H13).
   repeat split; assumption.
 Qed.
 
@@ -2909,6 +3326,23 @@ Proof.
   exists sg; repeat split; assumption.
 Qed.
 
+Lemma cfg_no_invented_fp_int_bitcast_inv :
+  forall src_cfg tgt_cfg tb,
+    cfg_no_invented_fp_int_bitcast src_cfg tgt_cfg = true ->
+    In tb (collect_cfg_bitcasts tgt_cfg) ->
+    is_fp_to_int_bitcast tb = false \/
+    exists sb,
+      In sb (collect_cfg_bitcasts src_cfg) /\
+      bitcast_site_eqb tb sb = true.
+Proof.
+  intros src_cfg tgt_cfg tb H Hin; unfold cfg_no_invented_fp_int_bitcast in H.
+  rewrite forallb_forall in H; specialize (H tb Hin); unfold bitcast_site_justified_by in H.
+  apply orb_true_iff in H as [Hnot | Hex].
+  - left; apply negb_true_iff in Hnot; exact Hnot.
+  - right; apply existsb_exists in Hex as [sb [Hsb Heq]].
+    exists sb; split; assumption.
+Qed.
+
 Lemma forallb2_typ_eqb_eq : forall xs ys,
   forallb2 typ_eqb xs ys = true -> xs = ys.
 Proof.
@@ -2924,12 +3358,17 @@ Theorem check_prototype_contract_inv :
     exists ret_ty arg_tys,
       dc_type src_decl = TYPE_Function ret_ty arg_tys false /\
       dc_type tgt_decl = TYPE_Function ret_ty arg_tys false /\
+      List.length (snd (dc_param_attrs src_decl)) = List.length arg_tys /\
+      List.length (snd (dc_param_attrs tgt_decl)) = List.length arg_tys /\
       cconv_eqb (anns_cconv (dc_annotations src_decl))
                 (anns_cconv (dc_annotations tgt_decl)) = true /\
+      ret_attrs_refine_b (fst (dc_param_attrs src_decl))
+                         (fst (dc_param_attrs tgt_decl)) = true /\
       param_attrs_refine_b (fst (dc_param_attrs src_decl))
                            (fst (dc_param_attrs tgt_decl)) = true /\
       forallb2 param_attrs_refine_b (snd (dc_param_attrs src_decl))
-                                    (snd (dc_param_attrs tgt_decl)) = true.
+                                    (snd (dc_param_attrs tgt_decl)) = true /\
+      check_fn_attrs_contract (dc_attrs src_decl) (dc_attrs tgt_decl) = true.
 Proof.
   intros src_decl tgt_decl H; unfold check_prototype_contract in H.
   apply andb_true_iff in H as [Hnm Hbody].
@@ -2943,8 +3382,12 @@ Proof.
   destruct (dc_param_attrs src_decl) as [sr sp] eqn:Hspa.
   destruct (dc_param_attrs tgt_decl) as [tr tp] eqn:Htpa.
   rewrite !andb_true_iff in Hbody.
-  destruct Hbody as ((((((((Hret & Hargs) & _) & _) & Hcc) & Hra) & Hpa) & _) & _).
+  destruct Hbody as
+    ((((((((((Hret & Hargs) & Hlens) & Hlent) & Hcc) & Hra) & Hpa) & Hfattrs) & _) & _) & _).
   apply typ_eqb_eq in Hret; apply forallb2_typ_eqb_eq in Hargs; subst tret targs.
+  apply Nat.eqb_eq in Hlens; apply Nat.eqb_eq in Hlent.
+  pose proof Hra as Hra_copy; unfold ret_attrs_refine_b in Hra_copy.
+  apply andb_true_iff in Hra_copy as [Hra_param _].
   split; [exact Hnm |].
   exists sret, sargs; cbn; repeat split; assumption.
 Qed.

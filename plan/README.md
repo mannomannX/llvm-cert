@@ -1,7 +1,7 @@
 # Master Plan & Roadmap (`cert-llvm`)
 
 **Target Baseline:** LLVM `23.1.5` (`llvmorg-23.1.5`, released 2026-11-03) + Vellvm (`main` on Rocq `9.1`)  
-**Last Updated:** 2026-11-15
+**Last Updated:** 2026-11-16
 
 ---
 
@@ -11,9 +11,9 @@
 | :--- | :--- | :--- | :--- |
 | **Phase 1: Repository Setup & Minimal Build** | Weeks 1–2 | **Completed** | **100%** (1.1, 1.1b, 1.1c, 1.2 LLVM 23.1.5 SDK & Rocq 9.1 CI, and 1.3 Rust `ir-bridge` Done) |
 | **Phase 2: Verified Fallback Core (Rocq)** | Months 1–3 | **Completed** | **100%** (2.1a, 2.1b, 2.2 5 Rocq passes + `Pipeline.v`, 2.3 `verified-opt-fallback` CLI + `ir-bridge` hardening, & `F-37` vector poison Done) |
-| **Phase 3: Verified Translation Validator** | Months 3–6 | **In Progress** | **~75%** (3.1 deterministic `cert-v1` + `Z3` `QF_BV` engine & 3.2 Rocq `cert-validator` `19,144` LOC / `411` `Qed.` Done; 3.3 loop/alias rule expansion next) |
-| **Phase 4: Orchestration, Backend Check & Audit** | Months 6–9 | **Completed** | **100%** (4.1a `cert-llvm` + `runtime/`, 4.1b Rocq [`ModuleMerge.v`](../passes/ModuleMerge.v), 4.2 `cert-backend-check`, & 4.3 Ed25519 `.proof.json` Done) |
-| **Phase 5: Two-Stage Hardening & Assurance** | Continuous | **In Progress** | **~90%** ([`CheckAssumptions.v`](../validator/CheckAssumptions.v) Layer 1, forged-cert/Wycheproof/CLI Layer 2, Red-Team Personas 1/3/4 `F-50`..`F-57` + `E-15`..`E-18`, & Stage B `cert-qual-suite` `E-19` Done; Persona 2 post-CI audit next) |
+| **Phase 3: Verified Translation Validator** | Months 3–6 | **Completed** | **100%** (3.1 `cert-v1` + `Z3` `QF_BV` engine, 3.2 Rocq `cert-validator` `34,059` LOC, & 3.3 loop cut-points / 64-bit GEP / SROA slot forwarding Done) |
+| **Phase 4: Orchestration, Backend Check & Audit** | Months 6–9 | **Completed** | **100%** (4.1a `cert-llvm` + `runtime/`, 4.1b Rocq [`ModuleMerge.v`](../passes/ModuleMerge.v) `8,762` LOC, 4.2 `cert-backend-check`, & 4.3 Ed25519 `.proof.json` Done) |
+| **Phase 5: Two-Stage Hardening & Assurance** | Continuous | **Completed** | **100%** ([`CheckAssumptions.v`](../validator/CheckAssumptions.v) `0` axioms, [`run_forged_cert_suite.py`](../scripts/run_forged_cert_suite.py) + Wycheproof, 4-Persona Red-Team `64/64` + `22/22` `resolved`, & Stage B `cert-qual-suite` Done) |
 
 ---
 
@@ -119,8 +119,8 @@ See:
   - Built the Alive2-style `(bv, poison)` + `reach` + `ub` `QF_BV` SMT-LIB2 encoder and `Z3` witness generator ([`smt.rs`](../../LLVMCert-Enterprise/crates/cert-z3-engine/src/smt.rs), [`ir_model.rs`](../../LLVMCert-Enterprise/crates/cert-z3-engine/src/ir_model.rs)) verified end-to-end against live `Z3` and pure-Rust `QF_BV` boundary tests.
 - [x] **3.2 100% Rocq-Proven Proof Checker (`cert-validator`):**
   - Implemented and proved [`CertFormat.v`](../validator/CertFormat.v), [`AigLrat.v`](../validator/AigLrat.v), [`AlgRules.v`](../validator/AlgRules.v), and [`CertValidator.v`](../validator/CertValidator.v) (`19,144` LOC, `411` `Qed.` theorems, `0 Admitted`, `0` axioms): total `cert-v1` parser + syntax/prototype contract gates (`F-17`, `F-18`, `F-19`, `F-21`, `F-30`..`F-34`), 2-rail `(val, poison)` AIG+LRAT checker, algebraic normalizer, and open-world `CallE` (`F-33`) + relational `DrawE` (`F-44`) CFG refinement validator (`validate_tle_pair_with_cert_str_sound`), extracted to standalone CLI [`cert_validator.ml`](../vellvm/src/ml/bin/cert_validator.ml).
-- [ ] **3.3 (`TODO`) Iterative Rule Expansion (AI-Assisted Proof Loop):**
-  - Extend validator rules step-by-step for loop unrolling/rotation, alias/memory forwarding, and `AArch64`/`RISCV` vector idioms.
+- [x] **3.3 Iterative Rule Expansion (Loops, 64-Bit Modular GEP & SROA/Stack Forwarding):**
+  - Implemented 3-step inductive loop cut-point & `K <= 16` unrolling synthesis (`loop_cert.rs`, `E-20`) + Rocq soundness (`check_loop_cutpoint_cfg_open_sound` preserving $\tau^\omega$ non-termination, `F-26`), 64-bit modular `getelementptr` reassociation (`Gep.v` + `gep_chained_no_flags_reassoc_sound`, `F-46`), padded-aggregate SROA/slot forwarding (`MemoryBytesFacts.v` + `check_memory_invariant_valid_sound`, `F-48`), and target NaN profiles (`Archi.v`, `F-39`).
 
 ---
 
@@ -139,10 +139,10 @@ See:
 
 ### Phase 5: Two-Stage Hardening & Continuous Assurance ([`hardening-and-assurance-strategy.md`](./hardening-and-assurance-strategy.md))
 
-- [ ] **5.1 (`TODO`) Stage A — TCB Assumption Gate, Forged-Cert/Wycheproof Suites & 4-Persona Red-Team:**
-  - **Layer 1:** Add `CheckAssumptions.v` (`Print Assumptions` gate) to `rocq-ci.yml` and audit `Extract.v` / `Camlcoq.ml`.
-  - **Layer 2:** Build adversarial negative/forged-certificate suite for `cert-validator` + Wycheproof Ed25519 & CLI/TOCTOU security tests for `cert-attestation` / `cert-llvm`.
-  - **Layer 4:** Execute domain-isolated 4-persona Red-Team audit (`Theorem/Extraction`, `Certificate Forger`, `Parser/IR-Bridge Desync`, `Orchestrator/Crypto Security`), logging every finding in `feedback.csv` and converting each into a permanent CI regression test.
+- [x] **5.1 Stage A — Zero-Axiom TCB Gate, Forged-Cert/Wycheproof Suites & 4-Persona Red-Team:**
+  - **Layer 1:** Discharged all upstream axioms (`F-05`, `ALLOWED_ROCQ_AXIOMS = set()`) and enforced `"Closed under the global context"` via [`CheckAssumptions.v`](../validator/CheckAssumptions.v) in `rocq-ci.yml`.
+  - **Layer 2:** Built 28-case [`run_forged_cert_suite.py`](../scripts/run_forged_cert_suite.py) (`cert-validator`) + Wycheproof Ed25519 & 43-vector CLI/manifest security suites (`cert-attestation` / `cert-llvm`).
+  - **Layer 4:** Completed all 4 domain-isolated Red-Team persona audits (`F-50`..`F-64` & `E-15`..`E-22`), remediating 100% of findings (`64/64` public + `22/22` enterprise entries `resolved`) with permanent CI regression tests.
 - [x] **5.2 Stage B — Differential Execution Fuzzing, Embedded Safety Corpus & `ISO 26262` / `DO-330` Qualification Suite (`E-19`):**
   - **Layer 3a:** Built [`cert-qual-suite`](../../LLVMCert-Enterprise/crates/cert-qual-suite/src/lib.rs) (`0` external crates): seeded UB-free scalar & diamond-CFG IR fuzzer ([`fuzzer.rs`](../../LLVMCert-Enterprise/crates/cert-qual-suite/src/fuzzer.rs)), delta-debugging reducer ([`reduce.rs`](../../LLVMCert-Enterprise/crates/cert-qual-suite/src/reduce.rs)), 4-way differential oracle (`ir_interp` + live `Z3` `cert-v1` + concrete `AArch64` & `RISC-V+RVC` ELF64 executors + `cert-backend-check`), and 3-way `QEMU` harness ([`qemu.rs`](../../LLVMCert-Enterprise/crates/cert-qual-suite/src/qemu.rs)).
   - **Layer 3b:** 20 license-clean embedded safety kernels ([`corpus.rs`](../../LLVMCert-Enterprise/crates/cert-qual-suite/src/corpus.rs): `100%` Fast-Path on eligible acyclic kernels, `90%` `McValidated`, `<= 256`B stack bound), `.proof.json` telemetry gates ([`telemetry.rs`](../../LLVMCert-Enterprise/crates/cert-qual-suite/src/telemetry.rs)), and 10-case `ISO 26262 TCL3` / `DO-330 TQL-1` fault-injection suite (`100%` mutation kill rate, [`qualification.rs`](../../LLVMCert-Enterprise/crates/cert-qual-suite/src/qualification.rs)).

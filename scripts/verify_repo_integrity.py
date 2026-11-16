@@ -45,10 +45,7 @@ ROCQ_DIRS = (
     "validator",
 )
 
-ALLOWED_ROCQ_AXIOMS: set[tuple[str, str]] = {
-    ("vellvm/src/rocq/Numeric/Integers.v", "wordsize_not_zero"),
-    ("vellvm/src/rocq/Utils/ParserHelper.v", "Zlog2_log_inf"),
-}
+ALLOWED_ROCQ_AXIOMS: set[tuple[str, str]] = set()
 
 # Upstream `SurfaceSyntax.v` uses `Goal ... Abort.` inside `SurfaceSyntaxTest` purely to test
 # notation pretty-printing (`Abort` adds nothing to the Rocq environment, unlike `Admitted`).

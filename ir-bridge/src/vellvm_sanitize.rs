@@ -414,6 +414,7 @@ fn check_line_soundness_hazards(
     // F-36 & F-51: Gate `sitofp` / `uitofp` from `> 32`-bit int to `float` and `> 64`-bit int to `double`.
     if is_exec_or_global_line {
         check_wide_int_to_fp_conversions(raw_code, type_aliases, reasons);
+        check_fp_to_int_bitcasts(raw_code, type_aliases, reasons);
     }
 
     // F-55: Call / invoke operand bundles (`call void @foo() [ "align"(ptr %p, i64 8) ]`),
@@ -1070,6 +1071,73 @@ fn check_wide_int_to_fp_conversions(
     }
 }
 
+fn check_fp_to_int_bitcasts(
+    raw_code: &str,
+    type_aliases: &BTreeMap<String, String>,
+    reasons: &mut Vec<String>,
+) {
+    let scrubbed = mask_quoted_strings(raw_code);
+    let bytes = scrubbed.as_bytes();
+    let op = "bitcast";
+    let mut search_from = 0_usize;
+    while let Some(sub) = scrubbed.get(search_from..) {
+        let Some(rel_pos) = sub.find(op) else {
+            break;
+        };
+        let abs_pos = search_from + rel_pos;
+        let end_pos = abs_pos + op.len();
+        let prev_ok = abs_pos == 0
+            || bytes.get(abs_pos - 1).is_some_and(|b| {
+                b.is_ascii_whitespace() || matches!(*b, b'(' | b'=' | b',' | b'[' | b'{')
+            });
+        let next_ok = bytes
+            .get(end_pos)
+            .is_some_and(|b| b.is_ascii_whitespace() || *b == b'(');
+        search_from = end_pos;
+        if !prev_ok || !next_ok {
+            continue;
+        }
+
+        let after_op = raw_code.get(end_pos..).unwrap_or("").trim_start();
+        let expr_body = if after_op.starts_with('(') {
+            let Some(close) = find_matching_delim(after_op, b'(', b')') else {
+                continue;
+            };
+            after_op.get(1..close).unwrap_or("").trim_start()
+        } else {
+            after_op
+        };
+
+        let Some((src_ty, after_src_ty)) = parse_balanced_llvm_type(expr_body) else {
+            continue;
+        };
+        let expanded_src = expand_llvm_type(src_ty, type_aliases);
+        let src_fp = extract_fp_element_name(&expanded_src);
+        let is_fp_src = matches!(
+            src_fp,
+            "float" | "double" | "half" | "bfloat" | "fp128" | "x86_fp80" | "ppc_fp128"
+        );
+        if !is_fp_src {
+            continue;
+        }
+
+        let Some(after_to) = find_top_level_to_keyword(after_src_ty) else {
+            continue;
+        };
+        let Some((dst_ty, _)) = parse_balanced_llvm_type(after_to) else {
+            continue;
+        };
+        let expanded_dst = expand_llvm_type(dst_ty, type_aliases);
+        if extract_int_element_bitwidth(&expanded_dst).is_some() {
+            reasons.push(format!(
+                "`bitcast` from floating-point `{}` to integer `{}` inspects target-dependent NaN payload bits and requires Safe-Path fallback (F-39)",
+                src_ty.trim(),
+                dst_ty.trim()
+            ));
+        }
+    }
+}
+
 fn extract_int_element_bitwidth(ty: &str) -> Option<u32> {
     let trimmed = ty.trim();
     let elem = if let Some(inner) = trimmed.strip_prefix('<').and_then(|s| s.strip_suffix('>')) {
@@ -1083,7 +1151,10 @@ fn extract_int_element_bitwidth(ty: &str) -> Option<u32> {
 fn extract_fp_element_name(ty: &str) -> &str {
     let trimmed = ty.trim();
     if let Some(inner) = trimmed.strip_prefix('<').and_then(|s| s.strip_suffix('>')) {
-        inner.rsplit('x').next().unwrap_or("").trim()
+        inner
+            .rsplit_once(" x ")
+            .map_or_else(|| inner.rsplit('x').next().unwrap_or(""), |(_, rhs)| rhs)
+            .trim()
     } else {
         trimmed
     }

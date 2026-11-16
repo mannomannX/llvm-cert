@@ -60,7 +60,19 @@ Fixpoint log_inf (p:positive) : Z :=
   | xI q => Z.succ (log_inf q)
   end.
 
-Axiom Zlog2_log_inf : forall p, Z.log2 (Zpos p) = log_inf p.
+Lemma pos_size_log_inf : forall q, Z.pos (Pos.size q) = Z.succ (log_inf q).
+Proof.
+  induction q as [q IH | q IH |]; cbn [Pos.size log_inf];
+    [rewrite Pos2Z.inj_succ, IH; reflexivity
+    | rewrite Pos2Z.inj_succ, IH; reflexivity
+    | reflexivity].
+Qed.
+
+Lemma Zlog2_log_inf : forall p, Z.log2 (Zpos p) = log_inf p.
+Proof.
+  destruct p as [q | q |]; cbn [Z.log2 log_inf];
+    [apply pos_size_log_inf | apply pos_size_log_inf | reflexivity].
+Qed.
 
 (** * normalization *)
 Definition normalize_float (prec emax : Z) (f : bfloat)

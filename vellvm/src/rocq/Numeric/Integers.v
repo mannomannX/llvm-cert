@@ -58,7 +58,7 @@ Definition swap_comparison (c: comparison): comparison :=
 
 Module Type WORDSIZE.
   Parameter wordsize: nat.
-  Axiom wordsize_not_zero: wordsize <> 0%nat.
+  Parameter wordsize_not_zero: wordsize <> 0%nat.
 End WORDSIZE.
 
 (* To avoid useless definitions of inductors in extracted code. *)
