@@ -560,7 +560,19 @@ Definition bit_int_to_bools (sz : positive) (x : @Integers.bit_int sz) : list bo
 Lemma bit_int_to_bools_length : forall sz x,
   List.length (bit_int_to_bools sz x) = Pos.to_nat sz.
 Proof.
-  intros sz x; unfold bit_int_to_bools; rewrite map_length, seq_length; reflexivity.
+  intros sz x; unfold bit_int_to_bools; rewrite length_map, length_seq; reflexivity.
+Qed.
+
+Lemma bit_int_to_bools_nth : forall sz (x : @Integers.bit_int sz) k,
+  (k < Pos.to_nat sz)%nat ->
+  List.nth k (bit_int_to_bools sz x) false = @Integers.testbit sz x (Z.of_nat k).
+Proof.
+  intros sz x k Hlt; unfold bit_int_to_bools.
+  set (f := fun j => @Integers.testbit sz x (Z.of_nat j)).
+  rewrite (nth_indep _ false (f 0%nat))
+    by (subst f; rewrite length_map, length_seq; exact Hlt).
+  rewrite map_nth, seq_nth by exact Hlt.
+  subst f; cbn [Nat.add]; reflexivity.
 Qed.
 
 Theorem bit_int_to_bools_repr : forall sz (x : @Integers.bit_int sz),
@@ -571,13 +583,10 @@ Proof.
   rewrite @Integers.testbit_repr by exact Hi.
   replace i with (Z.of_nat (Z.to_nat i)) at 1 by (rewrite Z2Nat.id; lia).
   rewrite bools_to_Z_testbit.
-  unfold bit_int_to_bools.
   assert (Hlt : (Z.to_nat i < Pos.to_nat sz)%nat)
     by (unfold Integers.zwordsize in Hi; lia).
-  rewrite (nth_indep _ false (@Integers.testbit sz x (Z.of_nat 0)))
-    by (rewrite map_length, seq_length; exact Hlt).
-  rewrite map_nth, seq_nth by exact Hlt.
-  cbn [Nat.add]; rewrite Z2Nat.id by lia; reflexivity.
+  rewrite bit_int_to_bools_nth by exact Hlt.
+  rewrite Z2Nat.id by lia; reflexivity.
 Qed.
 
 (** ** 4. Monotone Tseitin Gate Builder & Verified 2-Rail Encodings *)
@@ -3228,13 +3237,10 @@ Lemma msb_of_sign_cond : forall sz (x : @Integers.bit_int sz),
   (if Numeric.Rocqlib.zlt (@Integers.unsigned sz x) (@Integers.half_modulus sz)
    then false else true).
 Proof.
-  intros sz x; unfold msb_of, bit_int_to_bools.
+  intros sz x; unfold msb_of.
   pose proof (Pos2Nat.is_pos sz) as Hpos.
   assert (Hlt : (Pos.to_nat sz - 1 < Pos.to_nat sz)%nat) by lia.
-  rewrite (nth_indep _ false (@Integers.testbit sz x (Z.of_nat 0)))
-    by (rewrite map_length, seq_length; exact Hlt).
-  rewrite map_nth, seq_nth by exact Hlt.
-  cbn [Nat.add].
+  rewrite bit_int_to_bools_nth by exact Hlt.
   replace (Z.of_nat (Pos.to_nat sz - 1)) with (@Integers.zwordsize sz - 1)%Z
     by (unfold Integers.zwordsize; rewrite Nat2Z.inj_sub by lia, positive_nat_Z; reflexivity).
   apply @Integers.sign_bit_of_unsigned.

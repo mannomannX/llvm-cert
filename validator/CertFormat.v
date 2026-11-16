@@ -143,10 +143,10 @@ Section CertExprInd.
   Hypothesis H_BvConst : forall w v, P (CE_BvConst w v).
   Hypothesis H_Poison : forall w, P (CE_Poison w).
   Hypothesis H_Var : forall nm w, P (CE_Var nm w).
-  Hypothesis H_BinOp : forall op w fl l r, P l -> P r -> P (CE_BinOp op w fl l r).
-  Hypothesis H_ICmp : forall pr ss w l r, P l -> P r -> P (CE_ICmp pr ss w l r).
+  Hypothesis H_BinOp : forall op w fl l, P l -> forall r, P r -> P (CE_BinOp op w fl l r).
+  Hypothesis H_ICmp : forall pr ss w l, P l -> forall r, P r -> P (CE_ICmp pr ss w l r).
   Hypothesis H_Cast : forall k fw tw fl o, P o -> P (CE_Cast k fw tw fl o).
-  Hypothesis H_Select : forall w c t f, P c -> P t -> P f -> P (CE_Select w c t f).
+  Hypothesis H_Select : forall w c, P c -> forall t, P t -> forall f, P f -> P (CE_Select w c t f).
   Hypothesis H_Freeze : forall w o, P o -> P (CE_Freeze w o).
   Hypothesis H_Let : forall bs body,
       Forall (fun p => P (snd p)) bs -> P body -> P (CE_Let bs body).
@@ -157,15 +157,15 @@ Section CertExprInd.
     | CE_Poison w => H_Poison w
     | CE_Var nm w => H_Var nm w
     | CE_BinOp op w fl l r =>
-        H_BinOp op w fl (cert_expr_ind_nested l) (cert_expr_ind_nested r)
+        H_BinOp op w fl l (cert_expr_ind_nested l) r (cert_expr_ind_nested r)
     | CE_ICmp pr ss w l r =>
-        H_ICmp pr ss w (cert_expr_ind_nested l) (cert_expr_ind_nested r)
+        H_ICmp pr ss w l (cert_expr_ind_nested l) r (cert_expr_ind_nested r)
     | CE_Cast k fw tw fl o =>
-        H_Cast k fw tw fl (cert_expr_ind_nested o)
+        H_Cast k fw tw fl o (cert_expr_ind_nested o)
     | CE_Select w c t f =>
-        H_Select w (cert_expr_ind_nested c) (cert_expr_ind_nested t) (cert_expr_ind_nested f)
+        H_Select w c (cert_expr_ind_nested c) t (cert_expr_ind_nested t) f (cert_expr_ind_nested f)
     | CE_Freeze w o =>
-        H_Freeze w (cert_expr_ind_nested o)
+        H_Freeze w o (cert_expr_ind_nested o)
     | CE_Let bs body =>
         let fix bind_all (xs : list (string * cert_expr))
             : Forall (fun p => P (snd p)) xs :=

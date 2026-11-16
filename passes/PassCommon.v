@@ -63,6 +63,7 @@ From Vellvm Require Import
   Semantics.Libraries.
 
 Set Default Goal Selector "!".
+Unset Implicit Arguments.
 
 (** * 1. Extraction-Clean Equality Deciders & List Membership *)
 

@@ -59,6 +59,7 @@ From CertPasses Require Import
   PassCommon.
 
 Set Default Goal Selector "!".
+Unset Implicit Arguments.
 Local Open Scope list_scope.
 
 (** * 1. Duplicate-Free Block-ID Validation & [find_block] Helpers *)

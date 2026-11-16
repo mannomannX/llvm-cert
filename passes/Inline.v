@@ -64,6 +64,7 @@ From Vellvm Require Import
 From CertPasses Require Import PassCommon.
 
 Set Default Goal Selector "!".
+Unset Implicit Arguments.
 
 (** * 1. Computable ID Sets, Deduplication, and Renaming Maps *)
 

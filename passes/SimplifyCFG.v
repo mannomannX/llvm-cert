@@ -59,6 +59,7 @@ From Vellvm Require Import
 From CertPasses Require Import PassCommon.
 
 Set Default Goal Selector "!".
+Unset Implicit Arguments.
 
 (** * 1. Combinatorial, Lookup, Block-Address, & [refine_cfg] Helpers *)
 

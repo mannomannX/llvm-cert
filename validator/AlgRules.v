@@ -9126,10 +9126,7 @@ Proof.
                      List.nth k (bit_int_to_bools w iv) false = false).
            { cbn [Nat.add]; intros k Hkz.
              destruct (Nat.lt_ge_cases k (Pos.to_nat w)) as [Hlt | Hge].
-             - unfold bit_int_to_bools.
-               rewrite (nth_indep _ false (@Integers.testbit w iv (Z.of_nat 0)))
-                 by (rewrite map_length, seq_length; exact Hlt).
-               rewrite map_nth, seq_nth by exact Hlt; cbn [Nat.add].
+             - rewrite bit_int_to_bools_nth by exact Hlt.
                unfold Integers.testbit.
                exact (ctx_ptr_low_bit_zero_sound penv foracle ctx nm w k iv Hkz Hctx Hpm).
              - apply nth_overflow; rewrite bit_int_to_bools_length; exact Hge. }

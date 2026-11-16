@@ -96,6 +96,7 @@ From CertPasses Require Import
   McfgExport.
 
 Set Default Goal Selector "!".
+Unset Implicit Arguments.
 #[local] Open Scope list_scope.
 #[local] Existing Instance MemoryModelStateV.
 #[local] Existing Instance MemoryModelPrimitivesV.
@@ -2679,7 +2680,7 @@ Theorem check_module_merge_I2F_model_refine
 Proof.
   split.
   - exact (check_module_merge_refines_IPZ m_orig m_merged verified_slices Hchk Hslices).
-  - exact (I2F_toplevel.model_refine ret_typ entry args1 args2 m_merged s1 s2 Hargs Hs).
+  - exact (@I2F_toplevel.model_refine ret_typ entry args1 args2 m_merged s1 s2 Hargs Hs).
 Qed.
 
 Corollary validate_module_merge_I2F_model_refine
@@ -3800,7 +3801,7 @@ Proof.
   split.
   - exact (@check_module_merge_universal_refines IPZ IPZTheory m_orig m_merged
              verified_slices Hchk Hslices).
-  - exact (I2F_toplevel.model_refine ret_typ entry args1 args2 m_merged s1 s2 Hargs Hs).
+  - exact (@I2F_toplevel.model_refine ret_typ entry args1 args2 m_merged s1 s2 Hargs Hs).
 Qed.
 
 
@@ -4233,7 +4234,7 @@ Section StripFileInfoRefinement.
       assert (Hfb :
         option_map strip_file_info_block (find_block (blks c1) src) =
         option_map strip_file_info_block (find_block (blks c2) src)).
-      { rewrite <- !(ScopeTheory.find_block_map strip_file_info_block _ src)
+      { rewrite <- !(@ScopeTheory.find_block_map _ strip_file_info_block _ src)
           by (intros ?; reflexivity).
         rewrite Hbks; reflexivity. }
       destruct (find_block (blks c1) src) as [bk1 |],
@@ -4350,7 +4351,7 @@ Proof.
   split.
   - exact (@validate_module_merge_parsed_refines IPZ IPZTheory m_orig m_merged
              verified_slices Hval Hslices).
-  - exact (I2F_toplevel.model_refine ret_typ entry args1 args2 m_merged s1 s2 Hargs Hs).
+  - exact (@I2F_toplevel.model_refine ret_typ entry args1 args2 m_merged s1 s2 Hargs Hs).
 Qed.
 
 (** * 7. Surface-Syntax [toplevel_entities] CLI Entrypoint *)
@@ -8098,7 +8099,7 @@ Section NormVoidRefinement.
       assert (Hfb :
         option_map mm_norm_void_block (find_block (blks c1) src) =
         option_map mm_norm_void_block (find_block (blks c2) src)).
-      { rewrite <- !(ScopeTheory.find_block_map mm_norm_void_block _ src)
+      { rewrite <- !(@ScopeTheory.find_block_map _ mm_norm_void_block _ src)
           by (intros ?; reflexivity).
         rewrite Hbks; reflexivity. }
       destruct (find_block (blks c1) src) as [bk1 |],

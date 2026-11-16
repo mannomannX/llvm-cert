@@ -44,6 +44,7 @@ From CertPasses Require Import
 
 #[local] Existing Instance MemoryModelStateV.
 #[local] Existing Instance MemoryModelPrimitivesV.
+Unset Implicit Arguments.
 
 (** Canonical multi-stage optimization pipeline over [CFG.mcfg dtyp]:
     1. [mem2reg_mcfg]     : Promote caller/callee stack slots to SSA registers
@@ -130,5 +131,5 @@ Proof.
   intros M ret_typ entry args1 args2 s1 s2 Hargs Hs.
   split.
   - exact (optimize_mcfg_refines_IPZ M).
-  - exact (I2F_toplevel.model_refine ret_typ entry args1 args2 (optimize_mcfg M) s1 s2 Hargs Hs).
+  - exact (@I2F_toplevel.model_refine ret_typ entry args1 args2 (optimize_mcfg M) s1 s2 Hargs Hs).
 Qed.

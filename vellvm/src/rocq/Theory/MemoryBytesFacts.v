@@ -4293,9 +4293,9 @@ Section MemoryByteFacts.
             with ((sfe_step pad offset dt - offset) + (foff - sfe_step pad offset dt))%N
             by lia.
           rewrite <- drop_drop.
-          replace (p1 ++ rev wf ++ p2 ++ rev wr ++ extra)
+          replace ((p1 ++ rev wf ++ p2 ++ rev wr) ++ extra)
             with ((p1 ++ rev wf ++ p2) ++ (rev wr ++ extra))
-            by (rewrite !app_assoc; reflexivity).
+            by (rewrite <- !app_assoc; reflexivity).
           rewrite drop_app_exact by exact Hstep_len.
           exact Hrd2.
   Qed.
