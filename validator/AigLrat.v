@@ -170,7 +170,7 @@ Lemma trail_sound_set : forall assign trail v b,
 Proof.
   intros assign trail v b Htr Hv u bu Hget.
   destruct (Pos.eq_dec u v) as [Heq | Hneq].
-  - subst u; rewrite pt_get_set_same in Hget; inversion Hget; subst; exact Hv.
+  - subst u; rewrite pt_get_set_same in Hget; inversion Hget; subst bu; exact Hv.
   - rewrite pt_get_set_other in Hget by exact Hneq; exact (Htr u bu Hget).
 Qed.
 

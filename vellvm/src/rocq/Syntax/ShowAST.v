@@ -1108,7 +1108,7 @@ bundle operand ::= SSA value | metadata string
 tag ::= string constant
  *)
 
-  Definition show_syncscope str : string := "syncscope(" ++ show str ++ ")".
+  Definition show_syncscope (str : string) : string := "syncscope(" ++ show str ++ ")".
 
   Definition ann_str {A B} (l : list A) (k:A -> option B) (to_str : B -> string) : string :=
   match find_option k l with
