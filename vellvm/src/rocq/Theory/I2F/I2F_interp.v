@@ -673,8 +673,8 @@ Lemma I2F_defs_assoc :
     (defs_assoc (Pa := PFin) (E := @MCFGEtop PFin)).
 Proof.
   unfold defs_assoc.
-  generalize (@defined_intrinsics PInf (@MCFGEtop PInf))
-             (@defined_intrinsics PFin (@MCFGEtop PFin))
+  generalize (defined_intrinsics (Pa := PInf) (E := @MCFGEtop PInf))
+             (defined_intrinsics (Pa := PFin) (E := @MCFGEtop PFin))
              I2F_defined_intrinsics.
   intros l1 l2 H; induction H as [| [d1 f1] [d2 f2] l1' l2' [Hd Hf] H' IH]; cbn in *; [constructor |].
   subst d2.

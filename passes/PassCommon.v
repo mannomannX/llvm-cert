@@ -231,7 +231,7 @@ Definition mk_copy_exp {T : Set} (ty_i1 : T) (t : T) (e : exp T) : exp T :=
 Lemma denote_mk_copy_exp {Pa : Params} (top : option dtyp) (ty_i1 t : dtyp) (e : exp dtyp) :
   denote_exp top (mk_copy_exp ty_i1 t e) ≅ denote_exp (Some t) e.
 Proof.
-  cbn [denote_exp mk_copy_exp Monads.bind Monads.ret Monad_itree].
+  cbn [denote_exp mk_copy_exp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
   rewrite Eqit.bind_ret_l.
   rewrite <- (Eqit.bind_ret_r (denote_exp (Some t) e)) at 2.
   eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
@@ -239,7 +239,7 @@ Proof.
   rewrite Eqit.bind_ret_l.
   cbn [eval_select eval_select_base_dvalue].
   replace (@Integers.unsigned 1 VellvmIntegers.one =? 1)%Z with true by reflexivity.
-  cbn [EOU_to_itree EOU_monad Monads.ret Monad_itree].
+  cbn [EOU_to_itree EOU_monad ExtLib.Structures.Monad.ret Monad_itree].
   reflexivity.
 Qed.
 
@@ -2477,7 +2477,7 @@ Section ModelSemantics.
     (f : X -> @memM (@ParamsV IP IPT) _ Y)
     (Hm : memM_all_ret P m)
     (Hf : forall x, P x -> memM_all_ret Q (f x)) :
-    memM_all_ret Q (Monads.bind m f).
+    memM_all_ret Q (ExtLib.Structures.Monad.bind m f).
   Proof using.
     induction m as [x | s | s | s | k IH | σ' k IH | c k IH]; cbn in *;
       [apply Hf, Hm | exact I | exact I | exact I
@@ -3810,7 +3810,7 @@ Section ModelSemantics.
     fun T call_ev =>
       match call_ev with
       | Call dt cc fv args =>
-          @Monads.bind (@CFGtop (@ParamsV IP IPT)) _ _ _
+          @ExtLib.Structures.Monad.bind (@CFGtop (@ParamsV IP IPT)) _ _ _
             (EOU_to_itree (check_callee fv))
             (fun _ =>
                match lookup_defn fv fundefs with
@@ -3846,7 +3846,7 @@ Section ModelSemantics.
         stk env1 env2 (mrec_ctx ctx1 X c1) (mrec_ctx ctx2 X c2).
   Proof using.
     intros stk env1 env2 X [dt1 cc1 fv1 fas1] [dt2 cc2 fv2 fas2] (<- & <- & <- & <-).
-    unfold mrec_ctx; cbn [Monads.bind Monad_itree].
+    unfold mrec_ctx; cbn [ExtLib.Structures.Monad.bind Monad_itree].
     eapply gen_stack_sim_bind;
       [apply cfg_stack_sim_EOU | intros ? ? ? [] _ (-> & -> & -> & <-)].
     assert (Hext :
@@ -4440,7 +4440,7 @@ Section ModelSemantics.
   Proof using.
     destruct s as [m [[sf fstk] g]].
     unfold fused_local_prov, on_ls_prov, handle_local_stack, handle_local_debug,
-           handle_local, update_locals_ref; cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+           handle_local, update_locals_ref; cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
     rewrite Hlk, !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l.
     destruct sf; cbn [upd_local_sf stack_vars stack_exc stack_loc]; reflexivity.
   Qed.
@@ -4454,7 +4454,7 @@ Section ModelSemantics.
     destruct s as [m [[sf fstk] g]].
     unfold fused_local_prov, on_ls_prov, handle_local_stack, handle_local_debug,
            handle_local, update_locals_ref, raise, trigger_cast, ITree.trigger;
-      cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+      cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
     rewrite Hlk, !Eqit.bind_vis.
     unfold lift_bot_prov; rewrite unfold_translate; cbn [observe subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
     rewrite Eqit.bind_vis.
@@ -4467,7 +4467,7 @@ Section ModelSemantics.
       Ret ((m, ((upd_local_sf sf (Maps.add x v sf.(stack_vars)), fstk), g)), tt).
   Proof using.
     unfold fused_local_prov, on_ls_prov, handle_local_stack, handle_local_debug,
-           handle_local, update_locals_ref; cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+           handle_local, update_locals_ref; cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
     rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity.
   Qed.
 
@@ -4726,7 +4726,7 @@ Section ModelSemantics.
               destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]];
               destruct Hmatch as (<- & <- & Hsf & Hsfm).
             -- destruct Hstk as [<- [Hr | Hb]]; [| inversion Hb].
-               unfold fused_stack_prov, on_ls_prov, handle_stack; cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+               unfold fused_stack_prov, on_ls_prov, handle_stack; cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
                eapply refine_prov_obs_eq;
                  [symmetry; rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity
                  | symmetry; rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity |].
@@ -4738,7 +4738,7 @@ Section ModelSemantics.
             -- destruct stk as [[p1 p2] rest |].
                ++ destruct Hstk as [Hr | Hb]; [| inversion Hb].
                   inversion Hsfm as [| ? ? sf1' sf2' ? fstk1' fstk2' Hsf' Hsfm']; subst.
-                  unfold fused_stack_prov, on_ls_prov, handle_stack; cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+                  unfold fused_stack_prov, on_ls_prov, handle_stack; cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
                   eapply refine_prov_obs_eq;
                     [symmetry; rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity
                     | symmetry; rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity |].
@@ -4747,7 +4747,7 @@ Section ModelSemantics.
                   repeat split; try exact Hsf'; try exact Hsfm'; reflexivity.
                ++ inversion Hsfm; subst.
                   unfold fused_stack_prov, on_ls_prov, handle_stack, raise, trigger_cast, ITree.trigger, lift_bot_prov;
-                    cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+                    cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
                   pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind, !unfold_translate; cbn.
                   right; right; split; [exact I | intros [] [] _]. }
     set (r_both := fun U0 (a1 : itree ProvBotE (FusedS * R1)) (a2 : itree ProvBotE (FusedS * R2)) =>

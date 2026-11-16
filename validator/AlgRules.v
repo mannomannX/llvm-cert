@@ -8380,10 +8380,10 @@ Proof.
       exists asg', (if nuw_p || nsw_p then DVALUE_Base DVALUE_Poison
                     else DVALUE_Base (@DVALUE_I Pa sz res)).
       split.
-      * cbn [Monad.bind Monad_EOU Monad.ret]; fold res nuw_p.
+      * cbn [ExtLib.Structures.Monad.bind EOU_monad ExtLib.Structures.Monad.ret]; fold res nuw_p.
         destruct nuw_p; [reflexivity |].
         cbn [orb]; unfold nsw_p; destruct (cbf_nsw fl); [| reflexivity].
-        cbn [andb Monad.bind Monad_EOU];
+        cbn [andb ExtLib.Structures.Monad.bind EOU_monad];
           destruct (negb _); reflexivity.
       * split; [exact Hs | split; [exact Hwf_out |
         exact (dvalue_poison_or_int_rail sz asg' out (nuw_p || nsw_p) res Hpsn

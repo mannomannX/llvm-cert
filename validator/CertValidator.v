@@ -12618,7 +12618,7 @@ Lemma denote_code_varargs_eq {Pa : Params} :
 Proof.
   induction c as [| [[iid ins] md] rest IH]; intros va1 va2 H; [reflexivity |].
   cbn in H; apply andb_true_iff in H as [Hi Hr].
-  unfold denote_code in *; cbn [loop_monad Monad.bind Monad_itree].
+  unfold denote_code in *; cbn [loop_monad ExtLib.Structures.Monad.bind Monad_itree].
   rewrite (denote_instr_varargs_eq (iid, ins, md) va1 va2 Hi), (IH va1 va2 Hr); reflexivity.
 Qed.
 

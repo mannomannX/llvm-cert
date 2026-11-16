@@ -2913,10 +2913,7 @@ Proof.
   intros src_fattrs tgt_fattrs H; unfold check_fn_attrs_contract in H.
   rewrite !andb_true_iff in H.
   destruct H as (((((Hu1 & Hu2) & Hsem) & Hnr) & Hnuw) & Hnc).
-  apply (proj1 (implb_true_iff _ _)) in Hnr.
-  apply (proj1 (implb_true_iff _ _)) in Hnuw.
-  apply (proj1 (implb_true_iff _ _)) in Hnc.
-  repeat split; assumption.
+  repeat split; try assumption; intros Hx; rewrite Hx in *; cbn in *; assumption.
 Qed.
 
 Definition decl_ann_supported {T : Set} (a : annotation T) : bool :=

@@ -909,9 +909,9 @@ Lemma bs_cnf_prefix_step :
 Proof.
   intros gate Hpref xs.
   induction xs as [| x rx IH]; intros [| y ry] st zs st' Hm; cbn in Hm.
-  - inversion Hm; subst; exists []; apply app_nil_r.
-  - inversion Hm; subst; exists []; apply app_nil_r.
-  - inversion Hm; subst; exists []; apply app_nil_r.
+  - inversion Hm; subst; exists []; rewrite app_nil_r; reflexivity.
+  - inversion Hm; subst; exists []; rewrite app_nil_r; reflexivity.
+  - inversion Hm; subst; exists []; rewrite app_nil_r; reflexivity.
   - destruct (gate x y st) as [z st1] eqn:Hg.
     destruct (map2_emit gate rx ry st1) as [zr st2] eqn:Hmr.
     inversion Hm; subst; clear Hm.
@@ -1140,8 +1140,8 @@ Lemma emit_or_list_pref : forall ls st out st',
   emit_or_list ls st = (out, st') -> exists d, bs_cnf st' = bs_cnf st ++ d.
 Proof.
   induction ls as [| x [| y r] IH]; intros st out st' H; cbn in H.
-  - inversion H; subst; exists []; apply app_nil_r.
-  - inversion H; subst; exists []; apply app_nil_r.
+  - inversion H; subst; exists []; rewrite app_nil_r; reflexivity.
+  - inversion H; subst; exists []; rewrite app_nil_r; reflexivity.
   - destruct (emit_or_list (y :: r) st) as [sub st1] eqn:Hs.
     destruct (IH st sub st1 Hs) as [d1 Hd1].
     destruct (emit_or2_pref x sub st1 out st' H) as [d2 Hd2].
@@ -1221,9 +1221,9 @@ Lemma mux_bits_list_pref : forall sel ts fs st ms st',
 Proof.
   intros sel ts.
   induction ts as [| t rt IH]; intros [| f rf] st ms st' H; cbn in H.
-  - inversion H; subst; exists []; apply app_nil_r.
-  - inversion H; subst; exists []; apply app_nil_r.
-  - inversion H; subst; exists []; apply app_nil_r.
+  - inversion H; subst; exists []; rewrite app_nil_r; reflexivity.
+  - inversion H; subst; exists []; rewrite app_nil_r; reflexivity.
+  - inversion H; subst; exists []; rewrite app_nil_r; reflexivity.
   - destruct (emit_mux2 sel t f st) as [m st1] eqn:Hm.
     destruct (mux_bits_list sel rt rf st1) as [mr st2] eqn:Hmr.
     inversion H; subst; clear H.

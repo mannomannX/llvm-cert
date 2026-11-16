@@ -31,7 +31,8 @@ From ITree Require Import
 
 From ExtLib Require Import
   Structures.Maps
-  Structures.Monads.
+  Structures.Monads
+  Data.Monads.OptionMonad.
 
 From Vellvm Require Import
   Numeric
@@ -1822,7 +1823,7 @@ Section ConstEvalSound.
            equ add add_carry add_overflow sub sub_borrow sub_overflow
            mul divu divs modu mods shl shr shru negative and or xor
            bitwidth zero one min_signed max_signed unsigned signed
-           option_pred from_option fmap Functor_option Functor_Monad EOU_monad Monads.bind Monads.ret tdb ToDvalue_Int
+           option_pred from_option fmap Functor_option Functor_Monad EOU_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret tdb ToDvalue_Int
            dtyp_base_eqb dtyp_base_eq_dec negb].
     - destruct (orb _ _); [discriminate | intros H; inversion H; reflexivity].
     - destruct (orb _ _); [discriminate | intros H; inversion H; reflexivity].
@@ -1884,7 +1885,7 @@ Section ConstEvalSound.
     rewrite sccp_pos_eq_dec_refl; cbn [eq_rect].
     destruct cmp_op;
       cbn [eval_int_icmp mcmp mcmpu msamesign mdtyp_of_int VIntVMemInt VInt_Bounded
-           cmp cmpu dtyp_base_eq_dec Monads.bind Monads.ret EOU_monad fmap Functor_Monad];
+           cmp cmpu dtyp_base_eq_dec ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad fmap Functor_Monad];
       change (samesign_f && negb (@samesign (@bit_int sz2) (VInt_Bounded sz2) x y))%bool
         with (samesign_f && negb (@VellvmIntegers.samesign (@bit_int sz2) (VInt_Bounded sz2) x y))%bool;
       rewrite Hss; reflexivity.
@@ -2632,7 +2633,7 @@ Section SCCPSimulation.
       destruct b; try discriminate Hsafe.
       eexists;
         cbn [denote_exp' denote_exp denote_int_syntax_as_int coerce_integer_to_int
-             Monads.bind Monads.ret EOU_monad EOU_to_itree].
+             ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad EOU_to_itree].
       apply evals_local_to_withCall_ret.
     - destruct b; eexists; cbn [denote_exp' denote_exp]; apply evals_local_to_withCall_ret.
     - eexists; cbn [denote_exp' denote_exp]; apply evals_local_to_withCall_ret.
@@ -2666,7 +2667,7 @@ Section SCCPSimulation.
       destruct b; try discriminate H.
       inversion H; subst cv; clear H.
       cbn [denote_exp' denote_exp denote_int_syntax_as_int coerce_integer_to_int
-           VellvmIntegers.repr VInt_Bounded Monads.bind Monads.ret EOU_monad
+           VellvmIntegers.repr VInt_Bounded ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad
            EOU_to_itree const_to_dvalue].
       apply evals_local_to_withCall_ret.
     - (* EXP_Bool *)
@@ -2724,7 +2725,7 @@ Section SCCPSimulation.
         eapply evals_local_to_withCall_bind; [apply (IH1 (Some dt1) cv E1) |].
         eapply evals_local_to_withCall_bind; [exact Hv2 |].
         cbn [const_to_dvalue eval_select eval_select_base_dvalue].
-        rewrite Econd; cbn [Monads.ret EOU_monad EOU_to_itree]; apply evals_local_to_withCall_ret.
+        rewrite Econd; cbn [ExtLib.Structures.Monad.ret EOU_monad EOU_to_itree]; apply evals_local_to_withCall_ret.
       + assert (Hop1 : exists v1, evals_local_to env (denote_exp' (Some dt1) op1) v1).
         { destruct (eval_cert_exp cm defs (Some dt1) op1) as [c1 |] eqn:E1.
           - exists (@const_to_dvalue PaV c1); apply (IH1 (Some dt1) c1 E1).
@@ -2737,7 +2738,7 @@ Section SCCPSimulation.
         eapply evals_local_to_withCall_bind; [exact Hv1 |].
         eapply evals_local_to_withCall_bind; [apply (IH2 (Some dt2) cv E2) |].
         cbn [const_to_dvalue eval_select eval_select_base_dvalue].
-        rewrite Econd; cbn [Monads.ret EOU_monad EOU_to_itree]; apply evals_local_to_withCall_ret.
+        rewrite Econd; cbn [ExtLib.Structures.Monad.ret EOU_monad EOU_to_itree]; apply evals_local_to_withCall_ret.
     - (* EXP_Metadata *)
       intros md IHm top cv H; cbn [eval_cert_exp] in H.
       destruct md as [| | [dt ex] | | | |]; try discriminate H.
@@ -3715,9 +3716,9 @@ Section SCCPSimulation.
     - unfold f at 1 in H.
       destruct (@coerce_integer_to_int PaV (Some sz) (denote_int_syntax x))
         as [| | | s]; try discriminate H.
-      cbn [Monads.bind EOU_monad] in H.
+      cbn [ExtLib.Structures.Monad.bind EOU_monad] in H.
       destruct (map_monad f rest) as [| | | sws]; try discriminate H.
-      cbn [Monads.bind Monads.ret EOU_monad] in H.
+      cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad] in H.
       inversion H; subst switches; cbn [List.map snd].
       f_equal; apply IH; reflexivity.
   Qed.
@@ -3740,7 +3741,7 @@ Section SCCPSimulation.
             raise_ret bid ->
             In bid (default_br :: List.map snd dests)).
     destruct (map_monad f dests) as [| | | switches] eqn:Esw; try discriminate.
-    cbn [Monads.bind EOU_monad]; intros Hsel.
+    cbn [ExtLib.Structures.Monad.bind EOU_monad]; intros Hsel.
     rewrite <- (sccp_map_monad_switch_dests_snd dests switches Esw).
     apply sccp_select_switch_in, Hsel.
   Qed.

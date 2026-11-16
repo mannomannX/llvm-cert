@@ -2384,7 +2384,7 @@ Section CompositionalLinking.
     fun T call_ev =>
       match call_ev with
       | Call dt cc fv args =>
-          @Monads.bind (@CFGtop (@ParamsV IP IPT)) _ _ _
+          @ExtLib.Structures.Monad.bind (@CFGtop (@ParamsV IP IPT)) _ _ _
             (EOU_to_itree (check_callee fv))
             (fun _ =>
                match lookup_defn fv fundefs with
@@ -2452,7 +2452,7 @@ Section CompositionalLinking.
         (ctx1 := IntMaps.IP.of_list (defns1 ++ libs1))
         (ctx2 := IntMaps.IP.of_list (defns2 ++ libs2));
         [exact Hctx | reflexivity | reflexivity |].
-      unfold mm_mrec_ctx; cbn [Monads.bind Monad_itree].
+      unfold mm_mrec_ctx; cbn [ExtLib.Structures.Monad.bind Monad_itree].
       eapply gen_stack_sim_bind;
         [apply cfg_stack_sim_EOU | intros ? ? ? [] _ (-> & -> & -> & <-)].
       assert (Hext :
@@ -6243,7 +6243,7 @@ Section ValueDrawRefinement.
         stk env1 env2 (mm_mrec_ctx ctx1 X c1) (mm_mrec_ctx ctx2 X c2).
   Proof using.
     intros stk env1 env2 X [dt1 cc1 fv1 fas1] [dt2 cc2 fv2 fas2] (<- & <- & <- & <-).
-    unfold mm_mrec_ctx; cbn [Monads.bind Monad_itree].
+    unfold mm_mrec_ctx; cbn [ExtLib.Structures.Monad.bind Monad_itree].
     eapply vds_sim_bind;
       [apply vds_cfg_EOU | intros ? ? ? [] _ (-> & -> & -> & <-)].
     assert (Hext :
@@ -6284,7 +6284,7 @@ Section ValueDrawRefinement.
         (mm_mrec_ctx ctx2 _ (Call dt cc fv fas)).
   Proof using.
     intros stk env1 env2 dt cc fv fas.
-    unfold mm_mrec_ctx; cbn [Monads.bind Monad_itree].
+    unfold mm_mrec_ctx; cbn [ExtLib.Structures.Monad.bind Monad_itree].
     eapply vds_sim_bind;
       [apply vds_cfg_EOU | intros ? ? ? [] _ (-> & -> & -> & <-)].
     assert (Hext :
@@ -6953,14 +6953,14 @@ Section ValueDrawRefinement.
                  Ret ((mm1, (({| stack_vars := init_local_env bs1; stack_exc := None; stack_loc := ""%string |},
                               sf1 :: fstk1), gg1)), tt)).
                { unfold fused_stack_prov, on_ls_prov, handle_stack;
-                   cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+                   cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
                  rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity. }
                assert (Hps2 :
                  fused_stack_prov _ (StackPush bs2) (mm1, ((sf2, fstk2), gg1)) ≅
                  Ret ((mm1, (({| stack_vars := init_local_env bs2; stack_exc := None; stack_loc := ""%string |},
                               sf2 :: fstk2), gg1)), tt)).
                { unfold fused_stack_prov, on_ls_prov, handle_stack;
-                   cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+                   cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
                  rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity. }
                eapply refine_prov_draw_obs_eq;
                  [symmetry; rewrite (lift_prov_to_draw_eq _ _ Hps1), lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity
@@ -6977,13 +6977,13 @@ Section ValueDrawRefinement.
                     fused_stack_prov _ StackPop (mm1, ((sf1, sf1' :: fstk1'), gg1)) ≅
                     Ret ((mm1, ((sf1', fstk1'), gg1)), tt)).
                   { unfold fused_stack_prov, on_ls_prov, handle_stack;
-                      cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+                      cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
                     rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity. }
                   assert (Hpp2 :
                     fused_stack_prov _ StackPop (mm1, ((sf2, sf2' :: fstk2'), gg1)) ≅
                     Ret ((mm1, ((sf2', fstk2'), gg1)), tt)).
                   { unfold fused_stack_prov, on_ls_prov, handle_stack;
-                      cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+                      cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
                     rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity. }
                   eapply refine_prov_draw_obs_eq;
                     [symmetry; rewrite (lift_prov_to_draw_eq _ _ Hpp1), lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity
@@ -6994,7 +6994,7 @@ Section ValueDrawRefinement.
                ++ inversion Hsfm; subst.
                   unfold fused_stack_prov, on_ls_prov, handle_stack, raise, trigger_cast,
                          ITree.trigger, lift_bot_prov, lift_prov_to_draw;
-                    cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+                    cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
                   pstep; apply RPD_Step; unfold rpd_step_body;
                     rewrite !observe_bind, !unfold_translate; cbn.
                   right; right; split; [exact I | intros [] [] _]. }

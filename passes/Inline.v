@@ -2364,7 +2364,7 @@ Section InliningSemantics.
   Proof using.
     destruct s as [m [ls g]]; cbn [snd] in Hlk.
     unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, update_globals_ref.
-    cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+    cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
     rewrite Hlk, !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity.
   Qed.
 
@@ -2376,7 +2376,7 @@ Section InliningSemantics.
   Proof using.
     destruct s as [m [ls g]]; cbn [snd] in Hlk.
     unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, update_globals_ref.
-    cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+    cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
     rewrite Hlk.
     unfold raise, trigger_cast, ITree.trigger, lift_bot_prov.
     eexists _, _; rewrite !Eqit.bind_bind.
@@ -2390,7 +2390,7 @@ Section InliningSemantics.
     Ret ((m, (ls, Maps.add k v g)), tt).
   Proof using.
     unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, update_globals_ref.
-    cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+    cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
     rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity.
   Qed.
 
@@ -2400,7 +2400,7 @@ Section InliningSemantics.
     fun T call_ev =>
       match call_ev with
       | Call dt cc fv args =>
-          @Monads.bind (@CFGtop PaV) _ _ _ (EOU_to_itree (check_callee fv))
+          @ExtLib.Structures.Monad.bind (@CFGtop PaV) _ _ _ (EOU_to_itree (check_callee fv))
             (fun _ =>
                match lookup_defn fv fundefs with
                | Some f_den => f_den cc args
@@ -2485,7 +2485,7 @@ Section InliningSemantics.
     apply_attrs [] msg v ≅ Ret v.
   Proof using.
     unfold apply_attrs, assert_attrs_dereferenceable; rewrite apply_value_attrs_nil.
-    cbn [EOU_to_itree find_option Monads.bind Monads.ret Monad_itree].
+    cbn [EOU_to_itree find_option ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     rewrite !Eqit.bind_ret_l; reflexivity.
   Qed.
 
@@ -2497,12 +2497,12 @@ Section InliningSemantics.
     revert attrss Hnil; induction args as [| v vs IH]; intros attrss Hnil; cbn [apply_args_attrs].
     - reflexivity.
     - destruct attrss as [| a rest].
-      + cbn [Monads.bind Monads.ret Monad_itree].
+      + cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         rewrite apply_attrs_nil_eq, Eqit.bind_ret_l, (IH [] Logic.eq_refl), Eqit.bind_ret_l.
         reflexivity.
       + cbn [forallb] in Hnil; apply andb_prop in Hnil as [Ha Hrest].
         apply is_empty_list_spec in Ha; subst a.
-        cbn [Monads.bind Monads.ret Monad_itree].
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         rewrite apply_attrs_nil_eq, Eqit.bind_ret_l, (IH rest Hrest), Eqit.bind_ret_l.
         reflexivity.
   Qed.
@@ -2540,7 +2540,7 @@ Section InliningSemantics.
     check_call_return fattrs [] None loc args (inr v) ≅ Ret (inr v).
   Proof using.
     unfold check_call_return; rewrite (check_call_result_safe_inr fattrs loc args v Hsafe).
-    cbn [EOU_to_itree value_metadata_range Monads.bind Monads.ret Monad_itree].
+    cbn [EOU_to_itree value_metadata_range ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     rewrite Eqit.bind_ret_l, apply_attrs_nil_eq, Eqit.bind_ret_l; reflexivity.
   Qed.
 
@@ -2566,7 +2566,7 @@ Section InliningSemantics.
   Lemma denote_operand_bundles_nil_eq (loc : string) (f : exp dtyp) :
     @denote_operand_bundles PaV loc f [] ≅ Ret tt.
   Proof using.
-    unfold denote_operand_bundles; cbn [map_monad Monads.bind Monads.ret Monad_itree].
+    unfold denote_operand_bundles; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     rewrite Eqit.bind_ret_l; reflexivity.
   Qed.
 
@@ -2688,11 +2688,11 @@ Section InliningSemantics.
 
   Lemma memM_interp_prov_bind_eq {A B : Type}
     (m : @memM PaV _ A) (k : A -> @memM PaV _ B) (σ : state) :
-    memM_interp_prov (Monads.bind m k) σ ≅
+    memM_interp_prov (ExtLib.Structures.Monad.bind m k) σ ≅
     ITree.bind (memM_interp_prov m σ) (fun '(σ', x) => memM_interp_prov (k x) σ').
   Proof using.
     revert σ; induction m as [x | s | s | s | g IH | σ' g IH | c g IH]; intros σ;
-      cbn [Monads.bind memS_mon memS_bind memM_interp_prov].
+      cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind memM_interp_prov].
     - rewrite Eqit.bind_ret_l; reflexivity.
     - unfold raiseOOM, trigger_cast; rewrite Eqit.bind_bind.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
@@ -2710,7 +2710,7 @@ Section InliningSemantics.
   Qed.
 
   Lemma memM_rel_empty_ret {X : Type} (P : X -> Prop) (x : X) (Hx : P x) :
-    memM_rel_empty P (Monads.ret x) (Monads.ret x).
+    memM_rel_empty P (ExtLib.Structures.Monad.ret x) (ExtLib.Structures.Monad.ret x).
   Proof using.
     intros σ U; pstep; apply RP_Step; cbn.
     split; [reflexivity | split; [reflexivity | exact Hx]].
@@ -2721,7 +2721,7 @@ Section InliningSemantics.
     (f1 f2 : X -> @memM PaV _ Y)
     (Hm : memM_rel_empty P m1 m2)
     (Hf : forall x, P x -> memM_rel_empty Q (f1 x) (f2 x)) :
-    memM_rel_empty Q (Monads.bind m1 f1) (Monads.bind m2 f2).
+    memM_rel_empty Q (ExtLib.Structures.Monad.bind m1 f1) (ExtLib.Structures.Monad.bind m2 f2).
   Proof using.
     intros σ U.
     eapply refine_prov_obs_eq;
@@ -2764,7 +2764,7 @@ Section InliningSemantics.
   Proof using.
     intros σ U; cbn [read_byte MemoryModelPrimitivesV].
     unfold Read_byte, read_byte_raw, get;
-      cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov
+      cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov
            state_get_memory MemoryModelStateV push_empty_frame Memory_stack_memory].
     destruct (read_byte_raw_mem (Memory_stack_memory (state_memory_stack σ)) (ptr_to_int p))
       as [[b aid] |]; cbn.
@@ -2779,7 +2779,7 @@ Section InliningSemantics.
   Proof using.
     intros σ U; cbn [write_byte MemoryModelPrimitivesV].
     unfold Write_byte, read_byte_raw, set_byte_raw, get_mem, upd_mem, app_mem, get, put;
-      cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov
+      cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov
            state_get_memory MemoryModelStateV push_empty_frame Memory_stack_memory].
     destruct (read_byte_raw_mem (Memory_stack_memory (state_memory_stack σ)) (ptr_to_int p))
       as [[b aid] |]; cbn.
@@ -2799,13 +2799,13 @@ Section InliningSemantics.
         memM_rel_empty (fun _ => True)
           ((fix loop (acc0 : list B) (l : list A) : @memM PaV _ (list B) :=
               match l with
-              | [] => Monads.ret (rev_append acc0 [])
-              | a :: l' => Monads.bind (f a) (fun b => loop (b :: acc0) l')
+              | [] => ExtLib.Structures.Monad.ret (rev_append acc0 [])
+              | a :: l' => ExtLib.Structures.Monad.bind (f a) (fun b => loop (b :: acc0) l')
               end) acc ys)
           ((fix loop (acc0 : list B) (l : list A) : @memM PaV _ (list B) :=
               match l with
-              | [] => Monads.ret (rev_append acc0 [])
-              | a :: l' => Monads.bind (f a) (fun b => loop (b :: acc0) l')
+              | [] => ExtLib.Structures.Monad.ret (rev_append acc0 [])
+              | a :: l' => ExtLib.Structures.Monad.bind (f a) (fun b => loop (b :: acc0) l')
               end) acc ys)).
     { induction ys as [| a ys' IH]; intros acc.
       - apply memM_rel_empty_ret, I.
@@ -2864,7 +2864,7 @@ Section InliningSemantics.
       [| intros p _; apply memM_rel_empty_ret; exists p; reflexivity].
     intros σ U.
     unfold allocate_bytes, fresh_prov; cbn [allocate_bytes_with_pr MemoryModelPrimitivesV].
-    cbn [Monads.bind memS_mon memS_bind memM_interp_prov].
+    cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind memM_interp_prov].
     pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn.
     right; right; intros pr _.
     left; eapply refine_prov_obs_eq;
@@ -2878,13 +2878,13 @@ Section InliningSemantics.
     change (N.length ([] : list (@memory_byte PaV))) with 0%N.
     eapply (memM_rel_empty_bind (fun '(_, ptrs) => ptrs = []) (fun _ => True)).
     - eapply memM_rel_empty_bind with (P := fun _ => True).
-      + intros σ0 U0; cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov
+      + intros σ0 U0; cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov
                            push_empty_frame Memory_stack_memory].
         pstep; apply RP_Step; cbn; auto.
       + intros addr _.
         eapply memM_rel_empty_bind; [apply memM_rel_empty_lift | intros p _].
         change (get_consecutive_ptrs p 0%N) with (@raise_ret (list (@ptr PaV)) []).
-        cbn [Vellvm.Semantics.Interfaces.Memory.lift EOU_Monad Monads.bind memS_mon memS_bind Monads.ret].
+        cbn [Vellvm.Semantics.Interfaces.Memory.lift EOU_monad ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret].
         apply memM_rel_empty_ret; reflexivity.
     - intros [p ptrs] ->.
       eapply memM_rel_empty_bind with (P := fun _ => True); [| intros [] _; apply memM_rel_empty_ret, I].
@@ -2892,7 +2892,7 @@ Section InliningSemantics.
              app_mem_stack, get, put.
       intros σ0 U0; destruct σ0 as [[mem0 fs0 hp0] pr0].
       change (memory_bytes_to_bytes (provenance_to_allocation_id pr) []) with ([] : list byte).
-      cbn [add_all_index_acc add_all_to_frame fold_left Monads.bind memS_mon memS_bind Monads.ret
+      cbn [add_all_index_acc add_all_to_frame fold_left ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret
            memM_interp_prov push_empty_frame state_get_memory MemoryModelStateV Memory_stack_memory].
       pstep; apply RP_Step; cbn; auto.
   Qed.
@@ -3270,7 +3270,7 @@ Section InliningSemantics.
     induction dv as [db | pk fs IHfs | vc es IHes] using dvalue_ind_nested; intros dt;
       unfold freeze.
     - destruct db as [| | | | | | | sz bv];
-        try (cbn [Functor.fmap Functor_itree ITree.map Monads.ret Monad_itree];
+        try (cbn [Functor.fmap Functor_itree ITree.map ExtLib.Structures.Monad.ret Monad_itree];
              eapply model_hoare_weaken;
              [intros s Hs; exact Hs | intros s _ Hs; exact Hs |];
              intros s U Hs; eapply refine_prov_obs_eq;
@@ -3279,7 +3279,7 @@ Section InliningSemantics.
              pstep; apply RP_Step; cbn; auto).
       + apply model_hoare_draw_preserve.
       + destruct bv as [bi | p ix | bits];
-          try (cbn [freeze_base Functor.fmap Functor_itree ITree.map Monads.ret Monad_itree];
+          try (cbn [freeze_base Functor.fmap Functor_itree ITree.map ExtLib.Structures.Monad.ret Monad_itree];
                intros s U Hs; eapply refine_prov_obs_eq;
                [symmetry; rewrite Eqit.bind_ret_l; apply interp_mcfg_model_ret_eq
                | symmetry; rewrite Eqit.bind_ret_l; apply interp_mcfg_model_ret_eq |];
@@ -3287,7 +3287,7 @@ Section InliningSemantics.
         cbn [freeze_base]; destruct (existsb is_poison_bit bits).
         * eapply model_hoare_bind; [apply model_hoare_draw_preserve |].
           intros x; apply model_hoare_ret; intros s Hs; exact Hs.
-        * cbn [Functor.fmap Functor_itree ITree.map Monads.ret Monad_itree].
+        * cbn [Functor.fmap Functor_itree ITree.map ExtLib.Structures.Monad.ret Monad_itree].
           intros s U Hs; eapply refine_prov_obs_eq;
             [symmetry; rewrite Eqit.bind_ret_l; apply interp_mcfg_model_ret_eq
             | symmetry; rewrite Eqit.bind_ret_l; apply interp_mcfg_model_ret_eq |];
@@ -3442,7 +3442,7 @@ Section InliningSemantics.
       [symmetry; rewrite memM_interp_prov_bind_eq, Eqit.bind_bind; reflexivity
       | symmetry; rewrite memM_interp_prov_bind_eq, Eqit.bind_bind; reflexivity |].
     unfold allocate_bytes, fresh_prov; cbn [allocate_bytes_with_pr MemoryModelPrimitivesV].
-    cbn [Monads.bind memS_mon memS_bind memM_interp_prov].
+    cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind memM_interp_prov].
     pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn.
     right; right; intros pr _.
     left; eapply refine_prov_obs_eq;
@@ -3457,11 +3457,11 @@ Section InliningSemantics.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite memM_interp_prov_bind_eq, !Eqit.bind_bind; reflexivity
       | symmetry; rewrite memM_interp_prov_bind_eq, !Eqit.bind_bind; reflexivity |].
-    cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_memory_stack].
+    cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_memory_stack].
     fold addr.
     unfold int_to_ptr; cbn [PointerV].
     destruct (from_Z addr) as [s | s | s | ip_a] eqn:Efz;
-      cbn [EOU_Monad Monads.bind Monads.ret Vellvm.Semantics.Interfaces.Memory.lift
+      cbn [EOU_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Vellvm.Semantics.Interfaces.Memory.lift
            memS_mon memS_bind memM_interp_prov].
     - unfold raiseOOM, trigger_cast, ITree.trigger.
       pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; left; reflexivity.
@@ -3474,7 +3474,7 @@ Section InliningSemantics.
       assert (Hp_addr : ptr_to_int p = addr).
       { cbn [ptr_to_int PointerV fst]; apply from_Z_to_Z, Efz. }
       destruct (get_consecutive_ptrs p (N.length pbytes)) as [s | s | s | ptrs] eqn:Ecptrs;
-        cbn [Vellvm.Semantics.Interfaces.Memory.lift memS_mon memS_bind Monads.ret memM_interp_prov].
+        cbn [Vellvm.Semantics.Interfaces.Memory.lift memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
       + unfold raiseOOM, trigger_cast, ITree.trigger.
         pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; left; reflexivity.
       + unfold raiseUB, trigger_cast, ITree.trigger.
@@ -3487,7 +3487,7 @@ Section InliningSemantics.
         unfold add_block_to_stack, add_block, add_ptrs_to_frame, get_mem, upd_mem, app_mem,
                app_mem_stack, get, put.
         destruct m0 as [[mem0 fs0 hp0] pr0].
-        cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov
+        cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov
              state_memory_stack state_get_memory MemoryModelStateV Memory_stack_memory].
         eapply refine_prov_obs_eq;
           [symmetry; rewrite !Eqit.bind_ret_l; reflexivity
@@ -5727,7 +5727,7 @@ Section InliningSemantics.
         apply eqit_Tau, inl_interp_mrec_proper.
         eapply eq_itree_clo_bind with (UU := Logic.eq); [| intros ? _ <-; reflexivity].
         unfold inl_mrec_ctx; rewrite (check_callee_nonnull_ptr p Hp_gt0).
-        cbn [EOU_to_itree lookup_defn Monads.bind Monads.ret Monad_itree].
+        cbn [EOU_to_itree lookup_defn ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         rewrite Eqit.bind_ret_l, Hp_eq, Hlk_callee; reflexivity. }
       eapply gen_inline_sim__obs_eq; [symmetry; exact Emrec_step | reflexivity |].
       eapply GIS_TauL; [reflexivity | exact IH].
@@ -6428,7 +6428,7 @@ Section InliningSemantics.
                  destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]];
                  destruct Hmatch as (-> & -> & -> & Hsf & Hsfm).
                ++ destruct Hstk as [<- Hr].
-                  unfold fused_stack_prov, on_ls_prov, handle_stack; cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+                  unfold fused_stack_prov, on_ls_prov, handle_stack; cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
                   eapply refine_prov_obs_eq;
                     [symmetry; rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity
                     | symmetry; rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity |].
@@ -6439,7 +6439,7 @@ Section InliningSemantics.
                   apply SFM_cons; [exact Hsf | exact Hsfm].
                ++ destruct stk as [[p1 p2] rest |].
                   ** inversion Hsfm as [| ? ? sf1' sf2' ? fstk1' fstk2' Hsf' Hsfm']; subst.
-                     unfold fused_stack_prov, on_ls_prov, handle_stack; cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+                     unfold fused_stack_prov, on_ls_prov, handle_stack; cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
                      eapply refine_prov_obs_eq;
                        [symmetry; rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity
                        | symmetry; rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity |].
@@ -6448,7 +6448,7 @@ Section InliningSemantics.
                      repeat split; try exact Hsf'; try exact Hsfm'; reflexivity.
                   ** inversion Hsfm; subst.
                      unfold fused_stack_prov, on_ls_prov, handle_stack, raise, trigger_cast, ITree.trigger, lift_bot_prov;
-                       cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+                       cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
                      pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind, !unfold_translate; cbn.
                      right; right; split; [exact I | intros [] [] _]. }
     set (r_both :=
@@ -6672,7 +6672,7 @@ Section InliningSemantics.
         + symmetry; rewrite Hu1, bind_trigger, interp_state_vis;
             cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl inr1 inl1].
           unfold fused_stack_prov, on_ls_prov, handle_stack;
-            cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+            cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
           rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity.
         + reflexivity.
         + eapply RP_TauL; [reflexivity | apply IH].
@@ -6689,7 +6689,7 @@ Section InliningSemantics.
         + symmetry; rewrite Hu1, bind_trigger, interp_state_vis;
             cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl inr1 inl1].
           unfold fused_stack_prov, on_ls_prov, handle_stack;
-            cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+            cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
           rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity.
         + reflexivity.
         + eapply RP_TauL; [reflexivity | apply IH].
@@ -6852,7 +6852,7 @@ Section InliningSemantics.
     loop_monad f (xs ++ ys) ≅
     ITree.bind (loop_monad f xs) (fun _ => loop_monad f ys).
   Proof.
-    induction xs as [| x xs' IH]; cbn [app loop_monad Monads.bind Monads.ret Monad_itree].
+    induction xs as [| x xs' IH]; cbn [app loop_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     - symmetry; apply Eqit.bind_ret_l.
     - rewrite Eqit.bind_bind.
       apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
@@ -6991,7 +6991,7 @@ Section InliningSemantics.
     induction dv as [db | pk fs IHfs | vc es IHes] using dvalue_ind_nested; intros dt;
       unfold freeze.
     - destruct db as [| | | | | | | sz bv];
-        try (cbn [freeze_base Functor.fmap Functor_itree ITree.map Monads.ret Monad_itree];
+        try (cbn [freeze_base Functor.fmap Functor_itree ITree.map ExtLib.Structures.Monad.ret Monad_itree];
              eapply gen_inline_sim_obs_eq;
              [symmetry; apply Eqit.bind_ret_l
              | symmetry; apply Eqit.bind_ret_l
@@ -6999,7 +6999,7 @@ Section InliningSemantics.
       + cbn [freeze_base]; unfold draw; apply mcfg_inline_sim_trigger_refl.
         destruct ic; try discriminate Hact; reflexivity.
       + destruct bv as [bi | p ix | bits];
-          try (cbn [freeze_base Functor.fmap Functor_itree ITree.map Monads.ret Monad_itree];
+          try (cbn [freeze_base Functor.fmap Functor_itree ITree.map ExtLib.Structures.Monad.ret Monad_itree];
                eapply gen_inline_sim_obs_eq;
                [symmetry; apply Eqit.bind_ret_l
                | symmetry; apply Eqit.bind_ret_l
@@ -7009,7 +7009,7 @@ Section InliningSemantics.
           -- unfold draw; apply mcfg_inline_sim_trigger_refl.
              destruct ic; try discriminate Hact; reflexivity.
           -- intros ? x1 x2 [-> <-]; apply gen_inline_sim_ret; split; reflexivity.
-        * cbn [Functor.fmap Functor_itree ITree.map Monads.ret Monad_itree].
+        * cbn [Functor.fmap Functor_itree ITree.map ExtLib.Structures.Monad.ret Monad_itree].
           eapply gen_inline_sim_obs_eq;
             [symmetry; apply Eqit.bind_ret_l
             | symmetry; apply Eqit.bind_ret_l
@@ -7321,10 +7321,10 @@ Section InliningSemantics.
     unfold apply_attrs, apply_value_attrs.
     set (vp := value_attrs_poison attrs v).
     destruct (existsb attr_is_noundef attrs && negb (dvalue_well_defined vp))%bool.
-    - cbn [EOU_to_itree Monads.bind Monad_itree].
+    - cbn [EOU_to_itree ExtLib.Structures.Monad.bind Monad_itree].
       unfold raiseUB, trigger_cast, ITree.trigger.
       pstep; apply GIS_Step; unfold gis_step_body; rewrite !observe_bind; cbn [observe]; left; reflexivity.
-    - cbn [EOU_to_itree Monads.bind Monads.ret Monad_itree].
+    - cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       eapply gen_inline_sim_obs_eq;
         [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
       unfold assert_attrs_dereferenceable.
@@ -7379,24 +7379,24 @@ Section InliningSemantics.
     unfold check_call_return, check_call_result.
     destruct res as [ex | v].
     - destruct (existsb fn_attr_is_nounwind fattrs).
-      + cbn [EOU_to_itree Monads.bind Monad_itree].
+      + cbn [EOU_to_itree ExtLib.Structures.Monad.bind Monad_itree].
         unfold raiseUB, trigger_cast, ITree.trigger.
         pstep; apply GIS_Step; unfold gis_step_body; rewrite observe_bind; cbn [observe]; left; reflexivity.
-      + cbn [EOU_to_itree Monads.bind Monads.ret Monad_itree].
+      + cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply gen_inline_sim_obs_eq;
           [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
         apply gen_inline_sim_ret; split; reflexivity.
     - destruct (existsb fn_attr_is_noreturn fattrs).
-      + cbn [EOU_to_itree Monads.bind Monad_itree].
+      + cbn [EOU_to_itree ExtLib.Structures.Monad.bind Monad_itree].
         unfold raiseUB, trigger_cast, ITree.trigger.
         pstep; apply GIS_Step; unfold gis_step_body; rewrite observe_bind; cbn [observe]; left; reflexivity.
       + destruct (existsb fn_attr_is_nocreateundeforpoison fattrs
                   && forallb dvalue_well_defined args
                   && negb (dvalue_well_defined v))%bool.
-        * cbn [EOU_to_itree Monads.bind Monad_itree].
+        * cbn [EOU_to_itree ExtLib.Structures.Monad.bind Monad_itree].
           unfold raiseUB, trigger_cast, ITree.trigger.
           pstep; apply GIS_Step; unfold gis_step_body; rewrite observe_bind; cbn [observe]; left; reflexivity.
-        * cbn [EOU_to_itree Monads.bind Monads.ret Monad_itree].
+        * cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
           eapply gen_inline_sim_obs_eq;
             [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
           eapply gen_inline_sim_bind;
@@ -7439,11 +7439,11 @@ Section InliningSemantics.
     (val : @dvalue PaV) (def_b : block_id)
     (dests : list (tint_literal * block_id)) :
     let elab (db : block_id) (ds : list (tint_literal * block_id)) : EOU block_id :=
-      Monads.bind
+      ExtLib.Structures.Monad.bind
         (map_monad
            (fun '((TInt_Literal sz x), id) =>
-              Monads.bind (coerce_integer_to_int (Some sz) (denote_int_syntax x))
-                (fun s => Monads.ret (DVALUE_Base s, id)))
+              ExtLib.Structures.Monad.bind (coerce_integer_to_int (Some sz) (denote_int_syntax x))
+                (fun s => ExtLib.Structures.Monad.ret (DVALUE_Base s, id)))
            ds)
         (fun switches => select_switch val db switches)
     in
@@ -7462,31 +7462,31 @@ Section InliningSemantics.
          (forall l0, err_sw <> raise_ret l0) /\
          map_monad
            (fun '((TInt_Literal sz x), id) =>
-              Monads.bind (coerce_integer_to_int (Some sz) (denote_int_syntax x))
-                (fun s => Monads.ret (DVALUE_Base s, id)))
+              ExtLib.Structures.Monad.bind (coerce_integer_to_int (Some sz) (denote_int_syntax x))
+                (fun s => ExtLib.Structures.Monad.ret (DVALUE_Base s, id)))
            dests = err_sw /\
          map_monad
            (fun '((TInt_Literal sz x), id) =>
-              Monads.bind (coerce_integer_to_int (Some sz) (denote_int_syntax x))
-                (fun s => Monads.ret (DVALUE_Base s, id)))
+              ExtLib.Structures.Monad.bind (coerce_integer_to_int (Some sz) (denote_int_syntax x))
+                (fun s => ExtLib.Structures.Monad.ret (DVALUE_Base s, id)))
            (List.map (fun '(lit, b) => (lit, ren_b b)) dests) = err_sw) \/
       (exists sws,
          List.map snd sws = List.map snd dests /\
          map_monad
            (fun '((TInt_Literal sz x), id) =>
-              Monads.bind (coerce_integer_to_int (Some sz) (denote_int_syntax x))
-                (fun s => Monads.ret (DVALUE_Base s, id)))
+              ExtLib.Structures.Monad.bind (coerce_integer_to_int (Some sz) (denote_int_syntax x))
+                (fun s => ExtLib.Structures.Monad.ret (DVALUE_Base s, id)))
            dests = raise_ret sws /\
          map_monad
            (fun '((TInt_Literal sz x), id) =>
-              Monads.bind (coerce_integer_to_int (Some sz) (denote_int_syntax x))
-                (fun s => Monads.ret (DVALUE_Base s, id)))
+              ExtLib.Structures.Monad.bind (coerce_integer_to_int (Some sz) (denote_int_syntax x))
+                (fun s => ExtLib.Structures.Monad.ret (DVALUE_Base s, id)))
            (List.map (fun '(lit, b) => (lit, ren_b b)) dests) =
          raise_ret (List.map (fun '(v, b) => (v, ren_b b)) sws))).
     { induction dests as [| [[sz x] id] rest IH]; cbn [List.map map_monad snd].
       - right; exists []; split; [reflexivity | split; reflexivity].
       - destruct (coerce_integer_to_int (Some sz) (denote_int_syntax x)) as [m | m | m | s];
-          cbn [EOU_Monad Monads.bind Monads.ret].
+          cbn [EOU_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret].
         + left; exists (raise_oom m); split; [intros ?; discriminate | split; reflexivity].
         + left; exists (raise_ub m); split; [intros ?; discriminate | split; reflexivity].
         + left; exists (raise_error m); split; [intros ?; discriminate | split; reflexivity].
@@ -7494,7 +7494,7 @@ Section InliningSemantics.
           * rewrite E1, E2.
             destruct err_sw as [m | m | m | l0]; [| | | exfalso; exact (Hnr l0 Logic.eq_refl)];
               cbn; left; eexists; split; [intros ?; discriminate | split; reflexivity].
-          * rewrite E1, E2; cbn [EOU_Monad Monads.bind Monads.ret List.map].
+          * rewrite E1, E2; cbn [EOU_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret List.map].
             right; exists ((DVALUE_Base s, id) :: sws).
             cbn [List.map snd]; rewrite Hsnd; split; [reflexivity | split; reflexivity]. }
     unfold elab.
@@ -7502,7 +7502,7 @@ Section InliningSemantics.
     - rewrite E1, E2.
       destruct err_sw as [m | m | m | l0]; [| | | exfalso; exact (Hnr l0 Logic.eq_refl)];
         cbn; left; eexists; split; [intros ?; discriminate | split; reflexivity].
-    - rewrite E1, E2; cbn [EOU_Monad Monads.bind].
+    - rewrite E1, E2; cbn [EOU_monad ExtLib.Structures.Monad.bind].
       destruct (select_switch_ren_b ren_b val def_b sws)
         as [(msg & Es1 & Es2) | (b & Hb & Es1 & Es2)].
       + left; exists (raise_error msg); split; [intros ?; discriminate | split; assumption].
@@ -7736,7 +7736,7 @@ Section InliningSemantics.
       (denote_phis b_from2 (List.map (ren_phi_entry ren_l ren_b) phis)).
   Proof.
     destruct Hentry_or_pred as [-> | (Hb_eq & Hfrom_dom & Hall_p)].
-    - cbn [List.map denote_phis map_monad Monads.bind Monads.ret Monad_itree].
+    - cbn [List.map denote_phis map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       rewrite app_nil_r.
       eapply gen_inline_sim_obs_eq;
         [symmetry; rewrite !Eqit.bind_ret_l; reflexivity
@@ -8001,7 +8001,7 @@ Section InliningSemantics.
                       Hinj_l Hfresh_l (blk_code bk) _ d_out stk ce1 e1_p e2_p
                       Hcode_leaf Hchk_cd Hd_phi_dom Hcd_defs_dom Hbound_p0 Hagree_p).
           -- intros ? [] [] (_ & _ & e1_c & e2_c & -> & Hbound_c & Hagree_c).
-             cbn [loop_monad denote_instr denote_terminator Monads.bind Monads.ret Monad_itree].
+             cbn [loop_monad denote_instr denote_terminator ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
              eapply gen_inline_sim_obs_eq.
              ++ reflexivity.
              ++ symmetry.
@@ -8094,7 +8094,7 @@ Section InliningSemantics.
                          [apply cfg_inline_sim_raiseUB | intros ? ? ? []].
                    --- eapply gen_inline_sim_bind with (RA := fun _ _ _ => False);
                          [apply cfg_inline_sim_raise; reflexivity | intros ? ? ? []].
-                ** rewrite E1, E2; cbn [EOU_to_itree Monads.bind Monads.ret Monad_itree].
+                ** rewrite E1, E2; cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
                    eapply gen_inline_sim_obs_eq;
                      [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
                    apply gen_inline_sim_ret; left.
@@ -8157,7 +8157,7 @@ Section InliningSemantics.
       assert (Hp_pattrs : pattrs = []) by (eapply Hpattrs; left; reflexivity).
       subst pattrs.
       cbn [denote_call_args build_param_copies denote_code map_monad loop_monad denote_instr
-           Monads.bind Monads.ret Monad_itree].
+           ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       eapply gen_inline_sim_obs_eq.
       + symmetry.
         rewrite Eqit.bind_bind.
@@ -8829,7 +8829,7 @@ Section InliningSemantics.
       (denote_phis b_from2 (remap_phis_pred call_bid post_bid phis)).
   Proof.
     destruct Hentry_or_remap as [-> | (Hne_cp & Hne_fp & -> & Hnin_pb)].
-    - cbn [remap_phis_pred List.map denote_phis map_monad Monads.bind Monads.ret Monad_itree].
+    - cbn [remap_phis_pred List.map denote_phis map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       eapply gen_inline_sim_obs_eq;
         [symmetry; rewrite !Eqit.bind_ret_l; reflexivity
         | symmetry; rewrite !Eqit.bind_ret_l; reflexivity |].
@@ -9003,7 +9003,7 @@ Section InliningSemantics.
                [apply cfg_inline_sim_raiseUB | intros ? ? ? []].
           -- eapply gen_inline_sim_bind with (RA := fun _ _ _ => False);
                [apply cfg_inline_sim_raise; reflexivity | intros ? ? ? []].
-        * rewrite E1; cbn [EOU_to_itree Monads.bind Monads.ret Monad_itree].
+        * rewrite E1; cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
           eapply gen_inline_sim_obs_eq;
             [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
           apply gen_inline_sim_ret.
@@ -10632,11 +10632,11 @@ Section InliningSemantics.
             destruct (dc_param_attrs (df_prototype callee_df)) as [ret_attrs args_attrs] eqn:Edcpa.
             cbn [fst] in Hpr; subst ret_attrs; cbn [snd] in Hpp.
             rewrite (check_cconv_eq_true _ _ _ Hcc_eq).
-            cbn [EOU_to_itree Monads.bind Monads.ret Monad_itree].
+            cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
             rewrite Eqit.bind_ret_l, Eqit.bind_bind.
             rewrite (apply_args_attrs_all_nil_eq _ _ _ Hpp), Eqit.bind_ret_l.
             rewrite (combine_lists_varargs_exact (df_args callee_df) vs (eq_sym Hvs_len)).
-            cbn [EOU_to_itree map_monad Monads.bind Monads.ret Monad_EOU Monad_itree]; fold bs_c.
+            cbn [EOU_to_itree map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad Monad_itree]; fold bs_c.
             rewrite !Eqit.bind_ret_l, !Eqit.bind_bind.
             apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
             rewrite !Eqit.bind_bind.
@@ -10770,7 +10770,7 @@ Section InliningSemantics.
               rewrite !Eqit.bind_bind.
               apply eq_itree_clo_bind with (UU := Logic.eq);
                 [apply denote_exp'_local_eq | intros uv _ <-].
-              rewrite !Eqit.bind_ret_l; cbn [map_monad Monads.bind Monads.ret Monad_itree].
+              rewrite !Eqit.bind_ret_l; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
               rewrite !Eqit.bind_bind.
               apply eq_itree_clo_bind with (UU := Logic.eq);
                 [reflexivity | intros [] _ _; rewrite !Eqit.bind_ret_l; reflexivity]. }
@@ -10795,7 +10795,7 @@ Section InliningSemantics.
             punfold Hlw; exact Hlw.
           + eapply gen_inline_sim_obs_eq;
               [reflexivity
-              | cbn [denote_phis map_monad Monads.bind Monads.ret Monad_itree];
+              | cbn [denote_phis map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
                 symmetry; rewrite !Eqit.bind_ret_l; reflexivity |].
             apply gen_inline_sim_ret; exists ce1, e2'; auto.
         - intros ? _ _ (ea1 & ea2 & -> & Hag_a).
@@ -10903,7 +10903,7 @@ Section InliningSemantics.
             fold (denote_code pre_cd caller_va)
                  (denote_code (build_param_copies ren_l (df_args callee_df) call_args) caller_va).
             cbn [loop_monad denote_instr explicit_alignment find_option denote_terminator
-                 step_bd_cont Monads.bind Monads.ret Monad_itree].
+                 step_bd_cont ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
             rewrite !Eqit.bind_bind.
             apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
             rewrite !Eqit.bind_bind.
@@ -11564,7 +11564,7 @@ Section InliningSemantics.
          | apply (model_hoare_raise (fun _ => True) (fun _ _ => False) msg s0 U' I)].
       intros _ _ [? [? ?]] [? [? ?]] _ (_ & _ & []). }
     destruct fv1 as [[p | | | | | | |] | |]; try apply Herr.
-    cbn [Monads.ret Monad_itree].
+    cbn [ExtLib.Structures.Monad.ret Monad_itree].
     eapply refine_prov_obs_eq;
       [symmetry; apply interp_mcfg_model_ret_eq
       | symmetry; apply interp_mcfg_model_ret_eq |].
@@ -11615,7 +11615,7 @@ Section InliningSemantics.
   Proof using.
     induction Hdefs as [| df1 df2 rest1 rest2 [Hproto Hfn] _ IH];
       intros s0 U Hg0; cbn [map_monad].
-    - cbn [Monads.ret Monad_itree].
+    - cbn [ExtLib.Structures.Monad.ret Monad_itree].
       eapply refine_prov_obs_eq;
         [symmetry; apply interp_mcfg_model_ret_eq
         | symmetry; apply interp_mcfg_model_ret_eq |].
@@ -11632,7 +11632,7 @@ Section InliningSemantics.
         | symmetry; apply interp_mcfg_model_bind_eq |].
       eapply refine_prov_bind; [apply (IH s0 U1 Hg0) |].
       intros U2 [s1' tl1] [s2' tl2] _ (-> & -> & Hsrc_tl & Hrel_tl).
-      cbn [Monads.ret Monad_itree].
+      cbn [ExtLib.Structures.Monad.ret Monad_itree].
       eapply refine_prov_obs_eq;
         [symmetry; apply interp_mcfg_model_ret_eq
         | symmetry; apply interp_mcfg_model_ret_eq |].

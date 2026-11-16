@@ -1396,7 +1396,7 @@ Section DCESoundness.
   Proof. reflexivity. Qed.
 
   Lemma bind_EOU_ret {A B : Type} (x : A) (k : A -> EOU B) :
-    Monads.bind (raise_ret x : EOU A) k = k x.
+    ExtLib.Structures.Monad.bind (raise_ret x : EOU A) k = k x.
   Proof. reflexivity. Qed.
 
   Lemma eou_safe_to_ret_imp {X : Type} (P : X -> Prop) (m : EOU X) :
@@ -1437,32 +1437,32 @@ Section DCESoundness.
     (dt : dtyp) (elts : list (@dvalue PaV)) :
     eou_ret_imp
       (fun v => dvalue_has_dtyp v dt)
-      (Monads.bind (map_monad (@dvalue_to_dvalue_base PaV) elts)
+      (ExtLib.Structures.Monad.bind (map_monad (@dvalue_to_dvalue_base PaV) elts)
          (fun elts' =>
-            Monads.bind
+            ExtLib.Structures.Monad.bind
               (vec_loop f (List.combine (repeat (@DVALUE_Poison PaV) (Datatypes.length elts')) elts'))
               (fun ans =>
-                 Monads.ret (@canonicalize_vector PaV (List.map (@DVALUE_Base PaV) ans))))).
+                 ExtLib.Structures.Monad.ret (@canonicalize_vector PaV (List.map (@DVALUE_Base PaV) ans))))).
   Proof.
     destruct (map_monad (@dvalue_to_dvalue_base PaV) elts) as [| | | elts'];
-      [exact I | exact I | exact I | cbn [Monads.bind EOU_monad]].
+      [exact I | exact I | exact I | cbn [ExtLib.Structures.Monad.bind EOU_monad]].
     assert (Hloop :
       eou_ret_imp (Forall (fun b => b = @DVALUE_Poison PaV))
         (vec_loop f (List.combine (repeat (@DVALUE_Poison PaV) (Datatypes.length elts')) elts'))).
     { unfold vec_loop.
       induction elts' as [| y ys IH];
-        cbn [Datatypes.length repeat List.combine monad_fold_right Monads.bind Monads.ret EOU_monad].
+        cbn [Datatypes.length repeat List.combine monad_fold_right ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad].
       - cbn [eou_ret_imp]; constructor.
       - destruct (monad_fold_right _ (List.combine (repeat (@DVALUE_Poison PaV) (Datatypes.length ys)) ys) [])
           as [| | | acc];
-          cbn [Monads.bind Monads.ret EOU_monad eou_ret_imp] in IH |- *; try exact I.
+          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad eou_ret_imp] in IH |- *; try exact I.
         specialize (HF y).
         destruct (f DVALUE_Poison y) as [| | | r];
-          cbn [Monads.bind Monads.ret EOU_monad eou_ret_imp] in HF |- *; try exact I.
+          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad eou_ret_imp] in HF |- *; try exact I.
         constructor; [exact HF | exact IH]. }
     destruct (vec_loop f (List.combine (repeat (@DVALUE_Poison PaV) (Datatypes.length elts')) elts'))
       as [| | | ans];
-      cbn [Monads.bind Monads.ret EOU_monad eou_ret_imp] in Hloop |- *; try exact I.
+      cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad eou_ret_imp] in Hloop |- *; try exact I.
     rewrite (@canonicalize_vector_all_poison_base PaV ans Hloop).
     apply DVALUE_Poison_typ_agg.
   Qed.
@@ -1814,7 +1814,7 @@ Section DCESoundness.
           try exact I; apply dvalue_has_dtyp_Poison.
       + cbn [eval_icmp]; apply eou_ret_imp_vec_poison_l.
         intros y; destruct y; unfold eval_icmp_base;
-          cbn [is_icmp_operand eou_ret_imp Monads.ret EOU_monad];
+          cbn [is_icmp_operand eou_ret_imp ExtLib.Structures.Monad.ret EOU_monad];
           first [reflexivity | exact I].
       + cbn [eval_icmp]; apply eou_ret_imp_fmap;
           destruct db2 as [p2 | sz2 i2 | ip2 | d2 | f2 | | | bsz2 bv2];
@@ -1832,7 +1832,7 @@ Section DCESoundness.
           try exact I; apply dvalue_has_dtyp_Poison.
       + cbn [eval_icmp]; apply eou_ret_imp_vec_poison_l.
         intros y; destruct y; unfold eval_icmp_base;
-          cbn [is_icmp_operand eou_ret_imp Monads.ret EOU_monad];
+          cbn [is_icmp_operand eou_ret_imp ExtLib.Structures.Monad.ret EOU_monad];
           first [reflexivity | exact I].
       + cbn [eval_icmp]; apply eou_ret_imp_fmap;
           destruct db2 as [p2 | sz2 i2 | ip2 | d2 | f2 | | | bsz2 bv2];
@@ -1949,7 +1949,7 @@ Section DCESoundness.
           destruct db2 as [p2 | sz2 i2 | ip2 | d2 | f2 | | | bsz2 bv2];
           cbn [eval_fcmp_base]; try exact I; apply dvalue_has_dtyp_Poison.
       + cbn [eval_fcmp]; apply eou_ret_imp_vec_poison_l.
-        intros y; destruct y; cbn [eval_fcmp_base eou_ret_imp Monads.ret EOU_monad];
+        intros y; destruct y; cbn [eval_fcmp_base eou_ret_imp ExtLib.Structures.Monad.ret EOU_monad];
           first [reflexivity | exact I].
       + cbn [eval_fcmp]; apply eou_ret_imp_fmap;
           destruct db2 as [p2 | sz2 i2 | ip2 | d2 | f2 | | | bsz2 bv2];
@@ -1963,7 +1963,7 @@ Section DCESoundness.
           destruct db2 as [p2 | sz2 i2 | ip2 | d2 | f2 | | | bsz2 bv2];
           cbn [eval_fcmp_base]; try exact I; apply dvalue_has_dtyp_Poison.
       + cbn [eval_fcmp]; apply eou_ret_imp_vec_poison_l.
-        intros y; destruct y; cbn [eval_fcmp_base eou_ret_imp Monads.ret EOU_monad];
+        intros y; destruct y; cbn [eval_fcmp_base eou_ret_imp ExtLib.Structures.Monad.ret EOU_monad];
           first [reflexivity | exact I].
       + cbn [eval_fcmp]; apply eou_ret_imp_fmap;
           destruct db2 as [p2 | sz2 i2 | ip2 | d2 | f2 | | | bsz2 bv2];

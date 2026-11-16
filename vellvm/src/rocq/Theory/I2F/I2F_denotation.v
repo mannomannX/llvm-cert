@@ -409,7 +409,7 @@ Lemma I2F_denote_instr :
           inversion Hand as [db1 db2 Hdb | | ]; subst; cbn; try repeat constructor.
           inversion Hdb; subst; cbn; try repeat constructor.
           destruct (Pos.eq_dec _ _) as [Heq | ?];
-            [subst; unfold eq_rec_r, eq_rec, eq_rect, eq_sym; cbn; repeat constructor
+            [unfold eq_rec_r; destruct (eq_sym Heq); cbn; repeat constructor
             | cbn; repeat constructor].
       }
       all: erbind; [apply I2F_refine_lift', I2F_eval_fop; eauto | intros].

@@ -40,7 +40,8 @@ From ITree Require Import
 From ExtLib Require Import
   Structures.Maps
   Structures.Monads
-  Structures.Functor.
+  Structures.Functor
+  Data.Monads.EitherMonad.
 
 From Vellvm Require Import
   Numeric
@@ -793,7 +794,7 @@ End BindCompat.
   fun T call_ev =>
     match call_ev with
     | Call dt cc fv args =>
-        @Monads.bind (@CFGtop (@ParamsV IP IPT)) _ _ _
+        @ExtLib.Structures.Monad.bind (@CFGtop (@ParamsV IP IPT)) _ _ _
           (EOU_to_itree (check_callee fv))
           (fun _ =>
              match lookup_defn fv fundefs with
@@ -2056,7 +2057,7 @@ Section MemoryAndSerialization.
   (** ** 3A. [memM_interp_prov] Monadic Laws & [mem_stack_equal] Synchronization *)
 
   Lemma memM_interp_prov_ret {A} (x : A) (σ : state) :
-    memM_interp_prov (Monads.ret x) σ = Ret (σ, x).
+    memM_interp_prov (ExtLib.Structures.Monad.ret x) σ = Ret (σ, x).
   Proof using.
     reflexivity.
   Qed.
@@ -2065,11 +2066,11 @@ Section MemoryAndSerialization.
     (m : @memM (@ParamsV IP IPT) _ A)
     (k : A -> @memM (@ParamsV IP IPT) _ B)
     (σ : state) :
-    memM_interp_prov (Monads.bind m k) σ ≅
+    memM_interp_prov (ExtLib.Structures.Monad.bind m k) σ ≅
     ITree.bind (memM_interp_prov m σ) (fun '(σ', x) => memM_interp_prov (k x) σ').
   Proof using.
     revert σ; induction m as [x | s | s | s | g IH | σ' g IH | c g IH]; intros σ;
-      cbn [Monads.bind memS_mon memS_bind memM_interp_prov].
+      cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind memM_interp_prov].
     - rewrite Eqit.bind_ret_l; reflexivity.
     - unfold raiseOOM, trigger_cast; rewrite Eqit.bind_bind.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
@@ -2095,13 +2096,13 @@ Section MemoryAndSerialization.
     unfold map_monad_acc.
     set (go := fix loop (acc : list B) (xs : list A) : @memM (@ParamsV IP IPT) _ (list B) :=
                  match xs with
-                 | [] => Monads.ret (rev_append acc [])
-                 | a :: xs' => Monads.bind (f a) (fun b => loop (b :: acc) xs')
+                 | [] => ExtLib.Structures.Monad.ret (rev_append acc [])
+                 | a :: xs' => ExtLib.Structures.Monad.bind (f a) (fun b => loop (b :: acc) xs')
                  end).
     change (memM_interp_prov (go [] l) σ ≅ memM_interp_prov (map_monad f l) σ).
     assert (Hgo : forall xs acc σ0,
               memM_interp_prov (go acc xs) σ0 ≅
-              memM_interp_prov (Monads.bind (map_monad f xs) (fun bs => Monads.ret (rev_append acc bs))) σ0).
+              memM_interp_prov (ExtLib.Structures.Monad.bind (map_monad f xs) (fun bs => ExtLib.Structures.Monad.ret (rev_append acc bs))) σ0).
     { induction xs as [| a xs' IH]; intros acc σ0; cbn [go map_monad].
       - rewrite memM_interp_prov_bind, memM_interp_prov_ret, Eqit.bind_ret_l; reflexivity.
       - rewrite !memM_interp_prov_bind, !Eqit.bind_bind.
@@ -2317,7 +2318,7 @@ Section MemoryAndSerialization.
     unfold Read_byte, read_byte_raw, read_byte_raw_mem.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    cbn [get Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+    cbn [get ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     change (IM.find (ptr_to_int p) (Memory_stack_memory (state_memory_stack σ1)))
       with (IntMaps.lookup (ptr_to_int p) (Memory_stack_memory (state_memory_stack σ1))).
     change (IM.find (ptr_to_int p) (Memory_stack_memory (state_memory_stack σ2)))
@@ -2348,7 +2349,7 @@ Section MemoryAndSerialization.
     unfold Write_byte, read_byte_raw, read_byte_raw_mem.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    cbn [get Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+    cbn [get ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     change (IM.find (ptr_to_int p) (Memory_stack_memory (state_memory_stack σ1)))
       with (IntMaps.lookup (ptr_to_int p) (Memory_stack_memory (state_memory_stack σ1))).
     change (IM.find (ptr_to_int p) (Memory_stack_memory (state_memory_stack σ2)))
@@ -2360,7 +2361,7 @@ Section MemoryAndSerialization.
         [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
       destruct (access_allowed (ptr_provenance p) aid).
       + unfold set_byte_raw, get_mem, upd_mem, app_mem, set_byte_raw_mem, get, put;
-          cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+          cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
         apply refine_prov_ret; repeat split; cbn;
           [apply incl_refl
           | apply Equal_add, Hmem
@@ -2502,17 +2503,17 @@ Section MemoryAndSerialization.
   Proof using.
     destruct Heq as (Hmem & Hfs & Hh).
     unfold get_free_block, next_key, Mnext_key;
-      cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov].
+      cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
     rewrite (Equal_next_key_with_alignment _ _ align Hmem).
     set (addr := next_key_with_alignment (Memory_stack_memory (state_memory_stack σ2)) align).
     destruct (int_to_ptr addr (allocation_id_to_prov (provenance_to_allocation_id pr)))
       as [s | s | s | pt];
-      cbn [Interfaces.Memory.lift Monads.bind memS_mon memS_bind Monads.ret].
+      cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret].
     - apply memM_interp_prov_raiseOOM_l.
     - apply memM_interp_prov_raiseUB_l.
     - apply memM_interp_prov_raise_both.
     - destruct (get_consecutive_ptrs pt sz) as [s | s | s | ptrs];
-        cbn [Interfaces.Memory.lift Monads.bind memS_mon memS_bind Monads.ret].
+        cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret].
       + apply memM_interp_prov_raiseOOM_l.
       + apply memM_interp_prov_raiseUB_l.
       + apply memM_interp_prov_raise_both.
@@ -2562,7 +2563,7 @@ Section MemoryAndSerialization.
     unfold add_block_to_stack, add_block, add_ptrs_to_frame, get_mem, upd_mem, app_mem, app_mem_stack, get, put.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+    cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
     destruct Heq1 as (Hm1 & Hfs1 & Hh1).
@@ -2588,7 +2589,7 @@ Section MemoryAndSerialization.
     unfold add_block_to_heap, add_block, add_ptrs_to_heap, get_mem, upd_mem, app_mem, app_mem_stack, get, put.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+    cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
     destruct Heq1 as (Hm1 & Hfs1 & Hh1).
@@ -2631,7 +2632,7 @@ Section MemoryAndSerialization.
     unfold allocate_bytes, fresh_prov, Mfresh_prov.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    cbn [Monads.ret memS_mon memM_interp_prov allocate_bytes_with_pr MemoryModelPrimitivesV].
+    cbn [ExtLib.Structures.Monad.ret memS_mon memM_interp_prov allocate_bytes_with_pr MemoryModelPrimitivesV].
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_bind | symmetry; apply Eqit.bind_bind |].
     apply refine_prov_trigger_fresh_both; intros p Hp.
@@ -2653,7 +2654,7 @@ Section MemoryAndSerialization.
     unfold malloc_bytes, fresh_prov, Mfresh_prov.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    cbn [Monads.ret memS_mon memM_interp_prov malloc_bytes_with_pr MemoryModelPrimitivesV].
+    cbn [ExtLib.Structures.Monad.ret memS_mon memM_interp_prov malloc_bytes_with_pr MemoryModelPrimitivesV].
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_bind | symmetry; apply Eqit.bind_bind |].
     apply refine_prov_trigger_fresh_both; intros p Hp.
@@ -2685,7 +2686,7 @@ Section MemoryAndSerialization.
   Proof using.
     destruct Heq as (Hmem & Hfs & Hh).
     unfold Mempush, app_frame_stack, get, put;
-      cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov].
+      cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
     apply refine_prov_ret; repeat split; cbn;
       [apply incl_refl | exact Hmem | unfold push_frame_stack; congruence | exact Hh | reflexivity].
   Qed.
@@ -2701,16 +2702,16 @@ Section MemoryAndSerialization.
            upd_frame_stack, app_frame_stack, app_mem, get, put.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+    cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     rewrite Hfs.
     destruct (Memory_stack_frame_stack (state_memory_stack σ2)) as [f | s f].
     - eapply refine_prov_obs_eq;
         [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-      cbn [pop_frame_stack Interfaces.Memory.lift Monads.bind memS_mon memS_bind].
+      cbn [pop_frame_stack Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind].
       apply memM_interp_prov_raise_both.
     - eapply refine_prov_obs_eq;
         [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-      cbn [pop_frame_stack Interfaces.Memory.lift Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov].
+      cbn [pop_frame_stack Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
       apply refine_prov_ret; repeat split; cbn;
         [apply incl_refl | apply Equal_free_frame_memory, Hmem | reflexivity | exact Hh | reflexivity].
   Qed.
@@ -2726,12 +2727,12 @@ Section MemoryAndSerialization.
     unfold Free, get_heap, app_mem, upd_heap, app_heap, get, put.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+    cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     rewrite Hh.
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
     destruct (IntMaps.lookup (ptr_to_int p) (Memory_stack_heap (state_memory_stack σ2))) as [blk |].
-    - cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov].
+    - cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
       apply refine_prov_ret; repeat split; cbn;
         [apply incl_refl | apply Equal_free_frame_memory, Hmem | exact Hfs | reflexivity | reflexivity].
     - apply memM_interp_prov_raiseUB_l.
@@ -2749,7 +2750,7 @@ Section MemoryAndSerialization.
     destruct ct.
     - destruct t1; try apply memM_interp_prov_raiseUB_l;
         destruct t2; try apply memM_interp_prov_raiseUB_l;
-        cbn [Monads.bind memS_mon memS_bind Monads.ret];
+        cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret];
         (destruct dv;
          eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |];
          intros r _ <-; exact (conj (incl_refl U) (conj Heq Logic.eq_refl))).
@@ -2861,15 +2862,15 @@ Section MemoryAndSerialization.
     assert (Hlen : refine_prov (eq_sync_post U) U
                      (memM_interp_prov
                         (match len with
-                         | DVALUE_I _ sz => Monads.ret (Z.to_N (unsigned sz))
-                         | DVALUE_Iptr sz => Monads.ret (Z.to_N (to_Z sz))
+                         | DVALUE_I _ sz => ExtLib.Structures.Monad.ret (Z.to_N (unsigned sz))
+                         | DVALUE_Iptr sz => ExtLib.Structures.Monad.ret (Z.to_N (to_Z sz))
                          | DVALUE_Poison => mub ((if ov then "memmove" else "memcpy") ++ " with poison length.")%string
                          | _ => merr ("Unsupported arguments to " ++ (if ov then "memmove" else "memcpy") ++ ".")%string
                          end) σ1)
                      (memM_interp_prov
                         (match len with
-                         | DVALUE_I _ sz => Monads.ret (Z.to_N (unsigned sz))
-                         | DVALUE_Iptr sz => Monads.ret (Z.to_N (to_Z sz))
+                         | DVALUE_I _ sz => ExtLib.Structures.Monad.ret (Z.to_N (unsigned sz))
+                         | DVALUE_Iptr sz => ExtLib.Structures.Monad.ret (Z.to_N (to_Z sz))
                          | DVALUE_Poison => mub ((if ov then "memmove" else "memcpy") ++ " with poison length.")%string
                          | _ => merr ("Unsupported arguments to " ++ (if ov then "memmove" else "memcpy") ++ ".")%string
                          end) σ2)).
@@ -2950,14 +2951,14 @@ Section MemoryAndSerialization.
                 assert (Hval : refine_prov (eq_sync_post U1) U1
                                  (memM_interp_prov
                                     (match val with
-                                     | DVALUE_I sz v => if Pos.eqb sz 8 then Monads.ret (BYTE_I (repr (unsigned v) : int8)) else merr "Unsupported arguments to memset."%string
-                                     | DVALUE_Poison => Monads.ret poison_memory_byte
+                                     | DVALUE_I sz v => if Pos.eqb sz 8 then ExtLib.Structures.Monad.ret (BYTE_I (repr (unsigned v) : int8)) else merr "Unsupported arguments to memset."%string
+                                     | DVALUE_Poison => ExtLib.Structures.Monad.ret poison_memory_byte
                                      | _ => merr "Unsupported arguments to memset."%string
                                      end) σ1')
                                  (memM_interp_prov
                                     (match val with
-                                     | DVALUE_I sz v => if Pos.eqb sz 8 then Monads.ret (BYTE_I (repr (unsigned v) : int8)) else merr "Unsupported arguments to memset."%string
-                                     | DVALUE_Poison => Monads.ret poison_memory_byte
+                                     | DVALUE_I sz v => if Pos.eqb sz 8 then ExtLib.Structures.Monad.ret (BYTE_I (repr (unsigned v) : int8)) else merr "Unsupported arguments to memset."%string
+                                     | DVALUE_Poison => ExtLib.Structures.Monad.ret poison_memory_byte
                                      | _ => merr "Unsupported arguments to memset."%string
                                      end) σ2')).
                 { destruct val; try apply memM_interp_prov_raise_both.
@@ -2972,13 +2973,13 @@ Section MemoryAndSerialization.
                 assert (Hsz : refine_prov (eq_sync_post U2) U2
                                 (memM_interp_prov
                                    (match len with
-                                    | DVALUE_I _ l => Monads.ret (Z.to_N (unsigned l))
+                                    | DVALUE_I _ l => ExtLib.Structures.Monad.ret (Z.to_N (unsigned l))
                                     | DVALUE_Poison => mub "memset with poison length."%string
                                     | _ => merr "Unsupported arguments to memset."%string
                                     end) s1)
                                 (memM_interp_prov
                                    (match len with
-                                    | DVALUE_I _ l => Monads.ret (Z.to_N (unsigned l))
+                                    | DVALUE_I _ l => ExtLib.Structures.Monad.ret (Z.to_N (unsigned l))
                                     | DVALUE_Poison => mub "memset with poison length."%string
                                     | _ => merr "Unsupported arguments to memset."%string
                                     end) s2)).
@@ -3186,31 +3187,31 @@ Section MemoryAndSerialization.
     set (go := fix loop (cnt : nat) (off : N) (bs : list (@memory_byte (@ParamsV IP IPT)))
                  : EOU (list (@dvalue (@ParamsV IP IPT))) :=
                  match cnt with
-                 | O => Monads.ret []
+                 | O => ExtLib.Structures.Monad.ret []
                  | S cnt' =>
-                     Monads.bind
+                     ExtLib.Structures.Monad.bind
                        (if N.leb (off + ssz) np
-                        then Monads.ret (DVALUE_Base DVALUE_Poison)
+                        then ExtLib.Structures.Monad.ret (DVALUE_Base DVALUE_Poison)
                         else memory_bytes_to_dvalue (take ssz bs) (DTYPE_Base (DTYPE_B 8)))
                        (fun e =>
-                          Monads.bind (loop cnt' (off + stride)%N (drop stride bs))
-                            (fun es => Monads.ret (e :: es)))
+                          ExtLib.Structures.Monad.bind (loop cnt' (off + stride)%N (drop stride bs))
+                            (fun es => ExtLib.Structures.Monad.ret (e :: es)))
                  end).
     assert (Hgo : forall cnt off bs, exists elts, go cnt off bs = raise_ret elts).
     { induction cnt as [| cnt' IH]; intros off bs; cbn [go]; [eexists; reflexivity |].
       assert (He : exists e,
                  (if N.leb (off + ssz) np
-                  then Monads.ret (DVALUE_Base DVALUE_Poison)
+                  then ExtLib.Structures.Monad.ret (DVALUE_Base DVALUE_Poison)
                   else memory_bytes_to_dvalue (take ssz bs) (DTYPE_Base (DTYPE_B 8))) = raise_ret e).
       { destruct (N.leb (off + ssz) np); [eexists; reflexivity | apply memory_bytes_to_dvalue_b8_total]. }
       destruct He as [e ->]; cbn.
       destruct (IH (off + stride)%N (drop stride bs)) as [elts ->]; cbn.
       eexists; reflexivity. }
     destruct (Hgo (N.to_nat n) 0%N (b0 :: rest')) as [elts Helts].
-    change (Monads.bind (go (N.to_nat n) 0%N (b0 :: rest'))
-              (fun es => Monads.ret (canonicalize_agg (DVALUE_Array false) es)))
+    change (ExtLib.Structures.Monad.bind (go (N.to_nat n) 0%N (b0 :: rest'))
+              (fun es => ExtLib.Structures.Monad.ret (canonicalize_agg (DVALUE_Array false) es)))
       with (elts0 <- go (N.to_nat n) 0%N (b0 :: rest');;
-            Monads.ret (canonicalize_agg (DVALUE_Array false) elts0)).
+            ExtLib.Structures.Monad.ret (canonicalize_agg (DVALUE_Array false) elts0)).
     rewrite Helts; cbn; eexists; reflexivity.
   Qed.
 
@@ -3250,12 +3251,12 @@ Section MemoryAndSerialization.
     unfold map_monad_acc.
     set (go := fix loop (acc : list B) (xs : list A) : EOU (list B) :=
                  match xs with
-                 | [] => Monads.ret (rev_append acc [])
-                 | a :: xs' => Monads.bind (f a) (fun b => loop (b :: acc) xs')
+                 | [] => ExtLib.Structures.Monad.ret (rev_append acc [])
+                 | a :: xs' => ExtLib.Structures.Monad.bind (f a) (fun b => loop (b :: acc) xs')
                  end).
     change (go [] l = map_monad f l).
     assert (Hgo : forall xs acc,
-              go acc xs = Monads.bind (map_monad f xs) (fun bs => Monads.ret (rev_append acc bs))).
+              go acc xs = ExtLib.Structures.Monad.bind (map_monad f xs) (fun bs => ExtLib.Structures.Monad.ret (rev_append acc bs))).
     { induction xs as [| a xs' IH]; intros acc; cbn [go map_monad]; [reflexivity |].
       destruct (f a) eqn:Efa; cbn; try reflexivity.
       rewrite IH; destruct (map_monad f xs'); reflexivity. }
@@ -3393,7 +3394,7 @@ Section MemoryAndSerialization.
     - change (Basics.compose from_Z Z.of_N) with (fun k : N => from_Z (Z.of_N k)).
       rewrite Hixs; cbn; rewrite map_monad_acc_EOU_eq.
       induction ixs as [| ix ixs' IH]; cbn [map_monad]; [left; exists []; reflexivity |].
-      unfold ptr_byte_offset, int_to_ptr, PIV; cbn [Monads.bind Monad_either].
+      unfold ptr_byte_offset, int_to_ptr, PIV; cbn [ExtLib.Structures.Monad.bind Monad_either].
       destruct (from_Z_ret_or_oom (ptr_to_int p + Z.of_N (alloc_size_dtyp (DTYPE_Base (DTYPE_B 8))) * to_Z ix)%Z)
         as [[i ->] | [msg ->]]; cbn; [| right; exists msg; reflexivity].
       destruct IH as [[ptrs ->] | [msg ->]]; cbn;
@@ -3883,7 +3884,7 @@ Section MemoryAndSerialization.
     destruct ct.
     - destruct t1; try apply memM_interp_prov_raiseUB_l;
         destruct t2; try apply memM_interp_prov_raiseUB_l;
-        cbn [Monads.bind memS_mon memS_bind Monads.ret];
+        cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret];
         (destruct dv;
          eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |];
          intros r _ <-; repeat split; reflexivity).
@@ -4235,7 +4236,7 @@ Section MemoryAndSerialization.
     intros (Hpu & Hnd & Hall & Hdisj & Hfgw & Hfs & Hh & Hout & Hgs).
     cbn [handle_memoryM mempush MemoryModelPrimitivesV].
     unfold Mempush, app_frame_stack, get, put, push_frame_stack, initial_frame;
-      cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov].
+      cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
     apply refine_prov_ret; repeat split; cbn.
     - exact Hpu.
     - exact Hnd.
@@ -4284,9 +4285,9 @@ Section MemoryAndSerialization.
     set (bs := concat_acc (repeatN num (@generate_poison_bytes (@ParamsV IP IPT) dt))).
     unfold allocate_bytes, fresh_prov, Mfresh_prov.
     eapply refine_prov_obs_eq;
-      [symmetry; rewrite memM_interp_prov_bind; cbn [Monads.ret memS_mon memM_interp_prov allocate_bytes_with_pr MemoryModelPrimitivesV];
+      [symmetry; rewrite memM_interp_prov_bind; cbn [ExtLib.Structures.Monad.ret memS_mon memM_interp_prov allocate_bytes_with_pr MemoryModelPrimitivesV];
        rewrite !Eqit.bind_bind; reflexivity
-      | symmetry; rewrite memM_interp_prov_bind; cbn [Monads.ret memS_mon memM_interp_prov allocate_bytes_with_pr MemoryModelPrimitivesV];
+      | symmetry; rewrite memM_interp_prov_bind; cbn [ExtLib.Structures.Monad.ret memS_mon memM_interp_prov allocate_bytes_with_pr MemoryModelPrimitivesV];
         rewrite !Eqit.bind_bind; reflexivity |].
     apply refine_prov_trigger_fresh_both; intros pr Hpr.
     eapply refine_prov_obs_eq;
@@ -4295,17 +4296,17 @@ Section MemoryAndSerialization.
     unfold Allocate_bytes_with_pr, get_free_block, next_key, Mnext_key.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !memM_interp_prov_bind;
-       cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov];
+       cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov];
        rewrite !Eqit.bind_bind; reflexivity
       | symmetry; rewrite !memM_interp_prov_bind;
-        cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov];
+        cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov];
         rewrite !Eqit.bind_bind; reflexivity |].
     rewrite (stage1_mem_next_key_eq U P_unprom G σ1 σ2 al Hinv).
     set (addr := next_key_with_alignment (Memory_stack_memory (state_memory_stack σ2)) al).
     set (sz := ListUtil.N.length bs).
     destruct (int_to_ptr addr (allocation_id_to_prov (provenance_to_allocation_id pr)))
       as [s | s | s | pt] eqn:Ept;
-      cbn [Interfaces.Memory.lift Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov].
+      cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
     - eapply refine_prov_obs_eq;
         [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
         | reflexivity |].
@@ -4319,7 +4320,7 @@ Section MemoryAndSerialization.
         | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
       pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
     - destruct (get_consecutive_ptrs pt sz) as [s | s | s | ptrs] eqn:Eptrs;
-        cbn [Interfaces.Memory.lift Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov].
+        cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
       + eapply refine_prov_obs_eq;
           [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
           | reflexivity |].
@@ -4335,10 +4336,10 @@ Section MemoryAndSerialization.
       + unfold add_block_to_stack, add_block, add_ptrs_to_frame, get_mem, upd_mem, app_mem, app_mem_stack, get, put.
         eapply refine_prov_obs_eq;
           [symmetry; rewrite !Eqit.bind_ret_l;
-           cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV];
+           cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV];
            rewrite !Eqit.bind_ret_l; reflexivity
           | symmetry; rewrite !Eqit.bind_ret_l;
-            cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV];
+            cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV];
             rewrite !Eqit.bind_ret_l; reflexivity |].
         apply refine_prov_ret.
         destruct (int_to_ptr_spec addr (Some [pr]) pt Ept) as [Hpt_int Hpt_pr].
@@ -4453,9 +4454,9 @@ Section MemoryAndSerialization.
     set (bs := concat_acc (repeatN 1%N (@generate_poison_bytes (@ParamsV IP IPT) dt))).
     unfold allocate_bytes, fresh_prov, Mfresh_prov.
     eapply refine_prov_obs_eq;
-      [symmetry; rewrite memM_interp_prov_bind; cbn [Monads.ret memS_mon memM_interp_prov allocate_bytes_with_pr MemoryModelPrimitivesV];
+      [symmetry; rewrite memM_interp_prov_bind; cbn [ExtLib.Structures.Monad.ret memS_mon memM_interp_prov allocate_bytes_with_pr MemoryModelPrimitivesV];
        rewrite !Eqit.bind_bind; reflexivity
-      | symmetry; rewrite memM_interp_prov_bind; cbn [Monads.ret memS_mon memM_interp_prov allocate_bytes_with_pr MemoryModelPrimitivesV];
+      | symmetry; rewrite memM_interp_prov_bind; cbn [ExtLib.Structures.Monad.ret memS_mon memM_interp_prov allocate_bytes_with_pr MemoryModelPrimitivesV];
         rewrite !Eqit.bind_bind; reflexivity |].
     apply refine_prov_trigger_fresh_both; intros pr Hpr.
     eapply refine_prov_obs_eq;
@@ -4464,17 +4465,17 @@ Section MemoryAndSerialization.
     unfold Allocate_bytes_with_pr, get_free_block, next_key, Mnext_key.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !memM_interp_prov_bind;
-       cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov];
+       cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov];
        rewrite !Eqit.bind_bind; reflexivity
       | symmetry; rewrite !memM_interp_prov_bind;
-        cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov];
+        cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov];
         rewrite !Eqit.bind_bind; reflexivity |].
     rewrite (stage1_mem_next_key_eq U P_unprom G σ1 σ2 al Hinv).
     set (addr := next_key_with_alignment (Memory_stack_memory (state_memory_stack σ2)) al).
     set (sz := ListUtil.N.length bs).
     destruct (int_to_ptr addr (allocation_id_to_prov (provenance_to_allocation_id pr)))
       as [s | s | s | pt] eqn:Ept;
-      cbn [Interfaces.Memory.lift Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov].
+      cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
     - eapply refine_prov_obs_eq;
         [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
         | reflexivity |].
@@ -4488,7 +4489,7 @@ Section MemoryAndSerialization.
         | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
       pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
     - destruct (get_consecutive_ptrs pt sz) as [s | s | s | ptrs] eqn:Eptrs;
-        cbn [Interfaces.Memory.lift Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov].
+        cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
       + eapply refine_prov_obs_eq;
           [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
           | reflexivity |].
@@ -4504,10 +4505,10 @@ Section MemoryAndSerialization.
       + unfold add_block_to_stack, add_block, add_ptrs_to_frame, get_mem, upd_mem, app_mem, app_mem_stack, get, put.
         eapply refine_prov_obs_eq;
           [symmetry; rewrite !Eqit.bind_ret_l;
-           cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV];
+           cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV];
            rewrite !Eqit.bind_ret_l; reflexivity
           | symmetry; rewrite !Eqit.bind_ret_l;
-            cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV];
+            cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV];
             rewrite !Eqit.bind_ret_l; reflexivity |].
         apply refine_prov_ret.
         destruct (int_to_ptr_spec addr (Some [pr]) pt Ept) as [Hpt_int Hpt_pr].
@@ -4633,7 +4634,7 @@ Section MemoryAndSerialization.
   Proof using.
     unfold Read_byte, read_byte_raw, read_byte_raw_mem.
     rewrite memM_interp_prov_bind.
-    cbn [get Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+    cbn [get ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     change (IM.find (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ)))
       with (IntMaps.lookup (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ))).
     rewrite Hlk, Eqit.bind_ret_l, Hpr.
@@ -4690,7 +4691,7 @@ Section MemoryAndSerialization.
     eapply refine_prov_obs_eq.
     - symmetry.
       rewrite memM_interp_prov_bind, memM_interp_prov_bind, Eptrs.
-      cbn [Interfaces.Memory.lift Monads.ret memS_mon memM_interp_prov read_byte MemoryModelPrimitivesV].
+      cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov read_byte MemoryModelPrimitivesV].
       rewrite Eqit.bind_ret_l, memM_interp_prov_map_monad_acc.
       rewrite (map_monad_Read_gs_bytes_eq (gs_ptrs gs) (gs_bytes gs) (gs_addr gs) 0%nat (gs_pr gs) σ1).
       + rewrite Eqit.bind_ret_l; reflexivity.
@@ -4717,13 +4718,13 @@ Section MemoryAndSerialization.
   Proof using.
     unfold Write_byte, read_byte_raw, read_byte_raw_mem.
     rewrite memM_interp_prov_bind.
-    cbn [get Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+    cbn [get ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     change (IM.find (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ)))
       with (IntMaps.lookup (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ))).
     rewrite Hlk, Eqit.bind_ret_l, Hpr.
     cbn [access_allowed ProvenanceV existsb]; rewrite N.eqb_refl; cbn [orb].
     unfold set_byte_raw, get_mem, upd_mem, app_mem, set_byte_raw_mem, get, put;
-      cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+      cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     reflexivity.
   Qed.
 
@@ -4855,9 +4856,9 @@ Section MemoryAndSerialization.
     cbn [handle_memoryM]; unfold write_dvalue, write_bytes.
     eapply refine_prov_obs_eq.
     - symmetry.
-      rewrite memM_interp_prov_bind, Hser; cbn [Interfaces.Memory.lift Monads.ret memS_mon memM_interp_prov].
+      rewrite memM_interp_prov_bind, Hser; cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov].
       rewrite Eqit.bind_ret_l, memM_interp_prov_bind, Hsz_bs', Eptrs.
-      cbn [Interfaces.Memory.lift Monads.ret memS_mon memM_interp_prov write_byte MemoryModelPrimitivesV].
+      cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov write_byte MemoryModelPrimitivesV].
       rewrite Eqit.bind_ret_l, zip_combine_eq, Hloop_eq; reflexivity.
     - reflexivity.
     - apply refine_prov_ret.
@@ -4922,7 +4923,7 @@ Section MemoryAndSerialization.
     destruct (is_scalar_dtyp_inv (gs_dt gs) Hsc) as [dtb Hdt_eq].
     destruct (dvalue_to_memory_bytes_base_err dtb v Hnot_base) as [msg1 Hser].
     cbn [handle_memoryM]; unfold write_dvalue.
-    rewrite Hdt_eq, Hser; cbn [Interfaces.Memory.lift Monads.bind memS_mon memS_bind].
+    rewrite Hdt_eq, Hser; cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind].
     apply memM_interp_prov_raise_both.
   Qed.
 
@@ -4940,7 +4941,7 @@ Section MemoryAndSerialization.
     unfold Read_byte, read_byte_raw, read_byte_raw_mem.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    cbn [get Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+    cbn [get ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     change (IM.find (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ1)))
       with (IntMaps.lookup (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ1))).
     change (IM.find (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ2)))
@@ -5014,7 +5015,7 @@ Section MemoryAndSerialization.
       | symmetry; rewrite !memM_interp_prov_bind; reflexivity |].
     destruct (get_consecutive_ptrs pt (@store_size_dtyp SizeofV dt))
       as [s | s | s | ptrs] eqn:Eptrs;
-      cbn [Interfaces.Memory.lift Monads.ret memS_mon memM_interp_prov].
+      cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov].
     - eapply refine_prov_obs_eq;
         [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
         | reflexivity |].
@@ -5063,7 +5064,7 @@ Section MemoryAndSerialization.
     unfold Write_byte, read_byte_raw, read_byte_raw_mem.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    cbn [get Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+    cbn [get ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     change (IM.find (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ1)))
       with (IntMaps.lookup (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ1))).
     change (IM.find (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ2)))
@@ -5086,7 +5087,7 @@ Section MemoryAndSerialization.
           [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
         destruct (access_allowed (ptr_provenance q) aid).
         * unfold set_byte_raw, get_mem, upd_mem, app_mem, set_byte_raw_mem, get, put;
-            cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+            cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
           apply refine_prov_ret; repeat split; cbn;
             try exact Hpu; try exact Hnd; try exact Hall; try exact Hdisj;
             try exact Hfgw; try exact Hfs; try exact Hh.
@@ -5160,7 +5161,7 @@ Section MemoryAndSerialization.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
     destruct (dvalue_to_memory_bytes dt v None) as [s | s | s | bs];
-      cbn [Interfaces.Memory.lift Monads.ret memS_mon memM_interp_prov].
+      cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov].
     - apply memM_interp_prov_raiseOOM_l.
     - apply memM_interp_prov_raiseUB_l.
     - apply memM_interp_prov_raise_both.
@@ -5168,7 +5169,7 @@ Section MemoryAndSerialization.
         [symmetry; rewrite Eqit.bind_ret_l, memM_interp_prov_bind; reflexivity
         | symmetry; rewrite Eqit.bind_ret_l, memM_interp_prov_bind; reflexivity |].
       destruct (get_consecutive_ptrs pt (ListUtil.N.length bs)) as [s | s | s | ptrs] eqn:Eptrs;
-        cbn [Interfaces.Memory.lift Monads.ret memS_mon memM_interp_prov].
+        cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov].
       + apply memM_interp_prov_raiseOOM_l.
       + apply memM_interp_prov_raiseUB_l.
       + apply memM_interp_prov_raise_both.
@@ -5197,7 +5198,7 @@ Section MemoryAndSerialization.
     unfold Read_byte, read_byte_raw, read_byte_raw_mem.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    cbn [get Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+    cbn [get ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     change (IM.find (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ1)))
       with (IntMaps.lookup (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ1))).
     change (IM.find (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ2)))
@@ -5267,7 +5268,7 @@ Section MemoryAndSerialization.
       | symmetry; rewrite !memM_interp_prov_bind; reflexivity |].
     destruct (get_consecutive_ptrs pt (@store_size_dtyp SizeofV (DTYPE_Array false n (DTYPE_Base (DTYPE_B 8)))))
       as [s | s | s | ptrs];
-      cbn [Interfaces.Memory.lift Monads.ret memS_mon memM_interp_prov].
+      cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov].
     - eapply refine_prov_obs_eq;
         [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
         | reflexivity |].
@@ -5290,7 +5291,7 @@ Section MemoryAndSerialization.
       intros U1 [σ1' bs1] [σ2' bs2] (-> & -> & ->).
       destruct (memory_bytes_to_dvalue_b8_array_total bs1 n) as [dv1 ->].
       destruct (memory_bytes_to_dvalue_b8_array_total bs2 n) as [dv2 ->].
-      cbn [Interfaces.Memory.lift Monads.ret memS_mon memM_interp_prov].
+      cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov].
       apply refine_prov_ret; repeat split; reflexivity.
   Qed.
 
@@ -5319,11 +5320,11 @@ Section MemoryAndSerialization.
            upd_frame_stack, app_frame_stack, app_mem, get, put.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+    cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     rewrite Hfs, Hfs_top.
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-    cbn [pop_frame_stack Interfaces.Memory.lift Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov].
+    cbn [pop_frame_stack Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
     apply refine_prov_ret; repeat split; cbn;
       try exact Hpu; try exact Hnd; try exact Hall; try exact Hdisj;
       try exact Hfgw_fs0; try exact Hh.
@@ -5369,11 +5370,11 @@ Section MemoryAndSerialization.
            upd_frame_stack, app_frame_stack, app_mem, get, put.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+    cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     rewrite Hfs, Hfs_top.
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-    cbn [pop_frame_stack Interfaces.Memory.lift Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov].
+    cbn [pop_frame_stack Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
     apply refine_prov_ret; repeat split; cbn;
       try exact Hpu; try exact Hnd_tl; try exact Hall_tl; try exact Hdisj_tl;
       try exact Hfgw_fs0; try exact Hh.
@@ -5479,7 +5480,7 @@ Section MemoryAndSerialization.
     unfold allocate_bytes, fresh_prov, Mfresh_prov.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite memM_interp_prov_bind;
-       cbn [Monads.ret memS_mon memM_interp_prov allocate_bytes_with_pr MemoryModelPrimitivesV];
+       cbn [ExtLib.Structures.Monad.ret memS_mon memM_interp_prov allocate_bytes_with_pr MemoryModelPrimitivesV];
        rewrite !Eqit.bind_bind; reflexivity
       | reflexivity |].
     apply refine_prov_trigger_fresh_l; intros pr Hpr.
@@ -5488,22 +5489,22 @@ Section MemoryAndSerialization.
     unfold Allocate_bytes_with_pr, get_free_block, next_key, Mnext_key.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !memM_interp_prov_bind;
-       cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov];
+       cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov];
        rewrite !Eqit.bind_bind; reflexivity
       | reflexivity |].
     set (addr := next_key_with_alignment (Memory_stack_memory (state_memory_stack σ1)) al).
     set (sz := ListUtil.N.length bs).
     unfold int_to_ptr, PIV at 1.
     destruct (from_Z_ret_or_oom addr) as [[ip Hip] | [msg Hoom]].
-    - rewrite Hip; cbn [Monads.bind Monad_either Monads.ret Interfaces.Memory.lift memS_mon memS_bind memM_interp_prov].
+    - rewrite Hip; cbn [ExtLib.Structures.Monad.bind Monad_either ExtLib.Structures.Monad.ret Interfaces.Memory.lift memS_mon memS_bind memM_interp_prov].
       set (pt := (ip, allocation_id_to_prov (provenance_to_allocation_id pr))
                  : @ptr ProvenanceV (@PointerV IP)).
       destruct (get_consecutive_ptrs_well_behaved pt sz) as [[ptrs Eptrs] | [msg Hoom]].
-      + rewrite Eptrs; cbn [Interfaces.Memory.lift Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov].
+      + rewrite Eptrs; cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
         unfold add_block_to_stack, add_block, add_ptrs_to_frame, get_mem, upd_mem, app_mem, app_mem_stack, get, put.
         eapply refine_prov_obs_eq;
           [symmetry; rewrite !Eqit.bind_ret_l;
-           cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV];
+           cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV];
            rewrite !Eqit.bind_ret_l; reflexivity
           | reflexivity |].
         apply refine_prov_ret.
@@ -5572,12 +5573,12 @@ Section MemoryAndSerialization.
              cbn [state_memory_stack]; rewrite Hmem_frame; cbn [Memory_stack_memory].
              rewrite lookup_add_all_index_acc_out by lia.
              apply Hm_eq.
-      + rewrite Hoom; cbn [Interfaces.Memory.lift Monads.bind memS_mon memS_bind memM_interp_prov].
+      + rewrite Hoom; cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind memM_interp_prov].
         eapply refine_prov_obs_eq;
           [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
           | reflexivity |].
         apply refine_prov_ub_vis_l; reflexivity.
-    - rewrite Hoom; cbn [Monads.bind Monad_either Interfaces.Memory.lift memS_mon memS_bind memM_interp_prov].
+    - rewrite Hoom; cbn [ExtLib.Structures.Monad.bind Monad_either Interfaces.Memory.lift memS_mon memS_bind memM_interp_prov].
       eapply refine_prov_obs_eq;
         [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
         | reflexivity |].
@@ -5601,7 +5602,7 @@ Section MemoryAndSerialization.
     unfold Read_byte, read_byte_raw, read_byte_raw_mem.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    cbn [get Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+    cbn [get ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     change (IM.find (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ1)))
       with (IntMaps.lookup (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ1))).
     change (IM.find (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ2)))
@@ -5677,7 +5678,7 @@ Section MemoryAndSerialization.
       | symmetry; rewrite !memM_interp_prov_bind; reflexivity |].
     destruct (get_consecutive_ptrs pt (@store_size_dtyp SizeofV dt))
       as [s | s | s | ptrs] eqn:Eptrs;
-      cbn [Interfaces.Memory.lift Monads.ret memS_mon memM_interp_prov].
+      cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov].
     - eapply refine_prov_obs_eq;
         [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
         | reflexivity |].
@@ -5727,7 +5728,7 @@ Section MemoryAndSerialization.
     unfold Write_byte, read_byte_raw, read_byte_raw_mem.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    cbn [get Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+    cbn [get ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     change (IM.find (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ1)))
       with (IntMaps.lookup (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ1))).
     change (IM.find (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ2)))
@@ -5745,7 +5746,7 @@ Section MemoryAndSerialization.
           [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
         destruct (access_allowed (ptr_provenance q) aid).
         * unfold set_byte_raw, get_mem, upd_mem, app_mem, set_byte_raw_mem, get, put;
-            cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+            cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
           apply refine_prov_ret; repeat split; cbn;
             try exact Hpu; try exact Hin; try exact Hnin;
             try exact Hh; try exact Hfs2; try exact Hfs1.
@@ -5818,7 +5819,7 @@ Section MemoryAndSerialization.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
     destruct (dvalue_to_memory_bytes dt v None) as [s | s | s | bs];
-      cbn [Interfaces.Memory.lift Monads.ret memS_mon memM_interp_prov].
+      cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov].
     - apply memM_interp_prov_raiseOOM_l.
     - apply memM_interp_prov_raiseUB_l.
     - apply memM_interp_prov_raise_both.
@@ -5826,7 +5827,7 @@ Section MemoryAndSerialization.
         [symmetry; rewrite Eqit.bind_ret_l, memM_interp_prov_bind; reflexivity
         | symmetry; rewrite Eqit.bind_ret_l, memM_interp_prov_bind; reflexivity |].
       destruct (get_consecutive_ptrs pt (ListUtil.N.length bs)) as [s | s | s | ptrs] eqn:Eptrs;
-        cbn [Interfaces.Memory.lift Monads.ret memS_mon memM_interp_prov].
+        cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov].
       + apply memM_interp_prov_raiseOOM_l.
       + apply memM_interp_prov_raiseUB_l.
       + apply memM_interp_prov_raise_both.
@@ -5863,11 +5864,11 @@ Section MemoryAndSerialization.
            upd_frame_stack, app_frame_stack, app_mem, get, put.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    cbn [Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov state_get_memory MemoryModelStateV].
+    cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     rewrite Hfs1, Hfs2.
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-    cbn [pop_frame_stack Interfaces.Memory.lift Monads.bind memS_mon memS_bind Monads.ret memM_interp_prov].
+    cbn [pop_frame_stack Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
     apply refine_prov_ret; repeat split; cbn; try exact Hh.
     intros z.
     destruct (stage2_in_range_dec base_dead sz_dead z) as [Hr | Hnr].
@@ -6164,8 +6165,8 @@ Section MemoryAndSerialization.
     (switches : list (@dvalue (@ParamsV IP IPT) * block_id)) :
     map_monad
       (fun '((TInt_Literal sz x), id) =>
-         Monads.bind (coerce_integer_to_int (Some sz) (denote_int_syntax x))
-           (fun s => Monads.ret (@DVALUE_Base (@ParamsV IP IPT) s, id)))
+         ExtLib.Structures.Monad.bind (coerce_integer_to_int (Some sz) (denote_int_syntax x))
+           (fun s => ExtLib.Structures.Monad.ret (@DVALUE_Base (@ParamsV IP IPT) s, id)))
       dests = raise_ret switches ->
     List.map snd switches = List.map snd dests.
   Proof using.
@@ -6974,7 +6975,7 @@ Section MemoryAndSerialization.
         (interp_cfg_model ctx (withCall (map_monad f xs)) s)
         (interp_mcfg_model (map_monad f xs) s).
   Proof using.
-    induction xs as [| a xs' IH]; intros s; cbn [map_monad Monads.bind Monads.ret Monad_itree].
+    induction xs as [| a xs' IH]; intros s; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     - apply tau_expand_cfg_withCall_ret.
     - eapply tau_expand_cfg_withCall_bind; [apply Hf; left; reflexivity |].
       intros s1 b; eapply tau_expand_cfg_withCall_bind.
@@ -7008,36 +7009,36 @@ Section MemoryAndSerialization.
   Proof using.
     unfold freeze_base.
     destruct db as [| | | | | sz bv | |].
-    - unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply tau_expand_cfg_withCall_bind;
         [apply tau_expand_cfg_withCall_ret | intros ? ?; apply tau_expand_cfg_withCall_ret].
-    - unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply tau_expand_cfg_withCall_bind;
         [apply tau_expand_cfg_withCall_ret | intros ? ?; apply tau_expand_cfg_withCall_ret].
-    - unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply tau_expand_cfg_withCall_bind;
         [apply tau_expand_cfg_withCall_ret | intros ? ?; apply tau_expand_cfg_withCall_ret].
-    - unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply tau_expand_cfg_withCall_bind;
         [apply tau_expand_cfg_withCall_ret | intros ? ?; apply tau_expand_cfg_withCall_ret].
-    - unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply tau_expand_cfg_withCall_bind;
         [apply tau_expand_cfg_withCall_ret | intros ? ?; apply tau_expand_cfg_withCall_ret].
     - destruct bv as [| | bits].
-      + unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+      + unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
           eapply tau_expand_cfg_withCall_bind;
           [apply tau_expand_cfg_withCall_ret | intros ? ?; apply tau_expand_cfg_withCall_ret].
-      + unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+      + unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
           eapply tau_expand_cfg_withCall_bind;
           [apply tau_expand_cfg_withCall_ret | intros ? ?; apply tau_expand_cfg_withCall_ret].
-      + destruct (existsb is_poison_bit bits); cbn [Monads.bind Monads.ret Monad_itree].
+      + destruct (existsb is_poison_bit bits); cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         * eapply tau_expand_cfg_withCall_bind.
           -- unfold draw, Subevent.trigger; try unfold trigger_cast; apply tau_expand_cfg_withCall_trigger.
           -- intros s' x; apply tau_expand_cfg_withCall_ret.
-        * unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+        * unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
             eapply tau_expand_cfg_withCall_bind;
             [apply tau_expand_cfg_withCall_ret | intros ? ?; apply tau_expand_cfg_withCall_ret].
-    - unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply tau_expand_cfg_withCall_bind;
         [apply tau_expand_cfg_withCall_ret | intros ? ?; apply tau_expand_cfg_withCall_ret].
     - unfold draw, Subevent.trigger; try unfold trigger_cast; apply tau_expand_cfg_withCall_trigger.
@@ -7058,13 +7059,13 @@ Section MemoryAndSerialization.
       + apply tau_expand_cfg_withCall_freeze_base.
       + destruct dt as [| | p' dts];
           try apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _).
-        cbn [Monads.bind Monads.ret Monad_itree].
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply tau_expand_cfg_withCall_bind; [| intros ? ?; apply tau_expand_cfg_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
         assert (Hfld : ( (fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) fields <= sz)%nat) by lia.
         clear Hle; generalize (@nil (@dvalue (@ParamsV IP IPT))) as acc.
         revert dts s Hfld; induction fields as [| v vs IHf]; intros [| t ts] s Hfld acc;
-          cbn [Monads.bind Monads.ret Monad_itree].
+          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         * apply tau_expand_cfg_withCall_ret.
         * apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _).
         * apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _).
@@ -7073,13 +7074,13 @@ Section MemoryAndSerialization.
           -- intros s1 v'; apply IHf; lia.
       + destruct dt as [| v' sz_n t |];
           try apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _).
-        cbn [Monads.bind Monads.ret Monad_itree].
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply tau_expand_cfg_withCall_bind; [| intros ? ?; apply tau_expand_cfg_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
         assert (Helt : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) elts <= sz)%nat) by lia.
         clear Hle; generalize (@nil (@dvalue (@ParamsV IP IPT))) as acc.
         revert s Helt; induction elts as [| v vs IHe]; intros s Helt acc;
-          cbn [Monads.bind Monads.ret Monad_itree].
+          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         * apply tau_expand_cfg_withCall_ret.
         * eapply tau_expand_cfg_withCall_bind.
           -- fold (@freeze (@ParamsV IP IPT) _ _ _ _ t v); apply IH; lia.
@@ -7109,7 +7110,7 @@ Section MemoryAndSerialization.
         apply IH.
         clear -Hin Helts; induction elts as [| [d1 e1] rest IHr]; [contradiction |].
         destruct Hin as [Heq | Hin]; [inversion Heq; subst; lia | apply IHr; [exact Hin | lia]]. }
-      destruct e; cbn [denote_exp Monads.bind Monads.ret Monad_itree]; cbn [m2r_exp_size] in Hle.
+      destruct e; cbn [denote_exp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; cbn [m2r_exp_size] in Hle.
       + destruct id as [gid | lid]; cbn [lookup_id];
           unfold gread, lread, Subevent.trigger; try unfold trigger_cast;
           apply tau_expand_cfg_withCall_trigger.
@@ -7256,7 +7257,7 @@ Section MemoryAndSerialization.
         (interp_cfg_exc ctx (withCall (map_monad f xs)) s)
         (mcfg_inr_exc (map_monad f xs) s).
   Proof using.
-    induction xs as [| a xs' IH]; intros s; cbn [map_monad Monads.bind Monads.ret Monad_itree].
+    induction xs as [| a xs' IH]; intros s; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     - apply tau_expand_exc_withCall_ret.
     - eapply tau_expand_exc_withCall_bind; [apply Hf; left; reflexivity |].
       intros s1 b; eapply tau_expand_exc_withCall_bind.
@@ -7291,37 +7292,37 @@ Section MemoryAndSerialization.
   Proof using.
     unfold freeze_base.
     destruct db as [| | | | | sz bv | |].
-    - unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply tau_expand_exc_withCall_bind;
         [apply tau_expand_exc_withCall_ret | intros ? ?; apply tau_expand_exc_withCall_ret].
-    - unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply tau_expand_exc_withCall_bind;
         [apply tau_expand_exc_withCall_ret | intros ? ?; apply tau_expand_exc_withCall_ret].
-    - unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply tau_expand_exc_withCall_bind;
         [apply tau_expand_exc_withCall_ret | intros ? ?; apply tau_expand_exc_withCall_ret].
-    - unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply tau_expand_exc_withCall_bind;
         [apply tau_expand_exc_withCall_ret | intros ? ?; apply tau_expand_exc_withCall_ret].
-    - unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply tau_expand_exc_withCall_bind;
         [apply tau_expand_exc_withCall_ret | intros ? ?; apply tau_expand_exc_withCall_ret].
     - destruct bv as [| | bits].
-      + unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+      + unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
           eapply tau_expand_exc_withCall_bind;
           [apply tau_expand_exc_withCall_ret | intros ? ?; apply tau_expand_exc_withCall_ret].
-      + unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+      + unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
           eapply tau_expand_exc_withCall_bind;
           [apply tau_expand_exc_withCall_ret | intros ? ?; apply tau_expand_exc_withCall_ret].
-      + destruct (existsb is_poison_bit bits); cbn [Monads.bind Monads.ret Monad_itree].
+      + destruct (existsb is_poison_bit bits); cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         * eapply tau_expand_exc_withCall_bind.
           -- unfold draw, Subevent.trigger; try unfold trigger_cast;
                apply tau_expand_exc_withCall_trigger; reflexivity.
           -- intros s' x; apply tau_expand_exc_withCall_ret.
-        * unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+        * unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
             eapply tau_expand_exc_withCall_bind;
             [apply tau_expand_exc_withCall_ret | intros ? ?; apply tau_expand_exc_withCall_ret].
-    - unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply tau_expand_exc_withCall_bind;
         [apply tau_expand_exc_withCall_ret | intros ? ?; apply tau_expand_exc_withCall_ret].
     - unfold draw, Subevent.trigger; try unfold trigger_cast;
@@ -7343,13 +7344,13 @@ Section MemoryAndSerialization.
       + apply tau_expand_exc_withCall_freeze_base.
       + destruct dt as [| | p' dts];
           try apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _).
-        cbn [Monads.bind Monads.ret Monad_itree].
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply tau_expand_exc_withCall_bind; [| intros ? ?; apply tau_expand_exc_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
         assert (Hfld : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) fields <= sz)%nat) by lia.
         clear Hle; generalize (@nil (@dvalue (@ParamsV IP IPT))) as acc.
         revert dts s Hfld; induction fields as [| v vs IHf]; intros [| t ts] s Hfld acc;
-          cbn [Monads.bind Monads.ret Monad_itree].
+          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         * apply tau_expand_exc_withCall_ret.
         * apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _).
         * apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _).
@@ -7358,13 +7359,13 @@ Section MemoryAndSerialization.
           -- intros s1 v'; apply IHf; lia.
       + destruct dt as [| v' sz_n t |];
           try apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _).
-        cbn [Monads.bind Monads.ret Monad_itree].
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply tau_expand_exc_withCall_bind; [| intros ? ?; apply tau_expand_exc_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
         assert (Helt : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) elts <= sz)%nat) by lia.
         clear Hle; generalize (@nil (@dvalue (@ParamsV IP IPT))) as acc.
         revert s Helt; induction elts as [| v vs IHe]; intros s Helt acc;
-          cbn [Monads.bind Monads.ret Monad_itree].
+          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         * apply tau_expand_exc_withCall_ret.
         * eapply tau_expand_exc_withCall_bind.
           -- fold (@freeze (@ParamsV IP IPT) _ _ _ _ t v); apply IH; lia.
@@ -7394,7 +7395,7 @@ Section MemoryAndSerialization.
         apply IH.
         clear -Hin Helts; induction elts as [| [d1 e1] rest IHr]; [contradiction |].
         destruct Hin as [Heq | Hin]; [inversion Heq; subst; lia | apply IHr; [exact Hin | lia]]. }
-      destruct e; cbn [denote_exp Monads.bind Monads.ret Monad_itree]; cbn [m2r_exp_size] in Hle.
+      destruct e; cbn [denote_exp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; cbn [m2r_exp_size] in Hle.
       + destruct id as [gid | lid]; cbn [lookup_id];
           unfold gread, lread, Subevent.trigger; try unfold trigger_cast;
           apply tau_expand_exc_withCall_trigger; reflexivity.
@@ -7468,12 +7469,12 @@ Section MemoryAndSerialization.
     - assert (H1 : interp_vellvm_prov_h (subevent _ (GlobalRead gid)) (σ1, (ls1, g)) ≅ Ret ((σ1, (ls1, g)), v)).
       { unfold interp_vellvm_prov_h; cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
         unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, update_globals_ref;
-          cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
         rewrite Elk, !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity. }
       assert (H2 : interp_vellvm_prov_h (subevent _ (GlobalRead gid)) (σ2, (ls2, g)) ≅ Ret ((σ2, (ls2, g)), v)).
       { unfold interp_vellvm_prov_h; cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
         unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, update_globals_ref;
-          cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
         rewrite Elk, !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity. }
       eapply refine_prov_tau_star_l; [eapply tau_star_mcfg_det; [reflexivity | exact H1] |].
       eapply refine_prov_tau_star_r; [eapply tau_star_mcfg_det; [reflexivity | exact H2] |].
@@ -7484,7 +7485,7 @@ Section MemoryAndSerialization.
       + symmetry; apply interp_mcfg_model_non_intr; reflexivity.
       + unfold interp_vellvm_prov_h; cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
         unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, raise, trigger_cast, ITree.trigger, lift_bot_prov;
-          cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
         rewrite Elk.
         pstep; apply RP_Step; unfold rp_step_body.
         rewrite !observe_bind, !unfold_translate; cbn; right; right; split; [exact I | intros [] [] _].
@@ -7561,11 +7562,11 @@ Section MemoryAndSerialization.
         right; right; split; [exact I | intros [] [] _].
     - assert (Hd1 : interp_vellvm_prov_h (subevent _ (Draw dt)) s1 ≅ Ret (s1, dv)).
       { unfold interp_vellvm_prov_h; cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
-        unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree Monads.ret Monad_itree].
+        unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree ExtLib.Structures.Monad.ret Monad_itree].
         rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity. }
       assert (Hd2 : interp_vellvm_prov_h (subevent _ (Draw dt)) s2 ≅ Ret (s2, dv)).
       { unfold interp_vellvm_prov_h; cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
-        unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree Monads.ret Monad_itree].
+        unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree ExtLib.Structures.Monad.ret Monad_itree].
         rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity. }
       eapply refine_prov_tau_star_l; [eapply tau_star_mcfg_det; [reflexivity | exact Hd1] |].
       eapply refine_prov_tau_star_r; [eapply tau_star_mcfg_det; [reflexivity | exact Hd2] |].
@@ -7614,9 +7615,9 @@ Section MemoryAndSerialization.
     assert (Hfmap_ret :
       forall db0 U0 a1 a2,
         refine_prov (fun U' '(s1', r1) '(s2', r2) => U' = U0 /\ s1' = a1 /\ s2' = a2 /\ r1 = r2) U0
-          (interp_mcfg_model (DVALUE_Base <$> Monads.ret db0) a1)
-          (interp_mcfg_model (DVALUE_Base <$> Monads.ret db0) a2)).
-    { intros db0 U0 a1 a2; unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree.
+          (interp_mcfg_model (DVALUE_Base <$> ExtLib.Structures.Monad.ret db0) a1)
+          (interp_mcfg_model (DVALUE_Base <$> ExtLib.Structures.Monad.ret db0) a2)).
+    { intros db0 U0 a1 a2; unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree.
       eapply refine_mcfg_model_bind; [apply Hret_sync | intros ? ? ? ? ? _ (-> & -> & -> & ->); apply Hret_sync]. }
     assert (Hbase :
       forall dt0 db0 U0 a1 a2,
@@ -7627,7 +7628,7 @@ Section MemoryAndSerialization.
         try apply Hfmap_ret; [| apply refine_mcfg_draw_sync].
       destruct bv as [| | bits]; try apply Hfmap_ret.
       destruct (existsb is_poison_bit bits); [| apply Hfmap_ret].
-      cbn [Monads.bind Monads.ret Monad_itree].
+      cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       eapply refine_mcfg_model_bind; [apply refine_mcfg_draw_sync | intros ? ? ? ? ? _ (-> & -> & -> & ->); apply Hret_sync]. }
     remember (m2r_dvalue_size dv) as sz eqn:Esz.
     assert (Hle : (m2r_dvalue_size dv <= sz)%nat) by lia; clear Esz.
@@ -7636,25 +7637,25 @@ Section MemoryAndSerialization.
     - destruct dv as [db | p fields | vec elts]; cbn [freeze].
       + apply Hbase.
       + destruct dt as [| | p' dts]; try apply refine_mcfg_raise_both.
-        cbn [Monads.bind Monads.ret Monad_itree].
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply refine_mcfg_model_bind; [| intros ? ? ? ? ? _ (-> & -> & -> & ->); apply Hret_sync].
         cbn [m2r_dvalue_size] in Hle.
         assert (Hfld : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) fields <= sz)%nat) by lia.
         clear Hle; generalize (@nil (@dvalue (@ParamsV IP IPT))) as acc.
         revert dts U s1 s2 Hfld; induction fields as [| v vs IHf]; intros [| t ts] U s1 s2 Hfld acc;
-          cbn [Monads.bind Monads.ret Monad_itree];
+          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
           try apply refine_mcfg_raise_both; [apply Hret_sync |].
         eapply refine_mcfg_model_bind.
         * fold (@freeze (@ParamsV IP IPT) _ _ _ _ t v); apply IH; lia.
         * intros ? ? ? ? ? _ (-> & -> & -> & ->); apply IHf; lia.
       + destruct dt as [| v' sz_n t |]; try apply refine_mcfg_raise_both.
-        cbn [Monads.bind Monads.ret Monad_itree].
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply refine_mcfg_model_bind; [| intros ? ? ? ? ? _ (-> & -> & -> & ->); apply Hret_sync].
         cbn [m2r_dvalue_size] in Hle.
         assert (Helt : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) elts <= sz)%nat) by lia.
         clear Hle; generalize (@nil (@dvalue (@ParamsV IP IPT))) as acc.
         revert U s1 s2 Helt; induction elts as [| v vs IHe]; intros U s1 s2 Helt acc;
-          cbn [Monads.bind Monads.ret Monad_itree]; [apply Hret_sync |].
+          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; [apply Hret_sync |].
         eapply refine_mcfg_model_bind.
         * fold (@freeze (@ParamsV IP IPT) _ _ _ _ t v); apply IH; lia.
         * intros ? ? ? ? ? _ (-> & -> & -> & ->); apply IHe; lia.
@@ -7703,7 +7704,7 @@ Section MemoryAndSerialization.
             (interp_mcfg_model (map_monad (fun '(dt, ex) => denote_exp (Some dt) ex) elts) s1)
             (interp_mcfg_model (map_monad (fun '(dt, ex) => denote_exp (Some dt) ex) elts) s2)).
       { induction elts as [| [dt0 ex0] rest IHr]; intros Hsz0 Hv0;
-          cbn [map_monad Monads.bind Monads.ret Monad_itree].
+          cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         - eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret | apply refine_prov_ret; repeat split].
         - eapply refine_mcfg_model_bind.
           + apply IH; [lia | intros x Hx; apply Hv0, in_app_iff; left; exact Hx].
@@ -7722,7 +7723,7 @@ Section MemoryAndSerialization.
             m2r_safe_ptr_exp safe_locals e = true ->
             is_safe_ptr_dvalue P_unprom v).
       { intros v _ Hfalse ? safe_locals _ _ Htrue; rewrite (Hfalse safe_locals) in Htrue; discriminate Htrue. }
-      destruct e; cbn [denote_exp Monads.bind Monads.ret Monad_itree]; cbn [m2r_exp_size] in Hle.
+      destruct e; cbn [denote_exp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; cbn [m2r_exp_size] in Hle.
       + destruct id as [gid | lid]; cbn [lookup_id].
         * eapply refine_prov_weaken; [apply refine_mcfg_gread_same_g |].
           intros U' [s1' v1] [s2' v2] (-> & -> & -> & -> & Hsafe).
@@ -8040,7 +8041,7 @@ Section MemoryAndSerialization.
     loop_monad f (l1 ++ l2) ≅
     ITree.bind (loop_monad f l1) (fun _ => loop_monad f l2).
   Proof using.
-    induction l1 as [| a l1' IH]; cbn [List.app loop_monad Monads.bind Monads.ret Monad_itree].
+    induction l1 as [| a l1' IH]; cbn [List.app loop_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     - symmetry; apply Eqit.bind_ret_l.
     - symmetry; rewrite Eqit.bind_bind.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
@@ -8372,7 +8373,7 @@ Section MemoryAndSerialization.
     unfold interp_vellvm_prov_h;
       cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
     unfold fused_stack_prov, on_ls_prov, handle_stack;
-      cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+      cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
     rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity.
   Qed.
 
@@ -8389,7 +8390,7 @@ Section MemoryAndSerialization.
     unfold interp_vellvm_prov_h;
       cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
     unfold fused_stack_prov, on_ls_prov, handle_stack;
-      cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+      cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
     rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity.
   Qed.
 
@@ -8405,7 +8406,7 @@ Section MemoryAndSerialization.
     unfold interp_vellvm_prov_h;
       cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
     unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, update_globals_ref;
-      cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+      cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
     rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity.
   Qed.
 
@@ -8413,7 +8414,7 @@ Section MemoryAndSerialization.
     (loc : string) (f : exp dtyp) :
     @denote_operand_bundles (@ParamsV IP IPT) loc f [] ≅ Ret tt.
   Proof using.
-    unfold denote_operand_bundles; cbn [map_monad Monads.bind Monads.ret Monad_itree].
+    unfold denote_operand_bundles; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     rewrite Eqit.bind_ret_l; reflexivity.
   Qed.
 
@@ -8695,7 +8696,7 @@ Section MemoryAndSerialization.
       (interp_cfg_exc ctx2 (denote_call_args args msg) s2).
   Proof using.
     cbv zeta; unfold denote_call_args.
-    induction args as [| [[t op] attrs] rest IH]; cbn [map_monad Monads.bind Monads.ret Monad_itree].
+    induction args as [| [[t op] attrs] rest IH]; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     - apply refine_cfg_exc_ret; repeat split; reflexivity.
     - eapply refine_cfg_exc_bind.
       + eapply refine_cfg_exc_bind.
@@ -9639,7 +9640,7 @@ Section MemoryAndSerialization.
         (interp_mcfg_model (loop_monad f xs) (σ2, (ls, g))).
   Proof using.
     induction xs as [| a xs' IH]; intros U P0 σ1 σ2 ls g Hpu Hg Heq;
-      cbn [loop_monad Monads.bind Monads.ret Monad_itree].
+      cbn [loop_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     - eapply refine_prov_obs_eq;
         [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret |].
       apply refine_prov_ret; exists P0, g.
@@ -9905,7 +9906,7 @@ Section MemoryAndSerialization.
       (interp_mcfg_model (map_monad address_one_function defs2) s2).
   Proof using.
     cbv zeta; induction Hrel as [| d1 d2 ds1 ds2 [Hnm Hfn] _ IH];
-      cbn [map_monad Monads.bind Monads.ret Monad_itree].
+      cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     - eapply refine_prov_obs_eq;
         [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret |].
       apply refine_prov_ret;
@@ -9942,7 +9943,7 @@ Section MemoryAndSerialization.
       (interp_mcfg_model (map_monad address_one_library_function libs) s2).
   Proof using.
     cbv zeta; induction Hrel as [| lib rest Hfn _ IH];
-      cbn [map_monad Monads.bind Monads.ret Monad_itree].
+      cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     - eapply refine_prov_obs_eq;
         [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret |].
       apply refine_prov_ret;
@@ -11002,11 +11003,11 @@ Section MemoryAndSerialization.
          | _ => raise "dvalue_to_dvalue_base: non-base dvalue"
          end).
   Proof using.
-    unfold mk_store_val_exp; cbn [denote_exp Monads.bind Monads.ret Monad_itree].
+    unfold mk_store_val_exp; cbn [denote_exp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     rewrite !Eqit.bind_ret_l, !Eqit.bind_bind.
     eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
     intros [db | pk flds | vec elts] _ <-.
-    - cbn [dvalue_to_dvalue_base EOU_monad Monads.ret Monad_eitherT Monad_sum EOU_to_itree Monads.bind Monad_itree].
+    - cbn [dvalue_to_dvalue_base EOU_monad ExtLib.Structures.Monad.ret EOU_to_itree ExtLib.Structures.Monad.bind Monad_itree].
       rewrite !Eqit.bind_ret_l, ?Eqit.bind_bind, ?Eqit.bind_ret_l.
       unfold insert_element, extract_element, dvalue_to_Z, VellvmIntegers.signed, VellvmIntegers.zero;
         cbn; rewrite ?Eqit.bind_ret_l; reflexivity.
@@ -11023,7 +11024,7 @@ Section MemoryAndSerialization.
     ITree.bind (lread cur_reg)
       (fun v => convert CONV_Bitcast (DTYPE_Array true 1%N dt) (DVALUE_Array true [v]) dt).
   Proof using.
-    unfold mk_load_val_exp; cbn [denote_exp lookup_id map_monad Monads.bind Monads.ret Monad_itree].
+    unfold mk_load_val_exp; cbn [denote_exp lookup_id map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     rewrite !Eqit.bind_bind.
     eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
     intros v _ <-; rewrite !Eqit.bind_ret_l; reflexivity.
@@ -11224,7 +11225,7 @@ Section MemoryAndSerialization.
       as (_ & Hinv_ptrs & _).
     cbn [handle_memoryM]; unfold read_dvalue, read_bytes.
     rewrite memM_interp_prov_bind, memM_interp_prov_bind, Eptrs.
-    cbn [Interfaces.Memory.lift Monads.ret memS_mon memM_interp_prov read_byte MemoryModelPrimitivesV].
+    cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov read_byte MemoryModelPrimitivesV].
     rewrite Eqit.bind_ret_l, memM_interp_prov_map_monad_acc.
     rewrite (map_monad_Read_gs_bytes_eq (gs_ptrs gs) (gs_bytes gs) (gs_addr gs) 0%nat (gs_pr gs) σ1).
     - rewrite Eqit.bind_ret_l; reflexivity.
@@ -11391,7 +11392,7 @@ Section MemoryAndSerialization.
         * apply refine_cfg_exc_memory_event_l.
           eapply refine_prov_obs_eq;
             [symmetry; rewrite Hld_eq; reflexivity | reflexivity |].
-          cbn [Monads.ret memS_mon memM_interp_prov].
+          cbn [ExtLib.Structures.Monad.ret memS_mon memM_interp_prov].
           eapply refine_prov_tau_star_r;
             [apply tau_star_cfg_exc_lwrite |].
           apply refine_prov_ret; repeat split; reflexivity.
@@ -11518,14 +11519,14 @@ Section MemoryAndSerialization.
     - destruct e3 as [gid dv | gid]; [discriminate Hng |].
       unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, update_globals_ref.
       destruct (Maps.lookup gid g0) as [v |];
-        cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
       + eapply refine_prov_obs_eq;
           [symmetry; rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity
           | symmetry; rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity |].
         apply refine_prov_ret;
           exact (conj (incl_refl U) (conj Heq (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl)))).
       + unfold raise, trigger_cast, ITree.trigger, lift_bot_prov;
-          cbn [Monads.bind Monads.ret Monad_stateT Monad_itree].
+          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
         pstep; apply RP_Step; unfold rp_step_body.
         rewrite !observe_bind, !unfold_translate; cbn; right; right; split; [exact I | intros [] [] _].
     - unfold fused_local_prov; apply on_ls_prov_g_sync, Heq.
@@ -11908,7 +11909,7 @@ Section MemoryAndSerialization.
     ev_ok ok_ev (map_monad f xs).
   Proof using.
     intros Hf; induction xs as [| x xs' IH];
-      cbn [map_monad Monads.bind Monads.ret Monad_itree].
+      cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     - apply ev_ok_ret.
     - eapply ev_ok_bind; [apply Hf; left; reflexivity |].
       intros b; eapply ev_ok_bind.
@@ -11923,7 +11924,7 @@ Section MemoryAndSerialization.
     ev_ok ok_ev (loop_monad f xs).
   Proof using.
     intros Hf; induction xs as [| x xs' IH];
-      cbn [loop_monad Monads.bind Monads.ret Monad_itree].
+      cbn [loop_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     - apply ev_ok_ret.
     - eapply ev_ok_bind; [apply Hf; left; reflexivity |].
       intros []; apply IH; intros a Ha; apply Hf; right; exact Ha.
@@ -12063,7 +12064,7 @@ Section MemoryAndSerialization.
     ev_ok (@is_non_global_cfg_ev) (withCall (map_monad f xs)).
   Proof using.
     intros Hf; induction xs as [| a xs' IH];
-      cbn [map_monad Monads.bind Monads.ret Monad_itree].
+      cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     - apply ev_ok_withCall_ret.
     - eapply ev_ok_withCall_bind; [apply Hf; left; reflexivity |].
       intros b; eapply ev_ok_withCall_bind.
@@ -12091,29 +12092,29 @@ Section MemoryAndSerialization.
   Proof using.
     unfold freeze_base.
     destruct db as [| | | | | sz bv | |].
-    - unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros _; apply ev_ok_withCall_ret].
-    - unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros _; apply ev_ok_withCall_ret].
-    - unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros _; apply ev_ok_withCall_ret].
-    - unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros _; apply ev_ok_withCall_ret].
-    - unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros _; apply ev_ok_withCall_ret].
     - destruct bv as [| | bits].
-      + unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+      + unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
           eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros _; apply ev_ok_withCall_ret].
-      + unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+      + unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
           eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros _; apply ev_ok_withCall_ret].
-      + destruct (existsb is_poison_bit bits); cbn [Monads.bind Monads.ret Monad_itree].
+      + destruct (existsb is_poison_bit bits); cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         * eapply ev_ok_withCall_bind.
           -- unfold draw, Subevent.trigger; try unfold trigger_cast;
                apply ev_ok_withCall_trigger; reflexivity.
           -- intros x; apply ev_ok_withCall_ret.
-        * unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+        * unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
             eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros _; apply ev_ok_withCall_ret].
-    - unfold Functor.fmap, Functor_itree, ITree.map, Monads.ret, Monad_itree;
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros _; apply ev_ok_withCall_ret].
     - unfold draw, Subevent.trigger; try unfold trigger_cast;
         apply ev_ok_withCall_trigger; reflexivity.
@@ -12131,13 +12132,13 @@ Section MemoryAndSerialization.
       + apply ev_ok_withCall_freeze_base.
       + destruct dt as [| | p' dts];
           try apply (ev_ok_withCall_EOU (raise_error _)).
-        cbn [Monads.bind Monads.ret Monad_itree].
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply ev_ok_withCall_bind; [| intros _; apply ev_ok_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
         assert (Hfld : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) fields <= sz)%nat) by lia.
         clear Hle; generalize (@nil (@dvalue (@ParamsV IP IPT))) as acc.
         revert dts Hfld; induction fields as [| v vs IHf]; intros [| t ts] Hfld acc;
-          cbn [Monads.bind Monads.ret Monad_itree].
+          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         * apply ev_ok_withCall_ret.
         * apply (ev_ok_withCall_EOU (raise_error _)).
         * apply (ev_ok_withCall_EOU (raise_error _)).
@@ -12146,13 +12147,13 @@ Section MemoryAndSerialization.
           -- intros v'; apply IHf; lia.
       + destruct dt as [| v' sz_n t |];
           try apply (ev_ok_withCall_EOU (raise_error _)).
-        cbn [Monads.bind Monads.ret Monad_itree].
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply ev_ok_withCall_bind; [| intros _; apply ev_ok_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
         assert (Helt : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) elts <= sz)%nat) by lia.
         clear Hle; generalize (@nil (@dvalue (@ParamsV IP IPT))) as acc.
         revert Helt; induction elts as [| v vs IHe]; intros Helt acc;
-          cbn [Monads.bind Monads.ret Monad_itree].
+          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         * apply ev_ok_withCall_ret.
         * eapply ev_ok_withCall_bind.
           -- fold (@freeze (@ParamsV IP IPT) _ _ _ _ t v); apply IH; lia.
@@ -12176,7 +12177,7 @@ Section MemoryAndSerialization.
         intros [dt0 ex0] Hin; apply IH.
         clear -Hin Helts; induction elts as [| [d1 e1] rest IHr]; [contradiction |].
         destruct Hin as [Heq | Hin]; [inversion Heq; subst; lia | apply IHr; [exact Hin | lia]]. }
-      destruct e; cbn [denote_exp Monads.bind Monads.ret Monad_itree]; cbn [m2r_exp_size] in Hle.
+      destruct e; cbn [denote_exp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; cbn [m2r_exp_size] in Hle.
       + destruct id as [gid | lid]; cbn [lookup_id];
           unfold gread, lread, Subevent.trigger; try unfold trigger_cast;
           apply ev_ok_withCall_trigger; reflexivity.
@@ -12867,7 +12868,7 @@ Section MemoryAndSerialization.
         (interp_cfg_model ctx1 (mrec_ctx ctx1 X ce) (s_a, (ls0, g0)))
         (interp_cfg_model ctx2 (mrec_ctx ctx2 X ce) (s_b, (ls0, g0))).
     Proof using Hctx.
-      destruct ce as [dt cc fv vs]; unfold mrec_ctx; cbn [Monads.bind Monad_itree].
+      destruct ce as [dt cc fv vs]; unfold mrec_ctx; cbn [ExtLib.Structures.Monad.bind Monad_itree].
       destruct fv as [db | |];
         [| right; eapply refine_cfg_model_bind with (RA := fun _ _ _ => False);
              [apply refine_cfg_raise_both | intros _ _ _ _ _ _ []]
@@ -13185,7 +13186,7 @@ Section MemoryAndSerialization.
                                 (fun ba => Ret (dvalue_ptr_address ba))) brs) s2).
   Proof using.
     intros s1 s2; induction brs as [| b brs' IH];
-      cbn [map_monad Monads.bind Monads.ret Monad_itree].
+      cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     - apply refine_cfg_exc_ret;
         exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl))).
     - eapply refine_cfg_exc_bind.
@@ -13259,11 +13260,11 @@ Section MemoryAndSerialization.
       intros U1 s1' sel1 s2' sel2 _ (-> & -> & -> & <- & _).
       destruct (dvalue_is_poison sel1); [apply refine_cfg_exc_raiseUB_l |].
       set (sw_eou :=
-             Monads.bind
+             ExtLib.Structures.Monad.bind
                (map_monad
                   (fun '((TInt_Literal sz x), id) =>
-                     Monads.bind (coerce_integer_to_int (Some sz) (denote_int_syntax x))
-                       (fun s => Monads.ret (@DVALUE_Base (@ParamsV IP IPT) s, id)))
+                     ExtLib.Structures.Monad.bind (coerce_integer_to_int (Some sz) (denote_int_syntax x))
+                       (fun s => ExtLib.Structures.Monad.ret (@DVALUE_Base (@ParamsV IP IPT) s, id)))
                   dests)
                (fun switches => select_switch sel1 default_br switches)).
       destruct sw_eou as [msg | msg | msg | bid] eqn:Esw; cbn [EOU_to_itree].
@@ -13282,7 +13283,7 @@ Section MemoryAndSerialization.
           refine (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl _)))).
         unfold sw_eou in Esw.
         destruct (map_monad _ dests) as [? | ? | ? | switches] eqn:Emm;
-          cbn [Monads.bind Monad_EOU] in Esw; try discriminate Esw.
+          cbn [ExtLib.Structures.Monad.bind EOU_monad] in Esw; try discriminate Esw.
         pose proof (switch_dests_map_snd dests switches Emm) as Hmap_eq.
         apply select_switch_in in Esw as [-> | Hin_sw]; cbn [m2r_term_succs].
         * left; reflexivity.
@@ -13367,7 +13368,7 @@ Section MemoryAndSerialization.
       (Ret ((σ, ((upd_local_sf sf (write_phi_dvs dvs (stack_vars sf)), fstk), g)), inr tt)).
   Proof using.
     revert sf; induction dvs as [| [id dv] rest IH]; intros sf;
-      cbn [map_monad write_phi_dvs Monads.bind Monads.ret Monad_itree].
+      cbn [map_monad write_phi_dvs ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     - eapply tau_star_trans.
       + eapply TS_Eq;
           [rewrite (interp_cfg_exc_obs_eq ctx _ _ _ (Eqit.bind_ret_l _ _)),
@@ -13424,7 +13425,7 @@ Section MemoryAndSerialization.
       (interp_cfg_exc ctx2 (map_monad (denote_phi bid_from) phis) s2).
   Proof using.
     intros s1 s2; induction phis as [| [[id [fmf dt p_args]] md] rest IH];
-      cbn [map_monad denote_phi Monads.bind Monads.ret Monad_itree List.map].
+      cbn [map_monad denote_phi ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree List.map].
     - apply refine_cfg_exc_ret; repeat split; reflexivity.
     - destruct (assoc bid_from p_args) as [op |] eqn:Eassoc.
       + destruct (m2r_assoc_in bid_from p_args op Eassoc) as [k0 Hin_op].
@@ -13911,7 +13912,7 @@ Section MemoryAndSerialization.
   Lemma denote_phis_nil_eq (bid : block_id) :
     @denote_phis (@ParamsV IP IPT) bid [] ≅ Ret tt.
   Proof using.
-    unfold denote_phis; cbn [map_monad Monads.bind Monads.ret Monad_itree].
+    unfold denote_phis; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     rewrite !Eqit.bind_ret_l; reflexivity.
   Qed.
 
@@ -14847,7 +14848,7 @@ Section MemoryAndSerialization.
          (σ2, ((sf2, fstk2), g))).
   Proof using.
     unfold denote_phis.
-    cbn [map_monad denote_phi Monads.bind Monads.ret Monad_itree]; rewrite Hassoc.
+    cbn [map_monad denote_phi ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; rewrite Hassoc.
     assert (Er_assoc :
       ITree.bind
         (ITree.bind
@@ -16355,7 +16356,7 @@ Section MemoryAndSerialization.
   Lemma denote_operand_bundles_nil_eq (loc : string) (f : exp dtyp) :
     @denote_operand_bundles (@ParamsV IP IPT) loc f [] ≅ Ret tt.
   Proof using.
-    unfold denote_operand_bundles; cbn [map_monad Monads.bind Monads.ret Monad_itree].
+    unfold denote_operand_bundles; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     apply Eqit.bind_ret_l.
   Qed.
 
@@ -17324,13 +17325,13 @@ Section MemoryAndSerialization.
           ((block_id * block_id) + ((block_id * block_id) + @dvalue (@ParamsV IP IPT))) :=
       fun '((bid_from, bid_src) : block_id * block_id) =>
         match RM.find bid_src bmap with
-        | None => Monads.ret (inr (inl (bid_from, bid_src)))
+        | None => ExtLib.Structures.Monad.ret (inr (inl (bid_from, bid_src)))
         | Some block_src =>
-            Monads.bind (denote_block block_src bid_from va)
+            ExtLib.Structures.Monad.bind (denote_block block_src bid_from va)
               (fun bd =>
                  match bd with
-                 | inr dv => Monads.ret (inr (inr dv))
-                 | inl bid_target => Monads.ret (inl (bid_src, bid_target))
+                 | inr dv => ExtLib.Structures.Monad.ret (inr (inr dv))
+                 | inl bid_target => ExtLib.Structures.Monad.ret (inl (bid_src, bid_target))
                  end)
         end.
 
@@ -17377,7 +17378,7 @@ Section MemoryAndSerialization.
       apply m2r_nodup_ids_spec in Hnd_bks.
       unfold s1_unprom_loop_inv in Hli; fold c fargs safe_locals in Hli.
       destruct Hli as (HincU0 & P & σ1 & σ2 & sf & HincP0 & -> & -> & Hinv & Htf & Hgenv & Hsafe_loc).
-      destruct j as [bf bs]; unfold ocfg_step_body; cbn [Monads.bind Monads.ret Monad_itree].
+      destruct j as [bf bs]; unfold ocfg_step_body; cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       rewrite ScopeTheory.ocfg_map_find_block.
       destruct (find_block (blks c) bs) as [bk |] eqn:Efb.
       - destruct (m2r_find_block_some_inv (blks c) bs bk Efb) as [Hin_bk _].
@@ -17666,7 +17667,7 @@ Section MemoryAndSerialization.
         as [Hfb_none Hfb_some]; cbv zeta in Hfb_none, Hfb_some; fold end_map in Hfb_some.
       destruct j as [bf2 bs2]; cbn [fst snd] in *.
       unfold ocfg_step_body, sps_blks'; fold c dt init_reg.
-      cbn [Monads.bind Monads.ret Monad_itree].
+      cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       rewrite !ScopeTheory.ocfg_map_find_block.
       destruct (find_block (blks c) bs2) as [bk_cur |] eqn:Efind_cur.
       - destruct (m2r_find_block_some_inv (blks c) bs2 bk_cur Efind_cur) as [Hin_cur Hid_cur].
@@ -18053,7 +18054,7 @@ Section MemoryAndSerialization.
                      { apply lookup_end_reg_in_nodup; [exact Hnd_end_map |].
                        unfold end_map, sps_end_map; cbn [sps_pass1]; rewrite <- Hid_init.
                        exact (in_map (fun '(bk, _, _, er) => (blk_id bk, er)) _ _ Hin_p1_init). }
-                     unfold ocfg_step_body, sps_blks'; cbn [sps_c sps_dt sps_init_reg sps_pass1 Monads.bind Monads.ret Monad_itree].
+                     unfold ocfg_step_body, sps_blks'; cbn [sps_c sps_dt sps_init_reg sps_pass1 ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
                      rewrite ScopeTheory.ocfg_map_find_block, Efind_init.
                      rewrite ScopeTheory.ocfg_map_find_block, Efind_init'.
                      unfold denote_block; cbn [blk_phis blk_code blk_term]; rewrite Ephis_init.
@@ -18337,7 +18338,7 @@ Section MemoryAndSerialization.
                     U
                     (interp_cfg_model ctx1 (mrec_ctx ctx1 _ (Call dt cc fv vs)) (σ1, (ls1, g0)))
                     (interp_cfg_model ctx2 (mrec_ctx ctx2 _ (Call dt cc fv vs)) (σ2, (ls2, g0)))).
-        unfold mrec_ctx; cbn [Monads.bind Monad_itree].
+        unfold mrec_ctx; cbn [ExtLib.Structures.Monad.bind Monad_itree].
         destruct fv as [db | |];
           [| eapply s1_cps_cfg_bind with (RA := fun _ _ _ => False);
                [apply refine_prov_to_s1_cps, refine_cfg_raise_both | intros _ _ _ _ _ _ []]

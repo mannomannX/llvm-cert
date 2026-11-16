@@ -243,8 +243,8 @@ Qed.
 Lemma denote_phis_nil {Pa : Params} (from : block_id) :
   @denote_phis Pa from [] ≅ Ret tt.
 Proof.
-  unfold denote_phis; cbn [map_monad Monads.bind Monads.ret Monad_itree].
-  rewrite Eqit.bind_ret_l; cbn [map_monad Monads.ret Monad_itree].
+  unfold denote_phis; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+  rewrite Eqit.bind_ret_l; cbn [map_monad ExtLib.Structures.Monad.ret Monad_itree].
   rewrite Eqit.bind_ret_l; reflexivity.
 Qed.
 
@@ -257,13 +257,13 @@ Definition eval_one_switch_dest {Pa : Params}
 Lemma eval_switch_dests {Pa : Params} (dests : list (tint_literal * block_id)) :
   map_monad (m := EOU)
     (fun '((TInt_Literal sz x), id) =>
-       Monads.bind (coerce_integer_to_int (Some sz) (denote_int_syntax x))
-                   (fun s => Monads.ret (DVALUE_Base s, id)))
+       ExtLib.Structures.Monad.bind (coerce_integer_to_int (Some sz) (denote_int_syntax x))
+                   (fun s => ExtLib.Structures.Monad.ret (DVALUE_Base s, id)))
     dests
   = raise_ret (List.map (@eval_one_switch_dest Pa) dests).
 Proof.
   induction dests as [| [[sz x] id] rest IH]; [reflexivity |].
-  cbn [map_monad List.map eval_one_switch_dest coerce_integer_to_int Monads.bind Monads.ret EOU_monad].
+  cbn [map_monad List.map eval_one_switch_dest coerce_integer_to_int ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad].
   rewrite IH; reflexivity.
 Qed.
 
@@ -337,7 +337,7 @@ Proof.
     eapply ruttc_bind.
     + apply refine_EOU_to_cfg with
         (RR := fun b1 b2 => b1 = b2 /\ (b1 = default_br \/ In b1 (List.map snd dests))).
-      rewrite eval_switch_dests; cbn [Monads.bind EOU_monad].
+      rewrite eval_switch_dests; cbn [ExtLib.Structures.Monad.bind EOU_monad].
       destruct (select_switch sel default_br (List.map (@eval_one_switch_dest Pa) dests))
         as [err | oom | ub | bid] eqn:Esel; constructor.
       split; [reflexivity |].
@@ -473,7 +473,7 @@ Proof.
       cbn [fold_const_term_tm].
       unfold denote_terminator, denote_exp', withCall.
       cbn [denote_exp denote_int_syntax_as_int coerce_integer_to_int
-           Monads.bind Monads.ret EOU_monad EOU_to_itree Monad_itree].
+           ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad EOU_to_itree Monad_itree].
       rewrite translate_ret, Eqit.bind_ret_l.
       cbv iota; cbn [equ repr one VInt_Bounded].
       destruct (@Integers.eq 1%positive
@@ -482,7 +482,7 @@ Proof.
     + (* EXP_Bool *)
       destruct b; cbn [fold_const_term_tm];
         unfold denote_terminator, denote_exp', withCall;
-        cbn [denote_exp Monads.bind Monads.ret Monad_itree];
+        cbn [denote_exp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite translate_ret, Eqit.bind_ret_l;
         reflexivity.
   - (* TERM_Switch *)
@@ -493,12 +493,12 @@ Proof.
       as [target |] eqn:Efind; [| reflexivity].
     unfold denote_terminator, denote_exp', withCall.
     cbn [denote_exp denote_int_syntax_as_int coerce_integer_to_int
-         Monads.bind Monads.ret EOU_monad EOU_to_itree Monad_itree].
+         ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad EOU_to_itree Monad_itree].
     rewrite translate_ret, Eqit.bind_ret_l.
     cbn [dvalue_is_poison repr VInt_Bounded].
-    rewrite eval_switch_dests; cbn [Monads.bind EOU_monad].
+    rewrite eval_switch_dests; cbn [ExtLib.Structures.Monad.bind EOU_monad].
     rewrite (find_switch_dest_sound sz _ default_br dests target Efind).
-    cbn [EOU_to_itree Monads.bind Monads.ret Monad_itree].
+    cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     rewrite Eqit.bind_ret_l; reflexivity.
 Qed.
 
@@ -1209,7 +1209,7 @@ Lemma denote_ocfg_coalesce_lhs_euttge {Pa : Params}
 Proof.
   etransitivity; [apply (denote_ocfg_unfold_in_euttge va bks from1 id1 b1 Hfind1) |].
   unfold denote_block at 1; rewrite Hterm1.
-  cbn [denote_terminator Monads.bind Monads.ret Monad_itree].
+  cbn [denote_terminator ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
   rewrite !Eqit.bind_bind.
   eapply eqit_bind; [reflexivity | intros []].
   rewrite ?Eqit.bind_bind.
@@ -1236,7 +1236,7 @@ Lemma denote_block_coalesce_merged {Pa : Params}
     (denote_block (rewrite_block_phis id1 id2 (merge_blocks b1 b2)) from2 va).
 Proof.
   unfold denote_block.
-  cbn [rewrite_block_phis merge_blocks blk_phis blk_code blk_term Monads.bind Monad_itree].
+  cbn [rewrite_block_phis merge_blocks blk_phis blk_code blk_term ExtLib.Structures.Monad.bind Monad_itree].
   assert (Hphis_ref :
             refine_cfg Logic.eq
               (denote_phis from1 (blk_phis b1))
