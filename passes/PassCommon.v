@@ -1430,7 +1430,7 @@ Section ModelSemantics.
       ITree.map (fun '(σ', r) => (σ'.(state_provenance), (σ', r))) (memM_interp m σ).
   Proof using.
     revert σ; induction m as [x | s | s | s | k IH | σ' k IH | c k IH]; intros σ;
-      cbn [memM_interp_prov memM_interp].
+      cbn [memM_interp_prov memM_interp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     - rewrite interp_state_ret; unfold ITree.map; rewrite Eqit.bind_ret_l; reflexivity.
     - unfold raiseOOM, trigger_cast, ITree.map;
         rewrite interp_state_bind, interp_state_trigger, det_prov_h_inr1;
@@ -1446,10 +1446,13 @@ Section ModelSemantics.
         rewrite Eqit.bind_bind, bind_trigger; apply eqit_Vis; intros [].
     - apply IH.
     - exact (IH tt σ').
-    - destruct c as [sz align | |]; cbn [memM_interp_prov memM_interp].
+    - destruct c as [sz align | |];
+        cbn [memM_interp_prov memM_interp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       + apply IH.
       + rewrite interp_state_bind, interp_state_trigger, det_prov_h_inl1, Eqit.bind_ret_l.
-        unfold fresh_provenance, ITree.map; cbn -[memM_interp memM_interp_prov interp_state].
+        unfold fresh_provenance, ITree.map;
+          cbn [next_provenance ProvenanceV MemoryModelPrimitivesV ParamsV
+               ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         rewrite Eqit.bind_bind, Eqit.bind_ret_l.
         exact (IH (N.succ (state_provenance σ))
                   {| state_memory_stack := state_memory_stack σ;
@@ -1466,67 +1469,78 @@ Section ModelSemantics.
     destruct_sum1 e; cbn [case_].
     - (* ExternalCallE *)
       unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger, det_prov_h_inr1;
         rewrite Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger; symmetry;
         apply eqit_Vis; intros x;
         rewrite Eqit.bind_ret_l, interp_state_ret, Eqit.bind_ret_l; reflexivity.
     - (* IntrinsicE *)
-      unfold fused_intrinsic_prov, fused_intrinsic, on_mem_prov, on_mem.
+      unfold fused_intrinsic_prov, fused_intrinsic, on_mem_prov, on_mem;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       rewrite interp_state_bind, memM_interp_prov_det.
       unfold ITree.map; rewrite !Eqit.bind_bind.
       apply eutt_eq_bind; intros [m' r]; cbn [fst].
       rewrite !Eqit.bind_ret_l, interp_state_ret; reflexivity.
     - (* GlobalE *)
-      unfold fused_global_prov, fused_global, on_genv_prov, on_genv.
+      unfold fused_global_prov, fused_global, on_genv_prov, on_genv;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       rewrite interp_state_bind, interp_det_prov_lift_bot.
       unfold ITree.map; rewrite !Eqit.bind_bind.
       apply eutt_eq_bind; intros [g' r]; cbn [fst].
       rewrite !Eqit.bind_ret_l, interp_state_ret; reflexivity.
     - (* LocalE *)
-      unfold fused_local_prov, fused_local, on_ls_prov, on_ls.
+      unfold fused_local_prov, fused_local, on_ls_prov, on_ls;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       rewrite interp_state_bind, interp_det_prov_lift_bot.
       unfold ITree.map; rewrite !Eqit.bind_bind.
       apply eutt_eq_bind; intros [ls' r]; cbn [fst].
       rewrite !Eqit.bind_ret_l, interp_state_ret; reflexivity.
     - (* StackE *)
-      unfold fused_stack_prov, fused_stack, on_ls_prov, on_ls.
+      unfold fused_stack_prov, fused_stack, on_ls_prov, on_ls;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       rewrite interp_state_bind, interp_det_prov_lift_bot.
       unfold ITree.map; rewrite !Eqit.bind_bind.
       apply eutt_eq_bind; intros [ls' r]; cbn [fst].
       rewrite !Eqit.bind_ret_l, interp_state_ret; reflexivity.
     - (* MemoryE *)
-      unfold fused_memory_prov, fused_memory, on_mem_prov, on_mem.
+      unfold fused_memory_prov, fused_memory, on_mem_prov, on_mem;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       rewrite interp_state_bind, memM_interp_prov_det.
       unfold ITree.map; rewrite !Eqit.bind_bind.
       apply eutt_eq_bind; intros [m' r]; cbn [fst].
       rewrite !Eqit.bind_ret_l, interp_state_ret; reflexivity.
     - (* DrawE *)
-      unfold fused_draw_prov, fused_draw.
+      unfold fused_draw_prov, fused_draw;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       rewrite interp_state_bind, interp_det_prov_lift_bot.
       unfold ITree.map; rewrite !Eqit.bind_bind.
       apply eutt_eq_bind; intros r; cbn [fst].
       rewrite !Eqit.bind_ret_l, interp_state_ret; reflexivity.
     - (* OOME *)
       unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger, det_prov_h_inr1;
         rewrite Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger;
         apply eqit_Vis; intros [].
     - (* LLVMExcE *)
       unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger, det_prov_h_inr1;
         rewrite Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger;
         apply eqit_Vis; intros [].
     - (* UBE *)
       unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger, det_prov_h_inr1;
         rewrite Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger;
         apply eqit_Vis; intros [].
     - (* DebugE *)
       unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger, det_prov_h_inr1;
         rewrite Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger; symmetry;
@@ -1534,6 +1548,7 @@ Section ModelSemantics.
         rewrite Eqit.bind_ret_l, interp_state_ret, Eqit.bind_ret_l; reflexivity.
     - (* FailureE *)
       unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger, det_prov_h_inr1;
         rewrite Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger;

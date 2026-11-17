@@ -3606,7 +3606,7 @@ Proof.
     destruct (emit_and2_opt xy_xor cin st3) as [xc_and st4] eqn:Eg4.
     destruct (emit_or2_opt xy_and xc_and st4) as [cout1 st5] eqn:Eg5.
     destruct (emit_ripple_add cout1 rx ry st5) as [[rest_sum cout2] st6] eqn:Eg6.
-    inversion Hrip; subst sums cout st6; clear Hrip.
+    inversion Hrip; subst sums cout2 st6; clear Hrip.
     destruct (emit_xor2_opt_step asg x y st xy_xor st1 Hsat Hx Hy Eg1)
       as (asg1 & Hs1 & Hw_xx & Hev_xx).
     destruct (emit_xor2_opt_step asg1 xy_xor cin st1 sum_b st2 (proj2 (proj2 Hs1))
