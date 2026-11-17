@@ -14239,7 +14239,7 @@ Section MemoryAndSerialization.
     leaf_ctx_fn_rel P0 g0 (denote_function df) (denote_function df').
   Proof using.
     intros Hgenv0 Htry.
-    unfold try_elim_dead_alloca_in_defn in Htry.
+    unfold try_elim_dead_alloca_in_defn in Htry; cbn zeta in Htry.
     set (fargs := df_args df) in *.
     set (c := df_instrs df) in *.
     destruct (m2r_nodup_ids (List.map blk_id (blks c))
@@ -15018,7 +15018,7 @@ Section MemoryAndSerialization.
     flat_map block_block_addresses (blks (df_instrs df')) =
     flat_map block_block_addresses (blks (df_instrs df)).
   Proof using.
-    unfold try_promote_slot_in_defn; intros Htry.
+    unfold try_promote_slot_in_defn; cbn zeta; intros Htry.
     set (fargs := df_args df) in *; set (c := df_instrs df) in *.
     destruct (m2r_nodup_ids (List.map blk_id (blks c))
               && negb (in_raw_ids (init c) (m2r_all_succs c))
@@ -15117,7 +15117,7 @@ Section MemoryAndSerialization.
     flat_map block_block_addresses (blks (df_instrs df')) =
     flat_map block_block_addresses (blks (df_instrs df)).
   Proof using.
-    unfold try_elim_dead_alloca_in_defn; intros Htry.
+    unfold try_elim_dead_alloca_in_defn; cbn zeta; intros Htry.
     set (c := df_instrs df) in *.
     destruct (m2r_nodup_ids (List.map blk_id (blks c))
               && negb (in_raw_ids (init c) (m2r_all_succs c))
@@ -15421,7 +15421,7 @@ Section MemoryAndSerialization.
     leaf_ctx_fn_rel P0 g0 (denote_function df) (denote_function df').
   Proof using.
     intros Hgenv0 Htry.
-    unfold try_promote_slot_in_defn in Htry.
+    unfold try_promote_slot_in_defn in Htry; cbn zeta in Htry.
     set (fargs := df_args df) in *.
     set (c := df_instrs df) in *.
     destruct (m2r_nodup_ids (List.map blk_id (blks c))
@@ -15483,7 +15483,7 @@ Section MemoryAndSerialization.
       c' = {| init := init c;
               blks := build_promoted_blocks (init c) dt init_reg (blks c) pass1_out;
               args := args c |}).
-    { unfold c', promote_slot_in_cfg.
+    { unfold c', promote_slot_in_cfg; cbn zeta.
       fold avoid0 init_reg avoid1 phi_regs avoid2.
       rewrite Erw_post; fold init_op init_code' bk_phis.
       rewrite Epass1; reflexivity. }
@@ -17369,14 +17369,14 @@ Section MemoryAndSerialization.
         (interp_cfg_exc ctx2 (ocfg_step_body bmap va j) s2).
     Proof using.
       cbv zeta.
-      unfold m2r_defn_mem_safe in Hd.
+      unfold m2r_defn_mem_safe in Hd; cbn zeta in Hd.
       set (c := df_instrs d) in *.
       set (fargs := df_args d) in *.
       set (safe_locals :=
              m2r_collect_unique_allocas (fargs ++ flat_map full_block_defs (blks c)) (blks c)) in *.
       rewrite andb_true_iff in Hd; destruct Hd as [Hnd_bks Hbks_chk].
       apply m2r_nodup_ids_spec in Hnd_bks.
-      unfold s1_unprom_loop_inv in Hli; fold c fargs safe_locals in Hli.
+      unfold s1_unprom_loop_inv in Hli; cbn zeta in Hli; fold c fargs safe_locals in Hli.
       destruct Hli as (HincU0 & P & σ1 & σ2 & sf & HincP0 & -> & -> & Hinv & Htf & Hgenv & Hsafe_loc).
       destruct j as [bf bs]; unfold ocfg_step_body; cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       rewrite ScopeTheory.ocfg_map_find_block.
@@ -17651,7 +17651,7 @@ Section MemoryAndSerialization.
       assert (Hsub_safe : forall q,
                 In q safe_no_p ->
                 In q (m2r_collect_unique_allocas (fargs ++ flat_map full_block_defs (blks c)) (blks c))).
-      { intros q Hq; unfold safe_no_p, sps_safe_no_p in Hq; fold fargs c p in Hq.
+      { intros q Hq; unfold safe_no_p, sps_safe_no_p in Hq; cbn zeta in Hq; fold fargs c p in Hq.
         apply filter_In in Hq as [Hq _]; exact Hq. }
       assert (Hsafe_av0 : incl safe_no_p avoid0)
         by (intros q Hq; unfold avoid0, sps_avoid0; fold fargs c; apply safe_locals_in_avoid0, Hsub_safe, Hq).
@@ -17870,7 +17870,7 @@ Section MemoryAndSerialization.
         (interp_cfg_model ctx2 (denote_function df' cc args) (σ2_in, (ls2, g0))).
     Proof using.
       destruct ls1 as [sf_c1 fstk_c1], ls2 as [sf_c2 fstk_c2].
-      unfold try_promote_slot_in_defn in Htry.
+      unfold try_promote_slot_in_defn in Htry; cbn zeta in Htry.
       set (fargs := df_args df) in *.
       set (c := df_instrs df) in *.
       destruct (m2r_nodup_ids (List.map blk_id (blks c))
@@ -17932,7 +17932,7 @@ Section MemoryAndSerialization.
         c' = {| init := init c;
                 blks := build_promoted_blocks (init c) dt init_reg (blks c) pass1_out;
                 args := args c |}).
-      { unfold c', promote_slot_in_cfg.
+      { unfold c', promote_slot_in_cfg; cbn zeta.
         fold avoid0 init_reg avoid1 phi_regs avoid2.
         rewrite Erw_post; fold init_op init_code' bk_phis.
         rewrite Epass1; reflexivity. }

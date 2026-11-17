@@ -3699,7 +3699,7 @@ Section InliningSemantics.
       (fun s' _ => post_decl_inv all_decls s').
   Proof using.
     intros all_decls.
-    unfold is_hygienic_module in Hhyg.
+    unfold is_hygienic_module in Hhyg; cbn zeta in Hhyg.
     apply nodup_raw_ids_spec in Hhyg.
     fold all_decls in Hhyg.
     set (decl_names := List.map dc_name all_decls) in *.
@@ -10227,13 +10227,13 @@ Section InliningSemantics.
                 Hpattrs_nil Hcc_eq Hcall_rattrs Hcall_fattrs Hcall_range Hcallee_ok.
       (* Unpack caller & callee eligibility guards and fresh-ID partition *)
       pose proof Hcaller_ok as Hc1.
-      unfold is_inlinable_caller in Hc1; fold caller_cfg in Hc1.
+      unfold is_inlinable_caller in Hc1; cbn zeta in Hc1; fold caller_cfg in Hc1.
       apply andb_prop in Hc1 as [Hc1 _].
       apply andb_prop in Hc1 as [Hcaller_nd Hcaller_entry].
       apply nodup_raw_ids_spec in Hcaller_nd.
 
       pose proof Hcallee_ok as Hce.
-      unfold is_inlinable_callee in Hce; fold callee_gid callee_cfg in Hce.
+      unfold is_inlinable_callee in Hce; cbn zeta in Hce; fold callee_gid callee_cfg in Hce.
       apply andb_prop in Hce as [Hce Hvmap].
       unfold check_cfg_def_before_use in Hvmap; fold in_map in Hvmap.
       apply andb_prop in Hce as [Hce _].

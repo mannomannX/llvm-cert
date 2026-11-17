@@ -127,7 +127,7 @@ Lemma sccp_z_to_lit_checked_sound (z : Z) (lit : int_syntax) :
   sccp_z_to_lit_checked z = Some lit ->
   denote_int_syntax lit = z.
 Proof.
-  unfold sccp_z_to_lit_checked.
+  unfold sccp_z_to_lit_checked; cbn zeta.
   destruct (Z.eqb (denote_int_syntax (BinIntDef.Z.to_num_int z)) z) eqn:E; [| discriminate].
   intros H; inversion H; subst lit.
   apply Z.eqb_eq, E.
@@ -1262,7 +1262,7 @@ Lemma sccp_rewrite_block_id (fargs : list local_id) (c : CFG.cfg dtyp)
   (b : block dtyp) :
   blk_id (sccp_rewrite_block fargs c exec_edges md_in cm b) = blk_id b.
 Proof.
-  unfold sccp_rewrite_block.
+  unfold sccp_rewrite_block; cbn zeta.
   destruct (sccp_is_reachable_blk exec_edges (blk_id b)); [| reflexivity].
   destruct (blk_term b) as [[tiid tm] tmd]; reflexivity.
 Qed.
@@ -1739,7 +1739,7 @@ Lemma block_block_addresses_rewrite_nil (fargs : list local_id) (c : CFG.cfg dty
   block_block_addresses b = [] ->
   block_block_addresses (sccp_rewrite_block fargs c exec_edges md_in cm b) = [].
 Proof.
-  unfold sccp_rewrite_block.
+  unfold sccp_rewrite_block; cbn zeta.
   destruct (sccp_is_reachable_blk exec_edges (blk_id b)); [| intros H; exact H].
   unfold block_block_addresses; destruct (blk_term b) as [[tiid tm] tmd]; cbn [blk_phis blk_code blk_term].
   intros H.
@@ -1753,7 +1753,7 @@ Lemma sccp_cfg_block_addresses (fargs : list local_id) (c : CFG.cfg dtyp) :
   flat_map block_block_addresses (blks (sccp_cfg fargs c)) =
   flat_map block_block_addresses (blks c).
 Proof.
-  unfold sccp_cfg.
+  unfold sccp_cfg; cbn zeta.
   destruct (sccp_check_guards fargs c) eqn:Hg; [| reflexivity].
   destruct (sccp_solve fargs c) as [exec_edges lm].
   set (md_in := sccp_compute_must_def fargs c exec_edges).
@@ -3813,7 +3813,7 @@ Section SCCPSimulation.
       destruct allow_fold.
       + destruct (sccp_branch_target cm defs_end dt op br1 br2) as [taken |] eqn:Etgt.
         * pose proof Etgt as Etgt0.
-          unfold sccp_branch_target in Etgt.
+          unfold sccp_branch_target in Etgt; cbn zeta in Etgt.
           destruct (eval_cert_exp cm defs_end (Some dt) op) as [[sz vc] |] eqn:Eev;
             [| discriminate Etgt].
           destruct (Pos.eq_dec sz 1) as [<- | _]; [| discriminate Etgt].
@@ -4144,7 +4144,7 @@ Section SCCPSimulation.
           set (defs_end := sccp_block_defs_end defs_in b) in *.
           assert (Hdefs_in : env_matches_cert cm defs_in env1)
             by exact (env_matches_cert_incl cm defs_in _ env1 Hincl Hedge_env).
-          unfold sccp_rewrite_block; rewrite Hreach.
+          unfold sccp_rewrite_block; cbn zeta; rewrite Hreach.
           destruct (blk_term b) as [[tiid tm] tmd] eqn:Eterm.
           assert (Htid : match tiid with IId tx => RM.find tx cm = None | IVoid _ => True end).
           { pose proof Hterm_ok as Htid_chk; rewrite Eterm in Htid_chk.
@@ -4211,7 +4211,7 @@ Section SCCPSimulation.
     cfg_local_sim (fun _ _ r1 r2 => r1 = r2)
       env env (denote_cfg c va) (denote_cfg (sccp_cfg fargs c) va).
   Proof using.
-    intros Hfargs_lk; unfold sccp_cfg.
+    intros Hfargs_lk; unfold sccp_cfg; cbn zeta.
     destruct (sccp_check_guards fargs c); [| apply denote_cfg_refl_sim].
     destruct (sccp_solve fargs c) as [exec_edges lm].
     set (md_in := sccp_compute_must_def fargs c exec_edges).

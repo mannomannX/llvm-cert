@@ -1239,7 +1239,7 @@ Lemma dce_block_no_block_addresses
   block_block_addresses (dce_block fargs reach fm lm c bk) = [].
 Proof.
   intros Hbk.
-  unfold dce_block, dce_block_info.
+  unfold dce_block, dce_block_info; cbn zeta.
   destruct (in_raw_ids (blk_id bk) reach); [| exact Hbk].
   pose proof (dce_code_sublist (lookup_fwd (blk_id bk) fm) (blk_code bk)
                 (block_live_before_term bk lm)) as Hcsub.
@@ -1257,7 +1257,7 @@ Lemma dce_cfg_once_block_addresses (fargs : list local_id) (c : CFG.cfg dtyp) :
   flat_map block_block_addresses (blks (dce_cfg_once fargs c)) =
   flat_map block_block_addresses (blks c).
 Proof.
-  unfold dce_cfg_once.
+  unfold dce_cfg_once; cbn zeta.
   destruct (cfg_no_block_addresses c) eqn:Enba; cbn [andb]; [| reflexivity].
   destruct (nodup_raw_ids (List.map blk_id (blks c))); [| reflexivity].
   destruct (check_fwd_cfg _ _ _ _ && check_live_cfg _ _ _ _ _); [| reflexivity].
@@ -5485,7 +5485,7 @@ Section DCESoundness.
     cfg_local_sim (fun _ _ r1 r2 => r1 = r2)
       env env (denote_cfg c va) (denote_cfg (dce_cfg_once fargs c) va).
   Proof.
-    intros Henv; unfold dce_cfg_once.
+    intros Henv; unfold dce_cfg_once; cbn zeta.
     destruct (cfg_no_block_addresses c && nodup_raw_ids (List.map blk_id (blks c)));
       [| apply denote_cfg_refl_sim].
     set (reach := compute_reach c).
@@ -5512,7 +5512,7 @@ Section DCESoundness.
           pose proof (@find_block_In' dtyp (blks c) bid_src bk_src Efind) as Hin_bk.
           specialize (Hbk_inv bk_src Efind) as [Hsub_in Hag_in].
           subst bid_src.
-          unfold dce_block; unfold dce_block_info in Hag_in |- *.
+          unfold dce_block; unfold dce_block_info in Hag_in |- *; cbn zeta in Hag_in |- *.
           rewrite Hreach in Hag_in |- *.
           set (te_in := lookup_fwd (blk_id bk_src) fm) in *.
           set (live_end := block_live_before_term bk_src lm) in *.

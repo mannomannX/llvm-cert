@@ -3710,9 +3710,9 @@ Theorem blast_add_rail_step : forall nuw nsw sz a b asg st out st',
 Proof.
   intros nuw nsw sz a b asg st out st' Hsat
          ([Hwa Hla] & Hba & Hpa) ([Hwb Hlb] & Hbb & Hpb) Hbl.
-  unfold blast_add_rail in Hbl.
+  unfold blast_add_rail in Hbl; cbn zeta in Hbl.
   destruct (emit_ripple_add lit_false (rbv_bits a) (rbv_bits b) st)
-    as [[sums cout] st1] eqn:Hrip.
+    as [[sums cout] st1] eqn:Hrip; cbn iota zeta in Hbl.
   assert (Hlen_ab : List.length (rbv_bits a) = List.length (rbv_bits b)) by congruence.
   destruct (emit_ripple_add_step (rbv_bits a) (rbv_bits b) lit_false asg st sums cout st1
               Hlen_ab (wf_lit_bound_false _ (proj1 (proj1 Hsat))) Hba Hbb Hsat Hrip)
@@ -3832,7 +3832,7 @@ Proof.
                (Numeric.Rocqlib.zle _ (@Integers.half_modulus sz - 1));
       cbn [Numeric.Rocqlib.proj_sumbool andb negb]; try reflexivity; nia. }
   destruct Hnsw_step as (nsw_l & st4 & asg4 & Hnsw_eq & Hs14 & Hwf_nsw & Hev_nsw).
-  rewrite Hnsw_eq in Hbl; clear Hnsw_eq.
+  cbn iota zeta in Hnsw_eq, Hbl; rewrite Hnsw_eq in Hbl; cbn iota zeta in Hbl; clear Hnsw_eq.
   destruct (emit_or2_opt (rbv_psn a) (rbv_psn b) st4) as [base_psn st5] eqn:Ebp.
   destruct (emit_or2_opt nuw_lit nsw_l st5) as [ov_psn st6] eqn:Eov.
   destruct (emit_or2_opt base_psn ov_psn st6) as [psn st7] eqn:Ep.
@@ -3916,10 +3916,10 @@ Theorem blast_sub_rail_step : forall nuw nsw sz a b asg st out st',
 Proof.
   intros nuw nsw sz a b asg st out st' Hsat
          ([Hwa Hla] & Hba & Hpa) ([Hwb Hlb] & Hbb & Hpb) Hbl.
-  unfold blast_sub_rail in Hbl.
+  unfold blast_sub_rail in Hbl; cbn zeta in Hbl.
   set (not_b := List.map neg_lit (rbv_bits b)) in *.
   destruct (emit_ripple_add lit_true (rbv_bits a) not_b st)
-    as [[diffs cout] st1] eqn:Hrip.
+    as [[diffs cout] st1] eqn:Hrip; cbn iota zeta in Hbl.
   assert (Hlen_anb : List.length (rbv_bits a) = List.length not_b)
     by (unfold not_b; rewrite length_map; congruence).
   destruct (emit_ripple_add_step (rbv_bits a) not_b lit_true asg st diffs cout st1
@@ -4047,7 +4047,7 @@ Proof.
                (Numeric.Rocqlib.zle _ (@Integers.half_modulus sz - 1));
       cbn [Numeric.Rocqlib.proj_sumbool andb negb]; try reflexivity; nia. }
   destruct Hnsw_step as (nsw_l & st4 & asg4 & Hnsw_eq & Hs14 & Hwf_nsw & Hev_nsw).
-  rewrite Hnsw_eq in Hbl; clear Hnsw_eq.
+  cbn iota zeta in Hnsw_eq, Hbl; rewrite Hnsw_eq in Hbl; cbn iota zeta in Hbl; clear Hnsw_eq.
   destruct (emit_or2_opt (rbv_psn a) (rbv_psn b) st4) as [base_psn st5] eqn:Ebp.
   destruct (emit_or2_opt nuw_lit nsw_l st5) as [ov_psn st6] eqn:Eov.
   destruct (emit_or2_opt base_psn ov_psn st6) as [psn st7] eqn:Ep.
@@ -4442,7 +4442,7 @@ Proof.
               (Nat.le_refl n) Hbb Hsat)
     as (asg1 & Hs1 & Hlen_bits & Hwf_bits & Hwf_shp & Hspec_mux); [| exact Hmux |].
   { intros k asg0 st0 bk pk s1 Hk Hs0 Efk.
-    unfold blast_shl_k in Efk; fold n in Efk.
+    unfold blast_shl_k in Efk; cbn zeta in Efk; fold n in Efk.
     pose proof (proj2 (proj2 Hs0)) as Hsat0.
     pose proof (wf_lits_bound_mono _ _ (rbv_bits a) (proj1 Hs0) Hba) as Hba0.
     pose proof (step_spec_eval_lits st st0 asg asg0 (rbv_bits a) Hs0 Hba) as Hev_ba0.
@@ -4469,7 +4469,7 @@ Proof.
           split; [exact (wf_lit_bound_false _ (proj1 (proj1 Hsat0))) |
                   exact (sat_eval_lit_false asg0 st0 Hsat0)]]]. }
     destruct Hnuw_step as (nuw_l & s01 & asg01 & Hnuw_eq & Hs01 & Hw_nuw & Hev_nuw).
-    rewrite Hnuw_eq in Efk; clear Hnuw_eq.
+    cbn iota zeta in Hnuw_eq, Efk; rewrite Hnuw_eq in Efk; cbn iota zeta in Efk; clear Hnuw_eq.
     assert (Hnsw_step :
               exists nsw_l s03 asg03,
                 (if nsw then
@@ -4516,7 +4516,7 @@ Proof.
           split; [exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs01))))) |
                   exact (sat_eval_lit_false asg01 s01 (proj2 (proj2 Hs01)))]]]. }
     destruct Hnsw_step as (nsw_l & s03 & asg03 & Hnsw_eq & Hs13 & Hw_nsw & Hev_nsw).
-    rewrite Hnsw_eq in Efk; clear Hnsw_eq.
+    cbn iota zeta in Hnsw_eq, Efk; rewrite Hnsw_eq in Efk; cbn iota zeta in Efk; clear Hnsw_eq.
     destruct (emit_or2_opt nuw_l nsw_l s03) as [pk0 s04] eqn:Epk.
     inversion Efk; subst bk pk s1; clear Efk.
     destruct (emit_or2_opt_step asg03 nuw_l nsw_l s03 pk0 s04 (proj2 (proj2 Hs13))
@@ -4710,7 +4710,7 @@ Proof.
               (Nat.le_refl n) Hbb Hsat)
     as (asg1 & Hs1 & Hlen_bits & Hwf_bits & Hwf_shp & Hspec_mux); [| exact Hmux |].
   { intros k asg0 st0 bk pk s1 Hk Hs0 Efk.
-    unfold blast_lshr_k in Efk.
+    unfold blast_lshr_k in Efk; cbn zeta in Efk.
     pose proof (proj2 (proj2 Hs0)) as Hsat0.
     pose proof (wf_lits_bound_mono _ _ (rbv_bits a) (proj1 Hs0) Hba) as Hba0.
     pose proof (step_spec_eval_lits st st0 asg asg0 (rbv_bits a) Hs0 Hba) as Hev_ba0.
@@ -4864,7 +4864,7 @@ Proof.
               (Nat.le_refl n) Hbb Hsat)
     as (asg1 & Hs1 & Hlen_bits & Hwf_bits & Hwf_shp & Hspec_mux); [| exact Hmux |].
   { intros k asg0 st0 bk pk s1 Hk Hs0 Efk.
-    unfold blast_ashr_k in Efk; fold n in Efk.
+    unfold blast_ashr_k in Efk; cbn zeta in Efk; fold n in Efk.
     pose proof (proj2 (proj2 Hs0)) as Hsat0.
     pose proof (wf_lits_bound_mono _ _ (rbv_bits a) (proj1 Hs0) Hba) as Hba0.
     pose proof (step_spec_eval_lits st st0 asg asg0 (rbv_bits a) Hs0 Hba) as Hev_ba0.
@@ -5014,7 +5014,7 @@ Theorem blast_zext_rail_step : forall nneg fw tw a asg st out st',
       @Integers.repr tw (@Integers.unsigned fw (eval_rail_val fw asg a)).
 Proof.
   intros nneg fw tw a asg st out st' Hlt Hsat ([Hwa Hla] & Hba & Hpa) Hbl.
-  unfold blast_zext_rail in Hbl.
+  unfold blast_zext_rail in Hbl; cbn zeta in Hbl.
   set (nneg_l := if nneg then msb_lit a else lit_false) in *.
   assert (Hw_nl : wf_lit_bound (bs_next_var st) nneg_l)
     by (unfold nneg_l; destruct nneg;
@@ -5119,7 +5119,7 @@ Theorem blast_trunc_rail_step : forall nuw nsw fw tw a asg st out st',
       @Integers.repr tw (@Integers.unsigned fw (eval_rail_val fw asg a)).
 Proof.
   intros nuw nsw fw tw a asg st out st' Hlt Hsat ([Hwa Hla] & Hba & Hpa) Hbl.
-  unfold blast_trunc_rail in Hbl.
+  unfold blast_trunc_rail in Hbl; cbn zeta in Hbl.
   set (lo := List.firstn (Pos.to_nat tw) (rbv_bits a)) in *.
   set (hi := List.skipn (Pos.to_nat tw) (rbv_bits a)) in *.
   set (ba := List.map (eval_lit asg) (rbv_bits a)).
@@ -5145,7 +5145,7 @@ Proof.
         split; [exact (wf_lit_bound_false _ (proj1 (proj1 Hsat))) |
                 exact (sat_eval_lit_false asg _ Hsat)]]]. }
   destruct Hnuw_step as (nuw_l & st1 & asg1 & Hnuw_eq & Hs1 & Hwf_nuw & Hev_nuw).
-  rewrite Hnuw_eq in Hbl; clear Hnuw_eq.
+  cbn iota zeta in Hnuw_eq, Hbl; rewrite Hnuw_eq in Hbl; cbn iota zeta in Hbl; clear Hnuw_eq.
   set (b_slo := List.nth (Pos.to_nat tw - 1) b_lo false).
   assert (Hnsw_step :
             exists nsw_l st3 asg3,
@@ -5190,7 +5190,7 @@ Proof.
         split; [exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs1))))) |
                 exact (sat_eval_lit_false asg1 st1 (proj2 (proj2 Hs1)))]]]. }
   destruct Hnsw_step as (nsw_l & st3 & asg3 & Hnsw_eq & Hs13 & Hwf_nsw & Hev_nsw).
-  rewrite Hnsw_eq in Hbl; clear Hnsw_eq.
+  cbn iota zeta in Hnsw_eq, Hbl; rewrite Hnsw_eq in Hbl; cbn iota zeta in Hbl; clear Hnsw_eq.
   destruct (emit_or2_opt nuw_l nsw_l st3) as [ov_psn st4] eqn:Eov.
   destruct (emit_or2_opt (rbv_psn a) ov_psn st4) as [psn st5] eqn:Ep.
   inversion Hbl; subst out st5; clear Hbl.
@@ -5589,7 +5589,7 @@ Proof.
     by exact (conj (conj Hwa_w Hla) (conj Hba Hpa)).
   assert (Hwb_f : wf_rail_bound sz (bs_next_var st) b)
     by exact (conj (conj Hwb_w Hlb) (conj Hbb Hpb)).
-  unfold blast_icmp_rail in Hbl.
+  unfold blast_icmp_rail in Hbl; cbn zeta in Hbl.
   assert (Hres_step :
             exists res_bit st2 asg2,
               match c with
@@ -5673,7 +5673,7 @@ Proof.
       rewrite (eval_neg_lit_nonzero a2 lt_b (wf_lit_bound_nonzero _ _ Hw_lt)), Hev_lt;
         destruct is_signed; reflexivity. }
   destruct Hres_step as (res_bit & st2 & asg2 & Hres_eq & Hs02 & Hwf_rb & Hev_rb).
-  rewrite Hres_eq in Hbl; clear Hres_eq.
+  cbn iota zeta in Hres_eq, Hbl; rewrite Hres_eq in Hbl; cbn iota zeta in Hbl; clear Hres_eq.
   assert (Hss_step :
             exists ss_l st3 asg3,
               (if ss then emit_xor2_opt (msb_lit a) (msb_lit b) st2 else (lit_false, st2)) = (ss_l, st3) /\
@@ -5704,7 +5704,7 @@ Proof.
         split; [exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs02))))) |
                 exact (sat_eval_lit_false asg2 st2 (proj2 (proj2 Hs02)))]]]. }
   destruct Hss_step as (ss_l & st3 & asg3 & Hss_eq & Hs23 & Hwf_ss & Hev_ss).
-  rewrite Hss_eq in Hbl; clear Hss_eq.
+  cbn iota zeta in Hss_eq, Hbl; rewrite Hss_eq in Hbl; cbn iota zeta in Hbl; clear Hss_eq.
   destruct (emit_or2_opt (rbv_psn a) (rbv_psn b) st3) as [ab_psn st4] eqn:Eab.
   destruct (emit_or2_opt ab_psn ss_l st4) as [psn st5] eqn:Ep.
   inversion Hbl; subst out st5; clear Hbl.
@@ -5766,7 +5766,7 @@ Theorem blast_select_rail_opt_step : forall sz cond tv fv asg st out st',
 Proof.
   intros sz cond tv fv asg st out st' Hsat
          ([_ Hlc] & Hbc & Hpc) ([Hwt Hlt] & Hbt & Hpt) ([Hwf Hlf] & Hbf & Hpf) Hbl.
-  unfold blast_select_rail_opt in Hbl.
+  unfold blast_select_rail_opt in Hbl; cbn zeta in Hbl.
   set (cbit := List.hd lit_false (rbv_bits cond)) in *.
   assert (Hc_decomp : exists c0, rbv_bits cond = [c0]).
   { destruct (rbv_bits cond) as [| c0 [| c1 cr]]; try discriminate Hlc.

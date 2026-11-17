@@ -7948,9 +7948,9 @@ Proof.
     by exact (conj (conj Hwa_w Hla) (conj Hba Hpa)).
   assert (Hwb_f : wf_rail_bound sz (bs_next_var st) b)
     by exact (conj (conj Hwb_w Hlb) (conj Hbb Hpb)).
-  unfold blast_mul_rail in Hbl.
+  unfold blast_mul_rail in Hbl; cbn zeta in Hbl.
   destruct (emit_mul_bits (rbv_bits a) (rbv_bits b) st) as [prod_bits st1] eqn:Emul.
-  destruct (emit_or2_opt (rbv_psn a) (rbv_psn b) st1) as [base_psn st2] eqn:Ebp.
+  destruct (emit_or2_opt (rbv_psn a) (rbv_psn b) st1) as [base_psn st2] eqn:Ebp; cbn iota zeta in Hbl.
   destruct (emit_mul_bits_step (rbv_bits a) (rbv_bits b) asg st prod_bits st1
               Hsat Hba Hbb Emul)
     as (asg1 & Hs1 & Hlen_pb & Hwf_pb & k0 & Hk0).
@@ -8085,7 +8085,7 @@ Proof.
                (Z.ltb_spec (@Integers.unsigned sz res) ru);
         cbn [negb]; try reflexivity; lia. }
     destruct Hnuw_step as (nuw_psn & st6 & asg6 & Hnuw_eq & Hs26 & Hwf_nuwp & Hev_nuwp).
-    rewrite Hnuw_eq in Hbl; clear Hnuw_eq.
+    cbn iota zeta in Hnuw_eq, Hbl; rewrite Hnuw_eq in Hbl; cbn iota zeta in Hbl; clear Hnuw_eq.
     pose proof (step_spec_trans st st2 st6 asg asg2 asg6 Hs02 Hs26) as Hs06.
     assert (Hnsw_step :
               exists nsw_psn st10 asg10,
@@ -8193,7 +8193,7 @@ Proof.
       change (eval_rail_val dw a9 (mk_rail_bv dw sbits lit_false)) with prod_s.
       rewrite Hres_s_eq, Hs_prod; exact (signed_repr_neq_iff_oob sz rs). }
     destruct Hnsw_step as (nsw_psn & st10 & asg10 & Hnsw_eq & Hs610 & Hwf_nswp & Hev_nswp).
-    rewrite Hnsw_eq in Hbl; clear Hnsw_eq.
+    cbn iota zeta in Hnsw_eq, Hbl; rewrite Hnsw_eq in Hbl; cbn iota zeta in Hbl; clear Hnsw_eq.
     destruct (emit_or2_opt nuw_psn nsw_psn st10) as [ov_psn st11] eqn:Eov.
     destruct (emit_or2_opt base_psn ov_psn st11) as [psn st12] eqn:Ep.
     inversion Hbl; subst out st12; clear Hbl.
@@ -9952,7 +9952,7 @@ Proof.
   destruct (expand_lets_fueled norm_let_expand_budget src) as [es |] eqn:Ees; [| discriminate Hchk].
   destruct (expand_lets_fueled norm_let_expand_budget tgt) as [et |] eqn:Eet; [| discriminate Hchk].
   pose proof (expand_lets_fueled_eq norm_let_expand_budget src es Ees) as Hes_eq; subst es.
-  pose proof (expand_lets_fueled_eq norm_let_expand_budget tgt et Eet) as Het_eq; subst et.
+  pose proof (expand_lets_fueled_eq norm_let_expand_budget tgt et Eet) as Het_eq; subst et; cbn zeta in Hchk.
   apply Pos.eqb_eq in Hbw.
   destruct (expand_lets_with_typing src [] [] Hwts wf_let_subst_nil)
     as (Hb_es & Hwt_es & Hlf_es).

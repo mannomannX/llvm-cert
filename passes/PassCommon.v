@@ -37,7 +37,8 @@ From ITree Require Import
 
 From ExtLib Require Import
   Structures.Maps
-  Structures.Monads.
+  Structures.Monads
+  Structures.Functor.
 
 From Vellvm Require Import
   Numeric
@@ -1427,12 +1428,319 @@ Section ModelSemantics.
 
   Local Transparent det_prov_h.
 
-  Lemma memM_interp_prov_det {R} (m : memM R) (σ : state) :
+  Fixpoint memM_put_preserves_prov {R} (m : memM R) (σ : state) : Prop :=
+    match m with
+    | Mret _ | Moom _ | Mub _ | Merr _ => True
+    | Mget k => memM_put_preserves_prov (k σ) σ
+    | Mput σ' k =>
+        σ'.(state_provenance) = σ.(state_provenance) /\
+        memM_put_preserves_prov (k tt) σ'
+    | Mchoose (Cnext_key _ align) k =>
+        memM_put_preserves_prov
+          (k (next_key_with_alignment σ.(state_memory_stack).(Memory_stack_memory) align)) σ
+    | Mchoose Cfresh_prov k =>
+        forall p,
+          memM_put_preserves_prov (k p)
+            {| state_memory_stack := σ.(state_memory_stack);
+               state_provenance   := p |}
+    | Mchoose Cexposed_prov k => memM_put_preserves_prov (k None) σ
+    end.
+
+  Definition memM_wf_prov {R} (m : memM R) : Prop :=
+    forall σ, memM_put_preserves_prov m σ.
+
+  Local Lemma memM_put_preserves_prov_bind {X Y}
+    (m : memM X) (f : X -> memM Y) (σ : state)
+    (Hm : memM_put_preserves_prov m σ)
+    (Hf : forall x, memM_wf_prov (f x)) :
+    memM_put_preserves_prov (ExtLib.Structures.Monad.bind m f) σ.
+  Proof using.
+    revert σ Hm; induction m as [x | s | s | s | k IH | σ' k IH | c k IH]; intros σ Hm; cbn in *.
+    - exact (Hf x σ).
+    - exact I.
+    - exact I.
+    - exact I.
+    - exact (IH σ σ Hm).
+    - destruct Hm as [Heq Hm']; exact (conj Heq (IH tt σ' Hm')).
+    - destruct c as [sz align | |];
+        [exact (IH _ σ Hm) | intros p; exact (IH p _ (Hm p)) | exact (IH None σ Hm)].
+  Qed.
+
+  Local Lemma memM_wf_prov_bind {X Y}
+    (m : memM X) (f : X -> memM Y)
+    (Hm : memM_wf_prov m) (Hf : forall x, memM_wf_prov (f x)) :
+    memM_wf_prov (ExtLib.Structures.Monad.bind m f).
+  Proof using.
+    intros σ; exact (memM_put_preserves_prov_bind m f σ (Hm σ) Hf).
+  Qed.
+
+  Local Lemma memM_wf_prov_ret {X} (x : X) :
+    memM_wf_prov (ExtLib.Structures.Monad.ret x).
+  Proof using.
+    intros σ; exact I.
+  Qed.
+
+  Local Lemma memM_wf_prov_lift {X} (c : EOU X) :
+    memM_wf_prov (Vellvm.Semantics.Interfaces.Memory.lift c).
+  Proof using.
+    destruct c; intros σ; exact I.
+  Qed.
+
+  Local Lemma memM_wf_prov_loop_monad {A B} (f : A -> memM B) (l : list A)
+    (Hf : forall a, memM_wf_prov (f a)) :
+    memM_wf_prov (loop_monad f l).
+  Proof using.
+    induction l as [| a l' IH]; cbn [loop_monad];
+      [apply memM_wf_prov_ret
+      | apply memM_wf_prov_bind; [exact (Hf a) | intros _; exact IH]].
+  Qed.
+
+  Local Lemma memM_wf_prov_map_monad {A B} (f : A -> memM B) (l : list A)
+    (Hf : forall a, memM_wf_prov (f a)) :
+    memM_wf_prov (map_monad f l).
+  Proof using.
+    induction l as [| a l' IH]; cbn [map_monad]; [apply memM_wf_prov_ret |].
+    apply memM_wf_prov_bind; [exact (Hf a) | intros b].
+    apply memM_wf_prov_bind; [exact IH | intros bs; apply memM_wf_prov_ret].
+  Qed.
+
+  Local Lemma memM_wf_prov_map_monad_acc {A B} (f : A -> memM B) (l : list A)
+    (Hf : forall a, memM_wf_prov (f a)) :
+    memM_wf_prov (map_monad_acc f l).
+  Proof using.
+    unfold map_monad_acc; generalize (@nil B) as acc.
+    induction l as [| a l' IH]; intros acc;
+      [apply memM_wf_prov_ret
+      | apply memM_wf_prov_bind; [exact (Hf a) | intros b; exact (IH (b :: acc))]].
+  Qed.
+
+  Local Lemma Read_byte_wf_prov (p : ptr) :
+    memM_wf_prov (Read_byte p).
+  Proof using.
+    unfold Read_byte, read_byte_raw; cbn zeta; apply memM_wf_prov_bind.
+    - intros σ;
+        cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind get
+             ExtLib.Structures.Monad.ret memM_put_preserves_prov];
+        destruct (read_byte_raw_mem _ _); exact I.
+    - intros [_ aid]; destruct (access_allowed _ _); intros σ; exact I.
+  Qed.
+
+  Local Lemma Write_byte_wf_prov (p : ptr) (b : memory_byte) :
+    memM_wf_prov (Write_byte p b).
+  Proof using.
+    unfold Write_byte, read_byte_raw; cbn zeta; apply memM_wf_prov_bind.
+    - intros σ;
+        cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind get
+             ExtLib.Structures.Monad.ret memM_put_preserves_prov];
+        destruct (read_byte_raw_mem _ _); exact I.
+    - intros [_ aid]; destruct (access_allowed _ _); [| intros σ; exact I].
+      unfold set_byte_raw; apply memM_wf_prov_bind;
+        [intros σ; exact I | intros _ σ; exact (conj Logic.eq_refl I)].
+  Qed.
+
+  Local Lemma get_free_block_wf_prov (size align : N) (pr : provenance) :
+    memM_wf_prov (get_free_block size align pr).
+  Proof using.
+    unfold get_free_block; cbn zeta;
+      apply memM_wf_prov_bind; [intros σ; exact I | intros addr].
+    apply memM_wf_prov_bind; [apply memM_wf_prov_lift | intros p].
+    apply memM_wf_prov_bind; [apply memM_wf_prov_lift | intros ptrs; apply memM_wf_prov_ret].
+  Qed.
+
+  Local Lemma Allocate_bytes_with_pr_wf_prov (init_bytes : list memory_byte) (align : N) (pr : provenance) :
+    memM_wf_prov (Allocate_bytes_with_pr init_bytes align pr).
+  Proof using.
+    unfold Allocate_bytes_with_pr, add_block_to_stack, add_block, add_ptrs_to_frame; cbn zeta.
+    apply memM_wf_prov_bind; [apply get_free_block_wf_prov | intros [p ptrs]].
+    apply memM_wf_prov_bind.
+    - apply memM_wf_prov_bind; [intros σ; exact I | intros _ σ; exact (conj Logic.eq_refl I)].
+    - intros _; apply memM_wf_prov_bind;
+        [intros σ; exact (conj Logic.eq_refl I) | intros _; apply memM_wf_prov_ret].
+  Qed.
+
+  Local Lemma Malloc_bytes_with_pr_wf_prov (init_bytes : list memory_byte) (align : N) (pr : provenance) :
+    memM_wf_prov (Malloc_bytes_with_pr init_bytes align pr).
+  Proof using.
+    unfold Malloc_bytes_with_pr, add_block_to_heap, add_block, add_ptrs_to_heap; cbn zeta.
+    apply memM_wf_prov_bind; [apply get_free_block_wf_prov | intros [p ptrs]].
+    apply memM_wf_prov_bind.
+    - apply memM_wf_prov_bind; [intros σ; exact I | intros _ σ; exact (conj Logic.eq_refl I)].
+    - intros _; apply memM_wf_prov_bind;
+        [intros σ; exact (conj Logic.eq_refl I) | intros _; apply memM_wf_prov_ret].
+  Qed.
+
+  Local Lemma Mempop_wf_prov :
+    memM_wf_prov Mempop.
+  Proof using.
+    unfold Mempop; apply memM_wf_prov_bind.
+    - unfold get_frame; apply memM_wf_prov_bind;
+        [intros σ; exact I | intros []; apply memM_wf_prov_ret].
+    - intros f; apply memM_wf_prov_bind.
+      + unfold app_frame_stack_eob; apply memM_wf_prov_bind; [intros σ; exact I | intros fs].
+        apply memM_wf_prov_bind;
+          [apply memM_wf_prov_lift | intros _ σ; exact (conj Logic.eq_refl I)].
+      + intros _ σ; exact (conj Logic.eq_refl I).
+  Qed.
+
+  Local Lemma Free_wf_prov (p : ptr) :
+    memM_wf_prov (Free p).
+  Proof using.
+    unfold Free; cbn zeta; apply memM_wf_prov_bind; [intros σ; exact I | intros h].
+    lazymatch goal with
+    | |- memM_wf_prov match ?e with _ => _ end => destruct e as [blk |]
+    end; [| intros σ; exact I].
+    cbn zeta; apply memM_wf_prov_bind;
+      [intros σ; exact (conj Logic.eq_refl I) | intros _ σ; exact (conj Logic.eq_refl I)].
+  Qed.
+
+  Local Lemma read_bytes_wf_prov (p : ptr) (size : N) :
+    memM_wf_prov (read_bytes p size).
+  Proof using.
+    unfold read_bytes; cbn [read_byte MemoryModelPrimitivesV].
+    apply memM_wf_prov_bind; [apply memM_wf_prov_lift | intros ptrs].
+    apply memM_wf_prov_map_monad_acc, Read_byte_wf_prov.
+  Qed.
+
+  Local Lemma write_bytes_wf_prov (p : ptr) (bytes : list memory_byte) :
+    memM_wf_prov (write_bytes p bytes).
+  Proof using.
+    unfold write_bytes; cbn zeta; cbn [write_byte MemoryModelPrimitivesV].
+    apply memM_wf_prov_bind; [apply memM_wf_prov_lift | intros ptrs].
+    apply memM_wf_prov_loop_monad; intros [q b]; exact (Write_byte_wf_prov q b).
+  Qed.
+
+  Local Lemma convert_impure_base_wf_prov
+    (conv : impure_conversion) (tf : dtyp_base) (dv : dvalue_base) (tt0 : dtyp_base) :
+    memM_wf_prov (convert_impure_base conv tf dv tt0).
+  Proof using.
+    unfold convert_impure_base; destruct conv.
+    - apply memM_wf_prov_bind.
+      + unfold assert_inttoptr_types_ok; destruct tf, tt0; intros σ; exact I.
+      + intros _; destruct dv; apply memM_wf_prov_lift.
+    - destruct dv, tt0; try apply memM_wf_prov_lift; intros σ; exact I.
+    - destruct dv, tt0; try apply memM_wf_prov_lift; intros σ; exact I.
+    - intros σ; exact I.
+  Qed.
+
+  Local Lemma convert_impure_wf_prov
+    (conv : impure_conversion) (tf : dtyp) (dv : dvalue) (tt0 : dtyp) :
+    memM_wf_prov (convert_impure conv tf dv tt0).
+  Proof using.
+    unfold convert_impure; destruct dv as [db | ? ? | vc elts]; try (intros σ; exact I).
+    - destruct (get_base_conversion_type tf tt0) as [[tf' tt'] |]; [| intros σ; exact I].
+      cbn [Functor.fmap Functor_Monad].
+      apply memM_wf_prov_bind; [apply convert_impure_base_wf_prov | intros _; apply memM_wf_prov_ret].
+    - destruct vc; [| intros σ; exact I].
+      destruct (get_vector_conversion_type tf tt0) as [[tf' tt'] |]; [| intros σ; exact I].
+      apply memM_wf_prov_bind; [apply memM_wf_prov_lift | intros elts'].
+      apply memM_wf_prov_bind.
+      + apply memM_wf_prov_map_monad; intros v; apply convert_impure_base_wf_prov.
+      + intros _; apply memM_wf_prov_ret.
+  Qed.
+
+  Local Lemma handle_memoryM_wf_prov {T} (e : MemoryE T) :
+    memM_wf_prov (handle_memoryM e).
+  Proof using.
+    destruct e as [| | dt n al | dt a | dt a v | ct tf v tt0]; cbn [handle_memoryM].
+    - intros σ; exact (conj Logic.eq_refl I).
+    - exact Mempop_wf_prov.
+    - cbn zeta; apply memM_wf_prov_bind; [| intros _; apply memM_wf_prov_ret].
+      unfold allocate_dtyp; destruct (dtyp_eqb dt DTYPE_Void); [intros σ; exact I |].
+      cbn zeta; unfold allocate_bytes; cbn [allocate_bytes_with_pr MemoryModelPrimitivesV].
+      apply memM_wf_prov_bind; [intros σ p; exact I | intros pr; apply Allocate_bytes_with_pr_wf_prov].
+    - destruct a as [[p | | | | | | |] | |]; try (intros σ; exact I).
+      unfold read_dvalue; apply memM_wf_prov_bind;
+        [apply read_bytes_wf_prov | intros _; apply memM_wf_prov_lift].
+    - destruct a as [[p | | | | | | |] | |]; try (intros σ; exact I).
+      unfold write_dvalue; apply memM_wf_prov_bind;
+        [apply memM_wf_prov_lift | intros bs; apply write_bytes_wf_prov].
+    - apply convert_impure_wf_prov.
+  Qed.
+
+  Local Lemma handle_memtransfer_wf_prov (overlap_ok : bool) (args : list dvalue_base) :
+    memM_wf_prov (handle_memtransfer overlap_ok args).
+  Proof using.
+    unfold handle_memtransfer; cbn zeta.
+    destruct args as [| dst [| src [| len [| vol [| ? ?]]]]]; try (intros σ; exact I).
+    destruct vol; try (intros σ; exact I).
+    apply memM_wf_prov_bind.
+    - destruct len; intros σ; exact I.
+    - intros size; destruct dst, src; try (intros σ; exact I);
+        try (destruct (size =? 0)%N; intros σ; exact I).
+      destruct overlap_ok.
+      + unfold memmove; apply memM_wf_prov_bind;
+          [apply read_bytes_wf_prov | intros bs; apply write_bytes_wf_prov].
+      + unfold memcpy; destruct (orb _ _); [| intros σ; exact I].
+        apply memM_wf_prov_bind;
+          [apply read_bytes_wf_prov | intros bs; apply write_bytes_wf_prov].
+  Qed.
+
+  Local Lemma handle_memset_wf_prov (args : list dvalue_base) :
+    memM_wf_prov (handle_memset args).
+  Proof using.
+    unfold handle_memset.
+    destruct args as [| dst [| val [| len [| vol [| ? ?]]]]]; try (intros σ; exact I).
+    destruct vol; try (intros σ; exact I).
+    apply memM_wf_prov_bind.
+    - destruct val; try (intros σ; exact I).
+      destruct (Pos.eqb _ 8); intros σ; exact I.
+    - intros byte; apply memM_wf_prov_bind.
+      + destruct len; intros σ; exact I.
+      + intros size; destruct dst; try (intros σ; exact I).
+        * unfold memset; apply write_bytes_wf_prov.
+        * destruct (size =? 0)%N; intros σ; exact I.
+  Qed.
+
+  Local Lemma handle_malloc_wf_prov (args : list dvalue_base) (align : N) :
+    memM_wf_prov (handle_malloc args align).
+  Proof using.
+    unfold handle_malloc.
+    destruct args as [| a0 [| ? ?]]; [intros σ; exact I | | intros σ; exact I].
+    destruct a0; try (intros σ; exact I);
+      unfold malloc_bytes; cbn [malloc_bytes_with_pr MemoryModelPrimitivesV];
+      apply memM_wf_prov_bind; [intros σ p; exact I | intros pr; apply Malloc_bytes_with_pr_wf_prov].
+  Qed.
+
+  Local Lemma handle_free_wf_prov (args : list dvalue_base) :
+    memM_wf_prov (handle_free args).
+  Proof using.
+    unfold handle_free; cbn [free MemoryModelPrimitivesV].
+    destruct args as [| a0 [| ? ?]]; [intros σ; exact I | | intros σ; exact I].
+    destruct a0; try (intros σ; exact I).
+    destruct (_ =? _)%Z; [apply memM_wf_prov_ret | apply Free_wf_prov].
+  Qed.
+
+  Local Lemma handle_intrinsicM_wf_prov {T} (e : IntrinsicE T) :
+    memM_wf_prov (handle_intrinsicM e).
+  Proof using.
+    destruct e as [t name args ?]; cbn [handle_intrinsicM].
+    apply memM_wf_prov_bind; [apply memM_wf_prov_lift | intros args'].
+    destruct (is_memcpy_name name);
+      [apply memM_wf_prov_bind;
+       [apply handle_memtransfer_wf_prov | intros _; apply memM_wf_prov_ret] |].
+    destruct (is_memmove_name name);
+      [apply memM_wf_prov_bind;
+       [apply handle_memtransfer_wf_prov | intros _; apply memM_wf_prov_ret] |].
+    destruct (is_memset_name name);
+      [apply memM_wf_prov_bind;
+       [apply handle_memset_wf_prov | intros _; apply memM_wf_prov_ret] |].
+    destruct (Numeric.Rocqlib.proj_sumbool (string_dec name "malloc"));
+      [apply memM_wf_prov_bind;
+       [apply handle_malloc_wf_prov | intros _; apply memM_wf_prov_ret] |].
+    destruct (Numeric.Rocqlib.proj_sumbool (string_dec name "free"));
+      [apply memM_wf_prov_bind;
+       [apply handle_free_wf_prov | intros _; apply memM_wf_prov_ret]
+      | intros σ; exact I].
+  Qed.
+
+  Lemma memM_interp_prov_det {R} (m : memM R) (σ : state)
+    (Hwf : memM_put_preserves_prov m σ) :
     interp_state det_prov_h (memM_interp_prov m σ) σ.(state_provenance) ≈
       ITree.map (fun '(σ', r) => (σ'.(state_provenance), (σ', r))) (memM_interp m σ).
   Proof using.
-    revert σ; induction m as [x | s | s | s | k IH | σ' k IH | c k IH]; intros σ;
-      cbn [memM_interp_prov memM_interp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+    revert σ Hwf; induction m as [x | s | s | s | k IH | σ' k IH | c k IH]; intros σ Hwf;
+      cbn [memM_interp_prov memM_interp memM_put_preserves_prov
+           ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree] in Hwf |- *.
     - rewrite interp_state_ret; unfold ITree.map; rewrite Eqit.bind_ret_l; reflexivity.
     - unfold raiseOOM, trigger_cast, ITree.map;
         rewrite interp_state_bind, interp_state_trigger;
@@ -1458,11 +1766,11 @@ Section ModelSemantics.
         cbn -[print_msg ITree.trigger interp_state ITree.bind];
         rewrite Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger; apply eqit_Vis; intros [].
-    - apply IH.
-    - exact (IH tt σ').
+    - exact (IH σ σ Hwf).
+    - destruct Hwf as [Heq Hwf']; rewrite <- Heq; exact (IH tt σ' Hwf').
     - destruct c as [sz align | |];
         cbn [memM_interp_prov memM_interp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-      + apply IH.
+      + exact (IH _ σ Hwf).
       + rewrite interp_state_bind, interp_state_trigger, det_prov_h_inl1, Eqit.bind_ret_l.
         unfold fresh_provenance, ITree.map;
           cbn [next_provenance ProvenanceV MemoryModelPrimitivesV ParamsV
@@ -1470,8 +1778,9 @@ Section ModelSemantics.
         rewrite Eqit.bind_bind, Eqit.bind_ret_l.
         exact (IH (N.succ (state_provenance σ))
                   {| state_memory_stack := state_memory_stack σ;
-                     state_provenance   := N.succ (state_provenance σ) |}).
-      + apply IH.
+                     state_provenance   := N.succ (state_provenance σ) |}
+                  (Hwf (N.succ (state_provenance σ)))).
+      + exact (IH None σ Hwf).
   Qed.
 
   Lemma interp_vellvm_prov_h_det {T} (e : MCFGEtop T) (s : FusedS) :
@@ -1494,9 +1803,9 @@ Section ModelSemantics.
         apply eqit_Vis; intros x;
         rewrite Eqit.bind_ret_l, interp_state_ret, Eqit.bind_ret_l; reflexivity.
     - (* IntrinsicE *)
-      unfold fused_intrinsic_prov, fused_intrinsic, on_mem_prov, on_mem;
+      unfold fused_intrinsic_prov, fused_intrinsic, on_mem_prov, on_mem, handle_intrinsic;
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-      rewrite interp_state_bind, memM_interp_prov_det.
+      rewrite interp_state_bind, (memM_interp_prov_det _ _ (handle_intrinsicM_wf_prov e m)).
       unfold ITree.map; rewrite !Eqit.bind_bind.
       apply eutt_eq_bind; intros [m' r]; cbn [fst].
       rewrite !Eqit.bind_ret_l, interp_state_ret; reflexivity.
@@ -1522,9 +1831,9 @@ Section ModelSemantics.
       apply eutt_eq_bind; intros [ls' r]; cbn [fst].
       rewrite !Eqit.bind_ret_l, interp_state_ret; reflexivity.
     - (* MemoryE *)
-      unfold fused_memory_prov, fused_memory, on_mem_prov, on_mem;
+      unfold fused_memory_prov, fused_memory, on_mem_prov, on_mem, handle_memory;
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-      rewrite interp_state_bind, memM_interp_prov_det.
+      rewrite interp_state_bind, (memM_interp_prov_det _ _ (handle_memoryM_wf_prov e m)).
       unfold ITree.map; rewrite !Eqit.bind_bind.
       apply eutt_eq_bind; intros [m' r]; cbn [fst].
       rewrite !Eqit.bind_ret_l, interp_state_ret; reflexivity.
