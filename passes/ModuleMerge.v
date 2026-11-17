@@ -5004,11 +5004,11 @@ Section ValueDrawRefinement.
     - unfold rpd_step_body in Hstep.
       destruct (observe t1) as [r1 | m1 | X1 e1 k1'] eqn:Hot1.
       + destruct (observe t2) as [r2 | m2 | X2 e2 k2'] eqn:Hot2; try contradiction.
+        eapply paco3_mon; [| intros ? ? ? []].
         eapply refine_prov_draw_obs_eq.
         * symmetry; rewrite (itree_eta t1), Hot1, Eqit.bind_ret_l; reflexivity.
         * symmetry; rewrite (itree_eta t2), Hot2, Eqit.bind_ret_l; reflexivity.
-        * specialize (Hk U r1 r2 (incl_refl U) Hstep).
-          punfold Hk; pstep; eapply refine_prov_draw__mon; [exact Hk | intros ? ? ? Hb; inversion Hb].
+        * exact (Hk U r1 r2 (incl_refl U) Hstep).
       + destruct (observe t2) as [r2 | m2 | X2 e2 k2'] eqn:Hot2; try contradiction.
         pclearbot; pstep; apply RPD_Step; unfold rpd_step_body.
         rewrite (observe_bind t1 k1), Hot1, (observe_bind t2 k2), Hot2.
@@ -5399,11 +5399,11 @@ Section ValueDrawRefinement.
       - unfold vds_step_body in Hstep.
         destruct (observe t1) as [r1 | m1 | X1 e1 k1'] eqn:Hot1.
         + destruct (observe t2) as [r2 | m2 | X2 e2 k2'] eqn:Hot2; try contradiction.
+          eapply paco5_mon; [| intros ? ? ? ? ? []].
           eapply vds_sim_obs_eq.
           * symmetry; rewrite (itree_eta t1), Hot1, Eqit.bind_ret_l; reflexivity.
           * symmetry; rewrite (itree_eta t2), Hot2, Eqit.bind_ret_l; reflexivity.
-          * specialize (Hk stk env1 env2 r1 r2 Hstep).
-            punfold Hk; pstep; eapply vds_sim__mon; [exact Hk | intros ? ? ? ? ? Hb; inversion Hb].
+          * exact (Hk stk env1 env2 r1 r2 Hstep).
         + destruct (observe t2) as [r2 | m2 | X2 e2 k2'] eqn:Hot2; try contradiction.
           destruct Hstep as [Hstep | Hb]; [| inversion Hb].
           pstep; apply VDS_Step; unfold vds_step_body.
@@ -5898,7 +5898,8 @@ Section ValueDrawRefinement.
                 split; [apply unfold_run_exc_obs |].
                 split; [apply unfold_run_exc_obs |].
                 pstep; eapply VDS_TauL; [reflexivity |]; eapply VDS_TauR; [reflexivity |].
-                punfold HA; eapply vds_sim__mon; [exact HA | intros ? ? ? ? ? Hb; inversion Hb].
+                punfold HA; eapply vds_sim__mon;
+                  [exact HA | intros ? ? ? ? ? [Hl | []]; left; eapply paco5_mon; [exact Hl | intros ? ? ? ? ? []]].
           -- destruct ev1 as [| me1], ev2 as [| me2]; cbn in Hloc; try contradiction.
              destruct (as_local_mcfg me1) as [le1 |] eqn:Ele1,
                       (as_local_mcfg me2) as [le2 |] eqn:Ele2; try contradiction.
@@ -5914,7 +5915,8 @@ Section ValueDrawRefinement.
                 split; [apply unfold_run_exc_obs |].
                 split; [apply unfold_run_exc_obs |].
                 pstep; eapply VDS_TauL; [reflexivity |]; eapply VDS_TauR; [reflexivity |].
-                punfold Hrd; eapply vds_sim__mon; [exact Hrd | intros ? ? ? ? ? Hb; inversion Hb].
+                punfold Hrd; eapply vds_sim__mon;
+                  [exact Hrd | intros ? ? ? ? ? [Hl | []]; left; eapply paco5_mon; [exact Hl | intros ? ? ? ? ? []]].
              ++ destruct Hloc as (Hx & Hv & [Hr | Hb]); [| inversion Hb]; subst x2 v2.
                 apply VDS_Step; cbn; right; right; left.
                 split; [reflexivity | split; [reflexivity |]].
@@ -5922,7 +5924,8 @@ Section ValueDrawRefinement.
                 split; [apply unfold_run_exc_obs |].
                 split; [apply unfold_run_exc_obs |].
                 pstep; eapply VDS_TauL; [reflexivity |]; eapply VDS_TauR; [reflexivity |].
-                punfold Hr; eapply vds_sim__mon; [exact Hr | intros ? ? ? ? ? Hb; inversion Hb].
+                punfold Hr; eapply vds_sim__mon;
+                  [exact Hr | intros ? ? ? ? ? [Hl | []]; left; eapply paco5_mon; [exact Hl | intros ? ? ? ? ? []]].
     - eapply vds_sim__obs_eq with (t1 := Tau (run_exc mu1)) (t2 := run_exc u2);
         [intros s1 e1' e2' a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv);
          exists v1, v2;
@@ -6430,7 +6433,8 @@ Section ValueDrawRefinement.
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 pstep; eapply VDS_TauL; [reflexivity |]; eapply VDS_TauR; [reflexivity |].
-                punfold HA; eapply vds_sim__mon; [exact HA | intros ? ? ? ? ? Hb; inversion Hb].
+                punfold HA; eapply vds_sim__mon;
+                  [exact HA | intros ? ? ? ? ? [Hl | []]; left; eapply paco5_mon; [exact Hl | intros ? ? ? ? ? []]].
           -- destruct ev1 as [| me1], ev2 as [| me2]; cbn in Hloc; try contradiction.
              destruct (as_local_mcfg me1) as [le1 |] eqn:Ele1,
                       (as_local_mcfg me2) as [le2 |] eqn:Ele2; try contradiction.
@@ -6444,7 +6448,8 @@ Section ValueDrawRefinement.
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 pstep; eapply VDS_TauL; [reflexivity |]; eapply VDS_TauR; [reflexivity |].
-                punfold Hrd; eapply vds_sim__mon; [exact Hrd | intros ? ? ? ? ? Hb; inversion Hb].
+                punfold Hrd; eapply vds_sim__mon;
+                  [exact Hrd | intros ? ? ? ? ? [Hl | []]; left; eapply paco5_mon; [exact Hl | intros ? ? ? ? ? []]].
              ++ destruct Hloc as (Hx & Hv & [Hr | Hb]); [| inversion Hb].
                 apply VDS_Step; cbn; right; right; left.
                 rewrite Ele1, Ele2; split; [exact Hx | split; [exact Hv |]].
@@ -6452,7 +6457,8 @@ Section ValueDrawRefinement.
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 pstep; eapply VDS_TauL; [reflexivity |]; eapply VDS_TauR; [reflexivity |].
-                punfold Hr; eapply vds_sim__mon; [exact Hr | intros ? ? ? ? ? Hb; inversion Hb].
+                punfold Hr; eapply vds_sim__mon;
+                  [exact Hr | intros ? ? ? ? ? [Hl | []]; left; eapply paco5_mon; [exact Hl | intros ? ? ? ? ? []]].
           -- destruct ev1 as [| me1], ev2 as [| me2]; cbn in Hstk; try contradiction.
              destruct (as_stack_mcfg me1) as [se1 |] eqn:Ese1,
                       (as_stack_mcfg me2) as [se2 |] eqn:Ese2; try contradiction.
@@ -6463,7 +6469,8 @@ Section ValueDrawRefinement.
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 pstep; eapply VDS_TauL; [reflexivity |]; eapply VDS_TauR; [reflexivity |].
-                punfold Hr; eapply vds_sim__mon; [exact Hr | intros ? ? ? ? ? Hb; inversion Hb].
+                punfold Hr; eapply vds_sim__mon;
+                  [exact Hr | intros ? ? ? ? ? [Hl | []]; left; eapply paco5_mon; [exact Hl | intros ? ? ? ? ? []]].
              ++ apply VDS_Step; cbn; right; right; right; rewrite Ese1, Ese2.
                 destruct stk as [[p1 p2] rest |]; [| exact I].
                 destruct Hstk as [Hr | Hb]; [| inversion Hb].
@@ -6471,7 +6478,8 @@ Section ValueDrawRefinement.
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 pstep; eapply VDS_TauL; [reflexivity |]; eapply VDS_TauR; [reflexivity |].
-                punfold Hr; eapply vds_sim__mon; [exact Hr | intros ? ? ? ? ? Hb; inversion Hb].
+                punfold Hr; eapply vds_sim__mon;
+                  [exact Hr | intros ? ? ? ? ? [Hl | []]; left; eapply paco5_mon; [exact Hl | intros ? ? ? ? ? []]].
     - eapply vds_sim__obs_eq with (t1 := Tau (interp_mrec (mm_mrec_ctx ctx1) mu1))
                                   (t2 := interp_mrec (mm_mrec_ctx ctx2) u2);
         [intros s0 e1 e2 a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv);

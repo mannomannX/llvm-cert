@@ -2309,7 +2309,9 @@ Section ModelSemantics.
       destruct (observe t1) as [x1 | m1 | X1 e1 k1] eqn:Hot1; try contradiction.
       + pclearbot; punfold Hstep.
         eapply RP_TauL;
-          [exact Hot1 | eapply refine_prov__mon; [exact Hstep | intros ? ? ? [Hl | []]; left; exact Hl]].
+          [exact Hot1
+          | eapply refine_prov__mon;
+              [exact Hstep | intros ? ? ? [Hl | []]; left; eapply paco3_mon; [exact Hl | intros ? ? ? []]]].
       + apply RP_Step; unfold rp_step_body; rewrite Hot1.
         destruct Hstep as [Hub | [Hleft | Hboth]]; [left; exact Hub | | contradiction].
         right; left.
@@ -2319,7 +2321,8 @@ Section ModelSemantics.
         eapply refine_prov_obs_eq; [apply reflexivity | rewrite (itree_eta t2), Hot2; reflexivity | exact Hleft].
     - eapply RP_TauL; [exact Ht1 | apply IH, Hot2].
     - rewrite Hot2 in Ht2; inversion Ht2; subst m2'.
-      eapply refine_prov__mon; [exact Hrel | intros ? ? ? [Hl | []]; left; exact Hl].
+      eapply refine_prov__mon;
+        [exact Hrel | intros ? ? ? [Hl | []]; left; eapply paco3_mon; [exact Hl | intros ? ? ? []]].
   Qed.
 
   Lemma refine_prov_bind {R1 R2 S1 S2}
@@ -2337,12 +2340,11 @@ Section ModelSemantics.
     - unfold rp_step_body in Hstep.
       destruct (observe t1) as [r1 | m1 | X1 e1 k1'] eqn:Hot1.
       + destruct (observe t2) as [r2 | m2 | X2 e2 k2'] eqn:Hot2; try contradiction.
+        eapply paco3_mon; [| intros ? ? ? []].
         eapply refine_prov_obs_eq.
         * symmetry; rewrite (itree_eta t1), Hot1, Eqit.bind_ret_l; reflexivity.
         * symmetry; rewrite (itree_eta t2), Hot2, Eqit.bind_ret_l; reflexivity.
-        * specialize (Hk U r1 r2 (incl_refl U) Hstep).
-          punfold Hk; pstep; eapply refine_prov__mon; [exact Hk |].
-          intros ? ? ? Hb; inversion Hb.
+        * exact (Hk U r1 r2 (incl_refl U) Hstep).
       + destruct (observe t2) as [r2 | m2 | X2 e2 k2'] eqn:Hot2; try contradiction.
         pclearbot; pstep; apply RP_Step; unfold rp_step_body.
         rewrite (observe_bind t1 k1), Hot1, (observe_bind t2 k2), Hot2.
@@ -3472,11 +3474,11 @@ Section ModelSemantics.
     - unfold cls_step_body in Hstep.
       destruct (observe t1) as [r1 | m1 | X1 e1 k1'] eqn:Hot1.
       + destruct (observe t2) as [r2 | m2 | X2 e2 k2'] eqn:Hot2; try contradiction.
+        eapply paco4_mon; [| intros ? ? ? ? []].
         eapply cfg_local_sim_obs_eq.
         * symmetry; rewrite (itree_eta t1), Hot1, Eqit.bind_ret_l; reflexivity.
         * symmetry; rewrite (itree_eta t2), Hot2, Eqit.bind_ret_l; reflexivity.
-        * specialize (Hk env1 env2 r1 r2 Hstep).
-          punfold Hk; pstep; eapply cfg_local_sim__mon; [exact Hk | intros ? ? ? ? Hb; inversion Hb].
+        * exact (Hk env1 env2 r1 r2 Hstep).
       + destruct (observe t2) as [r2 | m2 | X2 e2 k2'] eqn:Hot2; try contradiction; pclearbot.
         pstep; apply CLS_Step; unfold cls_step_body.
         rewrite (observe_bind t1 k1), Hot1, (observe_bind t2 k2), Hot2.
@@ -3742,7 +3744,8 @@ Section ModelSemantics.
                 split; [apply unfold_run_exc_obs |].
                 pstep; eapply CLS_TauL; [reflexivity |];
                   eapply CLS_TauR; [reflexivity |].
-                punfold HA; eapply cfg_local_sim__mon; [exact HA | intros ? ? ? ? Hb; inversion Hb].
+                punfold HA; eapply cfg_local_sim__mon;
+                  [exact HA | intros ? ? ? ? [Hl | []]; left; eapply paco4_mon; [exact Hl | intros ? ? ? ? []]].
           -- destruct_sum1 ev1; try contradiction;
                destruct ev1 as [x1 |]; try contradiction;
                destruct_sum1 ev2; try contradiction;
@@ -3756,7 +3759,8 @@ Section ModelSemantics.
              split; [apply unfold_run_exc_obs |].
              pstep; eapply CLS_TauL; [reflexivity |];
                eapply CLS_TauR; [reflexivity |].
-             punfold Hrd'; eapply cfg_local_sim__mon; [exact Hrd' | intros ? ? ? ? Hb; inversion Hb].
+             punfold Hrd'; eapply cfg_local_sim__mon;
+               [exact Hrd' | intros ? ? ? ? [Hl | []]; left; eapply paco4_mon; [exact Hl | intros ? ? ? ? []]].
     - eapply cfg_local_sim__obs_eq with (t1 := Tau (run_exc mu1)) (t2 := run_exc u2);
         [intros e1' e2' a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv);
          exists v1, v2;
@@ -4124,11 +4128,11 @@ Section ModelSemantics.
       - unfold gss_step_body in Hstep.
         destruct (observe t1) as [r1 | m1 | X1 e1 k1'] eqn:Hot1.
         + destruct (observe t2) as [r2 | m2 | X2 e2 k2'] eqn:Hot2; try contradiction.
+          eapply paco5_mon; [| intros ? ? ? ? ? []].
           eapply gen_stack_sim_obs_eq.
           * symmetry; rewrite (itree_eta t1), Hot1, Eqit.bind_ret_l; reflexivity.
           * symmetry; rewrite (itree_eta t2), Hot2, Eqit.bind_ret_l; reflexivity.
-          * specialize (Hk stk env1 env2 r1 r2 Hstep).
-            punfold Hk; pstep; eapply Hmon; [exact Hk | intros ? ? ? ? ? Hb; inversion Hb].
+          * exact (Hk stk env1 env2 r1 r2 Hstep).
         + destruct (observe t2) as [r2 | m2 | X2 e2 k2'] eqn:Hot2; try contradiction.
           destruct Hstep as [Hstep | Hbot]; [| inversion Hbot].
           pstep; apply GSS_Step; unfold gss_step_body.
@@ -4561,7 +4565,8 @@ Section ModelSemantics.
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 pstep; eapply GSS_TauL; [reflexivity |]; eapply GSS_TauR; [reflexivity |].
-                punfold HA; eapply gen_stack_sim__mon; [exact HA | intros ? ? ? ? ? Hb; inversion Hb].
+                punfold HA; eapply gen_stack_sim__mon;
+                  [exact HA | intros ? ? ? ? ? [Hl | []]; left; eapply paco5_mon; [exact Hl | intros ? ? ? ? ? []]].
           -- destruct ev1 as [| me1], ev2 as [| me2]; cbn in Hloc; try contradiction.
              destruct (as_local_mcfg me1) as [le1 |] eqn:Ele1,
                       (as_local_mcfg me2) as [le2 |] eqn:Ele2; try contradiction.
@@ -4574,7 +4579,8 @@ Section ModelSemantics.
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 pstep; eapply GSS_TauL; [reflexivity |]; eapply GSS_TauR; [reflexivity |].
-                punfold Hrd; eapply gen_stack_sim__mon; [exact Hrd | intros ? ? ? ? ? Hb; inversion Hb].
+                punfold Hrd; eapply gen_stack_sim__mon;
+                  [exact Hrd | intros ? ? ? ? ? [Hl | []]; left; eapply paco5_mon; [exact Hl | intros ? ? ? ? ? []]].
              ++ destruct Hloc as (Hx & Hv & [Hr | Hb]); [| inversion Hb].
                 apply GSS_Step; cbn; right; right; left.
                 rewrite Ele1, Ele2; split; [exact Hx | split; [exact Hv |]].
@@ -4582,7 +4588,8 @@ Section ModelSemantics.
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 pstep; eapply GSS_TauL; [reflexivity |]; eapply GSS_TauR; [reflexivity |].
-                punfold Hr; eapply gen_stack_sim__mon; [exact Hr | intros ? ? ? ? ? Hb; inversion Hb].
+                punfold Hr; eapply gen_stack_sim__mon;
+                  [exact Hr | intros ? ? ? ? ? [Hl | []]; left; eapply paco5_mon; [exact Hl | intros ? ? ? ? ? []]].
           -- destruct ev1 as [| me1], ev2 as [| me2]; cbn in Hstk; try contradiction.
              destruct (as_stack_mcfg me1) as [se1 |] eqn:Ese1,
                       (as_stack_mcfg me2) as [se2 |] eqn:Ese2; try contradiction.
@@ -4594,7 +4601,8 @@ Section ModelSemantics.
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 pstep; eapply GSS_TauL; [reflexivity |]; eapply GSS_TauR; [reflexivity |].
-                punfold Hr; eapply gen_stack_sim__mon; [exact Hr | intros ? ? ? ? ? Hb; inversion Hb].
+                punfold Hr; eapply gen_stack_sim__mon;
+                  [exact Hr | intros ? ? ? ? ? [Hl | []]; left; eapply paco5_mon; [exact Hl | intros ? ? ? ? ? []]].
              ++ apply GSS_Step; cbn; right; right; right; rewrite Ese1, Ese2.
                 destruct stk as [[p1 p2] rest |]; [| exact I].
                 destruct Hstk as [Hr | Hb]; [| inversion Hb].
@@ -4602,7 +4610,8 @@ Section ModelSemantics.
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 pstep; eapply GSS_TauL; [reflexivity |]; eapply GSS_TauR; [reflexivity |].
-                punfold Hr; eapply gen_stack_sim__mon; [exact Hr | intros ? ? ? ? ? Hb; inversion Hb].
+                punfold Hr; eapply gen_stack_sim__mon;
+                  [exact Hr | intros ? ? ? ? ? [Hl | []]; left; eapply paco5_mon; [exact Hl | intros ? ? ? ? ? []]].
     - eapply gen_stack_sim__obs_eq with (t1 := Tau (interp_mrec (mrec_ctx ctx1) mu1))
                                         (t2 := interp_mrec (mrec_ctx ctx2) u2);
         [intros s0 e1 e2 a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv);

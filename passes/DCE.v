@@ -4822,7 +4822,7 @@ Section DCESoundness.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
       intros [] _ _; apply Eqit.bind_ret_l.
     - punfold Hk; eapply cfg_local_sim__mon;
-        [exact Hk | intros ? ? ? ? Hb; inversion Hb].
+        [exact Hk | intros ? ? ? ? [Hl | []]; left; eapply paco4_mon; [exact Hl | intros ? ? ? ? []]].
   Qed.
 
   Lemma dce_code_sim
@@ -4965,7 +4965,7 @@ Section DCESoundness.
         - intros e1' e2' _ _ Hpost; apply cfg_local_sim_ret, Hpost. }
       pstep; eapply CLS_WriteL; [reflexivity |].
       punfold Hsim_next; eapply cfg_local_sim__mon;
-        [exact Hsim_next | intros ? ? ? ? Hb; inversion Hb].
+        [exact Hsim_next | intros ? ? ? ? [Hl | []]; left; eapply paco4_mon; [exact Hl | intros ? ? ? ? []]].
   Qed.
 
   Lemma dce_phis_eval_sim

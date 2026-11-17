@@ -75,6 +75,44 @@ Set Default Goal Selector "!".
 #[local] Arguments Z.geb _ _ : simpl nomatch.
 #[local] Arguments Nat.eqb _ _ : simpl nomatch.
 #[local] Arguments String.eqb _ _ : simpl nomatch.
+#[local] Arguments Integers.modulus : simpl never.
+#[local] Arguments Integers.half_modulus : simpl never.
+#[local] Arguments Integers.max_unsigned : simpl never.
+#[local] Arguments Integers.max_signed : simpl never.
+#[local] Arguments Integers.min_signed : simpl never.
+#[local] Arguments Integers.unsigned : simpl never.
+#[local] Arguments Integers.signed : simpl never.
+#[local] Arguments Integers.repr : simpl never.
+#[local] Arguments Integers.zero : simpl never.
+#[local] Arguments Integers.one : simpl never.
+#[local] Arguments Integers.mone : simpl never.
+#[local] Arguments Integers.iwordsize : simpl never.
+#[local] Arguments Integers.eq : simpl never.
+#[local] Arguments Integers.lt : simpl never.
+#[local] Arguments Integers.ltu : simpl never.
+#[local] Arguments Integers.neg : simpl never.
+#[local] Arguments Integers.add : simpl never.
+#[local] Arguments Integers.sub : simpl never.
+#[local] Arguments Integers.mul : simpl never.
+#[local] Arguments Integers.divs : simpl never.
+#[local] Arguments Integers.mods : simpl never.
+#[local] Arguments Integers.divu : simpl never.
+#[local] Arguments Integers.modu : simpl never.
+#[local] Arguments Integers.and : simpl never.
+#[local] Arguments Integers.or : simpl never.
+#[local] Arguments Integers.xor : simpl never.
+#[local] Arguments Integers.not : simpl never.
+#[local] Arguments Integers.shl : simpl never.
+#[local] Arguments Integers.shru : simpl never.
+#[local] Arguments Integers.shr : simpl never.
+#[local] Arguments Integers.rol : simpl never.
+#[local] Arguments Integers.ror : simpl never.
+#[local] Arguments Integers.rolm : simpl never.
+#[local] Arguments Integers.negative : simpl never.
+#[local] Arguments Integers.add_carry : simpl never.
+#[local] Arguments Integers.add_overflow : simpl never.
+#[local] Arguments Integers.sub_borrow : simpl never.
+#[local] Arguments Integers.sub_overflow : simpl never.
 
 Local Open Scope bool_scope.
 Local Open Scope string_scope.
@@ -1070,7 +1108,7 @@ Proof.
   - exists (DVALUE_Base DVALUE_Poison); split; [reflexivity | left; reflexivity].
   - unfold eval_icmp; rewrite eval_icmp_base_same_width.
     destruct pr; unfold cert_to_icmp, eval_int_icmp;
-      cbn [mdtyp_of_int VIntVMemInt VInt_Bounded bitwidth dtyp_base_eq_dec dvp];
+      cbn - [andb negb msamesign mcmp mcmpu];
       repeat match goal with
              | |- context [if ?b then _ else _] => destruct b
              end;
@@ -3033,7 +3071,7 @@ Proof.
                destruct b eqn:?; [discriminate Hfold |]
            end;
     inversion Hfold; subst out; clear Hfold;
-    unfold cert_to_ibinop, eval_int_op; cbn;
+    unfold cert_to_ibinop, eval_int_op; cbn - [andb orb];
     repeat match goal with
            | H : ?b = false |- context [if ?b then _ else _] => rewrite H
            | |- context [if ?b then _ else _] => destruct b
@@ -3137,7 +3175,7 @@ Proof.
   - destruct Hk as (([Hlt _] & _) & _); rewrite Pos.eqb_refl, Hlt.
     unfold mk_bv_const; cbn; repeat split; try reflexivity;
       rewrite repr_of_N_to_N_unsigned; reflexivity.
-  - destruct Hk as [Hlt _]; rewrite Pos.eqb_refl, Hlt; cbn.
+  - destruct Hk as [Hlt _]; rewrite Pos.eqb_refl, Hlt; cbn - [andb orb].
     match goal with |- context [if ?b then _ else _] => destruct b end;
       unfold mk_bv_const; cbn; repeat split; try reflexivity;
       rewrite repr_of_N_to_N_unsigned; reflexivity.
@@ -8317,7 +8355,7 @@ Proof.
     exists asg', (if ov then DVALUE_Base DVALUE_Poison
                   else DVALUE_Base (@DVALUE_I Pa sz (@Integers.add sz (eval_rail_val sz asg rl) (eval_rail_val sz asg rr)))).
     split.
-    + unfold eval_iop; rewrite eval_iop_integer_base_same_width; unfold cert_to_ibinop, eval_int_op; cbn.
+    + unfold eval_iop; rewrite eval_iop_integer_base_same_width; unfold cert_to_ibinop, eval_int_op; cbn - [andb orb].
       fold ov; destruct ov; reflexivity.
     + split; [exact Hs | split; [exact Hwf_out |
       exact (dvalue_poison_or_int_rail sz asg' out ov _ Hpsn (fun _ => Hval))]].
@@ -8340,7 +8378,7 @@ Proof.
     exists asg', (if ov then DVALUE_Base DVALUE_Poison
                   else DVALUE_Base (@DVALUE_I Pa sz (@Integers.sub sz (eval_rail_val sz asg rl) (eval_rail_val sz asg rr)))).
     split.
-    + unfold eval_iop; rewrite eval_iop_integer_base_same_width; unfold cert_to_ibinop, eval_int_op; cbn.
+    + unfold eval_iop; rewrite eval_iop_integer_base_same_width; unfold cert_to_ibinop, eval_int_op; cbn - [andb orb].
       fold ov; destruct ov; reflexivity.
     + split; [exact Hs | split; [exact Hwf_out |
       exact (dvalue_poison_or_int_rail sz asg' out ov _ Hpsn (fun _ => Hval))]].
@@ -8369,7 +8407,7 @@ Proof.
         cbn [mbitwidth mdtyp_of_int option_pred mmin_signed mmax_signed mmul munsigned msigned
              VIntVMemInt VInt_Bounded bitwidth dtyp_base_eq_dec fmap dvp].
       unfold ov; destruct (Pos.eqb sz 1%positive); [reflexivity |].
-      cbn; match goal with |- context [if ?b then _ else _] => destruct b; reflexivity end.
+      cbn - [andb orb]; match goal with |- context [if ?b then _ else _] => destruct b; reflexivity end.
     + split; [exact Hs | split; [exact Hwf_out |
       exact (dvalue_poison_or_int_rail sz asg' out ov _ Hpsn (fun _ => Hval))]].
   - (* CB_Shl *)
@@ -8431,7 +8469,7 @@ Proof.
     + set (ov := cbf_exact fl && negb ((@Integers.unsigned sz va mod (2 ^ @Integers.unsigned sz vb)) =? 0)%Z) in *.
       exists asg', (if ov then DVALUE_Base DVALUE_Poison
                     else DVALUE_Base (@DVALUE_I Pa sz (@Integers.shru sz va vb))).
-      split; [cbn; fold ov; destruct ov; reflexivity |
+      split; [cbn - [andb negb]; fold ov; destruct ov; reflexivity |
       split; [exact Hs | split; [exact Hwf_out |
         exact (dvalue_poison_or_int_rail sz asg' out ov _ Hpsn (fun _ => Hval eq_refl))]]].
   - (* CB_AShr *)
@@ -8456,7 +8494,7 @@ Proof.
     + set (ov := cbf_exact fl && negb ((@Integers.unsigned sz va mod (2 ^ @Integers.unsigned sz vb)) =? 0)%Z) in *.
       exists asg', (if ov then DVALUE_Base DVALUE_Poison
                     else DVALUE_Base (@DVALUE_I Pa sz (@Integers.shr sz va vb))).
-      split; [cbn; fold ov; destruct ov; reflexivity |
+      split; [cbn - [andb negb]; fold ov; destruct ov; reflexivity |
       split; [exact Hs | split; [exact Hwf_out |
         exact (dvalue_poison_or_int_rail sz asg' out ov _ Hpsn (fun _ => Hval eq_refl))]]].
   - (* CB_And *)
@@ -8572,7 +8610,7 @@ Proof.
                          else if cb then @DVALUE_I Pa 1%positive (@Integers.one 1%positive)
                          else @DVALUE_I Pa 1%positive (@Integers.zero 1%positive))).
     { destruct pr; cbn in Esc; inversion Esc; subst is_s c;
-        unfold cert_to_icmp, eval_int_icmp; cbn; fold ssp cb; destruct ssp, cb; reflexivity. }
+        unfold cert_to_icmp, eval_int_icmp; cbn - [andb negb msamesign]; fold ssp cb; destruct ssp, cb; reflexivity. }
     rewrite Hcmp_eq; destruct ssp, cb; reflexivity.
   - split; [exact Hs | split; [exact Hwf_out |
     exact (dvalue_poison_or_int_rail 1%positive asg' out ssp _ Hpsn (fun _ => Hval))]].
@@ -8623,7 +8661,7 @@ Proof.
       exists asg', (if ov then DVALUE_Base DVALUE_Poison
                     else DVALUE_Base (@DVALUE_I Pa tw (@Integers.repr tw (@Integers.unsigned fw va)))).
       split.
-      * cbn; rewrite Pos.eqb_refl, Hlt; cbn; fold ov; destruct ov; reflexivity.
+      * cbn - [andb]; rewrite Pos.eqb_refl, Hlt; cbn - [andb]; fold ov; destruct ov; reflexivity.
       * split; [exact Hs | split; [exact Hwf_out |
         exact (dvalue_poison_or_int_rail tw asg' out ov _ Hpsn (fun _ => Hval))]].
   - (* CCK_SExt *)
@@ -8656,7 +8694,7 @@ Proof.
       exists asg', (if ov then DVALUE_Base DVALUE_Poison
                     else DVALUE_Base (@DVALUE_I Pa tw res)).
       split.
-      * cbn; rewrite Pos.eqb_refl, Hlt; cbn; fold res ov; destruct ov; reflexivity.
+      * cbn - [andb orb negb]; rewrite Pos.eqb_refl, Hlt; cbn - [andb orb negb]; fold res ov; destruct ov; reflexivity.
       * split; [exact Hs | split; [exact Hwf_out |
         exact (dvalue_poison_or_int_rail tw asg' out ov res Hpsn (fun _ => Hval))]].
 Qed.

@@ -4485,7 +4485,7 @@ Section InliningSemantics.
           pose proof (Hk ic a1 a2 Hstep) as Hka; punfold Hka.
           eapply gen_inline_sim__obs_eq; [symmetry; exact Eb1 | symmetry; exact Eb2 |].
           eapply gen_inline_sim__mon; [exact Hka |].
-          intros ic0 b1 b2 [Hb | Hbot]; [left; exact Hb | inversion Hbot].
+          intros ic0 b1 b2 [Hb | []]; left; eapply paco3_mon; [exact Hb | intros ? ? ? []].
         + destruct (observe t2) as [a2 | m2 | X2 e2 f2] eqn:Hot2; try contradiction.
           apply GIS_Step; unfold gis_step_body.
           rewrite !observe_bind, Hot1, Hot2.
@@ -4792,7 +4792,7 @@ Section InliningSemantics.
         pose proof (Hk ic x1 x2 Hic Hstep) as Hkx; punfold Hkx.
         eapply gen_inline_sim__obs_eq; [symmetry; exact Eb1 | symmetry; exact Eb2 |].
         eapply gen_inline_sim__mon; [exact Hkx |].
-        intros ic0 u1 u2 [Hu | Hbot]; [left; exact Hu | inversion Hbot].
+        intros ic0 u1 u2 [Hu | []]; left; eapply paco3_mon; [exact Hu | intros ? ? ? []].
       + destruct (observe a2) as [x2 | ma2 | X2 e2 fa2] eqn:Hoa2; try contradiction.
         destruct Hstep as (m1 & m2 & Hs1 & Hs2 & [Hm | Hbot]); [| inversion Hbot].
         assert (Hou1 : observe (ITree.bind a1 k1) = TauF (ITree.bind ma1 k1)).
@@ -5027,7 +5027,7 @@ Section InliningSemantics.
         pose proof (Hk ic x1 x2 Hic Hstep) as Hkx; punfold Hkx.
         eapply gen_inline_sim__obs_eq; [symmetry; exact Eb1 | symmetry; exact Eb2 |].
         eapply gen_inline_sim__mon; [exact Hkx |].
-        intros ic0 u1 u2 [Hu | Hbot]; [left; exact Hu | inversion Hbot].
+        intros ic0 u1 u2 [Hu | []]; left; eapply paco3_mon; [exact Hu | intros ? ? ? []].
       + destruct (observe a2) as [x2 | ma2 | X2 e2 fa2] eqn:Hoa2; try contradiction.
         destruct Hstep as (m1 & m2 & Hs1 & Hs2 & [Hm | Hbot]); [| inversion Hbot].
         assert (Hou1 : observe (ITree.bind a1 k1) = TauF (ITree.bind ma1 k1)).

@@ -107,6 +107,44 @@ Set Default Goal Selector "!".
 #[local] Arguments Z.geb _ _ : simpl nomatch.
 #[local] Arguments Nat.eqb _ _ : simpl nomatch.
 #[local] Arguments String.eqb _ _ : simpl nomatch.
+#[local] Arguments Integers.modulus : simpl never.
+#[local] Arguments Integers.half_modulus : simpl never.
+#[local] Arguments Integers.max_unsigned : simpl never.
+#[local] Arguments Integers.max_signed : simpl never.
+#[local] Arguments Integers.min_signed : simpl never.
+#[local] Arguments Integers.unsigned : simpl never.
+#[local] Arguments Integers.signed : simpl never.
+#[local] Arguments Integers.repr : simpl never.
+#[local] Arguments Integers.zero : simpl never.
+#[local] Arguments Integers.one : simpl never.
+#[local] Arguments Integers.mone : simpl never.
+#[local] Arguments Integers.iwordsize : simpl never.
+#[local] Arguments Integers.eq : simpl never.
+#[local] Arguments Integers.lt : simpl never.
+#[local] Arguments Integers.ltu : simpl never.
+#[local] Arguments Integers.neg : simpl never.
+#[local] Arguments Integers.add : simpl never.
+#[local] Arguments Integers.sub : simpl never.
+#[local] Arguments Integers.mul : simpl never.
+#[local] Arguments Integers.divs : simpl never.
+#[local] Arguments Integers.mods : simpl never.
+#[local] Arguments Integers.divu : simpl never.
+#[local] Arguments Integers.modu : simpl never.
+#[local] Arguments Integers.and : simpl never.
+#[local] Arguments Integers.or : simpl never.
+#[local] Arguments Integers.xor : simpl never.
+#[local] Arguments Integers.not : simpl never.
+#[local] Arguments Integers.shl : simpl never.
+#[local] Arguments Integers.shru : simpl never.
+#[local] Arguments Integers.shr : simpl never.
+#[local] Arguments Integers.rol : simpl never.
+#[local] Arguments Integers.ror : simpl never.
+#[local] Arguments Integers.rolm : simpl never.
+#[local] Arguments Integers.negative : simpl never.
+#[local] Arguments Integers.add_carry : simpl never.
+#[local] Arguments Integers.add_overflow : simpl never.
+#[local] Arguments Integers.sub_borrow : simpl never.
+#[local] Arguments Integers.sub_overflow : simpl never.
 
 Local Open Scope bool_scope.
 Local Open Scope string_scope.
@@ -929,12 +967,13 @@ Section OpenWorldEvents.
     - eapply DR_TauR; [rewrite <- Ho2; exact Hm2 | exact (IH t1' m2 Ho1 eq_refl)].
   Qed.
 
-  Lemma det_ref_obs_eq {R1 R2 : Type} (RR : R1 -> R2 -> Prop) :
+  Lemma det_ref_obs_eq {R1 R2 : Type} (RR : R1 -> R2 -> Prop)
+    {r : itree Det_OW_E R1 -> itree Det_OW_E R2 -> Prop} :
     forall t1 t2 t1' t2',
       observe t1 = observe t1' ->
       observe t2 = observe t2' ->
-      det_ref RR t1 t2 ->
-      det_ref RR t1' t2'.
+      paco2 (det_ref_ RR) r t1 t2 ->
+      paco2 (det_ref_ RR) r t1' t2'.
   Proof using Type.
     intros t1 t2 t1' t2' Ho1 Ho2 H.
     punfold H; pstep; eapply det_ref__obs_eq; eassumption.

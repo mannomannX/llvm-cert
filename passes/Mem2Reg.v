@@ -6257,7 +6257,8 @@ Section MemoryAndSerialization.
     - eapply TE_Eq; [rewrite E1; reflexivity | rewrite E2; reflexivity | exact IH].
     - eapply TE_Eq; [apply Eqit.bind_ret_l | apply Eqit.bind_ret_l |].
       specialize (Hk x); punfold Hk.
-      eapply tau_expand__mon; [exact Hk | intros a b [Hab | []]; left; exact Hab].
+      eapply tau_expand__mon;
+        [exact Hk | intros a b [Hab | []]; left; eapply paco2_mon; [exact Hab | intros ? ? []]].
     - eapply TE_Eq; [apply Eqit.bind_tau | apply Eqit.bind_tau |].
       apply TE_Tau; pclearbot; right; apply CIH; [exact Hm | exact Hk].
     - eapply TE_Eq; [apply Eqit.bind_vis | apply Eqit.bind_vis |].
@@ -11675,7 +11676,7 @@ Section MemoryAndSerialization.
       - assert (Eka : k a ≅ b).
         { rewrite <- Eb, (itree_eta t0'), Ho, Eqit.bind_ret_l; reflexivity. }
         pose proof (ev_ok_obs_eq ok_ev (k a) b Eka (Hk a)) as Hb.
-        punfold Hb; pstep; eapply ev_ok__mon; [exact Hb | intros ? []; contradiction].
+        eapply paco1_mon; [exact Hb | intros ? []].
       - pstep; punfold Eb; red in Eb; rewrite observe_bind, Ho in Eb; cbn in Eb.
         apply eqitF_inv_Tau_l in Eb as (m' & Ho' & Hm'); pclearbot.
         eapply EOK_Tau; [exact Ho' |].
