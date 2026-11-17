@@ -5436,7 +5436,7 @@ Proof.
         rewrite Hskip_one, bools_to_Z_app, Hlo_len, bools_to_Z_cons; cbn [bools_to_Z]; nia. }
       assert (Hhm_pow : (2 ^ Z.of_nat (Pos.to_nat sz - 1) = @Integers.half_modulus sz)%Z).
       { pose proof (@Integers.half_modulus_modulus sz) as Hhm.
-        rewrite modulus_pow_sz, <- positive_nat_Z in Hhm.
+        rewrite modulus_pow_sz, <- (positive_nat_Z sz) in Hhm.
         replace (Pos.to_nat sz) with (S (Pos.to_nat sz - 1)) in Hhm by lia.
         rewrite Nat2Z.inj_succ, Z.pow_succ_r in Hhm by lia; lia. }
       rewrite bools_to_Z_app, Hlo_len, bools_to_Z_cons; cbn [bools_to_Z].

@@ -1937,26 +1937,23 @@ Section ModelSemantics.
     generalize (interp_intrinsics t) as u; intros u.
     revert u s; ginit; gcofix CIH; intros u s.
     destruct (observe u) as [rv | m | X e k] eqn:Hou.
-    - gclo; econstructor; auto_ctrans_eq.
-      + rewrite (unfold_interp_state interp_vellvm_prov_h u s), Hou;
-          cbn -[det_prov_h interp_vellvm_prov_h].
-        rewrite interp_state_ret, Eqit.bind_ret_l; reflexivity.
-      + rewrite (unfold_interp_state interp_vellvm_h u s), Hou;
-          cbn -[interp_vellvm_h]; reflexivity.
+    - assert (Hu : u ≅ Ret rv) by (rewrite (itree_eta u), Hou; reflexivity).
+      gclo; econstructor; auto_ctrans_eq.
+      + rewrite Hu, 2 interp_state_ret, Eqit.bind_ret_l; reflexivity.
+      + rewrite Hu, interp_state_ret; reflexivity.
       + gstep; constructor; reflexivity.
-    - gclo; econstructor; auto_ctrans_eq.
-      + rewrite (unfold_interp_state interp_vellvm_prov_h u s), Hou;
-          cbn -[det_prov_h interp_vellvm_prov_h].
-        rewrite interp_state_tau, Eqit.bind_tau; reflexivity.
-      + rewrite (unfold_interp_state interp_vellvm_h u s), Hou;
-          cbn -[interp_vellvm_h]; reflexivity.
+    - assert (Hu : u ≅ Tau m) by (rewrite (itree_eta u), Hou; reflexivity).
+      gclo; econstructor; auto_ctrans_eq.
+      + rewrite Hu, 2 interp_state_tau, Eqit.bind_tau; reflexivity.
+      + rewrite Hu, interp_state_tau; reflexivity.
       + gstep; constructor; gfinal; left; exact (CIH m s).
-    - gclo; econstructor; auto_ctrans_eq.
-      + rewrite (unfold_interp_state interp_vellvm_prov_h u s), Hou;
-          cbn -[det_prov_h interp_vellvm_prov_h].
-        rewrite interp_state_bind, Eqit.bind_bind; reflexivity.
-      + rewrite (unfold_interp_state interp_vellvm_h u s), Hou;
-          cbn -[interp_vellvm_h]; reflexivity.
+    - assert (Hu : u ≅ Vis e k) by (rewrite (itree_eta u), Hou; reflexivity).
+      gclo; econstructor; auto_ctrans_eq.
+      + rewrite Hu, interp_state_vis;
+          cbn [ExtLib.Structures.Monad.bind Monad_itree];
+          rewrite interp_state_bind, Eqit.bind_bind; reflexivity.
+      + rewrite Hu, interp_state_vis;
+          cbn [ExtLib.Structures.Monad.bind Monad_itree]; reflexivity.
       + guclo eqit_clo_bind; econstructor.
         * exact (interp_vellvm_prov_h_det_rel e s).
         * intros [pr' [s' x]] [s2 x2] [-> Hsx]; inversion Hsx; subst s2 x2; clear Hsx; cbn [fst snd].
