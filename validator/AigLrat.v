@@ -2084,8 +2084,8 @@ Proof.
               ?(eval_neg_lit_nonzero asg1 a (wf_lit_bound_nonzero _ _ Hwa1)),
               ?(eval_neg_lit_nonzero asg1 b (wf_lit_bound_nonzero _ _ Hwb1)),
               Hev_v,
-              <-(eval_lit_agree (bs_next_var st) asg asg1 a Hag1 Hwa),
-              <-(eval_lit_agree (bs_next_var st) asg asg1 b Hag1 Hwb);
+              <- ?(eval_lit_agree (bs_next_var st) asg asg1 a Hag1 Hwa),
+              <- ?(eval_lit_agree (bs_next_var st) asg asg1 b Hag1 Hwb);
       destruct (eval_lit asg a), (eval_lit asg b); reflexivity. }
   pose proof (add_clauses_sat_intro asg1 st1 _ Hge2_1 Ha1_1 Hwf1 Hcls_wf Hev1 Hcls_sat) as Hadd.
   exists asg1; repeat split; try rewrite Hbs;
@@ -2132,8 +2132,8 @@ Proof.
               ?(eval_neg_lit_nonzero asg1 a (wf_lit_bound_nonzero _ _ Hwa1)),
               ?(eval_neg_lit_nonzero asg1 b (wf_lit_bound_nonzero _ _ Hwb1)),
               Hev_v,
-              <-(eval_lit_agree (bs_next_var st) asg asg1 a Hag1 Hwa),
-              <-(eval_lit_agree (bs_next_var st) asg asg1 b Hag1 Hwb);
+              <- ?(eval_lit_agree (bs_next_var st) asg asg1 a Hag1 Hwa),
+              <- ?(eval_lit_agree (bs_next_var st) asg asg1 b Hag1 Hwb);
       destruct (eval_lit asg a), (eval_lit asg b); reflexivity. }
   pose proof (add_clauses_sat_intro asg1 st1 _ Hge2_1 Ha1_1 Hwf1 Hcls_wf Hev1 Hcls_sat) as Hadd.
   exists asg1; repeat split; try rewrite Hbs;
@@ -2183,8 +2183,8 @@ Proof.
               ?(eval_neg_lit_nonzero asg1 a (wf_lit_bound_nonzero _ _ Hwa1)),
               ?(eval_neg_lit_nonzero asg1 b (wf_lit_bound_nonzero _ _ Hwb1)),
               Hev_v,
-              <-(eval_lit_agree (bs_next_var st) asg asg1 a Hag1 Hwa),
-              <-(eval_lit_agree (bs_next_var st) asg asg1 b Hag1 Hwb);
+              <- ?(eval_lit_agree (bs_next_var st) asg asg1 a Hag1 Hwa),
+              <- ?(eval_lit_agree (bs_next_var st) asg asg1 b Hag1 Hwb);
       destruct (eval_lit asg a), (eval_lit asg b); reflexivity. }
   pose proof (add_clauses_sat_intro asg1 st1 _ Hge2_1 Ha1_1 Hwf1 Hcls_wf Hev1 Hcls_sat) as Hadd.
   exists asg1; repeat split; try rewrite Hbs;
@@ -2245,9 +2245,9 @@ Proof.
               ?(eval_neg_lit_nonzero asg1 tl (wf_lit_bound_nonzero _ _ Hwt1)),
               ?(eval_neg_lit_nonzero asg1 fl (wf_lit_bound_nonzero _ _ Hwf1_0)),
               Hev_v,
-              <-(eval_lit_agree (bs_next_var st) asg asg1 sel Hag1 Hws),
-              <-(eval_lit_agree (bs_next_var st) asg asg1 tl Hag1 Hwt),
-              <-(eval_lit_agree (bs_next_var st) asg asg1 fl Hag1 Hwf0);
+              <- ?(eval_lit_agree (bs_next_var st) asg asg1 sel Hag1 Hws),
+              <- ?(eval_lit_agree (bs_next_var st) asg asg1 tl Hag1 Hwt),
+              <- ?(eval_lit_agree (bs_next_var st) asg asg1 fl Hag1 Hwf0);
       destruct (eval_lit asg sel), (eval_lit asg tl), (eval_lit asg fl); reflexivity. }
   pose proof (add_clauses_sat_intro asg1 st1 _ Hge2_1 Ha1_1 Hwf1 Hcls_wf Hev1 Hcls_sat) as Hadd.
   exists asg1; repeat split; try rewrite Hbs;

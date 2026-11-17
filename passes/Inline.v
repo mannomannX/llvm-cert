@@ -6214,7 +6214,7 @@ Section InliningSemantics.
           split; [repeat split; try exact Hsf; try exact Hsfm; reflexivity |].
           split; [destruct e1; cbn; reflexivity | exact Hpost].
       + (* DrawE *)
-        destruct e1 as [dt1], e2 as [dt2]; subst dt2.
+        destruct e1 as [dt1], e2 as [dt2]; cbn in HE; subst dt2.
         unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_draw_prov, handle_draw.
         destruct (default_dvalue_of_dtyp dt1) as [s | s | s | dv]; cbn [EOU_to_itree].
         * unfold raiseOOM, trigger_cast, ITree.trigger, lift_bot_prov.
@@ -6233,7 +6233,7 @@ Section InliningSemantics.
         destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
         pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; left; reflexivity.
       + (* LLVMExcE *)
-        destruct e1, e2; subst; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
+        destruct e1, e2; cbn in HE; subst; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
         pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; right; right; split; [reflexivity | intros [] [] _].
       + (* UBE *)
         destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
@@ -6280,7 +6280,7 @@ Section InliningSemantics.
           split; [split; [reflexivity | split; [reflexivity | split; [reflexivity | split; [exact Hvars1 | exists csf1, fstk1'; auto]]]] |].
           split; [destruct e1; cbn; reflexivity | exact Hpost].
       + (* DrawE *)
-        destruct e1 as [dt1], e2 as [dt2]; subst dt2.
+        destruct e1 as [dt1], e2 as [dt2]; cbn in HE; subst dt2.
         unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_draw_prov, handle_draw.
         destruct (default_dvalue_of_dtyp dt1) as [s | s | s | dv]; cbn [EOU_to_itree].
         * unfold raiseOOM, trigger_cast, ITree.trigger, lift_bot_prov.

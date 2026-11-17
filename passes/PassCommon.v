@@ -580,40 +580,46 @@ Variant cutUB_rel {E : Type -> Type} `{UBE -< E} : forall [A : Type], E A -> Pro
   | CutUB_rel u : cutUB_rel (subevent _ (ThrowUB u)).
 
 Ltac destruct_sum1 e :=
-  repeat match type of e with
-  | (_ +' _) _ => destruct e as [e | e]
-  end.
+  repeat (let Te := type of e in
+          let Te' := eval hnf in Te in
+          match Te' with
+          | (_ +' _) _ => destruct e as [e | e]
+          end).
 
 Ltac destruct_sum2 e1 e2 HE :=
-  repeat match type of e1 with
-  | (_ +' _) _ =>
-      match type of HE with
-      | sum_prerel_c _ _ _ _ _ _ => idtac
-      | sum_postrel_c _ _ _ _ _ _ _ _ => idtac
-      | _ => try red in HE
-      end;
-      destruct e1 as [e1 | e1], e2 as [e2 | e2];
-      cbn [sum_prerel_c sum_postrel_c] in HE;
-      try contradiction
-  end.
+  repeat (let Te := type of e1 in
+          let Te' := eval hnf in Te in
+          match Te' with
+          | (_ +' _) _ =>
+              match type of HE with
+              | sum_prerel_c _ _ _ _ _ _ => idtac
+              | sum_postrel_c _ _ _ _ _ _ _ _ => idtac
+              | _ => try red in HE
+              end;
+              destruct e1 as [e1 | e1], e2 as [e2 | e2];
+              cbn [sum_prerel_c sum_postrel_c] in HE;
+              try contradiction
+          end).
 
 Ltac destruct_sum3 e1 e2 e3 H12 H23 :=
-  repeat match type of e1 with
-  | (_ +' _) _ =>
-      match type of H12 with
-      | sum_prerel_c _ _ _ _ _ _ => idtac
-      | sum_postrel_c _ _ _ _ _ _ _ _ => idtac
-      | _ => try red in H12
-      end;
-      match type of H23 with
-      | sum_prerel_c _ _ _ _ _ _ => idtac
-      | sum_postrel_c _ _ _ _ _ _ _ _ => idtac
-      | _ => try red in H23
-      end;
-      destruct e1 as [e1 | e1], e2 as [e2 | e2], e3 as [e3 | e3];
-      cbn [sum_prerel_c sum_postrel_c] in H12, H23;
-      try contradiction
-  end.
+  repeat (let Te := type of e1 in
+          let Te' := eval hnf in Te in
+          match Te' with
+          | (_ +' _) _ =>
+              match type of H12 with
+              | sum_prerel_c _ _ _ _ _ _ => idtac
+              | sum_postrel_c _ _ _ _ _ _ _ _ => idtac
+              | _ => try red in H12
+              end;
+              match type of H23 with
+              | sum_prerel_c _ _ _ _ _ _ => idtac
+              | sum_postrel_c _ _ _ _ _ _ _ _ => idtac
+              | _ => try red in H23
+              end;
+              destruct e1 as [e1 | e1], e2 as [e2 | e2], e3 as [e3 | e3];
+              cbn [sum_prerel_c sum_postrel_c] in H12, H23;
+              try contradiction
+          end).
 
 Section EventRelations.
   Context {Pa : Params}.
@@ -931,26 +937,24 @@ Section EventRelations.
       destruct e1; destruct e2; destruct e3; cbn in *; try contradiction; intuition congruence.
   Qed.
 
-  Lemma EqA_MCFG_eq {A} (e1 e2 : MCFGEtop A) (a1 a2 : A) :
-    EqA_MCFG A A e1 a1 e2 a2 -> a1 = a2.
+  Lemma EqA_MCFG_eq {A} (e : MCFGEtop A) (a1 a2 : A) :
+    EqA_MCFG A A e a1 e a2 -> a1 = a2.
   Proof using.
-    intros HA; destruct_sum2 e1 e2 HA;
-      destruct e1; destruct e2; cbn in HA; try contradiction; auto.
+    destruct_sum1 e; destruct e; cbn;
+      intros HA; match type of a1 with void => destruct a1 | _ => exact HA end.
   Qed.
 
-  Lemma EqA_CFG_eq {A} (e1 e2 : CFGEtop A) (a1 a2 : A) :
-    EqA_CFG A A e1 a1 e2 a2 -> a1 = a2.
+  Lemma EqA_CFG_eq {A} (e : CFGEtop A) (a1 a2 : A) :
+    EqA_CFG A A e a1 e a2 -> a1 = a2.
   Proof using.
-    destruct e1 as [c1 | m1], e2 as [c2 | m2]; cbn [EqA_CFG sum_postrel_c]; try contradiction.
-    - destruct c1, c2; cbn; auto.
-    - apply EqA_MCFG_eq.
+    destruct e as [c | m]; [destruct c; cbn; intros HA; exact HA | apply EqA_MCFG_eq].
   Qed.
 
-  Lemma EqA_bot_eq {A} (e1 e2 : MCFGEbot A) (a1 a2 : A) :
-    EqA_bot A A e1 a1 e2 a2 -> a1 = a2.
+  Lemma EqA_bot_eq {A} (e : MCFGEbot A) (a1 a2 : A) :
+    EqA_bot A A e a1 e a2 -> a1 = a2.
   Proof using.
-    intros HA; destruct_sum2 e1 e2 HA;
-      destruct e1; destruct e2; cbn in HA; try contradiction; auto.
+    destruct_sum1 e; destruct e; cbn;
+      intros HA; match type of a1 with void => destruct a1 | _ => exact HA end.
   Qed.
 
   Lemma EqA_bot_refl_diag {A B} (e1 : MCFGEbot A) (e2 : MCFGEbot B) (a : A) :
@@ -959,7 +963,7 @@ Section EventRelations.
   Proof using.
     intros HE; destruct_sum2 e1 e2 HE;
       destruct e1; destruct e2; cbn in HE |- *; try contradiction;
-      try (destruct a); exists a; reflexivity.
+      match type of a with void => destruct a | _ => exists a; reflexivity end.
   Qed.
 
   Lemma EqA_bot_trans {A B C}
@@ -972,8 +976,11 @@ Section EventRelations.
   Proof using.
     intros H12 H23 Ha13; destruct_sum3 e1 e2 e3 H12 H23;
       destruct e1; destruct e2; destruct e3; cbn in H12, H23, Ha13 |- *;
-      try contradiction; try (destruct a1);
-      subst; exists a3; split; reflexivity.
+      try contradiction;
+      match type of a1 with
+      | void => destruct a1
+      | _ => exists a3; split; [exact Ha13 | reflexivity]
+      end.
   Qed.
 
   (** ** Cut-Aware [CFGtop] & [MCFGtop] Refinements *)
@@ -4641,7 +4648,7 @@ Section ModelSemantics.
         split; [repeat split; try exact Hsf; try exact Hsfm; reflexivity |].
         split; [destruct e1; cbn; reflexivity | exact Hpost].
     - (* DrawE *)
-      destruct e1 as [dt1], e2 as [dt2]; subst dt2.
+      destruct e1 as [dt1], e2 as [dt2]; cbn in HE; subst dt2.
       unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_draw_prov, handle_draw.
       destruct (default_dvalue_of_dtyp dt1) as [s | s | s | dv] eqn:Edef; cbn [EOU_to_itree].
       + unfold raiseOOM, trigger_cast, ITree.trigger, lift_bot_prov.
@@ -4663,7 +4670,7 @@ Section ModelSemantics.
       destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
       pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; right; right; split; [exact I | intros [] [] _].
     - (* LLVMExcE *)
-      destruct e1, e2; subst; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
+      destruct e1, e2; cbn in HE; subst; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
       pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; right; right; split; [reflexivity | intros [] [] _].
     - (* UBE *)
       destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
