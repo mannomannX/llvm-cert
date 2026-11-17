@@ -2942,7 +2942,7 @@ Qed.
 Lemma bools_to_Z_range : forall bs,
   (0 <= bools_to_Z bs < 2 ^ Z.of_nat (List.length bs))%Z.
 Proof.
-  induction bs as [| b rest IH]; [cbn; lia |].
+  induction bs as [| b rest IH]; [cbn [bools_to_Z List.map List.length Z.of_nat]; rewrite Z.pow_0_r; lia |].
   cbn [List.length]; rewrite Nat2Z.inj_succ, Z.pow_succ_r, bools_to_Z_cons by lia.
   destruct b; cbn [b2z]; lia.
 Qed.
@@ -3001,8 +3001,9 @@ Lemma bools_to_Z_app : forall xs ys,
   bools_to_Z (xs ++ ys) =
   (bools_to_Z xs + 2 ^ Z.of_nat (List.length xs) * bools_to_Z ys)%Z.
 Proof.
-  induction xs as [| b rx IH]; intros ys; [cbn; lia |].
-  cbn [app List.length]; rewrite !bools_to_Z_cons, IH, Nat2Z.inj_succ, Z.pow_succ_r by lia; lia.
+  induction xs as [| b rx IH]; intros ys;
+    [cbn [app bools_to_Z List.length Z.of_nat]; rewrite Z.pow_0_r; lia |].
+  cbn [app List.length]; rewrite !bools_to_Z_cons, IH, Nat2Z.inj_succ, Z.pow_succ_r by lia; ring.
 Qed.
 
 Lemma bools_to_Z_repeat_false : forall n,
@@ -3066,7 +3067,7 @@ Qed.
 Lemma bools_to_Z_negb : forall bs,
   (bools_to_Z bs + bools_to_Z (List.map negb bs) = 2 ^ Z.of_nat (List.length bs) - 1)%Z.
 Proof.
-  induction bs as [| b rest IH]; [cbn; lia |].
+  induction bs as [| b rest IH]; [cbn [bools_to_Z List.map List.length Z.of_nat]; rewrite Z.pow_0_r; lia |].
   cbn [List.map List.length];
     rewrite !bools_to_Z_cons, Nat2Z.inj_succ, Z.pow_succ_r by lia.
   destruct b; cbn [negb b2z]; lia.
@@ -3593,7 +3594,7 @@ Proof.
     try discriminate; cbn [emit_ripple_add] in Hrip.
   - inversion Hrip; subst sums cout st'; exists asg; split;
       [exact (step_spec_refl _ asg Hsat) | split; [reflexivity | split; [constructor |
-       split; [exact Hcin | cbn; lia]]]].
+       split; [exact Hcin | cbn [List.map List.length Z.of_nat bools_to_Z]; rewrite Z.pow_0_r; lia]]]].
   - inversion Hwx as [| ? ? Hx Hwrx]; subst.
     inversion Hwy as [| ? ? Hy Hwry]; subst.
     injection Hlen as Hlen'.
@@ -3653,7 +3654,7 @@ Proof.
               Hev_xx,
               (step_spec_eval_lit st st3 asg asg3 cin Hs03 Hcin) in Heq_r.
       pose proof (full_adder_b2z (eval_lit asg x) (eval_lit asg y) (eval_lit asg cin)) as Hfa.
-      lia.
+      nia.
 Qed.
 
 Definition blast_add_rail (nuw nsw : bool) (sz : positive) (a b : rail_bv) (st : blast_state)
@@ -3925,7 +3926,7 @@ Proof.
   rewrite Hla, positive_nat_Z, <- modulus_pow_sz, Hua in Heq_diff; rewrite Hub in Hnb.
   set (ud := bools_to_Z (List.map (eval_lit asg1) diffs)) in *.
   assert (Hud_eq : (@Integers.unsigned sz va - @Integers.unsigned sz vb =
-                    ud + @Integers.modulus sz * (b2z (eval_lit asg1 cout) - 1))%Z) by lia.
+                    ud + @Integers.modulus sz * (b2z (eval_lit asg1 cout) - 1))%Z) by nia.
   assert (Hud_rng : (0 <= ud < @Integers.modulus sz)%Z).
   { unfold ud; pose proof (bools_to_Z_range (List.map (eval_lit asg1) diffs)) as Hr.
     rewrite length_map, Hlen_d, Hla, positive_nat_Z, <- modulus_pow_sz in Hr; exact Hr. }
@@ -4563,7 +4564,7 @@ Proof.
       rewrite <- (firstn_skipn_eq (n - k) ba) at 1; fold lo hi.
       rewrite bools_to_Z_app, Hlo_len; reflexivity. }
     assert (Hsb_z : (bools_to_Z (spec_bits k) = 2 ^ Z.of_nat k * bools_to_Z lo)%Z).
-    { unfold spec_bits; fold lo; rewrite bools_to_Z_app, bools_to_Z_repeat_false, repeat_length; lia. }
+    { unfold spec_bits; fold lo; rewrite bools_to_Z_app, bools_to_Z_repeat_false, repeat_length; ring. }
     assert (Hsb_len : List.length (spec_bits k) = n)
       by (unfold spec_bits; fold lo; rewrite length_app, repeat_length, Hlo_len; lia).
     assert (Hshl_z : (Z.shiftl (@Integers.unsigned sz va) (@Integers.unsigned sz vb) =
@@ -5403,7 +5404,7 @@ Proof.
                      2 ^ Z.of_nat (Pos.to_nat sz - 1) * b2z (msb_of sz vr))%Z).
       { unfold vr; rewrite (unsigned_eval_rail_val sz asg r Hlr); fold br.
         rewrite <- (firstn_skipn_eq (Pos.to_nat sz - 1) br) at 1, Hskip_one,
-                bools_to_Z_app, Hlo_len, bools_to_Z_cons; cbn [bools_to_Z]; lia. }
+                bools_to_Z_app, Hlo_len, bools_to_Z_cons; cbn [bools_to_Z]; nia. }
       assert (Hhm_pow : (2 ^ Z.of_nat (Pos.to_nat sz - 1) = @Integers.half_modulus sz)%Z).
       { pose proof (@Integers.half_modulus_modulus sz) as Hhm.
         rewrite modulus_pow_sz, <- positive_nat_Z in Hhm.
@@ -5411,7 +5412,7 @@ Proof.
         rewrite Nat2Z.inj_succ, Z.pow_succ_r in Hhm by lia; lia. }
       rewrite bools_to_Z_app, Hlo_len, bools_to_Z_cons; cbn [bools_to_Z].
       rewrite (signed_eq_unsigned_msb sz vr), (@Integers.half_modulus_modulus sz), Hur, Hhm_pow.
-      destruct (msb_of sz vr); cbn [b2z negb]; lia.
+      destruct (msb_of sz vr); cbn [b2z negb]; nia.
 Qed.
 
 Definition emit_cmp_lt_rail (is_signed : bool) (sz : positive) (a b : rail_bv) (st : blast_state)

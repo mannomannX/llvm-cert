@@ -1166,12 +1166,14 @@ Section EventRelations.
     refine_mcfg Logic.eq (denote_mcfg ctx1 dt fv args) (denote_mcfg ctx2 dt fv args).
   Proof using.
     unfold refine_mcfg, denote_mcfg.
-    eapply ruttc_weaken; cycle -1.
+    eapply ruttc_weaken with (Rcutl := cutUB_rel) (Rcutr := cutNone) (REv := EqE_MCFG) (RAns := EqA_MCFG); cycle -1.
     { eapply ruttc_mrec with (RCall := EqE_Call) (RCall' := EqA_Call).
       2: { cbn; auto. }
       intros A B [dt1 cc1 fv1 fas1] [dt2 cc2 fv2 fas2] HC.
       cbn in HC; destruct HC as (<- & <- & <- & <-).
-      eapply ruttc_weaken with (RR := @Logic.eq (exc + dvalue)).
+      eapply ruttc_weaken with
+        (Rcutl := cutUB_rel) (Rcutr := cutNone) (REv := EqE_CFG) (RAns := EqA_CFG)
+        (RR := @Logic.eq (exc + dvalue)).
       { intros ? e Hcut; exact (proj1 (cutUB_cfg_sum e) Hcut). }
       { intros ? e Hcut; exact (proj1 (cutNone_cfg_sum e) Hcut). }
       { intros * HE; destruct e1 as [c1 | m1], e2 as [c2 | m2]; cbn in HE; try contradiction; constructor; exact HE. }
@@ -1185,7 +1187,7 @@ Section EventRelations.
                (lookup (ptr_to_int p) ctx2) as [f2 |]; inversion Hlk; subst.
       - apply H1.
       - apply refine_cfg_refl. }
-    all: auto.
+    all: cbn; auto.
   Qed.
 
   Lemma refine_mcfg_interp_intrinsics {R} (t1 t2 : MCFGtop R) :

@@ -7854,13 +7854,13 @@ Proof.
       rewrite map_firstn_eq in Heq_sum; fold bys in Heq_sum.
       assert (Hlo_eq : (bools_to_Z (List.firstn m' bys) =
                         bools_to_Z bys - 2 ^ Z.of_nat m' * bools_to_Z (List.skipn m' bys))%Z)
-        by lia.
+        by nia.
       rewrite Hlo_eq in Heq_sum.
       rewrite Hlen_ys, Nat2Z.inj_succ, Z.pow_succ_r by lia.
       cbn [List.map]; rewrite bools_to_Z_cons; fold brx.
       exists (k1 - bools_to_Z brx * bools_to_Z (List.skipn m' bys) -
               b2z (eval_lit asg3 cout))%Z.
-      lia.
+      nia.
 Qed.
 
 Lemma mul_eq_repr_signed : forall sz (x y : @Integers.bit_int sz),
@@ -8146,6 +8146,7 @@ Proof.
         rewrite modulus_pow_sz in Hhm.
         replace (Z.pos sz) with (2 + (Z.pos sz - 2))%Z in Hhm by lia.
         rewrite Z.pow_add_r in Hhm by lia.
+        change (2 ^ 2)%Z with 4%Z in Hhm.
         pose proof (Z.pow_pos_nonneg 2 (Z.pos sz - 2)); lia. }
       assert (Hhm_dw : @Integers.half_modulus dw = (2 * H * H)%Z).
       { pose proof (@Integers.half_modulus_modulus dw) as Hhd.
