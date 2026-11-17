@@ -5431,7 +5431,7 @@ Proof.
       assert (Hur : (@Integers.unsigned sz vr =
                      bools_to_Z (List.firstn (Pos.to_nat sz - 1) br) +
                      2 ^ Z.of_nat (Pos.to_nat sz - 1) * b2z (msb_of sz vr))%Z).
-      { unfold vr; rewrite (unsigned_eval_rail_val sz asg r Hlr); fold br.
+      { unfold vr at 1; rewrite (unsigned_eval_rail_val sz asg r Hlr); fold br.
         rewrite <- (firstn_skipn_eq (Pos.to_nat sz - 1) br) at 1;
         rewrite Hskip_one, bools_to_Z_app, Hlo_len, bools_to_Z_cons; cbn [bools_to_Z]; nia. }
       assert (Hhm_pow : (2 ^ Z.of_nat (Pos.to_nat sz - 1) = @Integers.half_modulus sz)%Z).

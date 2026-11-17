@@ -1919,7 +1919,7 @@ Section ModelSemantics.
   Local Opaque det_prov_h.
 
   Lemma interp_vellvm_prov_h_det_rel {T} (e : MCFGEtop T) (s : FusedS) :
-    eutt (fun '(pr', sx1) sx2 => pr' = (fst sx2).(state_provenance) /\ sx1 = sx2)
+    eutt (fun '(pr', sx1) (sx2 : FusedS * T) => pr' = (fst (fst sx2)).(state_provenance) /\ sx1 = sx2)
       (interp_state det_prov_h (interp_vellvm_prov_h e s) (fst s).(state_provenance))
       (interp_vellvm_h e s).
   Proof using.
