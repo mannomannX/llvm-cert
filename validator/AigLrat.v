@@ -1983,7 +1983,7 @@ Proof.
   destruct (append_clauses (bs_next_cid st) cls) as [cid' new_cnf] eqn:Happ.
   destruct (append_clauses_sat_intro asg (bs_next_var st) cls
               (bs_next_cid st) cid' new_cnf Hwf_cls Hcls Happ) as [Hwf_new Hev_new].
-  repeat split; cbn.
+  repeat split; cbn -[eval_cnf].
   - exact Hge2.
   - apply Forall_app; split; [exact Hwf_st | exact Hwf_new].
   - exact Ha1.
@@ -2005,7 +2005,7 @@ Proof.
   set (v := bs_next_var st).
   set (asg1 := set_asg asg v b).
   pose proof (agree_below_set_asg asg v b) as Hag.
-  exists asg1; repeat split; cbn.
+  exists asg1; repeat split; cbn -[eval_cnf].
   - lia.
   - exact Hag.
   - lia.

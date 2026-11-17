@@ -63,6 +63,12 @@ From Vellvm Require Import
   Semantics.Libraries.
 Export LLVMAst.
 
+#[export] Arguments exp_block_addresses {T} _.
+#[export] Arguments texps_block_addresses {T} _.
+#[export] Arguments instr_block_addresses {T} _.
+#[export] Arguments term_block_addresses {T} _.
+#[export] Arguments block_block_addresses {T} _.
+
 Set Default Goal Selector "!".
 Unset Implicit Arguments.
 
