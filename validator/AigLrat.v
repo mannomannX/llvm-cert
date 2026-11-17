@@ -5077,7 +5077,7 @@ Proof.
     rewrite map_app, map_repeat_eq, (eval_msb_lit fw asg a (conj Hwa Hla)),
             bools_to_Z_app, bools_to_Z_repeat_b, length_map, Hla, positive_nat_Z.
     set (va := eval_rail_val fw asg a).
-    rewrite <- (unsigned_eval_rail_val fw asg a Hla).
+    rewrite <- (unsigned_eval_rail_val fw asg a Hla); fold va.
     replace (Z.of_nat (Pos.to_nat tw - Pos.to_nat fw)) with (Z.pos tw - Z.pos fw)%Z
       by (rewrite Nat2Z.inj_sub, !positive_nat_Z by lia; reflexivity).
     apply @Integers.eqm_samerepr.
