@@ -3271,6 +3271,14 @@ Proof.
   intros sz [|]; [exact (eq_one_cond sz false) | exact (eq_one_cond sz true)].
 Qed.
 
+Lemma eq_zero_one : forall sz,
+  @Integers.eq sz (@Integers.zero sz) (@Integers.one sz) = false.
+Proof. intros sz; exact (eq_one_cond sz false). Qed.
+
+Lemma eq_one_one : forall sz,
+  @Integers.eq sz (@Integers.one sz) (@Integers.one sz) = true.
+Proof. intros sz; exact (eq_one_cond sz true). Qed.
+
 Lemma div_low_high_pow2 : forall lo hi p,
   (0 < p)%Z -> (0 <= lo < p)%Z ->
   ((lo + p * hi) / p = hi)%Z.
@@ -3729,10 +3737,11 @@ Proof.
   assert (Hcarry_eq :
             @Integers.eq sz (@Integers.add_carry sz va vb (@Integers.zero sz)) (@Integers.one sz) =
             eval_lit asg1 cout).
-  { unfold Integers.add_carry; rewrite @Integers.unsigned_zero, Z.add_0_r, eq_zero_else_one_cond.
+  { unfold Integers.add_carry; rewrite @Integers.unsigned_zero, Z.add_0_r.
     destruct (eval_lit asg1 cout),
              (Numeric.Rocqlib.zlt (@Integers.unsigned sz va + @Integers.unsigned sz vb)
                                   (@Integers.modulus sz));
+      rewrite ?eq_zero_one, ?eq_one_one;
       cbn [b2z negb] in *; try reflexivity; nia. }
   set (nuw_lit := if nuw then cout else lit_false) in *.
   assert (Hwf_nuw : wf_lit_bound (bs_next_var st1) nuw_lit)
@@ -3805,7 +3814,8 @@ Proof.
     { exact (eval_msb_lit sz asg1 (mk_rail_bv sz sums lit_false)
                (conj eq_refl (eq_trans Hlen_s Hla))). }
     rewrite Hev_ss.
-    unfold Integers.add_overflow; rewrite @Integers.signed_zero, Z.add_0_r, eq_zero_else_one_cond.
+    unfold Integers.add_overflow; cbn zeta;
+      rewrite @Integers.signed_zero, !Z.add_0_r, eq_zero_else_one_cond.
     unfold Integers.min_signed, Integers.max_signed.
     pose proof (msb_of_unsigned_bounds sz va) as Hba_u.
     pose proof (msb_of_unsigned_bounds sz vb) as Hbb_u.
@@ -3818,7 +3828,7 @@ Proof.
       cbn [b2z xorb negb andb] in *;
       destruct (Numeric.Rocqlib.zle (- @Integers.half_modulus sz) _),
                (Numeric.Rocqlib.zle _ (@Integers.half_modulus sz - 1));
-      cbn [andb negb]; try reflexivity; nia. }
+      cbn [Numeric.Rocqlib.proj_sumbool andb negb]; try reflexivity; nia. }
   destruct Hnsw_step as (nsw_l & st4 & asg4 & Hnsw_eq & Hs14 & Hwf_nsw & Hev_nsw).
   rewrite Hnsw_eq in Hbl; clear Hnsw_eq.
   destruct (emit_or2_opt (rbv_psn a) (rbv_psn b) st4) as [base_psn st5] eqn:Ebp.
@@ -3940,9 +3950,10 @@ Proof.
   assert (Hborrow_eq :
             @Integers.eq sz (@Integers.sub_borrow sz va vb (@Integers.zero sz)) (@Integers.one sz) =
             negb (eval_lit asg1 cout)).
-  { unfold Integers.sub_borrow; rewrite @Integers.unsigned_zero, Z.sub_0_r, eq_one_cond.
+  { unfold Integers.sub_borrow; rewrite @Integers.unsigned_zero, Z.sub_0_r.
     destruct (eval_lit asg1 cout),
              (Numeric.Rocqlib.zlt (@Integers.unsigned sz va - @Integers.unsigned sz vb) 0%Z);
+      rewrite ?eq_zero_one, ?eq_one_one;
       cbn [b2z negb] in *; try reflexivity; nia. }
   set (nuw_lit := if nuw then neg_lit cout else lit_false) in *.
   assert (Hwf_nuw : wf_lit_bound (bs_next_var st1) nuw_lit)
@@ -4016,7 +4027,8 @@ Proof.
     { exact (eval_msb_lit sz asg1 (mk_rail_bv sz diffs lit_false)
                (conj eq_refl (eq_trans Hlen_d Hla))). }
     rewrite Hev_sd.
-    unfold Integers.sub_overflow; rewrite @Integers.signed_zero, Z.sub_0_r, eq_zero_else_one_cond.
+    unfold Integers.sub_overflow; cbn zeta;
+      rewrite @Integers.signed_zero, !Z.sub_0_r, eq_zero_else_one_cond.
     unfold Integers.min_signed, Integers.max_signed.
     pose proof (msb_of_unsigned_bounds sz va) as Hba_u.
     pose proof (msb_of_unsigned_bounds sz vb) as Hbb_u.
@@ -4029,7 +4041,7 @@ Proof.
       cbn [b2z xorb negb andb] in *;
       destruct (Numeric.Rocqlib.zle (- @Integers.half_modulus sz) _),
                (Numeric.Rocqlib.zle _ (@Integers.half_modulus sz - 1));
-      cbn [andb negb]; try reflexivity; nia. }
+      cbn [Numeric.Rocqlib.proj_sumbool andb negb]; try reflexivity; nia. }
   destruct Hnsw_step as (nsw_l & st4 & asg4 & Hnsw_eq & Hs14 & Hwf_nsw & Hev_nsw).
   rewrite Hnsw_eq in Hbl; clear Hnsw_eq.
   destruct (emit_or2_opt (rbv_psn a) (rbv_psn b) st4) as [base_psn st5] eqn:Ebp.

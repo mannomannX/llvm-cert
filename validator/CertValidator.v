@@ -8194,7 +8194,7 @@ Proof.
       destruct (negb (@Integers.eq w il ir)) eqn:Ene;
         [| inversion Eint; subst cbit; rewrite bit1_unsigned_zero in Hon; discriminate Hon].
       apply negb_true_iff in Ene; unfold Integers.eq in Ene.
-      destruct (Coqlib.zeq (@Integers.unsigned w il) (@Integers.unsigned w ir)) as [Heq | Hneq];
+      destruct (Numeric.Rocqlib.zeq (@Integers.unsigned w il) (@Integers.unsigned w ir)) as [Heq | Hneq];
         [discriminate Ene |].
       destruct (is_zero_bv_const r) eqn:Ezr.
       * constructor; [| exact Hbase].
@@ -8219,7 +8219,7 @@ Proof.
       destruct (@Integers.ltu w il ir) eqn:Elt;
         [| inversion Eint; subst cbit; rewrite bit1_unsigned_zero in Hon; discriminate Hon].
       unfold Integers.ltu in Elt.
-      destruct (Coqlib.zlt (@Integers.unsigned w il) (@Integers.unsigned w ir)) as [Hlt | _];
+      destruct (Numeric.Rocqlib.zlt (@Integers.unsigned w il) (@Integers.unsigned w ir)) as [Hlt | _];
         [| discriminate Elt].
       constructor; [| exact Hbase].
       cbn [ub_assumption_holds]; rewrite (expand_lets_let_free_id r Hlfr).
@@ -8235,7 +8235,7 @@ Proof.
       destruct (@Integers.ltu w ir il) eqn:Egt;
         [| inversion Eint; subst cbit; rewrite bit1_unsigned_zero in Hon; discriminate Hon].
       unfold Integers.ltu in Egt.
-      destruct (Coqlib.zlt (@Integers.unsigned w ir) (@Integers.unsigned w il)) as [Hgt | _];
+      destruct (Numeric.Rocqlib.zlt (@Integers.unsigned w ir) (@Integers.unsigned w il)) as [Hgt | _];
         [| discriminate Egt].
       constructor; [| exact Hbase].
       cbn [ub_assumption_holds]; rewrite (expand_lets_let_free_id l Hlfl).
@@ -8251,7 +8251,7 @@ Proof.
     destruct (@Integers.eq w il ir) eqn:Eeq;
       [inversion Eint; subst cbit; rewrite bit1_unsigned_one in Hon; discriminate Hon |].
     unfold Integers.eq in Eeq.
-    destruct (Coqlib.zeq (@Integers.unsigned w il) (@Integers.unsigned w ir)) as [Heq | Hneq];
+    destruct (Numeric.Rocqlib.zeq (@Integers.unsigned w il) (@Integers.unsigned w ir)) as [Heq | Hneq];
       [discriminate Eeq |].
     destruct (is_zero_bv_const r) eqn:Ezr.
     + constructor; [| exact Hbase].
