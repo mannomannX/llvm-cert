@@ -968,7 +968,7 @@ Definition mm_gep_flags_eqb (x y : gep_flags) : bool :=
 Lemma mm_gep_flags_eqb_eq (x y : gep_flags) :
   mm_gep_flags_eqb x y = true <-> x = y.
 Proof.
-  destruct x as [i1 s1 u1], y as [i2 s2 u2]; unfold mm_gep_flags_eqb; cbn.
+  destruct x as [i1 s1 u1], y as [i2 s2 u2]; unfold mm_gep_flags_eqb; cbn [gep_inbounds gep_nusw gep_nuw].
   rewrite !Bool.andb_true_iff, !mm_bool_eqb_eq.
   split; [intros [[-> ->] ->]; reflexivity | intros H; injection H as -> -> ->; repeat split; reflexivity].
 Qed.
@@ -1380,7 +1380,8 @@ Lemma mm_cmpxchg_eqb_eq (x y : cmpxchg dtyp) :
 Proof.
   destruct x as [w1 v1 p1 c1 n1 s1 so1 fo1 al1],
            y as [w2 v2 p2 c2 n2 s2 so2 fo2 al2].
-  unfold mm_cmpxchg_eqb; cbn.
+  unfold mm_cmpxchg_eqb;
+    cbn [c_weak c_volatile c_ptr c_cmp c_new c_syncscope c_success_ordering c_failure_ordering c_align].
   rewrite !Bool.andb_true_iff,
     !(mm_option_eqb_eq _ mm_unit_eqb_eq),
     !mm_texp_eqb_eq,
@@ -1439,7 +1440,8 @@ Lemma mm_atomicrmw_eqb_eq (x y : atomicrmw dtyp) :
 Proof.
   destruct x as [v1 op1 p1 val1 s1 o1 al1],
            y as [v2 op2 p2 val2 s2 o2 al2].
-  unfold mm_atomicrmw_eqb; cbn.
+  unfold mm_atomicrmw_eqb;
+    cbn [a_volatile a_operation a_ptr a_val a_syncscope a_ordering a_align].
   rewrite !Bool.andb_true_iff,
     (mm_option_eqb_eq _ mm_unit_eqb_eq),
     mm_atomic_rmw_op_eqb_eq,
@@ -1570,7 +1572,7 @@ Definition mm_operand_bundle_eqb (x y : @operand_bundle dtyp) : bool :=
 Lemma mm_operand_bundle_eqb_eq (x y : @operand_bundle dtyp) :
   mm_operand_bundle_eqb x y = true <-> x = y.
 Proof.
-  destruct x as [t1 o1], y as [t2 o2]; unfold mm_operand_bundle_eqb; cbn.
+  destruct x as [t1 o1], y as [t2 o2]; unfold mm_operand_bundle_eqb; cbn [ob_tag ob_ops].
   rewrite Bool.andb_true_iff, mm_string_eqb_eq, (mm_list_eqb_eq _ mm_operand_eqb_eq).
   split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
 Qed.
@@ -1756,7 +1758,7 @@ Lemma mm_block_eqb_eq (x y : block dtyp) :
   mm_block_eqb x y = true <-> x = y.
 Proof.
   destruct x as [id1 ph1 cd1 tm1 cm1], y as [id2 ph2 cd2 tm2 cm2].
-  unfold mm_block_eqb; cbn.
+  unfold mm_block_eqb; cbn [blk_id blk_phis blk_code blk_term blk_comments].
   rewrite !Bool.andb_true_iff, raw_id_eqb_spec,
     (mm_list_eqb_eq _ mm_phi_entry_eqb_eq),
     (mm_list_eqb_eq _ mm_code_entry_eqb_eq),
@@ -1776,7 +1778,7 @@ Lemma mm_cfg_eqb_eq (x y : CFG.cfg dtyp) :
   mm_cfg_eqb x y = true <-> x = y.
 Proof.
   destruct x as [in1 bk1 ar1], y as [in2 bk2 ar2].
-  unfold mm_cfg_eqb; cbn.
+  unfold mm_cfg_eqb; cbn [init blks args].
   rewrite !Bool.andb_true_iff, raw_id_eqb_spec,
     (mm_list_eqb_eq _ mm_block_eqb_eq),
     (mm_list_eqb_eq _ raw_id_eqb_spec).
@@ -1799,7 +1801,7 @@ Lemma mm_global_eqb_eq (x y : global dtyp) :
 Proof.
   destruct x as [id1 ty1 c1 ex1 ei1 al1 an1],
            y as [id2 ty2 c2 ex2 ei2 al2 an2].
-  unfold mm_global_eqb; cbn.
+  unfold mm_global_eqb; cbn [g_ident g_typ g_constant g_exp g_externally_initialized g_alias g_annotations].
   rewrite !Bool.andb_true_iff, raw_id_eqb_spec, mm_dtyp_eqb_eq,
     !mm_bool_eqb_eq, (mm_option_eqb_eq _ mm_exp_eqb_eq),
     (mm_list_eqb_eq _ mm_annotation_eqb_eq).
@@ -1835,7 +1837,7 @@ Lemma mm_declaration_eqb_eq (x y : declaration dtyp) :
   mm_declaration_eqb x y = true <-> x = y.
 Proof.
   destruct x as [nm1 ty1 pa1 fa1 an1], y as [nm2 ty2 pa2 fa2 an2].
-  unfold mm_declaration_eqb; cbn.
+  unfold mm_declaration_eqb; cbn [dc_name dc_type dc_param_attrs dc_attrs dc_annotations].
   rewrite !Bool.andb_true_iff, raw_id_eqb_spec, mm_dtyp_eqb_eq,
     mm_param_attrs_pair_eqb_eq,
     (mm_list_eqb_eq _ mm_fn_attr_eqb_eq),
@@ -1854,7 +1856,7 @@ Definition mm_definition_eqb
 Lemma mm_definition_eqb_eq (x y : definition dtyp (CFG.cfg dtyp)) :
   mm_definition_eqb x y = true <-> x = y.
 Proof.
-  destruct x as [p1 a1 i1], y as [p2 a2 i2]; unfold mm_definition_eqb; cbn.
+  destruct x as [p1 a1 i1], y as [p2 a2 i2]; unfold mm_definition_eqb; cbn [df_prototype df_args df_instrs].
   rewrite !Bool.andb_true_iff, mm_declaration_eqb_eq,
     (mm_list_eqb_eq _ raw_id_eqb_spec), mm_cfg_eqb_eq.
   split.
@@ -4851,14 +4853,14 @@ Section ValueDrawRefinement.
 
   Lemma refine_prov_draw__obs_eq {R1 R2}
     (RR : list N -> R1 -> R2 -> Prop)
-    (r : list N -> itree ProvDrawBotE R1 -> itree ProvDrawBotE R2 -> Prop)
+    (r r' : list N -> itree ProvDrawBotE R1 -> itree ProvDrawBotE R2 -> Prop)
     (Hr_eq : forall U a1 a1' a2 a2',
-               a1 ≅ a1' -> a2 ≅ a2' -> r U a1 a2 -> r U a1' a2') :
+               a1 ≅ a1' -> a2 ≅ a2' -> r U a1 a2 -> r' U a1' a2') :
     forall U (t1 t1' : itree ProvDrawBotE R1) (t2 t2' : itree ProvDrawBotE R2),
       t1 ≅ t1' ->
       t2 ≅ t2' ->
       refine_prov_draw_ RR r U t1 t2 ->
-      refine_prov_draw_ RR r U t1' t2'.
+      refine_prov_draw_ RR r' U t1' t2'.
   Proof using.
     intros U t1 t1' t2 t2' E1 E2 Hrel.
     revert t1' t2' E1 E2;
@@ -5283,14 +5285,14 @@ Section ValueDrawRefinement.
 
     Lemma vds_sim__obs_eq {R1 R2}
       (RR : env_stack -> @local_env PaV -> @local_env PaV -> R1 -> R2 -> Prop)
-      (r : env_stack -> @local_env PaV -> @local_env PaV -> itree E R1 -> itree E R2 -> Prop)
+      (r r' : env_stack -> @local_env PaV -> @local_env PaV -> itree E R1 -> itree E R2 -> Prop)
       (Hr_eq : forall stk e1 e2 a1 a1' a2 a2',
-                 a1 ≅ a1' -> a2 ≅ a2' -> r stk e1 e2 a1 a2 -> r stk e1 e2 a1' a2') :
+                 a1 ≅ a1' -> a2 ≅ a2' -> r stk e1 e2 a1 a2 -> r' stk e1 e2 a1' a2') :
       forall stk env1 env2 t1 t1' t2 t2',
         t1 ≅ t1' ->
         t2 ≅ t2' ->
         vds_sim_ RR r stk env1 env2 t1 t2 ->
-        vds_sim_ RR r stk env1 env2 t1' t2'.
+        vds_sim_ RR r' stk env1 env2 t1' t2'.
     Proof using.
       intros stk env1 env2 t1 t1' t2 t2' E1 E2 Hsim.
       revert t1' t2' E1 E2;

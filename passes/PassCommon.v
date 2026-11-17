@@ -2234,14 +2234,14 @@ Section ModelSemantics.
 
   Lemma refine_prov__obs_eq {R1 R2}
     (RR : list N -> R1 -> R2 -> Prop)
-    (r : list N -> itree ProvBotE R1 -> itree ProvBotE R2 -> Prop)
+    (r r' : list N -> itree ProvBotE R1 -> itree ProvBotE R2 -> Prop)
     (Hr_eq : forall U a1 a1' a2 a2',
-               a1 ≅ a1' -> a2 ≅ a2' -> r U a1 a2 -> r U a1' a2') :
+               a1 ≅ a1' -> a2 ≅ a2' -> r U a1 a2 -> r' U a1' a2') :
     forall U (t1 t1' : itree ProvBotE R1) (t2 t2' : itree ProvBotE R2),
       t1 ≅ t1' ->
       t2 ≅ t2' ->
       refine_prov_ RR r U t1 t2 ->
-      refine_prov_ RR r U t1' t2'.
+      refine_prov_ RR r' U t1' t2'.
   Proof using.
     intros U t1 t1' t2 t2' E1 E2 Hrel.
     revert t1' t2' E1 E2;
@@ -3367,15 +3367,15 @@ Section ModelSemantics.
 
   Lemma cfg_local_sim__obs_eq {R1 R2}
     (RR : @local_env (@ParamsV IP IPT) -> @local_env (@ParamsV IP IPT) -> R1 -> R2 -> Prop)
-    (r : @local_env (@ParamsV IP IPT) -> @local_env (@ParamsV IP IPT) ->
-         @CFGtop (@ParamsV IP IPT) R1 -> @CFGtop (@ParamsV IP IPT) R2 -> Prop)
+    (r r' : @local_env (@ParamsV IP IPT) -> @local_env (@ParamsV IP IPT) ->
+            @CFGtop (@ParamsV IP IPT) R1 -> @CFGtop (@ParamsV IP IPT) R2 -> Prop)
     (Hr_eq : forall env1 env2 a1 a1' a2 a2',
-               a1 ≅ a1' -> a2 ≅ a2' -> r env1 env2 a1 a2 -> r env1 env2 a1' a2') :
+               a1 ≅ a1' -> a2 ≅ a2' -> r env1 env2 a1 a2 -> r' env1 env2 a1' a2') :
     forall env1 env2 t1 t1' t2 t2',
       t1 ≅ t1' ->
       t2 ≅ t2' ->
       cfg_local_sim_ RR r env1 env2 t1 t2 ->
-      cfg_local_sim_ RR r env1 env2 t1' t2'.
+      cfg_local_sim_ RR r' env1 env2 t1' t2'.
   Proof using.
     intros env1 env2 t1 t1' t2 t2' E1 E2 Hsim.
     revert t1' t2' E1 E2;
@@ -4022,15 +4022,15 @@ Section ModelSemantics.
 
     Lemma gen_stack_sim__obs_eq {R1 R2}
       (RR : env_stack -> @local_env (@ParamsV IP IPT) -> @local_env (@ParamsV IP IPT) -> R1 -> R2 -> Prop)
-      (r : env_stack -> @local_env (@ParamsV IP IPT) -> @local_env (@ParamsV IP IPT) ->
-           itree E R1 -> itree E R2 -> Prop)
+      (r r' : env_stack -> @local_env (@ParamsV IP IPT) -> @local_env (@ParamsV IP IPT) ->
+              itree E R1 -> itree E R2 -> Prop)
       (Hr_eq : forall stk e1 e2 a1 a1' a2 a2',
-                 a1 ≅ a1' -> a2 ≅ a2' -> r stk e1 e2 a1 a2 -> r stk e1 e2 a1' a2') :
+                 a1 ≅ a1' -> a2 ≅ a2' -> r stk e1 e2 a1 a2 -> r' stk e1 e2 a1' a2') :
       forall stk env1 env2 t1 t1' t2 t2',
         t1 ≅ t1' ->
         t2 ≅ t2' ->
         gen_stack_sim_ RR r stk env1 env2 t1 t2 ->
-        gen_stack_sim_ RR r stk env1 env2 t1' t2'.
+        gen_stack_sim_ RR r' stk env1 env2 t1' t2'.
     Proof using.
       intros stk env1 env2 t1 t1' t2 t2' E1 E2 Hsim.
       revert t1' t2' E1 E2;

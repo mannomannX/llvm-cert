@@ -7465,7 +7465,7 @@ Proof.
                      pose proof (ctx_has_sdiv_no_ovf_sound penv foracle ctx l r w il0 ir Hnovf Hctx El Er)
                        as Hno_ovf.
                      unfold eval_iop in Hev; rewrite eval_iop_integer_base_same_width in Hev.
-                     unfold cert_to_ibinop, eval_int_op in Hev; cbn in Hev.
+                     unfold cert_to_ibinop, eval_int_op in Hev; cbn - [andb Z.eqb] in Hev.
                      rewrite (proj2 (Z.eqb_neq (@Integers.signed w ir) 0%Z) Hnsz) in Hev.
                      destruct ((@Integers.min_signed w =? @Integers.signed w il0)%Z &&
                                (@Integers.signed w ir =? -1)%Z) eqn:Eovf.
@@ -7507,7 +7507,7 @@ Proof.
                      pose proof (ctx_has_sdiv_no_ovf_sound penv foracle ctx l r w il0 ir Hnovf Hctx El Er)
                        as Hno_ovf.
                      unfold eval_iop in Hev; rewrite eval_iop_integer_base_same_width in Hev.
-                     unfold cert_to_ibinop, eval_int_op in Hev; cbn in Hev.
+                     unfold cert_to_ibinop, eval_int_op in Hev; cbn - [andb Z.eqb] in Hev.
                      rewrite (proj2 (Z.eqb_neq (@Integers.signed w ir) 0%Z) Hnsz) in Hev.
                      destruct ((@Integers.min_signed w =? @Integers.signed w il0)%Z &&
                                (@Integers.signed w ir =? -1)%Z) eqn:Eovf.
@@ -10507,7 +10507,7 @@ Lemma pair_phi_specs_supported :
     Forall (fun '(_, _, w) => is_supported_bit_width w = true) pspecs.
 Proof.
   induction xs as [| [id_s w_s] rx IH]; intros ys pspecs H;
-    destruct ys as [| [id_t w_t] ry]; cbn in H; try discriminate H.
+    destruct ys as [| [id_t w_t] ry]; cbn [pair_phi_specs] in H; try discriminate H.
   - inversion H; constructor.
   - destruct (Pos.eqb w_s w_t && is_supported_bit_width w_s) eqn:E; [| discriminate H].
     apply andb_true_iff in E as [_ Hsup].
@@ -10841,7 +10841,7 @@ Lemma pair_phi_specs_overlay :
 Proof.
   induction hspecs_s as [| [id_s w_s] rx IH];
     intros hspecs_t pspecs idx lmap_s lmap_t H;
-    destruct hspecs_t as [| [id_t w_t] ry]; cbn in H; try discriminate H.
+    destruct hspecs_t as [| [id_t w_t] ry]; cbn [pair_phi_specs] in H; try discriminate H.
   - inversion H; subst; repeat split; reflexivity.
   - destruct (Pos.eqb w_s w_t && is_supported_bit_width w_s) eqn:E; [| discriminate H].
     apply andb_true_iff in E as [Heqw _]; apply Pos.eqb_eq in Heqw; subst w_t.

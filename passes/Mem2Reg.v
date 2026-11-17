@@ -6350,14 +6350,14 @@ Section MemoryAndSerialization.
     paco2 (@prov_te_ R) bot2 t1 t2.
 
   Lemma prov_te__obs_eq {R : Type}
-    (r : itree ProvBotE R -> itree ProvBotE R -> Prop)
+    (r r' : itree ProvBotE R -> itree ProvBotE R -> Prop)
     (Hr_eq : forall a1 a1' a2 a2',
-               a1 ≅ a1' -> a2 ≅ a2' -> r a1 a2 -> r a1' a2') :
+               a1 ≅ a1' -> a2 ≅ a2' -> r a1 a2 -> r' a1' a2') :
     forall (t1 t1' t2 t2' : itree ProvBotE R),
       t1 ≅ t1' ->
       t2 ≅ t2' ->
       prov_te_ r t1 t2 ->
-      prov_te_ r t1' t2'.
+      prov_te_ r' t1' t2'.
   Proof using.
     intros t1 t1' t2 t2' E1 E2 Hrel.
     revert t1' t2' E1 E2;
