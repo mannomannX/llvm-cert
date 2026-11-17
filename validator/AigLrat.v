@@ -58,6 +58,11 @@ Set Default Goal Selector "!".
 Local Open Scope bool_scope.
 Local Open Scope list_scope.
 
+Lemma xorb_false_iff : forall b1 b2 : bool, xorb b1 b2 = false <-> b1 = b2.
+Proof.
+  intros [] []; cbn; split; intros H; try reflexivity; discriminate.
+Qed.
+
 (** ** 1. Positive-Indexed Binary Trie ([O(log N)] Clause & Trail Maps) *)
 
 Section PosTrie.
@@ -1362,7 +1367,7 @@ Proof.
       congruence. }
     assert (Hin_map : In (List.nth (Z.to_nat i) (List.map (eval_lit assign) xor_bits) false)
                          (List.map (eval_lit assign) xor_bits))
-      by (apply nth_In; rewrite map_length, Hlx; exact Hk).
+      by (apply nth_In; rewrite length_map, Hlx; exact Hk).
     apply in_map_iff in Hin_map as [z [Hz_eq Hz_in]].
     rewrite <- Hz_eq; exact (Hall z Hz_in). }
   rewrite Hxor_k_false in Hxk; symmetry in Hxk.
@@ -2974,7 +2979,7 @@ Lemma unsigned_eval_rail_val : forall sz assign r,
 Proof.
   intros sz assign r Hlen; unfold eval_rail_val; apply @Integers.unsigned_repr.
   pose proof (bools_to_Z_range (List.map (eval_lit assign) (rbv_bits r))) as Hr.
-  rewrite map_length, Hlen, positive_nat_Z in Hr.
+  rewrite length_map, Hlen, positive_nat_Z in Hr.
   unfold Integers.max_unsigned; rewrite modulus_pow_sz; lia.
 Qed.
 
@@ -2984,7 +2989,7 @@ Lemma map_eval_lit_eq_bit_int_to_bools : forall sz assign r,
   bit_int_to_bools sz (eval_rail_val sz assign r).
 Proof.
   intros sz assign r Hlen; apply bools_to_Z_inj.
-  - rewrite map_length, Hlen, bit_int_to_bools_length; reflexivity.
+  - rewrite length_map, Hlen, bit_int_to_bools_length; reflexivity.
   - rewrite bools_to_Z_bit_int_to_bools, unsigned_eval_rail_val by exact Hlen; reflexivity.
 Qed.
 
@@ -3035,7 +3040,7 @@ Lemma existsb_xorb_false_iff : forall s bs,
 Proof.
   intros s bs; induction bs as [| b rest IH]; cbn [existsb List.repeat List.length].
   - split; intros _; reflexivity.
-  - rewrite orb_false_iff, Bool.xorb_false_iff, IH; split.
+  - rewrite orb_false_iff, xorb_false_iff, IH; split.
     + intros [<- ->]; reflexivity.
     + intros Heq; injection Heq as <- Heqr; split; [reflexivity | exact Heqr].
 Qed.
@@ -3181,7 +3186,7 @@ Proof.
   assert (Hlt : (Pos.to_nat sz - 1 < List.length (rbv_bits r))%nat) by lia.
   rewrite <- (map_nth (eval_lit assign) (rbv_bits r) lit_false (Pos.to_nat sz - 1)).
   rewrite (nth_indep _ (eval_lit assign lit_false) false)
-    by (rewrite map_length; exact Hlt).
+    by (rewrite length_map; exact Hlt).
   rewrite (map_eval_lit_eq_bit_int_to_bools sz assign r Hlen); reflexivity.
 Qed.
 
@@ -3332,8 +3337,8 @@ Proof.
       rewrite @Integers.bits_and by exact Hi.
       rewrite !eval_rail_val_testbit by exact Hi.
       cbn [rbv_bits]; rewrite (step_spec_eval_lits st1 st' asg1 asg2 bits Hs2 Hbwf), Hbev.
-      apply list_map2_nth; [rewrite !map_length; exact Hlen_ab |].
-      rewrite map_length, Hla; unfold Integers.zwordsize in Hi; lia.
+      apply list_map2_nth; [rewrite !length_map; exact Hlen_ab |].
+      rewrite length_map, Hla; unfold Integers.zwordsize in Hi; lia.
 Qed.
 
 Definition blast_xor_rail_opt (sz : positive) (a b : rail_bv) (st : blast_state)
@@ -3380,8 +3385,8 @@ Proof.
       rewrite @Integers.bits_xor by exact Hi.
       rewrite !eval_rail_val_testbit by exact Hi.
       cbn [rbv_bits]; rewrite (step_spec_eval_lits st1 st' asg1 asg2 bits Hs2 Hbwf), Hbev.
-      apply list_map2_nth; [rewrite !map_length; exact Hlen_ab |].
-      rewrite map_length, Hla; unfold Integers.zwordsize in Hi; lia.
+      apply list_map2_nth; [rewrite !length_map; exact Hlen_ab |].
+      rewrite length_map, Hla; unfold Integers.zwordsize in Hi; lia.
 Qed.
 
 Lemma or_eq_xor_iff_disjoint : forall sz assign a b,
@@ -3399,9 +3404,9 @@ Proof.
   set (ba := List.map (eval_lit assign) (rbv_bits a)).
   set (bb := List.map (eval_lit assign) (rbv_bits b)).
   assert (Hlen_ab : List.length ba = List.length bb)
-    by (unfold ba, bb; rewrite !map_length; congruence).
+    by (unfold ba, bb; rewrite !length_map; congruence).
   assert (Hlen_a : List.length ba = Pos.to_nat sz)
-    by (unfold ba; rewrite map_length; exact Hla).
+    by (unfold ba; rewrite length_map; exact Hla).
   destruct (existsb (fun x : bool => x) (list_map2 andb ba bb)) eqn:Hex.
   - apply existsb_exists in Hex as [z [Hin Hz]]; subst z.
     destruct (In_nth _ _ false Hin) as [k [Hk Hnth]].
@@ -3523,8 +3528,8 @@ Proof.
         rewrite @Integers.bits_or by exact Hi.
         rewrite !eval_rail_val_testbit by exact Hi.
         cbn [rbv_bits]; rewrite (step_spec_eval_lits st1 st' asg1 asg5 bits Hs15 Hbwf), Hbev.
-        apply list_map2_nth; [rewrite !map_length; exact Hlen_ab |].
-        rewrite map_length, Hla; unfold Integers.zwordsize in Hi; lia.
+        apply list_map2_nth; [rewrite !length_map; exact Hlen_ab |].
+        rewrite length_map, Hla; unfold Integers.zwordsize in Hi; lia.
   - inversion Hbl; subst out st2; clear Hbl.
     exists asg2; split; [exact Hs12 | split].
     + split; [split; [reflexivity | cbn; congruence] |
@@ -3537,8 +3542,8 @@ Proof.
         rewrite @Integers.bits_or by exact Hi.
         rewrite !eval_rail_val_testbit by exact Hi.
         cbn [rbv_bits]; rewrite (step_spec_eval_lits st1 st' asg1 asg2 bits Hs2 Hbwf), Hbev.
-        apply list_map2_nth; [rewrite !map_length; exact Hlen_ab |].
-        rewrite map_length, Hla; unfold Integers.zwordsize in Hi; lia.
+        apply list_map2_nth; [rewrite !length_map; exact Hlen_ab |].
+        rewrite length_map, Hla; unfold Integers.zwordsize in Hi; lia.
 Qed.
 
 Fixpoint emit_ripple_add (cin : lit) (xs ys : list lit) (st : blast_state)
@@ -3708,7 +3713,7 @@ Proof.
   set (us := bools_to_Z (List.map (eval_lit asg1) sums)) in *.
   assert (Hus_rng : (0 <= us < @Integers.modulus sz)%Z).
   { unfold us; pose proof (bools_to_Z_range (List.map (eval_lit asg1) sums)) as Hr.
-    rewrite map_length, Hlen_s, Hla, positive_nat_Z, <- modulus_pow_sz in Hr; exact Hr. }
+    rewrite length_map, Hlen_s, Hla, positive_nat_Z, <- modulus_pow_sz in Hr; exact Hr. }
   assert (Hus_repr : @Integers.unsigned sz (@Integers.repr sz us) = us)
     by (apply @Integers.unsigned_repr; unfold Integers.max_unsigned; lia).
   assert (Hval_eq : @Integers.repr sz us = @Integers.add sz va vb).
@@ -3897,7 +3902,7 @@ Proof.
   destruct (emit_ripple_add lit_true (rbv_bits a) not_b st)
     as [[diffs cout] st1] eqn:Hrip.
   assert (Hlen_anb : List.length (rbv_bits a) = List.length not_b)
-    by (unfold not_b; rewrite map_length; congruence).
+    by (unfold not_b; rewrite length_map; congruence).
   destruct (emit_ripple_add_step (rbv_bits a) not_b lit_true asg st diffs cout st1
               Hlen_anb (wf_lit_bound_true _ (proj1 (proj1 Hsat)))
               Hba (wf_lits_bound_neg _ _ Hbb) Hsat Hrip)
@@ -3906,7 +3911,7 @@ Proof.
   unfold not_b in Heq_diff;
     rewrite (map_eval_neg_lits _ asg (rbv_bits b) Hbb) in Heq_diff.
   pose proof (bools_to_Z_negb (List.map (eval_lit asg) (rbv_bits b))) as Hnb.
-  rewrite map_length, Hlb, positive_nat_Z, <- modulus_pow_sz in Hnb.
+  rewrite length_map, Hlb, positive_nat_Z, <- modulus_pow_sz in Hnb.
   set (va := eval_rail_val sz asg a).
   set (vb := eval_rail_val sz asg b).
   assert (Hua : bools_to_Z (List.map (eval_lit asg) (rbv_bits a)) = @Integers.unsigned sz va)
@@ -3919,7 +3924,7 @@ Proof.
                     ud + @Integers.modulus sz * (b2z (eval_lit asg1 cout) - 1))%Z) by lia.
   assert (Hud_rng : (0 <= ud < @Integers.modulus sz)%Z).
   { unfold ud; pose proof (bools_to_Z_range (List.map (eval_lit asg1) diffs)) as Hr.
-    rewrite map_length, Hlen_d, Hla, positive_nat_Z, <- modulus_pow_sz in Hr; exact Hr. }
+    rewrite length_map, Hlen_d, Hla, positive_nat_Z, <- modulus_pow_sz in Hr; exact Hr. }
   assert (Hud_repr : @Integers.unsigned sz (@Integers.repr sz ud) = ud)
     by (apply @Integers.unsigned_repr; unfold Integers.max_unsigned; lia).
   assert (Hval_eq : @Integers.repr sz ud = @Integers.sub sz va vb).
@@ -4316,7 +4321,7 @@ Proof.
       rewrite (step_spec_eval_lits st st2 asg asg2 b_bits Hs02 Hwfb) in Hspec_r.
       rewrite (step_spec_eval_lits st st1 asg asg1 b_bits Hs1 Hwfb) in Hev_eqk.
       assert (Hk_pow : (0 <= Z.of_nat k < 2 ^ Z.of_nat (List.length (List.map (eval_lit asg) b_bits)))%Z).
-      { rewrite map_length, Hlen_b; pose proof (nat_lt_pow2 (Pos.to_nat sz)); lia. }
+      { rewrite length_map, Hlen_b; pose proof (nat_lt_pow2 (Pos.to_nat sz)); lia. }
       rewrite (eq_Z_bools_spec _ _ Hk_pow) in Hev_eqk.
       rewrite (step_spec_eval_lits st4 st' asg4 asg5 ob Hs5 Hwf_ob),
               Hev_ob, Hev_op,
@@ -4477,7 +4482,7 @@ Proof.
                         (wf_lit_bound_false _ (proj1 (proj1 Hsat))))).
           rewrite <- (map_nth (eval_lit asg) (rbv_bits a) lit_false (n - 1 - k)).
           rewrite (nth_indep _ (eval_lit asg lit_false) false)
-            by (rewrite map_length, Hla; fold n; lia).
+            by (rewrite length_map, Hla; fold n; lia).
           reflexivity. }
         rewrite Hsr_ev; reflexivity.
       - exists lit_false, s01, asg01; repeat split;
@@ -4494,7 +4499,7 @@ Proof.
     pose proof (step_spec_trans st0 s01 s03 asg0 asg01 asg03 Hs01 Hs13) as Hs03.
     pose proof (step_spec_trans st0 s03 s04 asg0 asg03 a04 Hs03 Hs34) as Hs04.
     exists a04; split; [exact Hs04 | split].
-    - rewrite app_length, repeat_length; unfold lo;
+    - rewrite length_app, repeat_length; unfold lo;
         rewrite len_firstn_le by (rewrite Hla; fold n; lia); lia.
     - split.
       + apply wf_lits_bound_app.
@@ -4542,7 +4547,7 @@ Proof.
     set (k := Z.to_nat (@Integers.unsigned sz vb)).
     assert (Hk_z : Z.of_nat k = @Integers.unsigned sz vb) by (unfold k; rewrite Z2Nat.id; lia).
     assert (Hk_n : (k < n)%nat) by (unfold n; rewrite <- positive_nat_Z in Hlt_sz; lia).
-    assert (Hba_len : List.length ba = n) by (unfold ba, n; rewrite map_length; exact Hla).
+    assert (Hba_len : List.length ba = n) by (unfold ba, n; rewrite length_map; exact Hla).
     set (lo := List.firstn (n - k) ba); set (hi := List.skipn (n - k) ba).
     assert (Hlo_len : List.length lo = (n - k)%nat)
       by (unfold lo; apply len_firstn_le; lia).
@@ -4556,7 +4561,7 @@ Proof.
     assert (Hsb_z : (bools_to_Z (spec_bits k) = 2 ^ Z.of_nat k * bools_to_Z lo)%Z).
     { unfold spec_bits; fold lo; rewrite bools_to_Z_app, bools_to_Z_repeat_false, repeat_length; lia. }
     assert (Hsb_len : List.length (spec_bits k) = n)
-      by (unfold spec_bits; fold lo; rewrite app_length, repeat_length, Hlo_len; lia).
+      by (unfold spec_bits; fold lo; rewrite length_app, repeat_length, Hlo_len; lia).
     assert (Hshl_z : (Z.shiftl (@Integers.unsigned sz va) (@Integers.unsigned sz vb) =
                       bools_to_Z (spec_bits k) + @Integers.modulus sz * bools_to_Z hi)%Z).
     { rewrite <- Hk_z, Z.shiftl_mul_pow2 by lia, Hua_split, Hsb_z.
@@ -4690,7 +4695,7 @@ Proof.
                   (wf_lits_bound_firstn _ _ _ Hba0) Hsat0 Epk)
         as (a01 & Hs01 & Hw_pk & Hev_pk).
       exists a01; split; [exact Hs01 | split].
-      + rewrite app_length, len_skipn_eq, repeat_length, Hla; fold n; lia.
+      + rewrite length_app, len_skipn_eq, repeat_length, Hla; fold n; lia.
       + split.
         * apply wf_lits_bound_app;
             [exact (wf_lits_bound_mono _ _ _ (proj1 Hs01) (wf_lits_bound_skipn _ _ _ Hba0))
@@ -4702,7 +4707,7 @@ Proof.
           -- cbn [spec_psn andb]; rewrite Hev_pk, map_firstn_eq, Hev_ba0; reflexivity.
     - inversion Efk; subst bk pk s1; clear Efk.
       exists asg0; split; [exact (step_spec_refl st0 asg0 Hsat0) | split].
-      + rewrite app_length, len_skipn_eq, repeat_length, Hla; fold n; lia.
+      + rewrite length_app, len_skipn_eq, repeat_length, Hla; fold n; lia.
       + split.
         * apply wf_lits_bound_app;
             [exact (wf_lits_bound_skipn _ _ _ Hba0)
@@ -4738,7 +4743,7 @@ Proof.
     set (k := Z.to_nat (@Integers.unsigned sz vb)).
     assert (Hk_z : Z.of_nat k = @Integers.unsigned sz vb) by (unfold k; rewrite Z2Nat.id; lia).
     assert (Hk_n : (k < n)%nat) by (unfold n; rewrite <- positive_nat_Z in Hlt_sz; lia).
-    assert (Hba_len : List.length ba = n) by (unfold ba, n; rewrite map_length; exact Hla).
+    assert (Hba_len : List.length ba = n) by (unfold ba, n; rewrite length_map; exact Hla).
     set (lo := List.firstn k ba); set (hi := List.skipn k ba).
     assert (Hlo_len : List.length lo = k) by (unfold lo; apply len_firstn_le; lia).
     assert (Hua_split : (@Integers.unsigned sz va =
@@ -4844,7 +4849,7 @@ Proof.
     { intros aX sX HsX; rewrite (step_spec_eval_lit st sX asg aX msb_l HsX Hw_msbl).
       unfold msb_l, b_msb, ba; pose proof (Pos2Nat.is_pos sz) as Hpos.
       rewrite <- (map_nth (eval_lit asg) (rbv_bits a) lit_false (n - 1)).
-      apply nth_indep; rewrite map_length, Hla; fold n; lia. }
+      apply nth_indep; rewrite length_map, Hla; fold n; lia. }
     destruct ex.
     - destruct (emit_or_list_opt (List.firstn k (rbv_bits a)) st0) as [pk0 s01] eqn:Epk.
       inversion Efk; subst bk pk s1; clear Efk.
@@ -4853,7 +4858,7 @@ Proof.
         as (a01 & Hs01 & Hw_pk & Hev_pk).
       pose proof (step_spec_trans st st0 s01 asg asg0 a01 Hs0 Hs01) as Hs001.
       exists a01; split; [exact Hs01 | split].
-      + rewrite app_length, len_skipn_eq, repeat_length, Hla; fold n; lia.
+      + rewrite length_app, len_skipn_eq, repeat_length, Hla; fold n; lia.
       + split.
         * apply wf_lits_bound_app;
             [exact (wf_lits_bound_mono _ _ _ (proj1 Hs01) (wf_lits_bound_skipn _ _ _ Hba0))
@@ -4865,7 +4870,7 @@ Proof.
           -- cbn [spec_psn andb]; rewrite Hev_pk, map_firstn_eq, Hev_ba0; reflexivity.
     - inversion Efk; subst bk pk s1; clear Efk.
       exists asg0; split; [exact (step_spec_refl st0 asg0 Hsat0) | split].
-      + rewrite app_length, len_skipn_eq, repeat_length, Hla; fold n; lia.
+      + rewrite length_app, len_skipn_eq, repeat_length, Hla; fold n; lia.
       + split.
         * apply wf_lits_bound_app;
             [exact (wf_lits_bound_skipn _ _ _ Hba0)
@@ -4901,7 +4906,7 @@ Proof.
     set (k := Z.to_nat (@Integers.unsigned sz vb)).
     assert (Hk_z : Z.of_nat k = @Integers.unsigned sz vb) by (unfold k; rewrite Z2Nat.id; lia).
     assert (Hk_n : (k < n)%nat) by (unfold n; rewrite <- positive_nat_Z in Hlt_sz; lia).
-    assert (Hba_len : List.length ba = n) by (unfold ba, n; rewrite map_length; exact Hla).
+    assert (Hba_len : List.length ba = n) by (unfold ba, n; rewrite length_map; exact Hla).
     set (lo := List.firstn k ba); set (hi := List.skipn k ba).
     assert (Hlo_len : List.length lo = k) by (unfold lo; apply len_firstn_le; lia).
     assert (Hua_split : (@Integers.unsigned sz va =
@@ -4994,7 +4999,7 @@ Proof.
   destruct (emit_or2_opt_step asg (rbv_psn a) nneg_l st psn st' Hsat Hpa Hw_nl Ep)
     as (asg1 & Hs1 & Hwf_p & Hev_p).
   exists asg1; split; [exact Hs1 | split].
-  - split; [split; [reflexivity | cbn; rewrite app_length, repeat_length, Hla; lia] | split].
+  - split; [split; [reflexivity | cbn; rewrite length_app, repeat_length, Hla; lia] | split].
     + apply wf_lits_bound_app;
         [exact (wf_lits_bound_mono _ _ _ (proj1 Hs1) Hba)
          | exact (wf_lits_bound_repeat _ _ _ (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs1))))))].
@@ -5032,7 +5037,7 @@ Proof.
   intros fw tw a asg st out st' Hlt Hsat ([Hwa Hla] & Hba & Hpa) Hbl.
   unfold blast_sext_rail in Hbl; inversion Hbl; subst out st'; clear Hbl.
   exists asg; split; [exact (step_spec_refl st asg Hsat) | split].
-  - split; [split; [reflexivity | cbn; rewrite app_length, repeat_length, Hla; lia] | split].
+  - split; [split; [reflexivity | cbn; rewrite length_app, repeat_length, Hla; lia] | split].
     + apply wf_lits_bound_app;
         [exact Hba
          | exact (wf_lits_bound_repeat _ _ _
@@ -5041,7 +5046,7 @@ Proof.
   - split; [reflexivity |].
     unfold eval_rail_val; cbn [rbv_bits].
     rewrite map_app, map_repeat_eq, (eval_msb_lit fw asg a (conj Hwa Hla)),
-            bools_to_Z_app, bools_to_Z_repeat_b, map_length, Hla, positive_nat_Z.
+            bools_to_Z_app, bools_to_Z_repeat_b, length_map, Hla, positive_nat_Z.
     set (va := eval_rail_val fw asg a).
     rewrite <- (unsigned_eval_rail_val fw asg a Hla).
     replace (Z.of_nat (Pos.to_nat tw - Pos.to_nat fw)) with (Z.pos tw - Z.pos fw)%Z
@@ -5149,7 +5154,7 @@ Proof.
         pose proof (Pos2Nat.is_pos tw) as Hptw.
         rewrite <- (map_nth (eval_lit asg) (List.firstn (Pos.to_nat tw) (rbv_bits a)) lit_false
                        (Pos.to_nat tw - 1)), map_firstn_eq.
-        apply nth_indep; rewrite len_firstn_le by (rewrite map_length, Hla; lia); lia. }
+        apply nth_indep; rewrite len_firstn_le by (rewrite length_map, Hla; lia); lia. }
       rewrite Hev_slo; reflexivity.
     - exists lit_false, st1, asg1; repeat split;
         try exact (step_spec_refl st1 asg1 (proj2 (proj2 Hs1)));
@@ -5172,9 +5177,9 @@ Proof.
   set (va := eval_rail_val fw asg a).
   set (res := @Integers.repr tw (@Integers.unsigned fw va)).
   assert (Hlo_len : List.length b_lo = Pos.to_nat tw)
-    by (unfold b_lo, ba; apply len_firstn_le; rewrite map_length, Hla; lia).
+    by (unfold b_lo, ba; apply len_firstn_le; rewrite length_map, Hla; lia).
   assert (Hhi_len : List.length b_hi = (Pos.to_nat fw - Pos.to_nat tw)%nat)
-    by (unfold b_hi, ba; rewrite len_skipn_eq, map_length, Hla; reflexivity).
+    by (unfold b_hi, ba; rewrite len_skipn_eq, length_map, Hla; reflexivity).
   assert (Hua_split : (@Integers.unsigned fw va =
                        bools_to_Z b_lo + 2 ^ Z.pos tw * bools_to_Z b_hi)%Z).
   { unfold va; rewrite (unsigned_eval_rail_val fw asg a Hla); fold ba.
@@ -5367,7 +5372,7 @@ Proof.
   assert (Hw_msb : wf_lit_bound (bs_next_var st) (msb_lit r))
     by exact (wf_msb_lit sz _ r Hge2 (conj (conj Hwr Hlr) (conj Hbr Hpr))).
   split.
-  - unfold flip_msb_rail_bits; rewrite app_length, len_firstn_le by lia; cbn; lia.
+  - unfold flip_msb_rail_bits; rewrite length_app, len_firstn_le by lia; cbn; lia.
   - split.
     + unfold flip_msb_rail_bits; apply wf_lits_bound_app;
         [exact (wf_lits_bound_firstn _ _ _ Hbr)
@@ -5378,7 +5383,7 @@ Proof.
       set (vr := eval_rail_val sz asg r).
       set (br := List.map (eval_lit asg) (rbv_bits r)).
       assert (Hbr_len : List.length br = Pos.to_nat sz)
-        by (unfold br; rewrite map_length; exact Hlr).
+        by (unfold br; rewrite length_map; exact Hlr).
       assert (Hlo_len : List.length (List.firstn (Pos.to_nat sz - 1) br) = (Pos.to_nat sz - 1)%nat)
         by (apply len_firstn_le; lia).
       assert (Hskip_one : List.skipn (Pos.to_nat sz - 1) br = [msb_of sz vr]).
@@ -5492,14 +5497,14 @@ Proof.
   set (ba := List.map (eval_lit assign) (rbv_bits a)).
   set (bb := List.map (eval_lit assign) (rbv_bits b)).
   assert (Hlen_ab : List.length ba = List.length bb)
-    by (unfold ba, bb; rewrite !map_length; congruence).
+    by (unfold ba, bb; rewrite !length_map; congruence).
   destruct (existsb (fun x : bool => x) (list_map2 xorb ba bb)) eqn:Hex.
   - apply existsb_exists in Hex as [z [Hin Hz]]; subst z.
     destruct (In_nth _ _ false Hin) as [k [Hk Hnth]].
     rewrite list_map2_length in Hk by exact Hlen_ab.
     rewrite list_map2_nth in Hnth by assumption.
     assert (Hk_sz : (k < Pos.to_nat sz)%nat)
-      by (unfold ba in Hk; rewrite map_length, Hla in Hk; exact Hk).
+      by (unfold ba in Hk; rewrite length_map, Hla in Hk; exact Hk).
     unfold Integers.eq, Numeric.Rocqlib.zeq.
     destruct (Z.eq_dec (@Integers.unsigned sz (eval_rail_val sz assign a))
                        (@Integers.unsigned sz (eval_rail_val sz assign b))) as [Hu | _];
@@ -5515,7 +5520,7 @@ Proof.
     { apply @Integers.same_bits_eq; intros i Hi.
       rewrite !eval_rail_val_testbit by exact Hi; fold ba bb.
       assert (Hk : (Z.to_nat i < List.length ba)%nat)
-        by (unfold ba; rewrite map_length, Hla; unfold Integers.zwordsize in Hi; lia).
+        by (unfold ba; rewrite length_map, Hla; unfold Integers.zwordsize in Hi; lia).
       assert (Hx_f : xorb (List.nth (Z.to_nat i) ba false) (List.nth (Z.to_nat i) bb false) = false).
       { rewrite <- (list_map2_nth xorb ba bb (Z.to_nat i) Hlen_ab Hk).
         destruct (List.nth (Z.to_nat i) (list_map2 xorb ba bb) false) eqn:Enth; [| reflexivity].
@@ -5523,7 +5528,7 @@ Proof.
         { apply existsb_exists; exists true; split; [| reflexivity].
           rewrite <- Enth; apply nth_In; rewrite list_map2_length by exact Hlen_ab; exact Hk. }
         congruence. }
-      apply Bool.xorb_false_iff in Hx_f; exact Hx_f. }
+      apply xorb_false_iff in Hx_f; exact Hx_f. }
     rewrite Heqv; unfold Integers.eq, Numeric.Rocqlib.zeq.
     destruct (Z.eq_dec _ _); [reflexivity | congruence].
 Qed.

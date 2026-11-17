@@ -7849,7 +7849,7 @@ Proof.
                  2 ^ Z.of_nat m' * bools_to_Z (List.skipn m' bys))%Z).
       { rewrite <- (firstn_skipn_eq m' bys) at 1, bools_to_Z_app.
         assert (Hfl : List.length (List.firstn m' bys) = m')
-          by (unfold bys; apply len_firstn_le; rewrite map_length; lia).
+          by (unfold bys; apply len_firstn_le; rewrite length_map; lia).
         rewrite Hfl; reflexivity. }
       rewrite map_firstn_eq in Heq_sum; fold bys in Heq_sum.
       assert (Hlo_eq : (bools_to_Z (List.firstn m' bys) =
@@ -9037,7 +9037,7 @@ Proof.
     destruct (blast_const_rail_sound asg w val 2%positive [] Hinit)
       as (_ & Hpsn & Hval).
     assert (Hwf_out : wf_rail_bound w (bs_next_var (be_st env)) (blast_const_rail w val)).
-    { split; [split; [reflexivity | unfold blast_const_rail; cbn; rewrite map_length, seq_length; reflexivity] | split].
+    { split; [split; [reflexivity | unfold blast_const_rail; cbn; rewrite length_map, length_seq; reflexivity] | split].
       - unfold blast_const_rail, wf_lits_bound; cbn.
         apply Forall_forall; intros l0 Hin; apply in_map_iff in Hin as [k0 [<- _]].
         pose proof (proj1 (proj1 Hst)); destruct (Z.testbit (Z.of_N val) (Z.of_nat k0)); cbn; lia.

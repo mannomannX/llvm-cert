@@ -3107,7 +3107,7 @@ Section MemoryAndSerialization.
     unfold dvalue_to_memory_bytes, acc_dvalue_to_memory_bytes_h,
            acc_memory_bytes_of_dvalue_base, accumulate_padding.
     eexists; split; [reflexivity |].
-    rewrite rev_append_rev, app_nil_r, rev_length, rev_loop_acc_length.
+    rewrite rev_append_rev, app_nil_r, length_rev, rev_loop_acc_length.
     cbn [List.length]; lia.
   Qed.
 

@@ -26,12 +26,13 @@ permissions:
 env:
   DUNE_CACHE: enabled
   DUNE_CACHE_STORAGE_MODE: copy
+  OCAMLRUNPARAM: "s=2M,o=80"
 
 jobs:
   rocq-verify:
     name: Build Vellvm Proofs & OCaml Extraction (Rocq 9.1)
     runs-on: ${{ vars.CERT_RUNNER || 'ubuntu-24.04' }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -71,20 +72,41 @@ jobs:
           restore-keys: |
             vellvm-dune-${{ runner.os }}-
 
-      - name: Cache compiled Vellvm .vo proof objects (exact hash key to preserve make mtimes)
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Restore compiled Vellvm core .vo proof objects
+        id: vellvm-core-vo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: vellvm/src/rocq
+          key: vellvm-core-vo-${{ runner.os }}-${{ hashFiles('vellvm/rocq-vellvm.opam', 'vellvm/src/_RocqProject', 'vellvm/src/rocq/**/*.v') }}
+
+      - name: Restore compiled CertPasses .vo proof objects
+        id: vellvm-passes-vo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: passes
+          key: vellvm-passes-vo-${{ runner.os }}-${{ hashFiles('vellvm/rocq-vellvm.opam', 'vellvm/src/_RocqProject', 'vellvm/src/rocq/**/*.v', 'passes/**/*.v') }}
+
+      - name: Restore compiled CertValidator .vo & extracted OCaml objects
+        id: vellvm-validator-vo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            vellvm/src/rocq
-            vellvm/src/ml/extracted
-            passes
             validator
-          key: vellvm-vo-${{ runner.os }}-${{ hashFiles('vellvm/rocq-vellvm.opam', 'vellvm/src/_RocqProject', 'vellvm/src/rocq/**/*.v', 'passes/**/*.v', 'validator/**/*.v', 'vellvm/src/ml/extracted/Extract.v') }}
+            vellvm/src/ml/extracted
+          key: vellvm-validator-vo-${{ runner.os }}-${{ hashFiles('vellvm/rocq-vellvm.opam', 'vellvm/src/_RocqProject', 'vellvm/src/rocq/**/*.v', 'passes/**/*.v', 'validator/**/*.v', 'vellvm/src/ml/extracted/Extract.v') }}
 
       - name: Compile Rocq 9.1 theories, extract OCaml & build libvellvm
         run: |
-          opam exec -- make -C vellvm/src rocq -k -j$(nproc)
-          opam exec -- make -C vellvm/src all -j$(nproc)
+          echo "=== [1/3] Compiling Vellvm 3.0 Core & I2F Theories (-j2) ==="
+          CORE_VOS=$(awk '/^\.\/rocq\/.*\.v$/ { sub(/^\.\//, ""); sub(/\.v$/, ".vo"); print }' vellvm/src/_RocqProject)
+          opam exec -- make -C vellvm/src RocqMakefile
+          opam exec -- make -C vellvm/src --no-print-directory -f RocqMakefile -j2 $CORE_VOS
+          free -h
+          echo "=== [2/3] Compiling CertPasses & CertValidator Proofs (-k -j2) ==="
+          opam exec -- make -C vellvm/src --no-print-directory -f RocqMakefile real-all -k -j2
+          free -h
+          echo "=== [3/3] Extracting Verified OCaml & Building Binaries (-j2) ==="
+          opam exec -- make -C vellvm/src all -j2
 
       - name: Independent Rocq kernel proof-checker gate (rocq check)
         run: cd vellvm/src && opam exec -- rocq check -o -R rocq Vellvm -R ../../passes CertPasses -R ../../validator CertValidator Vellvm.Semantics.TopLevel Vellvm.Theory.Equational CertPasses.Pipeline CertPasses.McfgExport CertPasses.ModuleMerge CertValidator.CertValidator CertValidator.CheckAssumptions
@@ -145,6 +167,29 @@ jobs:
           python3 scripts/run_forged_cert_suite.py \
             vellvm/src/_build/default/ml/bin/cert-validator \
             vellvm/src/_build/default/ml/bin/verified-opt-fallback
+
+      - name: Persist compiled Vellvm core .vo proof objects (even if downstream fails)
+        if: always() && steps.vellvm-core-vo-cache.outputs.cache-hit != 'true' && hashFiles('vellvm/src/rocq/Theory/I2F/I2F_toplevel.vo') != '' && hashFiles('vellvm/src/rocq/Theory/Equational.vo') != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: vellvm/src/rocq
+          key: ${{ steps.vellvm-core-vo-cache.outputs.cache-primary-key }}
+
+      - name: Persist compiled CertPasses .vo proof objects (even if validator fails)
+        if: always() && steps.vellvm-passes-vo-cache.outputs.cache-hit != 'true' && hashFiles('passes/ModuleMerge.vo') != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: passes
+          key: ${{ steps.vellvm-passes-vo-cache.outputs.cache-primary-key }}
+
+      - name: Persist compiled CertValidator .vo & extracted OCaml objects
+        if: always() && steps.vellvm-validator-vo-cache.outputs.cache-hit != 'true' && hashFiles('validator/CheckAssumptions.vo') != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            validator
+            vellvm/src/ml/extracted
+          key: ${{ steps.vellvm-validator-vo-cache.outputs.cache-primary-key }}
 
       - name: Persist compiled Rocq 9.1 & Vellvm opam dependencies (even if downstream fails)
         if: always() && steps.opam-deps-cache.outputs.cache-hit != 'true' && hashFiles('_opam/bin/rocq') != ''

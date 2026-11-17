@@ -10465,7 +10465,7 @@ Lemma eval_eff_loop_cond {Pa : Params} :
       (@Integers.unsigned 1 ebit =? 1)%Z = Bool.eqb (@Integers.unsigned 1 cbit =? 1)%Z pol.
 Proof.
   intros penv pol ce cbit Hev; destruct pol; cbn [eff_loop_cond].
-  - exists cbit; split; [exact Hev | rewrite Bool.eqb_true_r; reflexivity].
+  - exists cbit; split; [exact Hev | destruct (@Integers.unsigned 1 cbit =? 1)%Z; reflexivity].
   - unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev; cbn [eou_bind eval_select].
     destruct (@Integers.unsigned 1 cbit =? 1)%Z.
     + exists (@Integers.repr 1%positive (Z.of_N 0%N)); split; [reflexivity | exact bit1_repr_zero_unsigned].
@@ -13864,7 +13864,7 @@ Proof.
   - repeat split; constructor.
   - cbn [eval_args_attrs_poison args_attrs_src_ub] in Hno_ub |- *.
     apply andb_true_iff in Hpres as [Hp1 Hpr].
-    apply orb_false_elim in Hno_ub as [Hub1 Hubr].
+    apply orb_false_iff in Hno_ub as [Hub1 Hubr].
     destruct (IH ra Hpr Hubr) as (Hlen & Hty_r & Hnu_r).
     split; [cbn; f_equal; exact Hlen | split].
     + constructor; [exact (value_attrs_poison_preserves_dtyp dt a v Hp1 Hty1) | exact Hty_r].
