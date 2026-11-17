@@ -97,19 +97,54 @@ jobs:
 
       - name: Compile Rocq 9.1 theories, extract OCaml & build libvellvm
         run: |
+          run_mem_guarded() {
+            local rc=0
+            if command -v systemd-run >/dev/null 2>&1 && [ -d /run/systemd/system ] && sudo -n true >/dev/null 2>&1; then
+              local run_user run_group
+              run_user="$(id -un)"
+              run_group="$(id -gn)"
+              sudo systemd-run --scope --quiet \
+                -p MemoryHigh=11G -p MemoryMax=12500M -p MemorySwapMax=2G -- \
+                sudo -u "$run_user" -g "$run_group" \
+                env PATH="$PATH" HOME="$HOME" OPAMROOT="${OPAMROOT:-$HOME/.opam}" \
+                    OCAMLRUNPARAM="$OCAMLRUNPARAM" \
+                    DUNE_CACHE="$DUNE_CACHE" DUNE_CACHE_STORAGE_MODE="$DUNE_CACHE_STORAGE_MODE" \
+                "$@" || rc=$?
+            else
+              (ulimit -v 13107200 && exec "$@") || rc=$?
+            fi
+            if [ "$rc" -ne 0 ]; then
+              echo "::error::Build command exited with code $rc (isolated 12.5G memory scope kept runner alive)"
+              sudo -n dmesg -T 2>/dev/null | grep -i -E 'oom|killed process|memory cgroup' | tail -n 10 || true
+              return "$rc"
+            fi
+          }
           echo "=== [1/3] Compiling Vellvm 3.0 Core & I2F Theories (-j2) ==="
           CORE_VOS=$(awk '/^\.\/rocq\/.*\.v$/ { sub(/^\.\//, ""); sub(/\.v$/, ".vo"); print }' vellvm/src/_RocqProject)
-          opam exec -- make -C vellvm/src RocqMakefile
-          opam exec -- make -C vellvm/src --no-print-directory -f RocqMakefile -j2 $CORE_VOS
+          run_mem_guarded opam exec -- make -C vellvm/src RocqMakefile
+          run_mem_guarded opam exec -- make -C vellvm/src --no-print-directory -f RocqMakefile -j2 $CORE_VOS
           free -h
           echo "=== [2/3] Compiling CertPasses & CertValidator Proofs (-k -j2) ==="
-          opam exec -- make -C vellvm/src --no-print-directory -f RocqMakefile real-all -k -j2
+          run_mem_guarded opam exec -- make -C vellvm/src --no-print-directory -f RocqMakefile real-all -k -j2
           free -h
           echo "=== [3/3] Extracting Verified OCaml & Building Binaries (-j2) ==="
-          opam exec -- make -C vellvm/src all -j2
+          run_mem_guarded opam exec -- make -C vellvm/src all -j2
 
       - name: Independent Rocq kernel proof-checker gate (rocq check)
-        run: cd vellvm/src && opam exec -- rocq check -o -R rocq Vellvm -R ../../passes CertPasses -R ../../validator CertValidator Vellvm.Semantics.TopLevel Vellvm.Theory.Equational CertPasses.Pipeline CertPasses.McfgExport CertPasses.ModuleMerge CertValidator.CertValidator CertValidator.CheckAssumptions
+        run: |
+          cd vellvm/src
+          if command -v systemd-run >/dev/null 2>&1 && [ -d /run/systemd/system ] && sudo -n true >/dev/null 2>&1; then
+            sudo systemd-run --scope --quiet -p MemoryHigh=11G -p MemoryMax=12500M -p MemorySwapMax=2G -- \
+              sudo -u "$(id -un)" -g "$(id -gn)" \
+              env PATH="$PATH" HOME="$HOME" OPAMROOT="${OPAMROOT:-$HOME/.opam}" OCAMLRUNPARAM="$OCAMLRUNPARAM" \
+              opam exec -- rocq check -o -R rocq Vellvm -R ../../passes CertPasses -R ../../validator CertValidator \
+                Vellvm.Semantics.TopLevel Vellvm.Theory.Equational CertPasses.Pipeline CertPasses.McfgExport \
+                CertPasses.ModuleMerge CertValidator.CertValidator CertValidator.CheckAssumptions
+          else
+            (ulimit -v 13107200 && exec opam exec -- rocq check -o -R rocq Vellvm -R ../../passes CertPasses -R ../../validator CertValidator \
+              Vellvm.Semantics.TopLevel Vellvm.Theory.Equational CertPasses.Pipeline CertPasses.McfgExport \
+              CertPasses.ModuleMerge CertValidator.CertValidator CertValidator.CheckAssumptions)
+          fi
 
       - name: Layer-1 kernel Print Assumptions audit gate
         run: |
