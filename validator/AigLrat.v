@@ -4360,7 +4360,7 @@ Proof.
       set (ub := bools_to_Z (List.map (eval_lit asg) b_bits)) in *.
       fold k.
       destruct (Z.eqb_spec ub (Z.of_nat k)) as [Heq_ub | Hneq_ub].
-      * subst ub; rewrite Nat2Z.id.
+      * rewrite Heq_ub, Nat2Z.id.
         assert (Hcond : ((Z.of_nat k <=? Z.of_nat k)%Z && (Z.of_nat k <? Z.pos sz)%Z) = true).
         { rewrite Z.leb_refl; cbn [andb]; apply Z.ltb_lt; rewrite <- positive_nat_Z; lia. }
         rewrite Hcond; split; reflexivity.
@@ -4548,7 +4548,7 @@ Proof.
     as (asg3 & Hs3 & Hwf_p & Hev_p).
   pose proof (step_spec_trans st1 st2 st' asg1 asg2 asg3 Hs2 Hs3) as Hs13.
   pose proof (step_spec_trans st st1 st' asg asg1 asg3 Hs1 Hs13) as Hs03.
-  cbn zeta in Hspec_mux; rewrite Nat.sub_diag in Hspec_mux; cbn [Z.of_nat] in Hspec_mux.
+  cbn zeta in Hspec_mux; fold n in Hspec_mux; rewrite Nat.sub_diag in Hspec_mux; cbn [Z.of_nat] in Hspec_mux.
   set (va := eval_rail_val sz asg a).
   set (vb := eval_rail_val sz asg b).
   assert (Hub_eq : bools_to_Z (List.map (eval_lit asg) (rbv_bits b)) = @Integers.unsigned sz vb)
@@ -4752,7 +4752,7 @@ Proof.
     as (asg3 & Hs3 & Hwf_p & Hev_p).
   pose proof (step_spec_trans st1 st2 st' asg1 asg2 asg3 Hs2 Hs3) as Hs13.
   pose proof (step_spec_trans st st1 st' asg asg1 asg3 Hs1 Hs13) as Hs03.
-  cbn zeta in Hspec_mux; rewrite Nat.sub_diag in Hspec_mux; cbn [Z.of_nat] in Hspec_mux.
+  cbn zeta in Hspec_mux; fold n in Hspec_mux; rewrite Nat.sub_diag in Hspec_mux; cbn [Z.of_nat] in Hspec_mux.
   set (va := eval_rail_val sz asg a); set (vb := eval_rail_val sz asg b).
   assert (Hub_eq : bools_to_Z (List.map (eval_lit asg) (rbv_bits b)) = @Integers.unsigned sz vb)
     by (symmetry; exact (unsigned_eval_rail_val sz asg b Hlb)).
@@ -4915,7 +4915,7 @@ Proof.
     as (asg3 & Hs3 & Hwf_p & Hev_p).
   pose proof (step_spec_trans st1 st2 st' asg1 asg2 asg3 Hs2 Hs3) as Hs13.
   pose proof (step_spec_trans st st1 st' asg asg1 asg3 Hs1 Hs13) as Hs03.
-  cbn zeta in Hspec_mux; rewrite Nat.sub_diag in Hspec_mux; cbn [Z.of_nat] in Hspec_mux.
+  cbn zeta in Hspec_mux; fold n in Hspec_mux; rewrite Nat.sub_diag in Hspec_mux; cbn [Z.of_nat] in Hspec_mux.
   set (va := eval_rail_val sz asg a); set (vb := eval_rail_val sz asg b).
   assert (Hub_eq : bools_to_Z (List.map (eval_lit asg) (rbv_bits b)) = @Integers.unsigned sz vb)
     by (symmetry; exact (unsigned_eval_rail_val sz asg b Hlb)).

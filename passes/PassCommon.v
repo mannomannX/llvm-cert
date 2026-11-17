@@ -1552,26 +1552,31 @@ Section ModelSemantics.
     apply memM_wf_prov_bind; [apply memM_wf_prov_lift | intros ptrs; apply memM_wf_prov_ret].
   Qed.
 
+  Local Lemma add_block_wf_prov (aid : allocationId) (p : ptr) (ptrs : list ptr) (init_bytes : list memory_byte) :
+    memM_wf_prov (add_block aid p ptrs init_bytes).
+  Proof using.
+    unfold add_block; cbn zeta.
+    apply memM_wf_prov_bind; [intros σ; exact I | intros m0 σ; exact (conj Logic.eq_refl I)].
+  Qed.
+
   Local Lemma Allocate_bytes_with_pr_wf_prov (init_bytes : list memory_byte) (align : N) (pr : provenance) :
     memM_wf_prov (Allocate_bytes_with_pr init_bytes align pr).
   Proof using.
-    unfold Allocate_bytes_with_pr, add_block_to_stack, add_block, add_ptrs_to_frame; cbn zeta.
+    unfold Allocate_bytes_with_pr; cbn zeta.
     apply memM_wf_prov_bind; [apply get_free_block_wf_prov | intros [p ptrs]].
-    apply memM_wf_prov_bind.
-    - apply memM_wf_prov_bind; [intros σ; exact I | intros m0 σ; exact (conj Logic.eq_refl I)].
-    - intros u0; apply memM_wf_prov_bind;
-        [intros σ; exact (conj Logic.eq_refl I) | intros u1; apply memM_wf_prov_ret].
+    apply memM_wf_prov_bind; [| intros u0; apply memM_wf_prov_ret].
+    unfold add_block_to_stack, add_ptrs_to_frame.
+    apply memM_wf_prov_bind; [apply add_block_wf_prov | intros u0 σ; exact (conj Logic.eq_refl I)].
   Qed.
 
   Local Lemma Malloc_bytes_with_pr_wf_prov (init_bytes : list memory_byte) (align : N) (pr : provenance) :
     memM_wf_prov (Malloc_bytes_with_pr init_bytes align pr).
   Proof using.
-    unfold Malloc_bytes_with_pr, add_block_to_heap, add_block, add_ptrs_to_heap; cbn zeta.
+    unfold Malloc_bytes_with_pr; cbn zeta.
     apply memM_wf_prov_bind; [apply get_free_block_wf_prov | intros [p ptrs]].
-    apply memM_wf_prov_bind.
-    - apply memM_wf_prov_bind; [intros σ; exact I | intros m0 σ; exact (conj Logic.eq_refl I)].
-    - intros u0; apply memM_wf_prov_bind;
-        [intros σ; exact (conj Logic.eq_refl I) | intros u1; apply memM_wf_prov_ret].
+    apply memM_wf_prov_bind; [| intros u0; apply memM_wf_prov_ret].
+    unfold add_block_to_heap, add_ptrs_to_heap.
+    apply memM_wf_prov_bind; [apply add_block_wf_prov | intros u0 σ; exact (conj Logic.eq_refl I)].
   Qed.
 
   Local Lemma Mempop_wf_prov :
