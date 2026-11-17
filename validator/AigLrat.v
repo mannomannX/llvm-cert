@@ -3046,7 +3046,7 @@ Proof.
   intros s bs; induction bs as [| b rest IH]; cbn [existsb List.repeat List.length].
   - split; intros _; reflexivity.
   - rewrite orb_false_iff, xorb_false_iff, IH; split.
-    + intros [<- ->]; reflexivity.
+    + intros [<- H]; f_equal; exact H.
     + intros Heq; injection Heq as <- Heqr; split; [reflexivity | exact Heqr].
 Qed.
 

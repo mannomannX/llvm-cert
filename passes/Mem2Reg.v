@@ -2602,8 +2602,8 @@ Section MemoryAndSerialization.
     (U : list N) (k1 : N -> itree ProvBotE R1) (k2 : N -> itree ProvBotE R2) :
     (forall p : N, ~ In p U -> refine_prov RR (p :: U) (k1 p) (k2 p)) ->
     refine_prov RR U
-      (ITree.bind (ITree.trigger FreshProv) k1)
-      (ITree.bind (ITree.trigger FreshProv) k2).
+      (ITree.bind (ITree.trigger (inl1 FreshProv)) k1)
+      (ITree.bind (ITree.trigger (inl1 FreshProv)) k2).
   Proof using.
     intros Hk.
     eapply refine_prov_obs_eq;
@@ -2614,7 +2614,7 @@ Section MemoryAndSerialization.
   Lemma refine_prov_trigger_fresh_l {R1 R2} (RR : list N -> R1 -> R2 -> Prop)
     (U : list N) (k1 : N -> itree ProvBotE R1) (t2 : itree ProvBotE R2) :
     (forall p : N, ~ In p U -> refine_prov RR (p :: U) (k1 p) t2) ->
-    refine_prov RR U (ITree.bind (ITree.trigger FreshProv) k1) t2.
+    refine_prov RR U (ITree.bind (ITree.trigger (inl1 FreshProv)) k1) t2.
   Proof using.
     intros Hk.
     eapply refine_prov_obs_eq; [symmetry; apply bind_trigger | reflexivity |].
