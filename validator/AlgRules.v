@@ -726,7 +726,7 @@ Proof.
   - destruct (expand_let_binds_fueled expand_lets_fueled_with ms bs fuel)
       as [[ms' f1] |] eqn:Ebs; [| discriminate Hexp].
     assert (Hbs_eq : strip_let_sizes ms' = expand_let_binds expand_lets_with (strip_let_sizes ms) bs).
-    { revert ms fuel ms' f1 Ebs; induction IHbs as [| [bnm be] rest Hbe _ IHrest];
+    { clear Hexp; revert ms fuel ms' f1 Ebs; induction IHbs as [| [bnm be] rest Hbe _ IHrest];
         intros cur_ms f ms_out f_out Ebs; cbn in Ebs |- *.
       - inversion Ebs; reflexivity.
       - destruct (expand_lets_fueled_with cur_ms be f) as [[[ebe bsz] f_mid] |] eqn:Ebe;
@@ -1297,21 +1297,21 @@ Proof.
     destruct (wf_let_binds_step wt_cert_expr let_widths [] bs) as [env' |] eqn:Hbs;
       [| discriminate].
     assert (Hstep :
-      forall xs cur_lw seen cur_le,
-        wf_let_binds_step wt_cert_expr cur_lw seen xs = Some env' ->
+      forall cur_lw seen cur_le,
+        wf_let_binds_step wt_cert_expr cur_lw seen bs = Some env' ->
         wf_let_val_env cur_lw cur_le ->
         wf_param_env_for
-          (let '(b', vs_xs) := collect_bind_vars collect_free_vars (List.map fst cur_lw) xs in
+          (let '(b', vs_xs) := collect_bind_vars collect_free_vars (List.map fst cur_lw) bs in
            vs_xs ++ collect_free_vars b' body) penv ->
         (exists msg,
-           eval_let_binds (fun ce x => eval_cert_expr penv ce foracle x) cur_le xs =
+           eval_let_binds (fun ce x => eval_cert_expr penv ce foracle x) cur_le bs =
            raise_ub msg) \/
         (exists lenv',
-           eval_let_binds (fun ce x => eval_cert_expr penv ce foracle x) cur_le xs =
+           eval_let_binds (fun ce x => eval_cert_expr penv ce foracle x) cur_le bs =
            raise_ret lenv' /\
            wf_let_val_env env' lenv' /\
            wf_param_env_for (collect_free_vars (List.map fst env') body) penv)).
-    { induction IHbs as [| [bnm be] rx IHbe _ IHrx];
+    { clear Hbs Hpenv; induction IHbs as [| [bnm be] rx IHbe _ IHrx];
         intros cur_lw seen cur_le Hs Hcle Hcp; cbn in Hs.
       - inversion Hs; subst cur_lw; cbn in Hcp.
         right; exists cur_le; repeat split; assumption.
@@ -1334,7 +1334,7 @@ Proof.
           destruct (String.eqb bnm q); [exact Hwf_dv | exact (Hcle q)].
         + cbn [List.map fst]; rewrite Hbv.
           intros x wx Hx; apply Hcp; rewrite <- app_assoc; apply in_app_iff; right; exact Hx. }
-    destruct (Hstep bs let_widths [] lenv Hbs Hlenv Hpenv)
+    destruct (Hstep let_widths [] lenv Hbs Hlenv Hpenv)
       as [[msg ->] | [lenv' [-> [Hlenv' Hpenv']]]];
       [left; exists msg; reflexivity | cbn [eou_bind]].
     exact (IHb env' penv lenv' foracle Hwt Hlenv' Hpenv').
@@ -1607,11 +1607,11 @@ Proof.
     destruct (wf_let_binds_step wt_cert_expr let_widths [] bs) as [env' |] eqn:Hbs;
       [| discriminate].
     assert (Hstep :
-      forall xs cur_lw seen cur_le s,
-        ub_free_let_binds ub_free_expr xs = true ->
-        wf_let_binds_step wt_cert_expr cur_lw seen xs = Some env' ->
-        eval_let_binds (fun ce x => eval_cert_expr penv ce foracle x) cur_le xs <> raise_ub s).
-    { induction IHbs as [| [bnm be] rx IHbe _ IHrx];
+      forall cur_lw seen cur_le s,
+        ub_free_let_binds ub_free_expr bs = true ->
+        wf_let_binds_step wt_cert_expr cur_lw seen bs = Some env' ->
+        eval_let_binds (fun ce x => eval_cert_expr penv ce foracle x) cur_le bs <> raise_ub s).
+    { clear Hub_bs Hbs Hev; induction IHbs as [| [bnm be] rx IHbe _ IHrx];
         intros cur_lw seen cur_le s Hub_xs Hs Hev_xs; cbn in *.
       - discriminate Hev_xs.
       - apply andb_true_iff in Hub_xs as [Hub_be Hub_rx].
@@ -1624,7 +1624,7 @@ Proof.
         + exact (IHrx _ _ _ s Hub_rx Hs Hev_xs). }
     destruct (eval_let_binds (fun ce x => eval_cert_expr penv ce foracle x) lenv bs)
       as [| s | | lenv'] eqn:Ebs; cbn [eou_bind] in Hev; try discriminate.
-    + inversion Hev; subst s; exact (Hstep bs let_widths [] lenv msg Hub_bs Hbs Ebs).
+    + inversion Hev; subst s; exact (Hstep let_widths [] lenv msg Hub_bs Hbs Ebs).
     + exact (IHb env' penv lenv' foracle msg Hub_body Hwt Hev).
 Qed.
 
@@ -1808,11 +1808,11 @@ Proof.
   - cbn [wt_cert_expr expand_lets_with cert_expr_bit_width] in *.
     destruct (wf_let_binds_step wt_cert_expr lw [] bs) as [env' |] eqn:Hbs; [| discriminate].
     assert (Hstep :
-      forall xs cur_lw seen cur_m,
-        wf_let_binds_step wt_cert_expr cur_lw seen xs = Some env' ->
+      forall cur_lw seen cur_m,
+        wf_let_binds_step wt_cert_expr cur_lw seen bs = Some env' ->
         wf_let_subst cur_lw cur_m ->
-        wf_let_subst env' (expand_let_binds expand_lets_with cur_m xs)).
-    { induction IHbs as [| [bnm be] rx IHbe _ IHrx];
+        wf_let_subst env' (expand_let_binds expand_lets_with cur_m bs)).
+    { clear Hbs; induction IHbs as [| [bnm be] rx IHbe _ IHrx];
         intros cur_lw seen cur_m Hs Hcs; cbn in *.
       - inversion Hs; subst cur_lw; exact Hcs.
       - destruct (is_dollar_let_name bnm && negb (string_in_list bnm seen) &&
@@ -1825,7 +1825,7 @@ Proof.
         intros q; cbn [lookup_let_width lookup_let_expr].
         destruct (String.eqb bnm q); [repeat split; assumption | exact (Hcl q)]. }
     exact (IHb env' (expand_let_binds expand_lets_with m bs)
-               Hwt (Hstep bs lw [] m Hbs (conj Hdom Hsub))).
+               Hwt (Hstep lw [] m Hbs (conj Hdom Hsub))).
 Qed.
 
 Lemma lookup_let_expr_in : forall m nm ce,
@@ -1869,19 +1869,19 @@ Proof.
   - cbn [ub_free_expr]; exact (IHo m Hm Hub).
   - apply andb_true_iff in Hub as [Hbs Hbody].
     assert (Hstep :
-      forall xs cur_m,
+      forall cur_m,
         (forall k ce, In (k, ce) cur_m -> ub_free_expr ce = true) ->
-        ub_free_let_binds ub_free_expr xs = true ->
-        forall k ce, In (k, ce) (expand_let_binds expand_lets_with cur_m xs) ->
+        ub_free_let_binds ub_free_expr bs = true ->
+        forall k ce, In (k, ce) (expand_let_binds expand_lets_with cur_m bs) ->
                      ub_free_expr ce = true).
-    { induction IHbs as [| [bnm be] rx IHbe _ IHrx];
+    { clear Hbs; induction IHbs as [| [bnm be] rx IHbe _ IHrx];
         intros cur_m Hcm Hxs; cbn in Hxs |- *.
       - exact Hcm.
       - apply andb_true_iff in Hxs as [Hbe Hrx].
         pose proof (IHbe cur_m Hcm Hbe) as Hub_exp.
         apply IHrx; [| exact Hrx].
         intros k ce [Heq | Hin]; [inversion Heq; subst; exact Hub_exp | exact (Hcm k ce Hin)]. }
-    exact (IHb (expand_let_binds expand_lets_with m bs) (Hstep bs m Hm Hbs) Hbody).
+    exact (IHb (expand_let_binds expand_lets_with m bs) (Hstep m Hm Hbs) Hbody).
 Qed.
 
 Lemma ub_free_expr_wf_let_dag :
@@ -1913,13 +1913,13 @@ Proof.
   - exact (IHo m Hm Hub).
   - apply andb_true_iff in Hub as [Hbs Hbody].
     assert (Hstep :
-      forall exp_body xs cur_m,
+      forall exp_body cur_m,
         (forall k ce, In (k, ce) cur_m -> ub_free_expr ce = true) ->
-        ub_free_let_binds ub_free_expr xs = true ->
-        wf_let_dag_binds wf_let_dag exp_body cur_m xs = true /\
-        (forall k ce, In (k, ce) (expand_let_binds expand_lets_with cur_m xs) ->
+        ub_free_let_binds ub_free_expr bs = true ->
+        wf_let_dag_binds wf_let_dag exp_body cur_m bs = true /\
+        (forall k ce, In (k, ce) (expand_let_binds expand_lets_with cur_m bs) ->
                       ub_free_expr ce = true)).
-    { intros exp_body; induction IHbs as [| [bnm be] rx IHbe _ IHrx];
+    { clear Hbs; intros exp_body; induction IHbs as [| [bnm be] rx IHbe _ IHrx];
         intros cur_m Hcm Hxs; cbn in Hxs |- *.
       - split; [reflexivity | exact Hcm].
       - apply andb_true_iff in Hxs as [Hbe Hrx].
@@ -1932,7 +1932,7 @@ Proof.
         destruct (IHrx _ Hcm' Hrx) as [Hwf_rx Hcm_end].
         split; [rewrite Hwf_be, Hub_exp, Hwf_rx; reflexivity | exact Hcm_end]. }
     destruct (Hstep (expand_lets_with (expand_let_binds expand_lets_with m bs) body)
-                    bs m Hm Hbs) as [Hwf_bs Hm'].
+                    m Hm Hbs) as [Hwf_bs Hm'].
     rewrite Hwf_bs, (IHb _ Hm' Hbody); reflexivity.
 Qed.
 
@@ -2056,10 +2056,11 @@ Proof.
     set (exp_b := expand_lets_with (expand_let_binds expand_lets_with (strip_let_sizes ms) bs) body)
       in Ewbs |- *.
     assert (Hstep :
-      forall xs cur_ms f_in f_out,
-        wf_let_dag_binds_fueled wf_let_dag_fueled_with exp_b cur_ms xs f_in = Some f_out ->
-        wf_let_dag_binds wf_let_dag exp_b (strip_let_sizes cur_ms) xs = true).
-    { induction IHbs as [| [bnm be] rx IHbe _ IHrx];
+      forall cur_ms f_in f_out,
+        wf_let_dag_binds_fueled wf_let_dag_fueled_with exp_b cur_ms bs f_in = Some f_out ->
+        wf_let_dag_binds wf_let_dag exp_b (strip_let_sizes cur_ms) bs = true).
+    { clearbody exp_b; clear Ebs Ewbs Hms';
+      induction IHbs as [| [bnm be] rx IHbe _ IHrx];
         intros cur_ms f_in f_out H; cbn in H |- *.
       - reflexivity.
       - destruct (wf_let_dag_fueled_with cur_ms be f_in) as [fa |] eqn:Ebe1; [| discriminate H].
@@ -2072,7 +2073,7 @@ Proof.
         rewrite (IHbe _ _ _ Ebe1), Esub,
                 (IHrx ((bnm, (expand_lets_with (strip_let_sizes cur_ms) be, bsz)) :: cur_ms) _ _ H).
         reflexivity. }
-    rewrite (Hstep bs ms f2 f3 Ewbs), <- Hms', (IHb ms' f3 fuel' Hwf); reflexivity.
+    rewrite (Hstep ms f2 f3 Ewbs), <- Hms', (IHb ms' f3 fuel' Hwf); reflexivity.
 Qed.
 
 Lemma wf_let_dag_fueled_sound :
@@ -2144,14 +2145,14 @@ Proof.
     + apply (IHf m V Hm); intros x Hx; apply He, in_app_iff; right; apply in_app_iff; right; exact Hx.
   - exact (IHo m V Hm He).
   - assert (Hstep :
-      forall xs cur_m,
+      forall cur_m,
         (forall k ce, In (k, ce) cur_m -> incl (collect_free_vars [] ce) V) ->
-        incl (let '(b', vs_xs) := collect_bind_vars collect_free_vars (List.map fst cur_m) xs in
+        incl (let '(b', vs_xs) := collect_bind_vars collect_free_vars (List.map fst cur_m) bs in
               vs_xs ++ collect_free_vars b' body) V ->
-        (forall k ce, In (k, ce) (expand_let_binds expand_lets_with cur_m xs) ->
+        (forall k ce, In (k, ce) (expand_let_binds expand_lets_with cur_m bs) ->
                       incl (collect_free_vars [] ce) V) /\
-        incl (collect_free_vars (List.map fst (expand_let_binds expand_lets_with cur_m xs)) body) V).
-    { induction IHbs as [| [bnm be] rx IHbe _ IHrx];
+        incl (collect_free_vars (List.map fst (expand_let_binds expand_lets_with cur_m bs)) body) V).
+    { clear He; induction IHbs as [| [bnm be] rx IHbe _ IHrx];
         intros cur_m Hcm Hce; cbn in *.
       - split; assumption.
       - destruct (collect_bind_vars collect_free_vars (bnm :: List.map fst cur_m) rx)
@@ -2167,7 +2168,7 @@ Proof.
     assert (He' : incl (let '(b0, vs0) := collect_bind_vars collect_free_vars (List.map fst m) bs in
                         vs0 ++ collect_free_vars b0 body) V)
       by (rewrite Hbv; exact He).
-    destruct (Hstep bs m Hm He') as [Hm' Hbody'].
+    destruct (Hstep m Hm He') as [Hm' Hbody'].
     exact (IHb (expand_let_binds expand_lets_with m bs) V Hm' Hbody').
 Qed.
 
@@ -2351,22 +2352,23 @@ Proof.
           destruct (String.eqb bnm q); [repeat split; assumption | exact (Hcl q)]. }
       exact (proj1 (proj2 (expand_lets_with_typing body env' _ Hwt (Hg bs lw [] (let_val_exprs lenv) Hbs Hsub)))). }
     assert (Hstep :
-      forall xs cur_lw seen cur_le,
-        wf_let_binds_step wt_cert_expr cur_lw seen xs = Some env' ->
-        wf_let_dag_binds wf_let_dag exp_body (let_val_exprs cur_le) xs = true ->
+      forall cur_lw seen cur_le,
+        wf_let_binds_step wt_cert_expr cur_lw seen bs = Some env' ->
+        wf_let_dag_binds wf_let_dag exp_body (let_val_exprs cur_le) bs = true ->
         wf_let_eval_sync penv foracle cur_lw cur_le ->
         wf_param_env_for
-          (let '(b', vs_xs) := collect_bind_vars collect_free_vars (List.map fst cur_lw) xs in
+          (let '(b', vs_xs) := collect_bind_vars collect_free_vars (List.map fst cur_lw) bs in
            vs_xs ++ collect_free_vars b' body) penv ->
         (exists msg_l msg_r,
-           eval_let_binds (fun ce x => eval_cert_expr penv ce foracle x) cur_le xs = raise_ub msg_l /\
+           eval_let_binds (fun ce x => eval_cert_expr penv ce foracle x) cur_le bs = raise_ub msg_l /\
            eval_cert_expr penv [] foracle exp_body = raise_ub msg_r) \/
         (exists lenv',
-           eval_let_binds (fun ce x => eval_cert_expr penv ce foracle x) cur_le xs = raise_ret lenv' /\
-           let_val_exprs lenv' = expand_let_binds expand_lets_with (let_val_exprs cur_le) xs /\
+           eval_let_binds (fun ce x => eval_cert_expr penv ce foracle x) cur_le bs = raise_ret lenv' /\
+           let_val_exprs lenv' = expand_let_binds expand_lets_with (let_val_exprs cur_le) bs /\
            wf_let_eval_sync penv foracle env' lenv' /\
            wf_param_env_for (collect_free_vars (List.map fst env') body) penv)).
-    { induction IHbs as [| [bnm be] rx IHbe _ IHrx];
+    { fold exp_body in Hpenv_exp_body; clearbody exp_body; clear Hbs Hdag_bs Hdag_body Hpenv;
+      induction IHbs as [| [bnm be] rx IHbe _ IHrx];
         intros cur_lw seen cur_le Hs Hd Hsy Hcp; cbn in Hs, Hd.
       - inversion Hs; subst cur_lw; cbn in Hcp.
         right; exists cur_le; repeat split; try assumption; reflexivity.
@@ -2423,7 +2425,7 @@ Proof.
                ++ exact (Hfv_c k ce Hin_k).
           * cbn [List.map fst]; rewrite Hbv.
             intros x wx Hx; apply Hcp; rewrite <- app_assoc; apply in_app_iff; right; exact Hx. }
-    destruct (Hstep bs lw [] lenv Hbs Hdag_bs Hsync Hpenv)
+    destruct (Hstep lw [] lenv Hbs Hdag_bs Hsync Hpenv)
       as [[msg_l [msg_r [-> ->]]] | [lenv' [-> [Hle_exprs [Hsync' Hpenv']]]]].
     + cbn; exact I.
     + cbn [eou_bind]; unfold exp_body; rewrite <- Hle_exprs.
@@ -9423,25 +9425,25 @@ Proof.
                               lr ms_opt bs env)
       as [[[lr' ms_opt'] env_b] |] eqn:Ebs; [| discriminate Hbl].
     assert (Hstep_bs :
-      forall xs cur_lw seen cur_lr cur_ms cur_le cur_asg cur_env,
-        wf_let_binds_step wt_cert_expr cur_lw seen xs = Some lw' ->
+      forall cur_lw seen cur_lr cur_ms cur_le cur_asg cur_env,
+        wf_let_binds_step wt_cert_expr cur_lw seen bs = Some lw' ->
         blast_let_binds (fun lr0 ms0 x env0 => blast_cert_expr ctx lr0 ms0 x env0)
-                        cur_lr cur_ms xs cur_env = Some (lr', ms_opt', env_b) ->
+                        cur_lr cur_ms bs cur_env = Some (lr', ms_opt', env_b) ->
         wf_let_rails_sync cur_asg (bs_next_var (be_st cur_env)) cur_lw cur_le cur_lr ->
         wf_ms_sync cur_le cur_ms ->
         wf_param_env_for
-          (let '(b', vs_xs) := collect_bind_vars collect_free_vars (List.map fst cur_lw) xs in
+          (let '(b', vs_xs) := collect_bind_vars collect_free_vars (List.map fst cur_lw) bs in
            vs_xs ++ collect_free_vars b' body) penv ->
         sat_blast_env penv foracle cur_asg cur_env ->
         exists asg_b lenv',
-          eval_let_binds (fun ce x => eval_cert_expr penv ce foracle x) cur_le xs =
+          eval_let_binds (fun ce x => eval_cert_expr penv ce foracle x) cur_le bs =
             raise_ret lenv' /\
           step_spec (be_st cur_env) (be_st env_b) cur_asg asg_b /\
           sat_blast_env penv foracle asg_b env_b /\
           wf_let_rails_sync asg_b (bs_next_var (be_st env_b)) lw' lenv' lr' /\
           wf_ms_sync lenv' ms_opt' /\
           wf_param_env_for (collect_free_vars (List.map fst lw') body) penv).
-    { induction IHbs as [| [bnm be] rx IHbe _ IHrx];
+    { clear Hbl Elw Ebs Hpenv; induction IHbs as [| [bnm be] rx IHbe _ IHrx];
         intros cur_lw seen cur_lr cur_ms cur_le cur_asg cur_env
                Hlw_xs Hbl_xs Hsync_c Hms_c Hpenv_c Henv_c;
         cbn in Hlw_xs, Hbl_xs.
@@ -9515,7 +9517,7 @@ Proof.
         split; [cbn [eval_let_binds]; rewrite Ev_be; cbn [eou_bind]; exact Ev_rx |
         split; [exact (step_spec_trans _ _ _ _ _ _ Hs1 Hs_rx) |
         split; [exact Henv_b | split; [exact Hsync_b | split; [exact Hms_b | exact Hp_body]]]]]. }
-    destruct (Hstep_bs bs lw [] lr ms_opt lenv asg env Elw Ebs Hsync Hms Hpenv Henv)
+    destruct (Hstep_bs lw [] lr ms_opt lenv asg env Elw Ebs Hsync Hms Hpenv Henv)
       as (asg_b & lenv' & Ev_bs & Hs_bs & Henv_b & Hsync_b & Hms_b & Hp_body).
     destruct (IHb ctx lw' lr' ms_opt' penv lenv' foracle asg_b env_b env' out
                 Hbl Hwt Hsync_b Hms_b Hp_body Hctx Henv_b)

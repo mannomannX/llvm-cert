@@ -2174,7 +2174,9 @@ Section ModelSemantics.
   Qed.
 
   Lemma eqitF_inv_Ret_l {E : Type -> Type} {R1 R2 : Type}
-    {RR : R1 -> R2 -> Prop} {vsim sim : itree E R1 -> itree E R2 -> Prop}
+    {RR : R1 -> R2 -> Prop}
+    {vsim : (itree E R1 -> itree E R2 -> Prop) -> itree E R1 -> itree E R2 -> Prop}
+    {sim : itree E R1 -> itree E R2 -> Prop}
     (r1 : R1) (ot2 : itree' E R2) :
     eqitF RR false false vsim sim (RetF r1) ot2 ->
     exists r2 : R2, ot2 = RetF r2 /\ RR r1 r2.
@@ -2191,7 +2193,9 @@ Section ModelSemantics.
   Qed.
 
   Lemma eqitF_inv_Tau_l {E : Type -> Type} {R1 R2 : Type}
-    {RR : R1 -> R2 -> Prop} {vsim sim : itree E R1 -> itree E R2 -> Prop}
+    {RR : R1 -> R2 -> Prop}
+    {vsim : (itree E R1 -> itree E R2 -> Prop) -> itree E R1 -> itree E R2 -> Prop}
+    {sim : itree E R1 -> itree E R2 -> Prop}
     (m1 : itree E R1) (ot2 : itree' E R2) :
     eqitF RR false false vsim sim (TauF m1) ot2 ->
     exists m2 : itree E R2, ot2 = TauF m2 /\ sim m1 m2.
@@ -2208,17 +2212,18 @@ Section ModelSemantics.
   Qed.
 
   Lemma eqitF_inv_Vis_l {E : Type -> Type} {R1 R2 : Type}
-    {RR : R1 -> R2 -> Prop} {vsim sim : itree E R1 -> itree E R2 -> Prop}
+    {RR : R1 -> R2 -> Prop}
+    {sim : itree E R1 -> itree E R2 -> Prop}
     {X : Type} (e : E X) (k1 : X -> itree E R1) (ot2 : itree' E R2) :
-    eqitF RR false false vsim sim (VisF e k1) ot2 ->
+    eqitF RR false false id sim (VisF e k1) ot2 ->
     exists k2 : X -> itree E R2,
-      ot2 = VisF e k2 /\ forall x : X, vsim (k1 x) (k2 x).
+      ot2 = VisF e k2 /\ forall x : X, sim (k1 x) (k2 x).
   Proof using.
     intros H.
     change (match VisF e k1 : itree' E R1 with
             | VisF Y e1 h1 =>
                 exists k2 : Y -> itree E R2,
-                  ot2 = VisF e1 k2 /\ forall x : Y, vsim (h1 x) (k2 x)
+                  ot2 = VisF e1 k2 /\ forall x : Y, sim (h1 x) (k2 x)
             | _ => True
             end).
     generalize (VisF e k1 : itree' E R1) H; clear H; intros ot1 H.
