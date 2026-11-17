@@ -213,17 +213,16 @@ Qed.
 Lemma repr_all_ones_N : forall (sz : positive),
   @Integers.repr sz (Z.of_N (all_ones_N sz)) = @Integers.mone sz.
 Proof.
-  intros sz; unfold all_ones_N, Integers.mone.
+  intros sz; unfold all_ones_N.
   assert (Hpos : (0 <= Z.ones (Z.pos sz))%Z).
   { rewrite Z.ones_equiv.
     assert (Hp : (0 < 2 ^ Z.pos sz)%Z) by (apply Z.pow_pos_nonneg; lia).
     lia. }
   rewrite (Z2N.id _ Hpos).
   apply @Integers.same_bits_eq; intros i Hi.
-  rewrite !@Integers.testbit_repr by exact Hi.
+  rewrite (@Integers.testbit_repr sz _ i Hi), (@Integers.bits_mone sz i Hi).
   unfold Integers.zwordsize in Hi.
-  rewrite (Z.ones_spec_low (Z.pos sz) i Hi), (Z.bits_m1 i (proj1 Hi)).
-  reflexivity.
+  exact (Z.ones_spec_low (Z.pos sz) i Hi).
 Qed.
 
 Definition is_zero_const_expr (w : positive) (e : cert_expr) : bool :=

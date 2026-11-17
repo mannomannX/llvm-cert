@@ -4870,26 +4870,32 @@ Section ValueDrawRefinement.
       intros t1' t2' E1 E2.
     - punfold E1; red in E1; punfold E2; red in E2.
       apply RPD_Step; unfold rpd_step_body in *.
-      destruct E1 as [r1 r1' <- | m1 m1' Hm1 | X1 e1 k1 k1' Hk1]; pclearbot.
-      + destruct E2 as [r2 r2' <- | |]; try contradiction; exact Hstep.
-      + destruct E2 as [| m2 m2' Hm2 |]; try contradiction; pclearbot.
+      destruct E1 as [r1 r1' <- | m1 m1' Hm1 | X1 e1 k1 k1' Hk1 | ? ? Hchk _ | ? ? Hchk _];
+        try inversion Hchk; pclearbot.
+      + destruct E2 as [r2 r2' <- | | | ? ? Hchk _ | ? ? Hchk _];
+          try inversion Hchk; try contradiction; exact Hstep.
+      + destruct E2 as [| m2 m2' Hm2 | | ? ? Hchk _ | ? ? Hchk _];
+          try inversion Hchk; try contradiction; pclearbot.
         eapply Hr_eq; [exact Hm1 | exact Hm2 | exact Hstep].
       + destruct Hstep as [Hub | [Hleft | Hboth]].
         * left; exact Hub.
         * right; left; destruct e1 as [d1 | [p1 | b1]]; try contradiction; destruct p1.
           intros p Hp; eapply Hr_eq; [apply Hk1 | pstep; exact E2 | exact (Hleft p Hp)].
         * right; right.
-          destruct E2 as [| | X2 e2 k2 k2' Hk2]; try contradiction; pclearbot.
+          destruct E2 as [| | X2 e2 k2 k2' Hk2 | ? ? Hchk _ | ? ? Hchk _];
+            try inversion Hchk; try contradiction; pclearbot.
           destruct e1 as [d1 | [p1 | b1]], e2 as [d2 | [p2 | b2]]; cbn in *; try contradiction.
           -- destruct d1 as [dt1], d2 as [dt2]; destruct Hboth as [Hdt Hk]; split; [exact Hdt |].
              intros v Hv; eapply Hr_eq; [apply Hk1 | apply Hk2 | exact (Hk v Hv)].
           -- destruct p1, p2; intros p Hp; eapply Hr_eq; [apply Hk1 | apply Hk2 | exact (Hboth p Hp)].
           -- destruct Hboth as [HE HA]; split; [exact HE |].
              intros a1 a2 Ha; eapply Hr_eq; [apply Hk1 | apply Hk2 | exact (HA a1 a2 Ha)].
-    - punfold E1; red in E1; rewrite Ht1 in E1; inversion E1 as [| m1_ m1' Hm1 E1a E1b |]; subst; pclearbot.
-      eapply RPD_TauL; [symmetry; exact E1b | eapply IH; [exact Hm1 | exact E2]].
-    - punfold E2; red in E2; rewrite Ht2 in E2; inversion E2 as [| m2_ m2' Hm2 E2a E2b |]; subst; pclearbot.
-      eapply RPD_TauR; [symmetry; exact E2b | eapply IH; [exact E1 | exact Hm2]].
+    - punfold E1; red in E1; rewrite Ht1 in E1;
+        apply eqitF_inv_Tau_l in E1 as (m1' & E1b & Hm1); pclearbot.
+      eapply RPD_TauL; [exact E1b | eapply IH; [exact Hm1 | exact E2]].
+    - punfold E2; red in E2; rewrite Ht2 in E2;
+        apply eqitF_inv_Tau_l in E2 as (m2' & E2b & Hm2); pclearbot.
+      eapply RPD_TauR; [exact E2b | eapply IH; [exact E1 | exact Hm2]].
     - eapply RPD_DrawL;
         [symmetry; etransitivity; [symmetry; exact Ht1 | exact E1]
         | exact Hv
@@ -5300,12 +5306,16 @@ Section ValueDrawRefinement.
         intros t1' t2' E1 E2.
       - punfold E1; red in E1; punfold E2; red in E2.
         apply VDS_Step; unfold vds_step_body in *.
-        destruct E1 as [r1 r1' <- | m1 m1' Hm1 | X1 e1 k1 k1' Hk1]; pclearbot.
-        + destruct E2 as [r2 r2' <- | |]; try contradiction; exact Hstep.
-        + destruct E2 as [| m2 m2' Hm2 |]; try contradiction; pclearbot.
+        destruct E1 as [r1 r1' <- | m1 m1' Hm1 | X1 e1 k1 k1' Hk1 | ? ? Hchk _ | ? ? Hchk _];
+          try inversion Hchk; pclearbot.
+        + destruct E2 as [r2 r2' <- | | | ? ? Hchk _ | ? ? Hchk _];
+            try inversion Hchk; try contradiction; exact Hstep.
+        + destruct E2 as [| m2 m2' Hm2 | | ? ? Hchk _ | ? ? Hchk _];
+            try inversion Hchk; try contradiction; pclearbot.
           eapply Hr_eq; [exact Hm1 | exact Hm2 | exact Hstep].
         + destruct Hstep as [Hub | Hvis]; [left; exact Hub | right].
-          destruct E2 as [| | X2 e2 k2 k2' Hk2]; try contradiction; pclearbot.
+          destruct E2 as [| | X2 e2 k2 k2' Hk2 | ? ? Hchk _ | ? ? Hchk _];
+            try inversion Hchk; try contradiction; pclearbot.
           destruct Hvis as [(Hsync & HE & HA) | [Hloc | Hstk]].
           * left; split; [exact Hsync | split; [exact HE |]].
             intros a1 a2 Ha Hp; eapply Hr_eq; [apply Hk1 | apply Hk2 | exact (HA a1 a2 Ha Hp)].
@@ -5320,10 +5330,12 @@ Section ValueDrawRefinement.
             destruct se1, se2; try contradiction.
             -- eapply Hr_eq; [apply Hk1 | apply Hk2 | exact Hstk].
             -- destruct stk as [[p1 p2] rest |]; [eapply Hr_eq; [apply Hk1 | apply Hk2 | exact Hstk] | exact I].
-      - punfold E1; red in E1; rewrite Ht1 in E1; inversion E1 as [| m1_ m1' Hm1 E1a E1b |]; subst; pclearbot.
-        eapply VDS_TauL; [symmetry; exact E1b | eapply IH; [exact Hm1 | exact E2]].
-      - punfold E2; red in E2; rewrite Ht2 in E2; inversion E2 as [| m2_ m2' Hm2 E2a E2b |]; subst; pclearbot.
-        eapply VDS_TauR; [symmetry; exact E2b | eapply IH; [exact E1 | exact Hm2]].
+      - punfold E1; red in E1; rewrite Ht1 in E1;
+          apply eqitF_inv_Tau_l in E1 as (m1' & E1b & Hm1); pclearbot.
+        eapply VDS_TauL; [exact E1b | eapply IH; [exact Hm1 | exact E2]].
+      - punfold E2; red in E2; rewrite Ht2 in E2;
+          apply eqitF_inv_Tau_l in E2 as (m2' & E2b & Hm2); pclearbot.
+        eapply VDS_TauR; [exact E2b | eapply IH; [exact E1 | exact Hm2]].
       - eapply VDS_ReadL; [symmetry; etransitivity; [symmetry; exact Ht1 | exact E1] | exact Hlk | apply IH; [reflexivity | exact E2]].
       - eapply VDS_ReadR; [symmetry; etransitivity; [symmetry; exact Ht2 | exact E2] | exact Hlk | apply IH; [exact E1 | reflexivity]].
       - eapply VDS_WriteL; [symmetry; etransitivity; [symmetry; exact Ht1 | exact E1] | apply IH; [reflexivity | exact E2]].

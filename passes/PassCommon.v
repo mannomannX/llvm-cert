@@ -2173,6 +2173,60 @@ Section ModelSemantics.
     unfold translate; unfold observe at 1; cbn; destruct (observe t); reflexivity.
   Qed.
 
+  Lemma eqitF_inv_Ret_l {E : Type -> Type} {R1 R2 : Type}
+    {RR : R1 -> R2 -> Prop} {vsim sim : itree E R1 -> itree E R2 -> Prop}
+    (r1 : R1) (ot2 : itree' E R2) :
+    eqitF RR false false vsim sim (RetF r1) ot2 ->
+    exists r2 : R2, ot2 = RetF r2 /\ RR r1 r2.
+  Proof using.
+    intros H.
+    change (match RetF r1 : itree' E R1 with
+            | RetF x1 => exists r2 : R2, ot2 = RetF r2 /\ RR x1 r2
+            | _ => True
+            end).
+    generalize (RetF r1 : itree' E R1) H; clear H; intros ot1 H.
+    destruct H as [x1 x2 Hrr | | | ? ? Hchk _ | ? ? Hchk _];
+      try inversion Hchk; cbn; try exact I.
+    exists x2; split; [reflexivity | exact Hrr].
+  Qed.
+
+  Lemma eqitF_inv_Tau_l {E : Type -> Type} {R1 R2 : Type}
+    {RR : R1 -> R2 -> Prop} {vsim sim : itree E R1 -> itree E R2 -> Prop}
+    (m1 : itree E R1) (ot2 : itree' E R2) :
+    eqitF RR false false vsim sim (TauF m1) ot2 ->
+    exists m2 : itree E R2, ot2 = TauF m2 /\ sim m1 m2.
+  Proof using.
+    intros H.
+    change (match TauF m1 : itree' E R1 with
+            | TauF u1 => exists m2 : itree E R2, ot2 = TauF m2 /\ sim u1 m2
+            | _ => True
+            end).
+    generalize (TauF m1 : itree' E R1) H; clear H; intros ot1 H.
+    destruct H as [| u1 u2 Hsim | | ? ? Hchk _ | ? ? Hchk _];
+      try inversion Hchk; cbn; try exact I.
+    exists u2; split; [reflexivity | exact Hsim].
+  Qed.
+
+  Lemma eqitF_inv_Vis_l {E : Type -> Type} {R1 R2 : Type}
+    {RR : R1 -> R2 -> Prop} {vsim sim : itree E R1 -> itree E R2 -> Prop}
+    {X : Type} (e : E X) (k1 : X -> itree E R1) (ot2 : itree' E R2) :
+    eqitF RR false false vsim sim (VisF e k1) ot2 ->
+    exists k2 : X -> itree E R2,
+      ot2 = VisF e k2 /\ forall x : X, vsim (k1 x) (k2 x).
+  Proof using.
+    intros H.
+    change (match VisF e k1 : itree' E R1 with
+            | VisF Y e1 h1 =>
+                exists k2 : Y -> itree E R2,
+                  ot2 = VisF e1 k2 /\ forall x : Y, vsim (h1 x) (k2 x)
+            | _ => True
+            end).
+    generalize (VisF e k1 : itree' E R1) H; clear H; intros ot1 H.
+    destruct H as [| | Y e0 h1 h2 Hrel | ? ? Hchk _ | ? ? Hchk _];
+      try inversion Hchk; cbn; try exact I.
+    exists h2; split; [reflexivity | exact Hrel].
+  Qed.
+
   Lemma refine_prov__obs_eq {R1 R2}
     (RR : list N -> R1 -> R2 -> Prop)
     (r : list N -> itree ProvBotE R1 -> itree ProvBotE R2 -> Prop)
@@ -2190,9 +2244,12 @@ Section ModelSemantics.
       intros t1' t2' E1 E2.
     - punfold E1; red in E1; punfold E2; red in E2.
       apply RP_Step; unfold rp_step_body in *.
-      destruct E1 as [r1 r1' <- | m1 m1' Hm1 | X1 e1 k1 k1' Hk1]; pclearbot.
-      + destruct E2 as [r2 r2' <- | |]; try contradiction; exact Hstep.
-      + destruct E2 as [| m2 m2' Hm2 |]; try contradiction; pclearbot.
+      destruct E1 as [r1 r1' <- | m1 m1' Hm1 | X1 e1 k1 k1' Hk1 | ? ? Hchk _ | ? ? Hchk _];
+        try inversion Hchk; pclearbot.
+      + destruct E2 as [r2 r2' <- | | | ? ? Hchk _ | ? ? Hchk _];
+          try inversion Hchk; try contradiction; exact Hstep.
+      + destruct E2 as [| m2 m2' Hm2 | | ? ? Hchk _ | ? ? Hchk _];
+          try inversion Hchk; try contradiction; pclearbot.
         eapply Hr_eq; [exact Hm1 | exact Hm2 | exact Hstep].
       + destruct Hstep as [Hub | [Hleft | Hboth]].
         * left; exact Hub.
@@ -2200,17 +2257,20 @@ Section ModelSemantics.
           intros p Hp; specialize (Hleft p Hp).
           eapply Hr_eq; [apply Hk1 | pstep; exact E2 | exact Hleft].
         * right; right.
-          destruct E2 as [| | X2 e2 k2 k2' Hk2]; try contradiction; pclearbot.
+          destruct E2 as [| | X2 e2 k2 k2' Hk2 | ? ? Hchk _ | ? ? Hchk _];
+            try inversion Hchk; try contradiction; pclearbot.
           destruct e1 as [p1 | b1], e2 as [p2 | b2]; cbn in *; try contradiction.
           -- destruct p1, p2; intros p Hp; specialize (Hboth p Hp).
              eapply Hr_eq; [apply Hk1 | apply Hk2 | exact Hboth].
           -- destruct Hboth as [HE HA]; split; [exact HE |].
              intros a1 a2 Ha; specialize (HA a1 a2 Ha).
              eapply Hr_eq; [apply Hk1 | apply Hk2 | exact HA].
-    - punfold E1; red in E1; rewrite Ht1 in E1; inversion E1 as [| m1_ m1' Hm1 E1a E1b |]; subst; pclearbot.
-      eapply RP_TauL; [symmetry; exact E1b | eapply IH; [exact Hm1 | exact E2]].
-    - punfold E2; red in E2; rewrite Ht2 in E2; inversion E2 as [| m2_ m2' Hm2 E2a E2b |]; subst; pclearbot.
-      eapply RP_TauR; [symmetry; exact E2b | eapply IH; [exact E1 | exact Hm2]].
+    - punfold E1; red in E1; rewrite Ht1 in E1;
+        apply eqitF_inv_Tau_l in E1 as (m1' & E1b & Hm1); pclearbot.
+      eapply RP_TauL; [exact E1b | eapply IH; [exact Hm1 | exact E2]].
+    - punfold E2; red in E2; rewrite Ht2 in E2;
+        apply eqitF_inv_Tau_l in E2 as (m2' & E2b & Hm2); pclearbot.
+      eapply RP_TauR; [exact E2b | eapply IH; [exact E1 | exact Hm2]].
   Qed.
 
   Lemma refine_prov_obs_eq {R1 R2} (RR : list N -> R1 -> R2 -> Prop) :
@@ -3324,12 +3384,16 @@ Section ModelSemantics.
       intros t1' t2' E1 E2.
     - punfold E1; red in E1; punfold E2; red in E2.
       apply CLS_Step; unfold cls_step_body in *.
-      destruct E1 as [r1 r1' <- | m1 m1' Hm1 | X1 e1 k1 k1' Hk1]; pclearbot.
-      + destruct E2 as [r2 r2' <- | |]; try contradiction; exact Hstep.
-      + destruct E2 as [| m2 m2' Hm2 |]; try contradiction; pclearbot.
+      destruct E1 as [r1 r1' <- | m1 m1' Hm1 | X1 e1 k1 k1' Hk1 | ? ? Hchk _ | ? ? Hchk _];
+        try inversion Hchk; pclearbot.
+      + destruct E2 as [r2 r2' <- | | | ? ? Hchk _ | ? ? Hchk _];
+          try inversion Hchk; try contradiction; exact Hstep.
+      + destruct E2 as [| m2 m2' Hm2 | | ? ? Hchk _ | ? ? Hchk _];
+          try inversion Hchk; try contradiction; pclearbot.
         eapply Hr_eq; [exact Hm1 | exact Hm2 | exact Hstep].
       + destruct Hstep as [Hub | Hvis]; [left; exact Hub | right].
-        destruct E2 as [| | X2 e2 k2 k2' Hk2]; try contradiction; pclearbot.
+        destruct E2 as [| | X2 e2 k2 k2' Hk2 | ? ? Hchk _ | ? ? Hchk _];
+          try inversion Hchk; try contradiction; pclearbot.
         destruct Hvis as [(Hsync & HE & HA) | Hrd].
         * left; split; [exact Hsync | split; [exact HE |]].
           intros a1 a2 Ha Hp; eapply Hr_eq; [apply Hk1 | apply Hk2 | exact (HA a1 a2 Ha Hp)].
@@ -3340,10 +3404,12 @@ Section ModelSemantics.
             destruct e2 as [x2 |]; try contradiction.
           destruct Hrd as (Hx & Hlk & Hk); split; [exact Hx | split; [exact Hlk |]].
           intros v Hv; eapply Hr_eq; [apply Hk1 | apply Hk2 | apply Hk, Hv].
-    - punfold E1; red in E1; rewrite Ht1 in E1; inversion E1 as [| m1_ m1' Hm1 E1a E1b |]; subst; pclearbot.
-      eapply CLS_TauL; [symmetry; exact E1b | eapply IH; [exact Hm1 | exact E2]].
-    - punfold E2; red in E2; rewrite Ht2 in E2; inversion E2 as [| m2_ m2' Hm2 E2a E2b |]; subst; pclearbot.
-      eapply CLS_TauR; [symmetry; exact E2b | eapply IH; [exact E1 | exact Hm2]].
+    - punfold E1; red in E1; rewrite Ht1 in E1;
+        apply eqitF_inv_Tau_l in E1 as (m1' & E1b & Hm1); pclearbot.
+      eapply CLS_TauL; [exact E1b | eapply IH; [exact Hm1 | exact E2]].
+    - punfold E2; red in E2; rewrite Ht2 in E2;
+        apply eqitF_inv_Tau_l in E2 as (m2' & E2b & Hm2); pclearbot.
+      eapply CLS_TauR; [exact E2b | eapply IH; [exact E1 | exact Hm2]].
     - eapply CLS_ReadL; [symmetry; etransitivity; [symmetry; exact Ht1 | exact E1] | exact Hlk | apply IH; [reflexivity | exact E2]].
     - eapply CLS_ReadR; [symmetry; etransitivity; [symmetry; exact Ht2 | exact E2] | exact Hlk | apply IH; [exact E1 | reflexivity]].
     - eapply CLS_WriteL; [symmetry; etransitivity; [symmetry; exact Ht1 | exact E1] | apply IH; [reflexivity | exact E2]].
@@ -3973,12 +4039,16 @@ Section ModelSemantics.
         intros t1' t2' E1 E2.
       - punfold E1; red in E1; punfold E2; red in E2.
         apply GSS_Step; unfold gss_step_body in *.
-        destruct E1 as [r1 r1' <- | m1 m1' Hm1 | X1 e1 k1 k1' Hk1]; pclearbot.
-        + destruct E2 as [r2 r2' <- | |]; try contradiction; exact Hstep.
-        + destruct E2 as [| m2 m2' Hm2 |]; try contradiction; pclearbot.
+        destruct E1 as [r1 r1' <- | m1 m1' Hm1 | X1 e1 k1 k1' Hk1 | ? ? Hchk _ | ? ? Hchk _];
+          try inversion Hchk; pclearbot.
+        + destruct E2 as [r2 r2' <- | | | ? ? Hchk _ | ? ? Hchk _];
+            try inversion Hchk; try contradiction; exact Hstep.
+        + destruct E2 as [| m2 m2' Hm2 | | ? ? Hchk _ | ? ? Hchk _];
+            try inversion Hchk; try contradiction; pclearbot.
           eapply Hr_eq; [exact Hm1 | exact Hm2 | exact Hstep].
         + destruct Hstep as [Hub | Hvis]; [left; exact Hub | right].
-          destruct E2 as [| | X2 e2 k2 k2' Hk2]; try contradiction; pclearbot.
+          destruct E2 as [| | X2 e2 k2 k2' Hk2 | ? ? Hchk _ | ? ? Hchk _];
+            try inversion Hchk; try contradiction; pclearbot.
           destruct Hvis as [(Hsync & HE & HA) | [Hloc | Hstk]].
           * left; split; [exact Hsync | split; [exact HE |]].
             intros a1 a2 Ha Hp; eapply Hr_eq; [apply Hk1 | apply Hk2 | exact (HA a1 a2 Ha Hp)].
@@ -3993,10 +4063,12 @@ Section ModelSemantics.
             destruct se1, se2; try contradiction.
             -- destruct Hstk as [Hbs Hr]; split; [exact Hbs | eapply Hr_eq; [apply Hk1 | apply Hk2 | exact Hr]].
             -- destruct stk as [[p1 p2] rest |]; [eapply Hr_eq; [apply Hk1 | apply Hk2 | exact Hstk] | exact I].
-      - punfold E1; red in E1; rewrite Ht1 in E1; inversion E1 as [| m1_ m1' Hm1 E1a E1b |]; subst; pclearbot.
-        eapply GSS_TauL; [symmetry; exact E1b | eapply IH; [exact Hm1 | exact E2]].
-      - punfold E2; red in E2; rewrite Ht2 in E2; inversion E2 as [| m2_ m2' Hm2 E2a E2b |]; subst; pclearbot.
-        eapply GSS_TauR; [symmetry; exact E2b | eapply IH; [exact E1 | exact Hm2]].
+      - punfold E1; red in E1; rewrite Ht1 in E1;
+          apply eqitF_inv_Tau_l in E1 as (m1' & E1b & Hm1); pclearbot.
+        eapply GSS_TauL; [exact E1b | eapply IH; [exact Hm1 | exact E2]].
+      - punfold E2; red in E2; rewrite Ht2 in E2;
+          apply eqitF_inv_Tau_l in E2 as (m2' & E2b & Hm2); pclearbot.
+        eapply GSS_TauR; [exact E2b | eapply IH; [exact E1 | exact Hm2]].
       - eapply GSS_ReadL; [symmetry; etransitivity; [symmetry; exact Ht1 | exact E1] | exact Hlk | apply IH; [reflexivity | exact E2]].
       - eapply GSS_ReadR; [symmetry; etransitivity; [symmetry; exact Ht2 | exact E2] | exact Hlk | apply IH; [exact E1 | reflexivity]].
       - eapply GSS_WriteL; [symmetry; etransitivity; [symmetry; exact Ht1 | exact E1] | apply IH; [reflexivity | exact E2]].

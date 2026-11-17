@@ -6365,11 +6365,15 @@ Section MemoryAndSerialization.
       intros t1' t2' E1 E2.
     - punfold E1; red in E1; punfold E2; red in E2.
       apply PTE_Step; unfold prov_te_step_body in *.
-      destruct E1 as [r1 r1' <- | m1 m1' Hm1 | X1 e1 k1 k1' Hk1]; pclearbot.
-      + destruct E2 as [r2 r2' <- | |]; try contradiction; exact Hstep.
-      + destruct E2 as [| m2 m2' Hm2 |]; try contradiction; pclearbot.
+      destruct E1 as [r1 r1' <- | m1 m1' Hm1 | X1 e1 k1 k1' Hk1 | ? ? Hchk _ | ? ? Hchk _];
+        try inversion Hchk; pclearbot.
+      + destruct E2 as [r2 r2' <- | | | ? ? Hchk _ | ? ? Hchk _];
+          try inversion Hchk; try contradiction; exact Hstep.
+      + destruct E2 as [| m2 m2' Hm2 | | ? ? Hchk _ | ? ? Hchk _];
+          try inversion Hchk; try contradiction; pclearbot.
         eapply Hr_eq; [exact Hm1 | exact Hm2 | exact Hstep].
-      + destruct E2 as [| | X2 e2 k2 k2' Hk2]; try contradiction; pclearbot.
+      + destruct E2 as [| | X2 e2 k2 k2' Hk2 | ? ? Hchk _ | ? ? Hchk _];
+          try inversion Hchk; try contradiction; pclearbot.
         destruct e1 as [p1 | b1], e2 as [p2 | b2]; cbn in *; try contradiction.
         * destruct p1, p2; intros p; eapply Hr_eq; [apply Hk1 | apply Hk2 | apply Hstep].
         * destruct Hstep as (HE1 & HE2 & HA1 & HA2).
@@ -6377,8 +6381,8 @@ Section MemoryAndSerialization.
           -- intros a1 a2 Ha; eapply Hr_eq; [apply Hk1 | apply Hk2 | exact (HA1 a1 a2 Ha)].
           -- intros a2 a1 Ha; eapply Hr_eq; [apply Hk1 | apply Hk2 | exact (HA2 a2 a1 Ha)].
     - punfold E1; red in E1; rewrite Ht1 in E1;
-        inversion E1 as [| m1_ m1' Hm1 E1a E1b |]; subst; pclearbot.
-      eapply PTE_TauL; [symmetry; exact E1b | eapply IH; [exact Hm1 | exact E2]].
+        apply eqitF_inv_Tau_l in E1 as (m1' & E1b & Hm1); pclearbot.
+      eapply PTE_TauL; [exact E1b | eapply IH; [exact Hm1 | exact E2]].
   Qed.
 
   Lemma tau_expand_step_prov_te {R : Type} (t1 t2 : itree ProvBotE R) :
@@ -11627,15 +11631,15 @@ Section MemoryAndSerialization.
     revert t1 t2; pcofix CIH; intros t1 t2 Heq Hok; pstep.
     punfold Hok; punfold Heq; red in Heq.
     destruct Hok as [x t1' Ho1 | m1 t1' Ho1 Hm1 | X e k1 t1' Ho1 He Hk1];
-      rewrite Ho1 in Heq; inversion Heq; subst; pclearbot.
-    - eapply EOK_Ret; symmetry; eassumption.
-    - eapply EOK_Tau; [symmetry; eassumption | right; eapply CIH; eassumption].
-    - match goal with
-      | Hobs : VisF _ _ = observe t2 |- _ =>
-          eapply EOK_Vis; [symmetry; exact Hobs | exact He |]
-      end.
-      intros x; right; eapply CIH; [| exact (Hk1 x)].
-      match goal with Hrel : forall v, upaco2 _ _ _ _ |- _ => specialize (Hrel x); pclearbot; exact Hrel end.
+      rewrite Ho1 in Heq; pclearbot.
+    - apply eqitF_inv_Ret_l in Heq as (x2 & Ho2 & <-).
+      exact (EOK_Ret ok_ev _ x t2 Ho2).
+    - apply eqitF_inv_Tau_l in Heq as (m2 & Ho2 & Hm12); pclearbot.
+      eapply EOK_Tau; [exact Ho2 | right; exact (CIH m1 m2 Hm12 Hm1)].
+    - apply eqitF_inv_Vis_l in Heq as (k2 & Ho2 & Hk12).
+      eapply EOK_Vis; [exact Ho2 | exact He |].
+      intros x; specialize (Hk12 x); pclearbot.
+      right; exact (CIH _ _ Hk12 (Hk1 x)).
   Qed.
 
   Lemma ev_ok_ret {E : Type -> Type} {R : Type}
@@ -11673,17 +11677,14 @@ Section MemoryAndSerialization.
         pose proof (ev_ok_obs_eq ok_ev (k a) b Eka (Hk a)) as Hb.
         punfold Hb; pstep; eapply ev_ok__mon; [exact Hb | intros ? []; contradiction].
       - pstep; punfold Eb; red in Eb; rewrite observe_bind, Ho in Eb; cbn in Eb.
-        inversion Eb; subst; pclearbot.
-        eapply EOK_Tau; [symmetry; eassumption |].
-        right; apply CIH; exists m; split; [assumption | exact Hm].
+        apply eqitF_inv_Tau_l in Eb as (m' & Ho' & Hm'); pclearbot.
+        eapply EOK_Tau; [exact Ho' |].
+        right; apply CIH; exists m; split; [exact Hm' | exact Hm].
       - pstep; punfold Eb; red in Eb; rewrite observe_bind, Ho in Eb; cbn in Eb.
-        inversion Eb; subst; pclearbot.
-        match goal with
-        | Hobs : VisF _ _ = observe b |- _ =>
-            eapply EOK_Vis; [symmetry; exact Hobs | exact Hok |]
-        end.
-        intros x; right; apply CIH; exists (h x); split; [| exact (Hh x)].
-        match goal with Hrel : forall v, upaco2 _ _ _ _ |- _ => specialize (Hrel x); pclearbot; exact Hrel end. }
+        apply eqitF_inv_Vis_l in Eb as (k' & Ho' & Hk').
+        eapply EOK_Vis; [exact Ho' | exact Hok |].
+        intros x; specialize (Hk' x); pclearbot.
+        right; apply CIH; exists (h x); split; [exact Hk' | exact (Hh x)]. }
     apply Hgen; exists t; split; [reflexivity | exact Ht].
   Qed.
 
@@ -11998,26 +11999,25 @@ Section MemoryAndSerialization.
       destruct Ht0 as [[j | rv] t0' Ho | m t0' Ho Hm | X e h t0' Ho Hok Hh]; pclearbot.
       - assert (Et : Tau (ITree.iter body j) ≅ b).
         { rewrite <- Eb, (itree_eta t0'), Ho, Eqit.bind_ret_l; reflexivity. }
-        pstep; punfold Et; red in Et; cbn in Et; inversion Et; subst; pclearbot.
-        eapply EOK_Tau; [symmetry; eassumption |].
+        pstep; punfold Et; red in Et; cbn in Et;
+          apply eqitF_inv_Tau_l in Et as (m' & Ho' & Hm'); pclearbot.
+        eapply EOK_Tau; [exact Ho' |].
         right; apply CIH; exists (body j); split; [| exact (Hbody j)].
-        etransitivity; [symmetry; apply unfold_iter | assumption].
+        etransitivity; [symmetry; apply unfold_iter | exact Hm'].
       - assert (Er : Ret rv ≅ b).
         { rewrite <- Eb, (itree_eta t0'), Ho, Eqit.bind_ret_l; reflexivity. }
-        pstep; punfold Er; red in Er; cbn in Er; inversion Er; subst.
-        eapply EOK_Ret; symmetry; eassumption.
+        pstep; punfold Er; red in Er; cbn in Er;
+          apply eqitF_inv_Ret_l in Er as (rv' & Ho' & <-).
+        exact (EOK_Ret ok_ev _ rv b Ho').
       - pstep; punfold Eb; red in Eb; rewrite observe_bind, Ho in Eb; cbn in Eb.
-        inversion Eb; subst; pclearbot.
-        eapply EOK_Tau; [symmetry; eassumption |].
-        right; apply CIH; exists m; split; [assumption | exact Hm].
+        apply eqitF_inv_Tau_l in Eb as (m' & Ho' & Hm'); pclearbot.
+        eapply EOK_Tau; [exact Ho' |].
+        right; apply CIH; exists m; split; [exact Hm' | exact Hm].
       - pstep; punfold Eb; red in Eb; rewrite observe_bind, Ho in Eb; cbn in Eb.
-        inversion Eb; subst; pclearbot.
-        match goal with
-        | Hobs : VisF _ _ = observe b |- _ =>
-            eapply EOK_Vis; [symmetry; exact Hobs | exact Hok |]
-        end.
-        intros x; right; apply CIH; exists (h x); split; [| exact (Hh x)].
-        match goal with Hrel : forall v, upaco2 _ _ _ _ |- _ => specialize (Hrel x); pclearbot; exact Hrel end. }
+        apply eqitF_inv_Vis_l in Eb as (k' & Ho' & Hk').
+        eapply EOK_Vis; [exact Ho' | exact Hok |].
+        intros x; specialize (Hk' x); pclearbot.
+        right; apply CIH; exists (h x); split; [exact Hk' | exact (Hh x)]. }
     apply Hgen; exists (body i0); split; [symmetry; apply unfold_iter | exact (Hbody i0)].
   Qed.
 
@@ -12304,32 +12304,33 @@ Section MemoryAndSerialization.
         destruct Ht0 as [a t0' Ho | m t0' Ho Hm | X e h t0' Ho Hok Hh]; pclearbot.
         + assert (Er : Ret (inr a) ≅ b).
           { rewrite <- Eb, (unfold_run_exc_obs t0'), Ho; reflexivity. }
-          pstep; punfold Er; red in Er; cbn in Er; inversion Er; subst.
-          eapply EOK_Ret; symmetry; eassumption.
+          pstep; punfold Er; red in Er; cbn in Er;
+            apply eqitF_inv_Ret_l in Er as (r' & Ho' & <-).
+          exact (EOK_Ret _ _ (inr a) b Ho').
         + assert (Et : Tau (run_exc m) ≅ b).
           { rewrite <- Eb, (unfold_run_exc_obs t0'), Ho; reflexivity. }
-          pstep; punfold Et; red in Et; cbn in Et; inversion Et; subst; pclearbot.
-          eapply EOK_Tau; [symmetry; eassumption |].
-          right; apply CIH; exists m; split; [left; assumption | exact Hm].
+          pstep; punfold Et; red in Et; cbn in Et;
+            apply eqitF_inv_Tau_l in Et as (m' & Ho' & Hm'); pclearbot.
+          eapply EOK_Tau; [exact Ho' |].
+          right; apply CIH; exists m; split; [left; exact Hm' | exact Hm].
         + assert (Ev : match exc_of_event e with
                        | Some x => Ret (inl x)
                        | None => Vis e (fun y => Tau (run_exc (h y)))
                        end ≅ b).
           { rewrite <- Eb, (unfold_run_exc_obs t0'), Ho; reflexivity. }
           destruct (exc_of_event e) as [x |].
-          * pstep; punfold Ev; red in Ev; cbn in Ev; inversion Ev; subst.
-            eapply EOK_Ret; symmetry; eassumption.
-          * pstep; punfold Ev; red in Ev; cbn in Ev; inversion Ev; subst; pclearbot.
-            match goal with
-            | Hobs : VisF _ _ = observe b |- _ =>
-                eapply EOK_Vis; [symmetry; exact Hobs | exact Hok |]
-            end.
-            intros y; right; apply CIH; exists (h y); split; [| exact (Hh y)].
-            right.
-            match goal with Hrel : forall v, upaco2 _ _ _ _ |- _ => specialize (Hrel y); pclearbot; exact Hrel end.
-      - pstep; punfold Eb; red in Eb; cbn in Eb; inversion Eb; subst; pclearbot.
-        eapply EOK_Tau; [symmetry; eassumption |].
-        right; apply CIH; exists t0; split; [left; assumption | exact Ht0]. }
+          * pstep; punfold Ev; red in Ev; cbn in Ev;
+              apply eqitF_inv_Ret_l in Ev as (r' & Ho' & <-).
+            exact (EOK_Ret _ _ (inl x) b Ho').
+          * pstep; punfold Ev; red in Ev; cbn in Ev;
+              apply eqitF_inv_Vis_l in Ev as (k' & Ho' & Hk').
+            eapply EOK_Vis; [exact Ho' | exact Hok |].
+            intros y; specialize (Hk' y); pclearbot.
+            right; apply CIH; exists (h y); split; [right; exact Hk' | exact (Hh y)].
+      - pstep; punfold Eb; red in Eb; cbn in Eb;
+          apply eqitF_inv_Tau_l in Eb as (m' & Ho' & Hm'); pclearbot.
+        eapply EOK_Tau; [exact Ho' |].
+        right; apply CIH; exists t0; split; [left; exact Hm' | exact Ht0]. }
     apply Hgen; exists t; split; [left; reflexivity | exact Ht].
   Qed.
 
