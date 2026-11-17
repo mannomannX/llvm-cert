@@ -6308,9 +6308,9 @@ Section MemoryAndSerialization.
         | TauF m2 => r m1 m2
         | _ => False
         end
-    | VisF e1 k1 =>
+    | VisF _ e1 k1 =>
         match ot2 with
-        | VisF e2 k2 => prov_te_vis_match r e1 k1 e2 k2
+        | VisF _ e2 k2 => prov_te_vis_match r e1 k1 e2 k2
         | _ => False
         end
     end.

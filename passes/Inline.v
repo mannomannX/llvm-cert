@@ -4088,10 +4088,10 @@ Section InliningSemantics.
           | TauF m2 => gis_cont r ic m1 m2
           | _ => False
           end
-      | VisF e1 k1 =>
+      | VisF _ e1 k1 =>
           is_ub _ e1 = true \/
           match ot2 with
-          | VisF e2 k2 => gis_vis_both r ic e1 k1 e2 k2
+          | VisF _ e2 k2 => gis_vis_both r ic e1 k1 e2 k2
           | _ => False
           end
       end.

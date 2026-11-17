@@ -1062,7 +1062,7 @@ Section EventRelations.
       match observe t with
       | RetF a => Ret (inr a)
       | TauF u' => Tau (run_exc u')
-      | VisF e k =>
+      | VisF _ e k =>
           match exc_of_event e with
           | Some x => Ret (inl x)
           | None => Vis e (fun y => Tau (run_exc (k y)))
@@ -1593,7 +1593,7 @@ Section ModelSemantics.
         | TauF m2 => r U m1 m2
         | _ => False
         end
-    | VisF e1 k1 =>
+    | VisF _ e1 k1 =>
         is_ub_prov e1 = true
         \/ (match e1 with
             | inl1 p1 =>
@@ -1604,7 +1604,7 @@ Section ModelSemantics.
             | inr1 _ => fun _ => False
             end k1)
         \/ (match ot2 with
-            | VisF e2 k2 => match_vis_both r U e1 k1 e2 k2
+            | VisF _ e2 k2 => match_vis_both r U e1 k1 e2 k2
             | _ => False
             end)
     end.
@@ -1718,7 +1718,7 @@ Section ModelSemantics.
       match observe t with
       | RetF r => observe (k r)
       | TauF m => TauF (ITree.bind m k)
-      | VisF e h => VisF e (fun x => ITree.bind (h x) k)
+      | VisF _ e h => VisF e (fun x => ITree.bind (h x) k)
       end.
   Proof using.
     unfold ITree.bind, ITree.subst; cbn.
@@ -1731,7 +1731,7 @@ Section ModelSemantics.
       match observe t with
       | RetF r => RetF r
       | TauF m => TauF (translate h m)
-      | VisF e k => VisF (h _ e) (fun x => translate h (k x))
+      | VisF _ e k => VisF (h _ e) (fun x => translate h (k x))
       end.
   Proof using.
     unfold translate; cbn; destruct (observe t); reflexivity.
@@ -2778,10 +2778,10 @@ Section ModelSemantics.
         | TauF m2 => r env1 env2 m1 m2
         | _ => False
         end
-    | VisF e1 k1 =>
+    | VisF _ e1 k1 =>
         is_ub_cfg e1 = true \/
         match ot2 with
-        | VisF e2 k2 => cls_vis_both r env1 env2 e1 k1 e2 k2
+        | VisF _ e2 k2 => cls_vis_both r env1 env2 e1 k1 e2 k2
         | _ => False
         end
     end.
@@ -3425,10 +3425,10 @@ Section ModelSemantics.
           | TauF m2 => r stk env1 env2 m1 m2
           | _ => False
           end
-      | VisF e1 k1 =>
+      | VisF _ e1 k1 =>
           is_ub _ e1 = true \/
           match ot2 with
-          | VisF e2 k2 => css_vis_both is_sync EqE EqA ev_post as_loc as_stk r stk env1 env2 e1 k1 e2 k2
+          | VisF _ e2 k2 => css_vis_both is_sync EqE EqA ev_post as_loc as_stk r stk env1 env2 e1 k1 e2 k2
           | _ => False
           end
       end.
@@ -4235,7 +4235,7 @@ Section ModelSemantics.
     match observe u with
     | RetF r => Ret (inl r)
     | TauF m => Ret (inr m)
-    | VisF ev k => ITree.bind (interp_intrinsics_h ev) (fun x => Ret (inr (k x)))
+    | VisF _ ev k => ITree.bind (interp_intrinsics_h ev) (fun x => Ret (inr (k x)))
     end.
 
   Lemma decomp_intr_spec {R : Type} (u : @MCFGtop (@ParamsV IP IPT) R) :
@@ -4694,7 +4694,7 @@ Section ModelSemantics.
     match observe u with
     | RetF r => Ret (inl (s, r))
     | TauF m => Ret (inr (s, m))
-    | VisF e k => ITree.bind (interp_vellvm_prov_h e s) (fun '(s', x) => Ret (inr (s', k x)))
+    | VisF _ e k => ITree.bind (interp_vellvm_prov_h e s) (fun '(s', x) => Ret (inr (s', k x)))
     end.
 
   Lemma decomp_model_spec {R : Type} (u : @MCFGtop (@ParamsV IP IPT) R) (s : FusedS) :

@@ -120,7 +120,7 @@ Section ITreeObsLemmas.
     match observe t with
     | RetF r => observe (k r)
     | TauF t' => TauF (ITree.bind t' k)
-    | VisF e ke => VisF e (fun x => ITree.bind (ke x) k)
+    | VisF _ e ke => VisF e (fun x => ITree.bind (ke x) k)
     end.
   Proof using Type.
     unfold ITree.bind, ITree.subst; cbn; destruct (observe t); reflexivity.
@@ -132,7 +132,7 @@ Section ITreeObsLemmas.
     match observe t with
     | RetF r => RetF r
     | TauF t' => TauF (translate h t')
-    | VisF e ke => VisF (h _ e) (fun x => translate h (ke x))
+    | VisF _ e ke => VisF (h _ e) (fun x => translate h (ke x))
     end.
   Proof using Type.
     unfold translate; cbn; destruct (observe t); reflexivity.
@@ -200,7 +200,7 @@ Section OpenWorldEvents.
     match observe t with
     | RetF r => Ret r
     | TauF t' => Tau (run_cfg_locals env t')
-    | VisF e k =>
+    | VisF _ e k =>
         match classify_cfg_event e with
         | inl le =>
             match le in LocalE Y return (Y -> CFGtop R) -> itree OW_E R with
@@ -223,7 +223,7 @@ Section OpenWorldEvents.
     match observe t with
     | RetF r => RetF r
     | TauF t' => TauF (run_cfg_locals env t')
-    | VisF e k =>
+    | VisF _ e k =>
         match classify_cfg_event e with
         | inl le =>
             match le in LocalE Y return (Y -> CFGtop R) -> itree' OW_E R with
@@ -467,7 +467,7 @@ Section OpenWorldEvents.
     match observe t with
     | RetF r => Ret r
     | TauF t' => Tau (run_draws sigma t')
-    | VisF e k =>
+    | VisF _ e k =>
         match classify_ow_event e with
         | inl de =>
             match de in DrawE Y return (Y -> itree OW_E R) -> itree Det_OW_E R with
@@ -485,7 +485,7 @@ Section OpenWorldEvents.
     match observe t with
     | RetF r => RetF r
     | TauF t' => TauF (run_draws sigma t')
-    | VisF e k =>
+    | VisF _ e k =>
         match classify_ow_event e with
         | inl de =>
             match de in DrawE Y return (Y -> itree OW_E R) -> itree' Det_OW_E R with
@@ -867,10 +867,10 @@ Section OpenWorldEvents.
         | TauF m2 => r m1 m2
         | _ => False
         end
-    | VisF e1 k1 =>
+    | VisF _ e1 k1 =>
         det_is_ub e1 = true \/
         match observe t2 with
-        | VisF e2 k2 => det_vis_both r e1 k1 e2 k2
+        | VisF _ e2 k2 => det_vis_both r e1 k1 e2 k2
         | _ => False
         end
     end.
@@ -12241,7 +12241,7 @@ CoFixpoint run_fn_frames {Pa : Params} {R : Type}
   match observe t with
   | RetF r => Ret r
   | TauF t' => Tau (run_fn_frames env stk exc_slot t')
-  | VisF e k =>
+  | VisF _ e k =>
       match classify_fn_event e with
       | inl le =>
           match le in LocalE Y return (Y -> @CFGtop Pa R) -> itree (@OW_E Pa) R with
@@ -12283,7 +12283,7 @@ Lemma observe_run_fn_frames {Pa : Params} {R : Type}
   match observe t with
   | RetF r => RetF r
   | TauF t' => TauF (run_fn_frames env stk exc_slot t')
-  | VisF e k =>
+  | VisF _ e k =>
       match classify_fn_event e with
       | inl le =>
           match le in LocalE Y return (Y -> @CFGtop Pa R) -> itree' (@OW_E Pa) R with
@@ -13178,7 +13178,7 @@ Lemma observe_run_exc {Pa : Params} {A : Type} (u : @CFGtop Pa A) :
   match observe u with
   | RetF a => RetF (inr a)
   | TauF u' => TauF (run_exc u')
-  | VisF e k =>
+  | VisF _ e k =>
       match exc_of_event e with
       | Some x => RetF (inl x)
       | None => VisF e (fun y => run_exc_k (k y))

@@ -4753,7 +4753,7 @@ Section ValueDrawRefinement.
         | TauF m2 => r U m1 m2
         | _ => False
         end
-    | VisF e1 k1 =>
+    | VisF _ e1 k1 =>
         is_ub_prov_draw e1 = true
         \/ (match e1 with
             | inl1 _ => fun _ => False
@@ -4768,7 +4768,7 @@ Section ValueDrawRefinement.
                 end k1'
             end k1)
         \/ (match ot2 with
-            | VisF e2 k2 => rpd_vis_both r U e1 k1 e2 k2
+            | VisF _ e2 k2 => rpd_vis_both r U e1 k1 e2 k2
             | _ => False
             end)
     end.
@@ -5161,10 +5161,10 @@ Section ValueDrawRefinement.
           | TauF m2 => r stk env1 env2 m1 m2
           | _ => False
           end
-      | VisF e1 k1 =>
+      | VisF _ e1 k1 =>
           is_ub _ e1 = true \/
           match ot2 with
-          | VisF e2 k2 => vds_vis_both is_sync EqE EqA ev_post as_loc as_stk r stk env1 env2 e1 k1 e2 k2
+          | VisF _ e2 k2 => vds_vis_both is_sync EqE EqA ev_post as_loc as_stk r stk env1 env2 e1 k1 e2 k2
           | _ => False
           end
       end.
@@ -6819,7 +6819,7 @@ Section ValueDrawRefinement.
     match observe u with
     | RetF r => Ret (inl (s, r))
     | TauF m => Ret (inr (s, m))
-    | VisF e k => ITree.bind (interp_vellvm_rel_draw_h e s) (fun '(s', x) => Ret (inr (s', k x)))
+    | VisF _ e k => ITree.bind (interp_vellvm_rel_draw_h e s) (fun '(s', x) => Ret (inr (s', k x)))
     end.
 
   Lemma decomp_rel_draw_model_spec {R : Type} (u : @MCFGtop PaV R) (s : FusedS) :

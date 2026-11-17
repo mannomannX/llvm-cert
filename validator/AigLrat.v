@@ -2885,7 +2885,11 @@ Proof.
   rewrite Hvs1, Hvt1.
   apply (existsb_xor_bits_diff sz asg1 src_r tgt_r xor_bits
            (conj Hws Hls) (conj Hwt Hlt)); [congruence | |].
-  - intros k Hk; rewrite Hxev; apply list_map2_nth; [exact Hlen_st | congruence].
+  - intros k Hk;
+      rewrite Hxev,
+              <- (step_spec_eval_lits st st1 asg asg1 (rbv_bits src_r) Hs1 Hbs),
+              <- (step_spec_eval_lits st st1 asg asg1 (rbv_bits tgt_r) Hs1 Hbt).
+      apply list_map2_nth; [rewrite !length_map; exact Hlen_st | rewrite length_map, Hls; exact Hk].
   - rewrite <- existsb_id_map_eval_lit, Hxev; exact Hxor_false.
 Qed.
 
