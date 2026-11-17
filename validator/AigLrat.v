@@ -4612,7 +4612,9 @@ Proof.
       rewrite Hshl_z, Hures.
       pose proof (bools_to_Z_range hi) as Hhi_r.
       pose proof (@Integers.modulus_pos sz) as Hmp.
-      rewrite Z.gtb_ltb, <- (bools_to_Z_zero_iff hi).
+      rewrite Z.gtb_ltb;
+      replace (existsb (fun x : bool => x) hi) with (negb (bools_to_Z hi =? 0)%Z)
+        by (rewrite bools_to_Z_zero_iff, Bool.negb_involutive; reflexivity).
       destruct (Z.eqb_spec (bools_to_Z hi) 0%Z),
                (Z.ltb_spec (bools_to_Z (spec_bits k))
                            (bools_to_Z (spec_bits k) + @Integers.modulus sz * bools_to_Z hi));
@@ -5234,7 +5236,9 @@ Proof.
               (step_spec_eval_lit st1 st3 asg1 asg3 nuw_l Hs13 Hwf_nuw),
               Hev_nuw, Hev_nsw.
       f_equal; f_equal.
-      * f_equal; rewrite Hua_split, Hures, <- (bools_to_Z_zero_iff b_hi).
+      * f_equal; rewrite Hua_split, Hures;
+          replace (existsb (fun x : bool => x) b_hi) with (negb (bools_to_Z b_hi =? 0)%Z)
+            by (rewrite bools_to_Z_zero_iff, Bool.negb_involutive; reflexivity).
         pose proof (@Integers.modulus_pos tw) as Hmpt; rewrite modulus_pow_sz in Hmpt.
         destruct (Z.eqb_spec (bools_to_Z b_hi) 0%Z),
                  (Z.eqb_spec (bools_to_Z b_lo) (bools_to_Z b_lo + 2 ^ Z.pos tw * bools_to_Z b_hi));

@@ -1707,8 +1707,8 @@ Section ModelSemantics.
     unfold handle_malloc.
     destruct args as [| a0 rest]; [intros σ; exact I |].
     destruct a0, rest; try (intros σ; exact I);
-      unfold malloc_bytes; cbn [malloc_bytes_with_pr MemoryModelPrimitivesV];
-      apply memM_wf_prov_bind; [intros σ p; exact I | intros pr; apply Malloc_bytes_with_pr_wf_prov].
+      (unfold malloc_bytes; cbn [malloc_bytes_with_pr MemoryModelPrimitivesV];
+       apply memM_wf_prov_bind; [intros σ p; exact I | intros pr; apply Malloc_bytes_with_pr_wf_prov]).
   Qed.
 
   Local Lemma handle_free_wf_prov (args : list dvalue_base) :
