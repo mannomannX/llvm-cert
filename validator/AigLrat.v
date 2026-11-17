@@ -1866,7 +1866,7 @@ Lemma eval_rail_agree : forall sz bound a1 a2 r,
 Proof.
   intros sz bound a1 a2 r Hag (_ & Hls & Hp); unfold eval_rail_psn, eval_rail_val; split.
   - exact (eval_lit_agree bound a1 a2 _ Hag Hp).
-  - f_equal; exact (eval_lits_agree bound a1 a2 _ Hag Hls).
+  - rewrite (eval_lits_agree bound a1 a2 _ Hag Hls); reflexivity.
 Qed.
 
 Lemma eval_clause_agree : forall bound a1 a2 cl,

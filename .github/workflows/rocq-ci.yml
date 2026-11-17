@@ -121,15 +121,15 @@ jobs:
           }
           REAL_ROCQ="$(opam exec -- which rocq)"
           mkdir -p /tmp/rocq-bin
-          printf '#!/usr/bin/env bash\nif [ "${1:-}" = "compile" ]; then exec timeout --foreground -s INT -k 10s 300s "%s" "$@"; else exec "%s" "$@"; fi\n' "$REAL_ROCQ" "$REAL_ROCQ" > /tmp/rocq-bin/rocq
+          printf '#!/usr/bin/env bash\nif [ "${1:-}" = "compile" ]; then exec timeout --foreground -s INT -k 10s 150s "%s" "$@"; else exec "%s" "$@"; fi\n' "$REAL_ROCQ" "$REAL_ROCQ" > /tmp/rocq-bin/rocq
           chmod +x /tmp/rocq-bin/rocq
           echo "=== [1/3] Compiling Vellvm 3.0 Core & I2F Theories (-j2) ==="
           CORE_VOS=$(awk '/^\.\/rocq\/.*\.v$/ { sub(/^\.\//, ""); sub(/\.v$/, ".vo"); print }' vellvm/src/_RocqProject)
           run_mem_guarded opam exec -- make -C vellvm/src RocqMakefile
-          run_mem_guarded opam exec -- make -C vellvm/src --no-print-directory -f RocqMakefile ROCQBIN="/tmp/rocq-bin/" TIMED=1 -j2 $CORE_VOS
+          run_mem_guarded opam exec -- env PATH="/tmp/rocq-bin:$PATH" make -C vellvm/src --no-print-directory -f RocqMakefile COQBIN="/tmp/rocq-bin/" ROCQBIN="/tmp/rocq-bin/" TIMED=1 -j2 $CORE_VOS
           free -h
           echo "=== [2/3] Compiling CertPasses & CertValidator Proofs (-k -j2) ==="
-          run_mem_guarded opam exec -- make -C vellvm/src --no-print-directory -f RocqMakefile ROCQBIN="/tmp/rocq-bin/" TIMED=1 real-all -k -j2
+          run_mem_guarded opam exec -- env PATH="/tmp/rocq-bin:$PATH" make -C vellvm/src --no-print-directory -f RocqMakefile COQBIN="/tmp/rocq-bin/" ROCQBIN="/tmp/rocq-bin/" TIMED=1 real-all -k -j2
           free -h
           echo "=== [3/3] Extracting Verified OCaml & Building Binaries (-j2) ==="
           run_mem_guarded opam exec -- make -C vellvm/src all -j2
