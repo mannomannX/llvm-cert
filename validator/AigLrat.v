@@ -4498,9 +4498,9 @@ Proof.
           as (a03 & Hs23 & Hw_nl & Hev_nl).
         pose proof (step_spec_trans s01 s02 s03 asg01 a02 a03 Hs12 Hs23) as Hs13.
         exists nl, s03, a03; split; [reflexivity | split; [exact Hs13 | split; [exact Hw_nl |]]].
-        cbn [andb]; rewrite Hev_nl, Hev_xhs, existsb_id_map_f.
-        unfold hi; rewrite (step_spec_eval_lits st0 s01 asg0 asg01 _ Hs01 Hw_hi0),
-                           map_skipn_eq, Hev_ba0.
+        cbn [andb]; rewrite Hev_nl, Hev_xhs, existsb_id_map_f,
+          (step_spec_eval_lits st0 s01 asg0 asg01 hi Hs01 Hw_hi0).
+        unfold hi; rewrite map_skipn_eq, Hev_ba0.
         assert (Hsr_ev : eval_lit asg01 s_res = List.nth (n - 1 - k) ba false).
         { unfold s_res; pose proof (step_spec_trans st st0 s01 asg asg0 asg01 Hs0 Hs01) as Hs001.
           rewrite (step_spec_eval_lit st s01 asg asg01 _ Hs001

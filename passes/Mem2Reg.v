@@ -2855,9 +2855,9 @@ Section MemoryAndSerialization.
       (memM_interp_prov (handle_memtransfer ov args) σ2).
   Proof using.
     unfold handle_memtransfer.
-    destruct args as [| dst [| src [| len [| vlt [| ? ?]]]]];
+    destruct args as [| dst [| src [| len [| vlt rest]]]];
       try apply memM_interp_prov_raise_both.
-    destruct vlt; try apply memM_interp_prov_raise_both.
+    destruct vlt, rest; try apply memM_interp_prov_raise_both.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
     assert (Hlen : refine_prov (eq_sync_post U) U
@@ -2944,9 +2944,9 @@ Section MemoryAndSerialization.
                [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
              eapply refine_prov_bind.
              ++ unfold handle_memset.
-                destruct args1' as [| dst [| val [| len [| vlt [| ? ?]]]]];
+                destruct args1' as [| dst [| val [| len [| vlt rest]]]];
                   try apply memM_interp_prov_raise_both.
-                destruct vlt; try apply memM_interp_prov_raise_both.
+                destruct vlt, rest; try apply memM_interp_prov_raise_both.
                 eapply refine_prov_obs_eq;
                   [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
                 assert (Hval : refine_prov (eq_sync_post U1) U1
@@ -3005,8 +3005,8 @@ Section MemoryAndSerialization.
                   [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
                 eapply refine_prov_bind.
                 ** unfold handle_malloc.
-                   destruct args1' as [| a0 [| ? ?]]; try apply memM_interp_prov_raise_both.
-                   destruct a0; try apply memM_interp_prov_raise_both;
+                   destruct args1' as [| a0 rest]; [apply memM_interp_prov_raise_both |].
+                   destruct a0, rest; try apply memM_interp_prov_raise_both;
                      apply malloc_bytes_equal_sync, Heq1.
                 ** intros U2 [s1 pt1] [s2 pt2] (Hinc2 & Heq2 & <-).
                    apply refine_prov_ret; exact (conj Hinc2 (conj Heq2 Logic.eq_refl)).
@@ -3015,8 +3015,8 @@ Section MemoryAndSerialization.
                      [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
                    eapply refine_prov_bind.
                    --- unfold handle_free.
-                       destruct args1' as [| a0 [| ? ?]]; try apply memM_interp_prov_raise_both.
-                       destruct a0; try apply memM_interp_prov_raise_both.
+                       destruct args1' as [| a0 rest]; [apply memM_interp_prov_raise_both |].
+                       destruct a0, rest; try apply memM_interp_prov_raise_both.
                        +++ destruct (ptr_to_int p =? ptr_to_int null)%Z;
                              [apply refine_prov_ret; exact (conj (incl_refl U1) (conj Heq1 Logic.eq_refl))
                              | apply Free_equal_sync, Heq1].

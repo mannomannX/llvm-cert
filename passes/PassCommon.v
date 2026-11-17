@@ -1671,8 +1671,8 @@ Section ModelSemantics.
     memM_wf_prov (handle_memtransfer overlap_ok args).
   Proof using.
     unfold handle_memtransfer; cbn zeta.
-    destruct args as [| dst [| src [| len [| vol [| ? ?]]]]]; try (intros σ; exact I).
-    destruct vol; try (intros σ; exact I).
+    destruct args as [| dst [| src [| len [| vol rest]]]]; try (intros σ; exact I).
+    destruct vol, rest; try (intros σ; exact I).
     apply memM_wf_prov_bind.
     - destruct len; intros σ; exact I.
     - intros size; destruct dst, src; try (intros σ; exact I);
@@ -1689,8 +1689,8 @@ Section ModelSemantics.
     memM_wf_prov (handle_memset args).
   Proof using.
     unfold handle_memset.
-    destruct args as [| dst [| val [| len [| vol [| ? ?]]]]]; try (intros σ; exact I).
-    destruct vol; try (intros σ; exact I).
+    destruct args as [| dst [| val [| len [| vol rest]]]]; try (intros σ; exact I).
+    destruct vol, rest; try (intros σ; exact I).
     apply memM_wf_prov_bind.
     - destruct val; try (intros σ; exact I).
       destruct (Pos.eqb _ 8); intros σ; exact I.
@@ -1705,8 +1705,8 @@ Section ModelSemantics.
     memM_wf_prov (handle_malloc args align).
   Proof using.
     unfold handle_malloc.
-    destruct args as [| a0 [| ? ?]]; [intros σ; exact I | | intros σ; exact I].
-    destruct a0; try (intros σ; exact I);
+    destruct args as [| a0 rest]; [intros σ; exact I |].
+    destruct a0, rest; try (intros σ; exact I);
       unfold malloc_bytes; cbn [malloc_bytes_with_pr MemoryModelPrimitivesV];
       apply memM_wf_prov_bind; [intros σ p; exact I | intros pr; apply Malloc_bytes_with_pr_wf_prov].
   Qed.
@@ -1715,8 +1715,8 @@ Section ModelSemantics.
     memM_wf_prov (handle_free args).
   Proof using.
     unfold handle_free; cbn [free MemoryModelPrimitivesV].
-    destruct args as [| a0 [| ? ?]]; [intros σ; exact I | | intros σ; exact I].
-    destruct a0; try (intros σ; exact I).
+    destruct args as [| a0 rest]; [intros σ; exact I |].
+    destruct a0, rest; try (intros σ; exact I).
     destruct (_ =? _)%Z; [apply memM_wf_prov_ret | apply Free_wf_prov].
   Qed.
 
