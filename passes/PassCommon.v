@@ -1393,7 +1393,7 @@ Section ModelSemantics.
     revert t pr; ginit; gcofix CIH; intros t pr.
     unfold lift_bot_prov, ITree.map.
     rewrite unfold_translate, unfold_interp_state, unfold_bind.
-    destruct (observe t) as [r | m | X e k]; cbn.
+    destruct (observe t) as [rv | m | X e k]; cbn.
     - gstep; constructor; reflexivity.
     - gstep; constructor; gfinal; left; apply CIH.
     - unfold det_prov_h; cbn [case_]; unfold ITree.trigger.
@@ -1512,7 +1512,7 @@ Section ModelSemantics.
     revert u s; ginit; gcofix CIH; intros u s.
     rewrite (unfold_interp_state interp_vellvm_prov_h u s).
     rewrite (unfold_interp_state interp_vellvm_h u s).
-    destruct (observe u) as [r | m | X e k]; cbn -[interp_vellvm_prov_h interp_vellvm_h].
+    destruct (observe u) as [rv | m | X e k]; cbn -[interp_vellvm_prov_h interp_vellvm_h].
     - rewrite interp_state_ret; unfold ITree.map; rewrite Eqit.bind_ret_l; gstep; constructor; reflexivity.
     - rewrite interp_state_tau; unfold ITree.map; rewrite Eqit.bind_tau.
       gstep; constructor; gfinal; left; apply CIH.

@@ -12657,7 +12657,7 @@ Proof.
   pcofix CIH; intros sigma env u1 u2 [m [Ho1 Ho2]].
   pstep; apply DR_Step; unfold det_step_body.
   rewrite !observe_run_draws, !observe_run_cfg_locals, Ho1, Ho2, !observe_bind.
-  destruct (observe m) as [[l | r] | m' | X e k].
+  destruct (observe m) as [[l | rv] | m' | X e k].
   - cbn [observe]; right; apply CIH.
     exists (f1 l); split;
       [rewrite observe_iter; reflexivity
@@ -12954,7 +12954,7 @@ Proof.
     + exact (obs_eq_cfg_locals_draws sigma env u1 u2 Ho).
     + reflexivity.
     + eapply paco2_mon; [apply det_ref_refl; intros; reflexivity | intros ? ? []].
-  - destruct (observe m) as [[l | r] | m' | X e k] eqn:Hom.
+  - destruct (observe m) as [[l | rv] | m' | X e k] eqn:Hom.
     + pstep; apply DR_Step; unfold det_step_body.
       rewrite !observe_run_draws, !observe_run_cfg_locals, Ho1, Ho2, !observe_bind, Hom; cbn [observe].
       right; apply CIH; right; exists (f1 l); split.
@@ -13010,7 +13010,7 @@ Proof.
       [eapply no_stack_det_obs_eq;
          [symmetry; exact (obs_eq_cfg_locals_draws sigma env u1 u2 Ho) | exact Hns2]
       | intros ? []].
-  - destruct (observe m) as [[l | r] | m' | X e k] eqn:Hom.
+  - destruct (observe m) as [[l | rv] | m' | X e k] eqn:Hom.
     + assert (Ho_t2 : observe (run_draws sigma (run_cfg_locals env u2)) =
                       TauF (run_draws sigma (run_cfg_locals env (ITree.bind (ITree.iter f2 l) g))))
         by (rewrite observe_run_draws, observe_run_cfg_locals, Ho2, !observe_bind, Hom; reflexivity).

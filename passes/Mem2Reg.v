@@ -848,8 +848,8 @@ Section ModelCombinators.
   Proof using.
     ginit; gcofix CIH; intros t k.
     rewrite (unfold_interp_mrec ctx t).
-    destruct (observe t) as [r | m | X [d | e] h] eqn:Hot; cbn [_interp_mrec].
-    - assert (Htk : ITree.bind t k ≅ k r).
+    destruct (observe t) as [rv | m | X [d | e] h] eqn:Hot; cbn [_interp_mrec].
+    - assert (Htk : ITree.bind t k ≅ k rv).
       { rewrite (itree_eta t), Hot, Eqit.bind_ret_l; reflexivity. }
       rewrite (interp_mrec_proper_eq ctx _ _ Htk), Eqit.bind_ret_l.
       gfinal; right; eapply paco2_mon; [reflexivity | intros ? ? []].

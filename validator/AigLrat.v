@@ -3246,7 +3246,7 @@ Proof.
   intros sz x; unfold Integers.signed; rewrite msb_of_sign_cond.
   pose proof (@Integers.unsigned_range sz x) as Hur.
   destruct (Numeric.Rocqlib.zlt (@Integers.unsigned sz x) (@Integers.half_modulus sz));
-    destruct (Z.ltb_spec _ 0%Z); try reflexivity; lia.
+    match goal with |- context [(?u <? 0)%Z] => destruct (Z.ltb_spec u 0%Z) end; try reflexivity; lia.
 Qed.
 
 Lemma unsigned_negative_eq_msb : forall sz (x : @Integers.bit_int sz),
@@ -4140,8 +4140,8 @@ Proof.
       by (destruct (Z.odd k_val); lia).
     rewrite (IH (Z.div2 k_val) Hk2), bools_to_Z_cons.
     destruct b, (Z.odd k_val); cbn [Bool.eqb b2z andb];
-      destruct (Z.eqb_spec (bools_to_Z rest) (Z.div2 k_val)),
-               (Z.eqb_spec _ k_val);
+      destruct (Z.eqb_spec (bools_to_Z rest) (Z.div2 k_val));
+      match goal with |- context [(?u =? k_val)%Z] => destruct (Z.eqb_spec u k_val) end;
       try reflexivity; lia.
 Qed.
 
@@ -5357,7 +5357,7 @@ Proof.
       (step_spec_eval_lit st st2 asg asg2 bin Hs02 Hbin).
     destruct (eval_lit asg x), (eval_lit asg y), (eval_lit asg bin);
       cbn [negb xorb andb orb b2z];
-      destruct (Z.ltb_spec _ _), (Z.ltb_spec _ _);
+      repeat match goal with |- context [(?u <? ?v)%Z] => destruct (Z.ltb_spec u v) end;
       try reflexivity; lia.
 Qed.
 
@@ -5448,7 +5448,8 @@ Proof.
     exists asg1; split; [exact Hs1 | split; [exact Hwf_out |]].
     rewrite Hev_out, (sat_eval_lit_false asg _ Hsat), Hza, Hzb; cbn [b2z].
     unfold Integers.lt.
-    destruct (Z.ltb_spec _ _), (Numeric.Rocqlib.zlt _ _); try reflexivity; lia.
+    match goal with |- context [(?u <? ?v)%Z] => destruct (Z.ltb_spec u v) end;
+      destruct (Numeric.Rocqlib.zlt _ _); try reflexivity; lia.
   - destruct Hwa as ([_ Hla] & Hba & _), Hwb as ([_ Hlb] & Hbb & _).
     destruct (emit_ult_borrow_step _ _ lit_false asg st out st'
                 (eq_trans Hla (eq_sym Hlb))
@@ -5460,7 +5461,8 @@ Proof.
             <- (unsigned_eval_rail_val sz asg a Hla),
             <- (unsigned_eval_rail_val sz asg b Hlb); cbn [b2z].
     unfold Integers.ltu.
-    destruct (Z.ltb_spec _ _), (Numeric.Rocqlib.zlt _ _); try reflexivity; lia.
+    match goal with |- context [(?u <? ?v)%Z] => destruct (Z.ltb_spec u v) end;
+      destruct (Numeric.Rocqlib.zlt _ _); try reflexivity; lia.
 Qed.
 
 Definition blast_icmp_rail
