@@ -2005,7 +2005,7 @@ Proof.
   set (v := bs_next_var st).
   set (asg1 := set_asg asg v b).
   pose proof (agree_below_set_asg asg v b) as Hag.
-  exists asg1; repeat split; cbn -[eval_cnf].
+  exists asg1; repeat split; cbn -[eval_cnf set_asg].
   - lia.
   - exact Hag.
   - lia.
