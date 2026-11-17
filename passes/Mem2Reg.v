@@ -1284,7 +1284,7 @@ Section ModelCombinators.
   Proof using.
     unfold call, trigger, ITree.trigger, interp_cfg_model.
     rewrite (interp_mcfg_model_obs_eq _ _ s (unfold_interp_mrec (mrec_ctx ctx) _)).
-    cbn [_interp_mrec subevent resum ReSum_inl ReSum_id id_ Id_IFun inl1 observe].
+    cbn [_interp_mrec subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1 observe].
     rewrite interp_mcfg_model_tau.
     rewrite (interp_mcfg_model_obs_eq _ _ s
                (interp_mrec_proper_eq (mrec_ctx ctx) _ _ (Eqit.bind_ret_r _))).
@@ -1362,7 +1362,7 @@ Section ModelCombinators.
     eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_bind | reflexivity |].
     eapply refine_prov_obs_eq;
       [symmetry; rewrite (interp_mcfg_model_non_intr _ s1 Logic.eq_refl); reflexivity | reflexivity |].
-    cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity | reflexivity |].
@@ -1378,7 +1378,7 @@ Section ModelCombinators.
     eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_bind | reflexivity |].
     eapply refine_prov_obs_eq;
       [symmetry; rewrite (interp_mcfg_model_non_intr _ s1 Logic.eq_refl); reflexivity | reflexivity |].
-    cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity | reflexivity |].
@@ -1398,7 +1398,7 @@ Section ModelCombinators.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite (interp_mcfg_model_non_intr _ s1 Logic.eq_refl); reflexivity
       | symmetry; rewrite (interp_mcfg_model_non_intr _ s2 Logic.eq_refl); reflexivity |].
-    cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
@@ -1416,7 +1416,7 @@ Section ModelCombinators.
     eapply refine_prov_obs_eq; [symmetry; apply interp_cfg_model_bind | reflexivity |].
     eapply refine_prov_obs_eq;
       [symmetry; rewrite (interp_cfg_model_non_intr ctx1 _ s1 Logic.eq_refl); reflexivity | reflexivity |].
-    cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity | reflexivity |].
@@ -1433,7 +1433,7 @@ Section ModelCombinators.
     eapply refine_prov_obs_eq; [symmetry; apply interp_cfg_model_bind | reflexivity |].
     eapply refine_prov_obs_eq;
       [symmetry; rewrite (interp_cfg_model_non_intr ctx1 _ s1 Logic.eq_refl); reflexivity | reflexivity |].
-    cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity | reflexivity |].
@@ -1454,7 +1454,7 @@ Section ModelCombinators.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite (interp_cfg_model_non_intr ctx1 _ s1 Logic.eq_refl); reflexivity
       | symmetry; rewrite (interp_cfg_model_non_intr ctx2 _ s2 Logic.eq_refl); reflexivity |].
-    cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
@@ -1521,7 +1521,7 @@ Section ModelCombinators.
     eapply refine_prov_obs_eq;
       [symmetry; apply interp_mcfg_model_non_intr; reflexivity
       | symmetry; apply interp_mcfg_model_non_intr; reflexivity |].
-    cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
     unfold fused_memory_prov, on_mem_prov, handle_memory.
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_bind | symmetry; apply Eqit.bind_bind |].
@@ -1552,7 +1552,7 @@ Section ModelCombinators.
     eapply refine_prov_obs_eq;
       [symmetry; apply interp_cfg_model_non_intr; reflexivity
       | symmetry; apply interp_cfg_model_non_intr; reflexivity |].
-    cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
     unfold fused_memory_prov, on_mem_prov, handle_memory.
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_bind | symmetry; apply Eqit.bind_bind |].
@@ -1583,7 +1583,7 @@ Section ModelCombinators.
     intros Hmem.
     eapply refine_prov_obs_eq;
       [symmetry; apply interp_cfg_model_non_intr; reflexivity | symmetry; apply Eqit.bind_ret_r |].
-    cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
     unfold fused_memory_prov, on_mem_prov, handle_memory.
     eapply refine_prov_obs_eq; [symmetry; apply Eqit.bind_bind | reflexivity |].
     eapply refine_prov_bind; [exact Hmem |].
@@ -1654,7 +1654,7 @@ Section ModelCombinators.
   Proof using.
     unfold raiseLLVM, trigger_cast, ITree.trigger.
     rewrite unfold_run_exc_obs, observe_bind.
-    cbn [observe exc_of_event subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+    cbn [observe exc_of_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
     reflexivity.
   Qed.
 
@@ -1859,7 +1859,7 @@ Section ModelCombinators.
         eapply refine_prov_obs_eq;
           [symmetry; apply interp_cfg_model_non_intr; reflexivity
           | symmetry; apply interp_cfg_model_non_intr; reflexivity |].
-        cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+        cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
         unfold fused_trigger_prov, ITree.trigger.
         eapply refine_prov_obs_eq;
           [symmetry; apply Eqit.bind_vis | symmetry; apply Eqit.bind_vis |].
@@ -1876,7 +1876,7 @@ Section ModelCombinators.
         | reflexivity |].
       eapply refine_prov_obs_eq;
         [symmetry; rewrite (interp_cfg_model_non_intr ctx1 _ s1 Logic.eq_refl); reflexivity | reflexivity |].
-      cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
       unfold fused_trigger_prov, ITree.trigger.
       eapply refine_prov_obs_eq;
         [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity | reflexivity |].
@@ -1892,7 +1892,7 @@ Section ModelCombinators.
         | reflexivity |].
       eapply refine_prov_obs_eq;
         [symmetry; rewrite (interp_cfg_model_non_intr ctx1 _ s1 Logic.eq_refl); reflexivity | reflexivity |].
-      cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
       unfold fused_trigger_prov, ITree.trigger.
       eapply refine_prov_obs_eq;
         [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity | reflexivity |].
@@ -7500,12 +7500,12 @@ Section MemoryAndSerialization.
     cbv zeta; unfold gread, Subevent.trigger; try unfold trigger_cast.
     destruct (Maps.lookup gid g) as [v |] eqn:Elk.
     - assert (H1 : interp_vellvm_prov_h (subevent _ (GlobalRead gid)) (σ1, (ls1, g)) ≅ Ret ((σ1, (ls1, g)), v)).
-      { unfold interp_vellvm_prov_h; cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
         unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, update_globals_ref;
           cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
         rewrite Elk, !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity. }
       assert (H2 : interp_vellvm_prov_h (subevent _ (GlobalRead gid)) (σ2, (ls2, g)) ≅ Ret ((σ2, (ls2, g)), v)).
-      { unfold interp_vellvm_prov_h; cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
         unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, update_globals_ref;
           cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
         rewrite Elk, !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity. }
@@ -7516,7 +7516,7 @@ Section MemoryAndSerialization.
     - eapply refine_prov_obs_eq.
       + symmetry; apply interp_mcfg_model_non_intr; reflexivity.
       + symmetry; apply interp_mcfg_model_non_intr; reflexivity.
-      + unfold interp_vellvm_prov_h; cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      + unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
         unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, raise, trigger_cast, ITree.trigger, lift_bot_prov;
           cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
         rewrite Elk.
@@ -7553,10 +7553,10 @@ Section MemoryAndSerialization.
       destruct (fused_local_prov_read_none lid (σ2, ((sf2, fstk2), g2)) Elk2) as (msg2 & k2 & H2).
       eapply refine_prov_obs_eq.
       + symmetry; rewrite interp_mcfg_model_non_intr by reflexivity.
-        unfold interp_vellvm_prov_h; cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+        unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
         rewrite H1, Eqit.bind_vis; reflexivity.
       + symmetry; rewrite interp_mcfg_model_non_intr by reflexivity.
-        unfold interp_vellvm_prov_h; cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+        unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
         rewrite H2, Eqit.bind_vis; reflexivity.
       + pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
   Qed.
@@ -7574,31 +7574,31 @@ Section MemoryAndSerialization.
     - eapply refine_prov_obs_eq;
         [symmetry; apply interp_mcfg_model_non_intr; reflexivity
         | symmetry; apply interp_mcfg_model_non_intr; reflexivity |].
-      unfold interp_vellvm_prov_h; cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
       unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree].
       unfold raiseOOM, trigger_cast, ITree.trigger, lift_bot_prov.
       pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
     - eapply refine_prov_obs_eq;
         [symmetry; apply interp_mcfg_model_non_intr; reflexivity
         | symmetry; apply interp_mcfg_model_non_intr; reflexivity |].
-      unfold interp_vellvm_prov_h; cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
       unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree].
       unfold raiseUB, trigger_cast, ITree.trigger, lift_bot_prov.
       pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
     - eapply refine_prov_obs_eq;
         [symmetry; apply interp_mcfg_model_non_intr; reflexivity
         | symmetry; apply interp_mcfg_model_non_intr; reflexivity |].
-      unfold interp_vellvm_prov_h; cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
       unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree].
       unfold raise, trigger_cast, ITree.trigger, lift_bot_prov.
       pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn;
         right; right; split; [exact I | intros [] [] _].
     - assert (Hd1 : interp_vellvm_prov_h (subevent _ (Draw dt)) s1 ≅ Ret (s1, dv)).
-      { unfold interp_vellvm_prov_h; cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
         unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree ExtLib.Structures.Monad.ret Monad_itree].
         rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity. }
       assert (Hd2 : interp_vellvm_prov_h (subevent _ (Draw dt)) s2 ≅ Ret (s2, dv)).
-      { unfold interp_vellvm_prov_h; cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
         unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree ExtLib.Structures.Monad.ret Monad_itree].
         rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity. }
       eapply refine_prov_tau_star_l; [eapply tau_star_mcfg_det; [reflexivity | exact Hd1] |].
@@ -7994,7 +7994,7 @@ Section MemoryAndSerialization.
       eapply refine_prov_obs_eq;
         [symmetry; apply interp_cfg_model_non_intr; reflexivity
         | symmetry; apply interp_cfg_model_non_intr; reflexivity |].
-      cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
       unfold fused_trigger_prov, ITree.trigger.
       eapply refine_prov_obs_eq;
         [symmetry; apply Eqit.bind_vis | symmetry; apply Eqit.bind_vis |].
@@ -8356,7 +8356,7 @@ Section MemoryAndSerialization.
     unfold lwrite, Subevent.trigger; try unfold trigger_cast.
     eapply tau_star_cfg_det; [reflexivity |].
     unfold interp_vellvm_prov_h;
-      cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
     apply fused_local_prov_write.
   Qed.
 
@@ -8387,7 +8387,7 @@ Section MemoryAndSerialization.
     unfold lread, Subevent.trigger; try unfold trigger_cast.
     eapply tau_star_cfg_det; [reflexivity |].
     unfold interp_vellvm_prov_h;
-      cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
     exact (fused_local_prov_read_some x v (σ, ((sf, fstk), g)) Hlk).
   Qed.
 
@@ -8420,7 +8420,7 @@ Section MemoryAndSerialization.
     unfold stack_push, Subevent.trigger; try unfold trigger_cast.
     eapply tau_star_cfg_det; [reflexivity |].
     unfold interp_vellvm_prov_h;
-      cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
     unfold fused_stack_prov, on_ls_prov, handle_stack;
       cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
     rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity.
@@ -8437,7 +8437,7 @@ Section MemoryAndSerialization.
     unfold stack_pop, Subevent.trigger; try unfold trigger_cast.
     eapply tau_star_cfg_det; [reflexivity |].
     unfold interp_vellvm_prov_h;
-      cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
     unfold fused_stack_prov, on_ls_prov, handle_stack;
       cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
     rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity.
@@ -8453,7 +8453,7 @@ Section MemoryAndSerialization.
     unfold gwrite, Subevent.trigger; try unfold trigger_cast.
     eapply tau_star_mcfg_det; [reflexivity |].
     unfold interp_vellvm_prov_h;
-      cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
     unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, update_globals_ref;
       cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
     rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity.
@@ -8785,7 +8785,7 @@ Section MemoryAndSerialization.
         eapply refine_prov_obs_eq;
           [symmetry; apply interp_cfg_model_non_intr; reflexivity
           | symmetry; apply interp_cfg_model_non_intr; reflexivity |].
-        cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+        cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
         unfold fused_trigger_prov, ITree.trigger.
         eapply refine_prov_obs_eq;
           [symmetry; apply Eqit.bind_vis | symmetry; apply Eqit.bind_vis |].
@@ -9531,7 +9531,7 @@ Section MemoryAndSerialization.
     destruct rest as [ls g].
     unfold interp_vellvm_prov_h.
     destruct e as [e1 | [e2 | [e3 | [[e4a | e4b] | [e5 | [e6 | [e7 | [e8 | [e9 | [e10 | e11]]]]]]]]]];
-      cbn [case_].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_].
     - apply fused_trigger_prov_equal_sync, Heq.
     - unfold fused_intrinsic_prov, handle_intrinsic.
       apply on_mem_prov_equal_sync, handle_intrinsicM_equal_sync, Heq.
@@ -10975,7 +10975,7 @@ Section MemoryAndSerialization.
     unfold lread, Subevent.trigger; try unfold trigger_cast.
     eapply tau_star_mcfg_det; [reflexivity |].
     unfold interp_vellvm_prov_h;
-      cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
     exact (fused_local_prov_read_some x v (σ, ((sf, fstk), g)) Hlk).
   Qed.
 
@@ -11005,7 +11005,7 @@ Section MemoryAndSerialization.
       rewrite (eq_itree_clo_bind _ _ _ _ Logic.eq
                  (interp_mcfg_model_non_intr (subevent _ (Throw (print_msg msg2))) s2 Logic.eq_refl)
                  (fun _ _ <- => Logic.eq_refl)).
-      cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
       unfold fused_trigger_prov, ITree.trigger.
       rewrite !Eqit.bind_bind, !Eqit.bind_vis.
       apply eqit_Vis; intros []. }
@@ -11037,7 +11037,7 @@ Section MemoryAndSerialization.
     rewrite (eq_itree_clo_bind _ _ _ _ Logic.eq
                (interp_mcfg_model_non_intr (subevent _ (Throw (print_msg msg))) s2 Logic.eq_refl)
                (fun _ _ <- => Logic.eq_refl)).
-    cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
     unfold fused_trigger_prov, ITree.trigger.
     rewrite !Eqit.bind_bind, !Eqit.bind_vis.
     apply eqit_Vis; intros [].
@@ -11561,7 +11561,7 @@ Section MemoryAndSerialization.
   Proof using.
     unfold interp_vellvm_prov_h.
     destruct e as [e1 | [e2 | [e3 | [[e4a | e4b] | [e5 | [e6 | [e7 | [e8 | [e9 | [e10 | e11]]]]]]]]]];
-      cbn [case_].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_].
     - apply fused_trigger_prov_g_sync, Heq.
     - unfold fused_intrinsic_prov, handle_intrinsic.
       apply on_mem_prov_g_sync, handle_intrinsicM_equal_sync, Heq.
@@ -11919,8 +11919,8 @@ Section MemoryAndSerialization.
     eapply ev_ok_obs_eq; [symmetry; exact Etr |].
     eapply ev_ok_bind; [| intros x; pstep; eapply EOK_Tau; [reflexivity | left; apply ev_ok_ret]].
     destruct me as [e1 | [ie | fe]].
-    - cbn [interp_intrinsics_h case_ E_trigger Subevent.trigger]; apply ev_ok_trigger; reflexivity.
-    - cbn [interp_intrinsics_h case_].
+    - cbn [interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ E_trigger Subevent.trigger]; apply ev_ok_trigger; reflexivity.
+    - cbn [interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_].
       unfold handle_intrinsics.
       destruct ie as [dt fname args va]; cbn.
       destruct (assoc fname defs_assoc) as [f |] eqn:Eassoc.
@@ -11930,7 +11930,7 @@ Section MemoryAndSerialization.
         pose proof defined_intrinsics_ev_ok as Hall; rewrite Forall_forall in Hall.
         exact (Hall (decl, f) Hin_def args va).
       + cbn; apply ev_ok_trigger; reflexivity.
-    - cbn [interp_intrinsics_h case_ F_trigger Subevent.trigger].
+    - cbn [interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ F_trigger Subevent.trigger].
       apply ev_ok_trigger, Hng.
   Qed.
 
@@ -16132,7 +16132,7 @@ Section MemoryAndSerialization.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite (interp_mcfg_model_non_intr _ s1 Logic.eq_refl); reflexivity
       | symmetry; rewrite (interp_mcfg_model_non_intr _ s2 Logic.eq_refl); reflexivity |].
-    cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
@@ -17354,7 +17354,7 @@ Section MemoryAndSerialization.
         eapply refine_prov_obs_eq;
           [symmetry; apply interp_cfg_model_non_intr; reflexivity
           | symmetry; apply interp_cfg_model_non_intr; reflexivity |].
-        cbn [interp_vellvm_prov_h case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+        cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
         unfold fused_trigger_prov.
         eapply refine_prov_obs_eq;
           [symmetry; apply Eqit.bind_bind | symmetry; apply Eqit.bind_bind |].

@@ -1980,7 +1980,7 @@ Section SCCPSimulation.
   Proof using.
     unfold withCall, lread, ITree.trigger.
     rewrite unfold_translate;
-      cbn [observe translateF subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      cbn [observe translateF subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
     rewrite !Eqit.bind_vis.
     pstep; red; cbn [observe]; constructor; intros v; left.
     rewrite translate_ret, !Eqit.bind_ret_l; reflexivity.
@@ -2153,7 +2153,7 @@ Section SCCPSimulation.
     unfold withCall, lread, ITree.trigger.
     pstep; apply CLS_Step; unfold cls_step_body.
     rewrite !observe_translate;
-      cbn [observe subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
     right; right.
     split; [reflexivity | split; [exact Hlk |]].
     intros v _; left.
@@ -2182,7 +2182,7 @@ Section SCCPSimulation.
     unfold withCall, draw, ITree.trigger.
     pstep; apply CLS_Step; unfold cls_step_body.
     rewrite !observe_translate;
-      cbn [observe subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+      cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
     right; left; split; [reflexivity | split; [apply EqE_CFG_refl |]].
     intros a1 a2 Ha _; apply EqA_CFG_eq in Ha; subst a2.
     left; apply cfg_local_sim_withCall_ret; repeat split; reflexivity.

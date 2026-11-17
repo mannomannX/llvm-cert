@@ -5927,35 +5927,35 @@ Section ValueDrawRefinement.
       eapply VDS_TauR; [reflexivity | exact IH].
     - eapply VDS_ReadL with (k1 := fun y => Tau (run_exc (k1 y))).
       + rewrite Hu1, bind_trigger, unfold_run_exc_obs;
-          cbn [observe exc_of_event subevent resum ReSum_inr ReSum_inl inr1 inl1].
+          cbn [observe exc_of_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
         rewrite bind_trigger; reflexivity.
       + exact Hlk.
       + eapply VDS_TauL; [reflexivity | exact IH].
     - eapply VDS_ReadR with (k2 := fun y => Tau (run_exc (k2 y))).
       + rewrite Hu2, bind_trigger, unfold_run_exc_obs;
-          cbn [observe exc_of_event subevent resum ReSum_inr ReSum_inl inr1 inl1].
+          cbn [observe exc_of_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
         rewrite bind_trigger; reflexivity.
       + exact Hlk.
       + eapply VDS_TauR; [reflexivity | exact IH].
     - eapply VDS_WriteL with (k1 := fun y => Tau (run_exc (k1 y))).
       + rewrite Hu1, bind_trigger, unfold_run_exc_obs;
-          cbn [observe exc_of_event subevent resum ReSum_inr ReSum_inl inr1 inl1].
+          cbn [observe exc_of_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
         rewrite bind_trigger; reflexivity.
       + eapply VDS_TauL; [reflexivity | exact IH].
     - eapply VDS_WriteR with (k2 := fun y => Tau (run_exc (k2 y))).
       + rewrite Hu2, bind_trigger, unfold_run_exc_obs;
-          cbn [observe exc_of_event subevent resum ReSum_inr ReSum_inl inr1 inl1].
+          cbn [observe exc_of_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
         rewrite bind_trigger; reflexivity.
       + eapply VDS_TauR; [reflexivity | exact IH].
     - eapply VDS_DrawL with (k1 := fun y => Tau (run_exc (k1 y))).
       + rewrite Hu1, bind_trigger, unfold_run_exc_obs;
-          cbn [observe exc_of_event subevent resum ReSum_inr ReSum_inl inr1 inl1].
+          cbn [observe exc_of_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
         rewrite bind_trigger; reflexivity.
       + exact Hv.
       + eapply VDS_TauL; [reflexivity | exact IH].
     - eapply VDS_DrawR with (k2 := fun y => Tau (run_exc (k2 y))).
       + rewrite Hu2, bind_trigger, unfold_run_exc_obs;
-          cbn [observe exc_of_event subevent resum ReSum_inr ReSum_inl inr1 inl1].
+          cbn [observe exc_of_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
         rewrite bind_trigger; reflexivity.
       + intros v Hv; eapply VDS_TauR; [reflexivity | exact (IH v Hv)].
   Qed.
@@ -6477,30 +6477,30 @@ Section ValueDrawRefinement.
         | symmetry; rewrite unfold_interp_mrec, Hu2; reflexivity |].
       eapply VDS_TauR; [reflexivity | exact IH].
     - eapply VDS_ReadL with (k1 := fun y => Tau (interp_mrec (mm_mrec_ctx ctx1) (k1 y))).
-      + rewrite Hu1, bind_trigger, unfold_interp_mrec; cbn [observe subevent resum ReSum_inr ReSum_inl inr1 inl1].
+      + rewrite Hu1, bind_trigger, unfold_interp_mrec; cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
         rewrite bind_trigger; reflexivity.
       + exact Hlk.
       + eapply VDS_TauL; [reflexivity | exact IH].
     - eapply VDS_ReadR with (k2 := fun y => Tau (interp_mrec (mm_mrec_ctx ctx2) (k2 y))).
-      + rewrite Hu2, bind_trigger, unfold_interp_mrec; cbn [observe subevent resum ReSum_inr ReSum_inl inr1 inl1].
+      + rewrite Hu2, bind_trigger, unfold_interp_mrec; cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
         rewrite bind_trigger; reflexivity.
       + exact Hlk.
       + eapply VDS_TauR; [reflexivity | exact IH].
     - eapply VDS_WriteL with (k1 := fun y => Tau (interp_mrec (mm_mrec_ctx ctx1) (k1 y))).
-      + rewrite Hu1, bind_trigger, unfold_interp_mrec; cbn [observe subevent resum ReSum_inr ReSum_inl inr1 inl1].
+      + rewrite Hu1, bind_trigger, unfold_interp_mrec; cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
         rewrite bind_trigger; reflexivity.
       + eapply VDS_TauL; [reflexivity | exact IH].
     - eapply VDS_WriteR with (k2 := fun y => Tau (interp_mrec (mm_mrec_ctx ctx2) (k2 y))).
-      + rewrite Hu2, bind_trigger, unfold_interp_mrec; cbn [observe subevent resum ReSum_inr ReSum_inl inr1 inl1].
+      + rewrite Hu2, bind_trigger, unfold_interp_mrec; cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
         rewrite bind_trigger; reflexivity.
       + eapply VDS_TauR; [reflexivity | exact IH].
     - eapply VDS_DrawL with (k1 := fun y => Tau (interp_mrec (mm_mrec_ctx ctx1) (k1 y))).
-      + rewrite Hu1, bind_trigger, unfold_interp_mrec; cbn [observe subevent resum ReSum_inr ReSum_inl inr1 inl1].
+      + rewrite Hu1, bind_trigger, unfold_interp_mrec; cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
         rewrite bind_trigger; reflexivity.
       + exact Hv.
       + eapply VDS_TauL; [reflexivity | exact IH].
     - eapply VDS_DrawR with (k2 := fun y => Tau (interp_mrec (mm_mrec_ctx ctx2) (k2 y))).
-      + rewrite Hu2, bind_trigger, unfold_interp_mrec; cbn [observe subevent resum ReSum_inr ReSum_inl inr1 inl1].
+      + rewrite Hu2, bind_trigger, unfold_interp_mrec; cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
         rewrite bind_trigger; reflexivity.
       + intros v Hv; eapply VDS_TauR; [reflexivity | exact (IH v Hv)].
   Qed.
@@ -6543,7 +6543,7 @@ Section ValueDrawRefinement.
         + destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
           destruct Hvis as [(Hsync & HE & HA) | [Hloc | Hstk]].
           * destruct ev1 as [ec1 | [ie1 | re1]], ev2 as [ec2 | [ie2 | re2]]; cbn in HE; try contradiction.
-            -- cbn [interp_intrinsics_h case_ E_trigger]; unfold ITree.trigger.
+            -- cbn [interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ E_trigger]; unfold ITree.trigger.
                pstep; apply VDS_Step; unfold vds_step_body; rewrite !observe_bind; cbn.
                right; left; split; [reflexivity | split; [exact HE |]].
                intros a1 a2 Ha Hp; specialize (HA a1 a2 Ha Hp); destruct HA as [HA | Hb]; [| inversion Hb].
@@ -6551,12 +6551,12 @@ Section ValueDrawRefinement.
                  [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
                apply vds_sim_ret; exact HA.
             -- destruct ie1 as [dt1 fn1 args1 va1], ie2 as [dt2 fn2 args2 va2].
-               destruct HE as (<- & <- & <- & <-); cbn [interp_intrinsics_h case_].
+               destruct HE as (<- & <- & <- & <-); cbn [interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_].
                eapply vds_sim_bind; [apply mcfg_stack_to_vdraw_sim, handle_intrinsics_sync |].
                intros ? ? ? a1 _ (-> & -> & -> & <-).
                specialize (HA a1 a1 Logic.eq_refl I); destruct HA as [HA | Hb]; [| inversion Hb].
                apply vds_sim_ret; exact HA.
-            -- cbn [interp_intrinsics_h case_ F_trigger]; unfold ITree.trigger.
+            -- cbn [interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ F_trigger]; unfold ITree.trigger.
                pstep; apply VDS_Step; unfold vds_step_body; rewrite !observe_bind; cbn.
                right; left; split; [exact Hsync | split; [exact HE |]].
                intros a1 a2 Ha Hp; specialize (HA a1 a2 Ha Hp); destruct HA as [HA | Hb]; [| inversion Hb].
@@ -6569,7 +6569,7 @@ Section ValueDrawRefinement.
               destruct_sum1 ev1; try discriminate Ele1;
               destruct_sum1 ev2; try discriminate Ele2;
               inversion Ele1; subst; inversion Ele2; subst;
-              cbn [interp_intrinsics_h case_ F_trigger]; unfold ITree.trigger.
+              cbn [interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ F_trigger]; unfold ITree.trigger.
             -- destruct Hloc as (<- & Hlk & Hrd).
                pstep; apply VDS_Step; unfold vds_step_body; rewrite !observe_bind; cbn.
                right; right; left; split; [reflexivity | split; [exact Hlk |]].
@@ -6589,7 +6589,7 @@ Section ValueDrawRefinement.
               destruct_sum1 ev1; try discriminate Ese1;
               destruct_sum1 ev2; try discriminate Ese2;
               inversion Ese1; subst; inversion Ese2; subst;
-              cbn [interp_intrinsics_h case_ F_trigger]; unfold ITree.trigger.
+              cbn [interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ F_trigger]; unfold ITree.trigger.
             -- destruct Hstk as [Hr | Hb]; [| inversion Hb].
                pstep; apply VDS_Step; unfold vds_step_body; rewrite !observe_bind; cbn.
                right; right; right.
@@ -6712,35 +6712,35 @@ Section ValueDrawRefinement.
         eapply VDS_TauR; [reflexivity | exact IH].
       - eapply VDS_ReadL with (k1 := fun y => Tau (interp_intrinsics (k1 y))).
         + unfold interp_intrinsics; rewrite Hu1, bind_trigger, unfold_interp;
-            cbn [observe interp_intrinsics_h case_ F_trigger subevent resum ReSum_inr ReSum_inl inr1 inl1].
+            cbn [observe interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ F_trigger subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
           rewrite bind_trigger; reflexivity.
         + exact Hlk.
         + eapply VDS_TauL; [reflexivity | exact IH].
       - eapply VDS_ReadR with (k2 := fun y => Tau (interp_intrinsics (k2 y))).
         + unfold interp_intrinsics; rewrite Hu2, bind_trigger, unfold_interp;
-            cbn [observe interp_intrinsics_h case_ F_trigger subevent resum ReSum_inr ReSum_inl inr1 inl1].
+            cbn [observe interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ F_trigger subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
           rewrite bind_trigger; reflexivity.
         + exact Hlk.
         + eapply VDS_TauR; [reflexivity | exact IH].
       - eapply VDS_WriteL with (k1 := fun y => Tau (interp_intrinsics (k1 y))).
         + unfold interp_intrinsics; rewrite Hu1, bind_trigger, unfold_interp;
-            cbn [observe interp_intrinsics_h case_ F_trigger subevent resum ReSum_inr ReSum_inl inr1 inl1].
+            cbn [observe interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ F_trigger subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
           rewrite bind_trigger; reflexivity.
         + eapply VDS_TauL; [reflexivity | exact IH].
       - eapply VDS_WriteR with (k2 := fun y => Tau (interp_intrinsics (k2 y))).
         + unfold interp_intrinsics; rewrite Hu2, bind_trigger, unfold_interp;
-            cbn [observe interp_intrinsics_h case_ F_trigger subevent resum ReSum_inr ReSum_inl inr1 inl1].
+            cbn [observe interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ F_trigger subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
           rewrite bind_trigger; reflexivity.
         + eapply VDS_TauR; [reflexivity | exact IH].
       - eapply VDS_DrawL with (k1 := fun y => Tau (interp_intrinsics (k1 y))).
         + unfold interp_intrinsics; rewrite Hu1, bind_trigger, unfold_interp;
-            cbn [observe interp_intrinsics_h case_ F_trigger subevent resum ReSum_inr ReSum_inl inr1 inl1].
+            cbn [observe interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ F_trigger subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
           rewrite bind_trigger; reflexivity.
         + exact Hv.
         + eapply VDS_TauL; [reflexivity | exact IH].
       - eapply VDS_DrawR with (k2 := fun y => Tau (interp_intrinsics (k2 y))).
         + unfold interp_intrinsics; rewrite Hu2, bind_trigger, unfold_interp;
-            cbn [observe interp_intrinsics_h case_ F_trigger subevent resum ReSum_inr ReSum_inl inr1 inl1].
+            cbn [observe interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ F_trigger subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
           rewrite bind_trigger; reflexivity.
         + intros v Hv; eapply VDS_TauR; [reflexivity | exact (IH v Hv)]. }
     assert (Hmain :
@@ -6807,7 +6807,7 @@ Section ValueDrawRefinement.
     - destruct_sum1 e1; try discriminate Ed1;
         destruct_sum1 e2; cbn in HE; try contradiction.
       destruct e1 as [dt1], e2 as [dt2]; subst dt2.
-      unfold interp_vellvm_rel_draw_h; cbn [case_]; unfold ITree.trigger.
+      unfold interp_vellvm_rel_draw_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_]; unfold ITree.trigger.
       pstep; apply RPD_Step; unfold rpd_step_body; rewrite !observe_bind; cbn.
       right; right; split; [reflexivity | intros v Hv].
       left; eapply refine_prov_draw_obs_eq;
@@ -6902,7 +6902,7 @@ Section ValueDrawRefinement.
       - destruct Hstep as [Hub | Hvis].
         + destruct_sum1 ev1; try discriminate Hub; destruct ev1 as [u].
           pstep; apply RPD_Step; unfold rpd_step_body, interp_vellvm_rel_draw_h;
-            cbn [case_]; unfold fused_trigger_prov, ITree.trigger, lift_prov_to_draw;
+            cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_]; unfold fused_trigger_prov, ITree.trigger, lift_prov_to_draw;
             repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
         + destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
           destruct Hvis as [(Hsync & HE & HA) | [Hloc | Hstk]].
@@ -6917,7 +6917,7 @@ Section ValueDrawRefinement.
               destruct_sum1 ev1; try discriminate Ele1;
               destruct_sum1 ev2; try discriminate Ele2;
               inversion Ele1; subst; inversion Ele2; subst;
-              unfold interp_vellvm_rel_draw_h; cbn [case_];
+              unfold interp_vellvm_rel_draw_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_];
               destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]].
             -- destruct Hloc as (<- & Hlk_eq & Hrd).
                pose proof Hmatch as (Hmm & Hgg & (Hvars1 & Hvars2 & Hexc & Hloc) & Hsfm).
@@ -6961,7 +6961,7 @@ Section ValueDrawRefinement.
               destruct_sum1 ev1; try discriminate Ese1;
               destruct_sum1 ev2; try discriminate Ese2;
               inversion Ese1; subst; inversion Ese2; subst;
-              unfold interp_vellvm_rel_draw_h; cbn [case_];
+              unfold interp_vellvm_rel_draw_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_];
               destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]];
               destruct Hmatch as (<- & <- & Hsf & Hsfm).
             -- destruct Hstk as [Hr | Hb]; [| inversion Hb].
@@ -7126,7 +7126,7 @@ Section ValueDrawRefinement.
           (t2 := interp_state interp_vellvm_rel_draw_h u2 (mm2, ((sf2, fstk2), gg2))).
         + exact Hr_eq.
         + symmetry; rewrite Hu1, bind_trigger, interp_state_vis;
-            cbn [interp_vellvm_rel_draw_h case_ subevent resum ReSum_inr ReSum_inl inr1 inl1].
+            cbn [interp_vellvm_rel_draw_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
           rewrite (lift_prov_to_draw_eq _ _
                      (fused_local_prov_read_some x v (mm1, ((sf1, fstk1), gg1))
                         (ltac:(rewrite Hvars1; exact Hlk)))),
@@ -7141,7 +7141,7 @@ Section ValueDrawRefinement.
         + exact Hr_eq.
         + reflexivity.
         + symmetry; rewrite Hu2, bind_trigger, interp_state_vis;
-            cbn [interp_vellvm_rel_draw_h case_ subevent resum ReSum_inr ReSum_inl inr1 inl1].
+            cbn [interp_vellvm_rel_draw_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
           rewrite (lift_prov_to_draw_eq _ _
                      (fused_local_prov_read_some x v (mm2, ((sf2, fstk2), gg2))
                         (ltac:(rewrite Hvars2; exact Hlk)))),
@@ -7155,7 +7155,7 @@ Section ValueDrawRefinement.
           (t2 := interp_state interp_vellvm_rel_draw_h u2 (mm1, ((sf2, fstk2), gg1))).
         + exact Hr_eq.
         + symmetry; rewrite Hu1, bind_trigger, interp_state_vis;
-            cbn [interp_vellvm_rel_draw_h case_ subevent resum ReSum_inr ReSum_inl inr1 inl1].
+            cbn [interp_vellvm_rel_draw_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
           rewrite (lift_prov_to_draw_eq _ _ (fused_local_prov_write _ _ _ _ _ _)),
                   lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity.
         + reflexivity.
@@ -7170,14 +7170,14 @@ Section ValueDrawRefinement.
         + exact Hr_eq.
         + reflexivity.
         + symmetry; rewrite Hu2, bind_trigger, interp_state_vis;
-            cbn [interp_vellvm_rel_draw_h case_ subevent resum ReSum_inr ReSum_inl inr1 inl1].
+            cbn [interp_vellvm_rel_draw_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
           rewrite (lift_prov_to_draw_eq _ _ (fused_local_prov_write _ _ _ _ _ _)),
                   lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity.
         + eapply RPD_TauR; [reflexivity | apply IH].
           rewrite Hvars2; repeat split; try exact Hvars1; try exact Hexc; try exact Hloc; try exact Hsfm; reflexivity.
       - eapply RPD_DrawL.
         + rewrite Hu1, bind_trigger, interp_state_vis;
-            cbn [interp_vellvm_rel_draw_h case_ subevent resum ReSum_inr ReSum_inl inr1 inl1];
+            cbn [interp_vellvm_rel_draw_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1];
             rewrite Eqit.bind_bind; reflexivity.
         + exact Hv.
         + eapply refine_prov_draw__obs_eq;
@@ -7185,7 +7185,7 @@ Section ValueDrawRefinement.
           cbn [fst snd]; eapply RPD_TauL; [reflexivity | apply IH, Hmatch].
       - eapply RPD_DrawR.
         + rewrite Hu2, bind_trigger, interp_state_vis;
-            cbn [interp_vellvm_rel_draw_h case_ subevent resum ReSum_inr ReSum_inl inr1 inl1];
+            cbn [interp_vellvm_rel_draw_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1];
             rewrite Eqit.bind_bind; reflexivity.
         + intros v Hv.
           eapply refine_prov_draw__obs_eq;

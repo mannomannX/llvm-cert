@@ -4636,7 +4636,7 @@ Proof.
         rewrite Hbits_res; unfold spec_bits.
         rewrite nth_app_r by (rewrite repeat_length; lia).
         rewrite repeat_length, nth_firstn_lt by lia; reflexivity. }
-      rewrite Hmsb_res, bools_to_Z_eq_repeat_iff, Bool.negb_involutive; reflexivity. }
+      rewrite Hmsb_res, bools_to_Z_eq_repeat_iff, Bool.negb_involutive, Hhi_len; reflexivity. }
   exists asg3; split; [exact Hs03 | split].
   - split; [split; [reflexivity | cbn; exact Hlen_bits] |
             split; [exact (wf_lits_bound_mono _ _ bits (proj1 Hs13) Hwf_bits) | exact Hwf_p]].
