@@ -572,6 +572,42 @@ Variant cutNone {E : Type -> Type} : forall [A : Type], E A -> Prop := .
 Variant cutUB_rel {E : Type -> Type} `{UBE -< E} : forall [A : Type], E A -> Prop :=
   | CutUB_rel u : cutUB_rel (subevent _ (ThrowUB u)).
 
+Ltac destruct_sum1 e :=
+  repeat match type of e with
+  | (_ +' _) _ => destruct e as [e | e]
+  end.
+
+Ltac destruct_sum2 e1 e2 HE :=
+  repeat match type of e1 with
+  | (_ +' _) _ =>
+      match type of HE with
+      | sum_prerel_c _ _ _ _ _ _ => idtac
+      | sum_postrel_c _ _ _ _ _ _ _ _ => idtac
+      | _ => try red in HE
+      end;
+      destruct e1 as [e1 | e1], e2 as [e2 | e2];
+      cbn [sum_prerel_c sum_postrel_c] in HE;
+      try contradiction
+  end.
+
+Ltac destruct_sum3 e1 e2 e3 H12 H23 :=
+  repeat match type of e1 with
+  | (_ +' _) _ =>
+      match type of H12 with
+      | sum_prerel_c _ _ _ _ _ _ => idtac
+      | sum_postrel_c _ _ _ _ _ _ _ _ => idtac
+      | _ => try red in H12
+      end;
+      match type of H23 with
+      | sum_prerel_c _ _ _ _ _ _ => idtac
+      | sum_postrel_c _ _ _ _ _ _ _ _ => idtac
+      | _ => try red in H23
+      end;
+      destruct e1 as [e1 | e1], e2 as [e2 | e2], e3 as [e3 | e3];
+      cbn [sum_prerel_c sum_postrel_c] in H12, H23;
+      try contradiction
+  end.
+
 Section EventRelations.
   Context {Pa : Params}.
 
@@ -863,7 +899,12 @@ Section EventRelations.
 
   Lemma EqE_MCFG_refl {A} (e : MCFGEtop A) : EqE_MCFG A A e e.
   Proof using.
-    repeat (destruct e as [e | e]); destruct e; cbn; auto.
+    destruct_sum1 e; destruct e; cbn; auto.
+  Qed.
+
+  Lemma EqA_MCFG_refl {A} (e : MCFGEtop A) (a : A) : EqA_MCFG A A e a e a.
+  Proof using.
+    destruct_sum1 e; destruct e; cbn; try destruct a; reflexivity.
   Qed.
 
   Lemma EqE_CFG_refl {A} (e : CFGEtop A) : EqE_CFG A A e e.
@@ -873,32 +914,27 @@ Section EventRelations.
 
   Lemma EqE_bot_refl {A} (e : MCFGEbot A) : EqE_bot A A e e.
   Proof using.
-    repeat (destruct e as [e | e]); destruct e; cbn; auto.
+    destruct_sum1 e; destruct e; cbn; auto.
   Qed.
 
   Lemma EqE_bot_trans {A B C} (e1 : MCFGEbot A) (e2 : MCFGEbot B) (e3 : MCFGEbot C) :
     EqE_bot A B e1 e2 -> EqE_bot B C e2 e3 -> EqE_bot A C e1 e3.
   Proof using.
-    repeat (destruct e1 as [e1 | e1]);
-      repeat (destruct e2 as [e2 | e2]);
-      repeat (destruct e3 as [e3 | e3]);
-      cbn; try contradiction;
-      destruct e1; destruct e2; destruct e3; cbn; intuition congruence.
+    intros H12 H23; destruct_sum3 e1 e2 e3 H12 H23;
+      destruct e1; destruct e2; destruct e3; cbn in *; try contradiction; intuition congruence.
   Qed.
 
   Lemma EqA_MCFG_eq {A} (e1 e2 : MCFGEtop A) (a1 a2 : A) :
     EqA_MCFG A A e1 a1 e2 a2 -> a1 = a2.
   Proof using.
-    repeat (destruct e1 as [e1 | e1]);
-      repeat (destruct e2 as [e2 | e2]);
-      cbn; try contradiction;
-      destruct e1; destruct e2; cbn; try contradiction; auto.
+    intros HA; destruct_sum2 e1 e2 HA;
+      destruct e1; destruct e2; cbn in HA; try contradiction; auto.
   Qed.
 
   Lemma EqA_CFG_eq {A} (e1 e2 : CFGEtop A) (a1 a2 : A) :
     EqA_CFG A A e1 a1 e2 a2 -> a1 = a2.
   Proof using.
-    destruct e1 as [c1 | m1], e2 as [c2 | m2]; cbn; try contradiction.
+    destruct e1 as [c1 | m1], e2 as [c2 | m2]; cbn [EqA_CFG sum_postrel_c]; try contradiction.
     - destruct c1, c2; cbn; auto.
     - apply EqA_MCFG_eq.
   Qed.
@@ -906,20 +942,16 @@ Section EventRelations.
   Lemma EqA_bot_eq {A} (e1 e2 : MCFGEbot A) (a1 a2 : A) :
     EqA_bot A A e1 a1 e2 a2 -> a1 = a2.
   Proof using.
-    repeat (destruct e1 as [e1 | e1]);
-      repeat (destruct e2 as [e2 | e2]);
-      cbn; try contradiction;
-      destruct e1; destruct e2; cbn; try contradiction; auto.
+    intros HA; destruct_sum2 e1 e2 HA;
+      destruct e1; destruct e2; cbn in HA; try contradiction; auto.
   Qed.
 
   Lemma EqA_bot_refl_diag {A B} (e1 : MCFGEbot A) (e2 : MCFGEbot B) (a : A) :
     EqE_bot A B e1 e2 ->
     exists b : B, EqA_bot A B e1 a e2 b.
   Proof using.
-    repeat (destruct e1 as [e1 | e1]);
-      repeat (destruct e2 as [e2 | e2]);
-      cbn; try contradiction;
-      destruct e1; destruct e2; cbn; intros H; try contradiction;
+    intros HE; destruct_sum2 e1 e2 HE;
+      destruct e1; destruct e2; cbn in HE |- *; try contradiction;
       try (destruct a); exists a; reflexivity.
   Qed.
 
@@ -931,12 +963,9 @@ Section EventRelations.
     EqA_bot A C e1 a1 e3 a3 ->
     exists a2 : B, EqA_bot A B e1 a1 e2 a2 /\ EqA_bot B C e2 a2 e3 a3.
   Proof using.
-    repeat (destruct e1 as [e1 | e1]);
-      repeat (destruct e2 as [e2 | e2]);
-      repeat (destruct e3 as [e3 | e3]);
-      cbn; try contradiction;
-      destruct e1; destruct e2; destruct e3; cbn;
-      intros H12 H23 Ha13; try contradiction; try (destruct a1);
+    intros H12 H23 Ha13; destruct_sum3 e1 e2 e3 H12 H23;
+      destruct e1; destruct e2; destruct e3; cbn in H12, H23, Ha13 |- *;
+      try contradiction; try (destruct a1);
       subst; exists a3; split; reflexivity.
   Qed.
 
@@ -1044,10 +1073,8 @@ Section EventRelations.
   Lemma EqE_CFG_exc_of_event {A B} (e1 : CFGEtop A) (e2 : CFGEtop B) :
     EqE_CFG A B e1 e2 -> exc_of_event e1 = exc_of_event e2.
   Proof using.
-    repeat (destruct e1 as [e1 | e1]);
-      repeat (destruct e2 as [e2 | e2]);
-      cbn; try contradiction;
-      destruct e1; destruct e2; cbn; intros H; try reflexivity; subst; reflexivity.
+    intros HE; destruct_sum2 e1 e2 HE;
+      destruct e1; destruct e2; cbn in HE |- *; try contradiction; try reflexivity; subst; reflexivity.
   Qed.
 
   Lemma refine_cfg_run_exc {R1 R2} (RR : R1 -> R2 -> Prop)
@@ -1249,10 +1276,8 @@ Section ModelSemantics.
     EqA_bot A B e1 a1 e2 a2 ->
     bot_ans_provs e1 a1 = bot_ans_provs e2 a2.
   Proof using.
-    repeat (destruct e1 as [e1 | e1]);
-      repeat (destruct e2 as [e2 | e2]);
-      cbn; try contradiction;
-      destruct e1; destruct e2; cbn; intros HE HA;
+    intros HE HA; destruct_sum2 e1 e2 HE;
+      destruct e1; destruct e2; cbn in HE, HA |- *;
       try contradiction; subst; reflexivity.
   Qed.
 
@@ -1505,9 +1530,7 @@ Section ModelSemantics.
   Lemma EqE_bot_is_ub {A B} (b1 : MCFGEbot A) (b2 : MCFGEbot B) :
     EqE_bot A B b1 b2 -> is_ub_bot b1 = is_ub_bot b2.
   Proof using.
-    repeat (destruct b1 as [b1 | b1]);
-      repeat (destruct b2 as [b2 | b2]);
-      cbn; try contradiction;
+    intros HE; destruct_sum2 b1 b2 HE;
       destruct b1; destruct b2; reflexivity.
   Qed.
 
@@ -2043,6 +2066,15 @@ Section ModelSemantics.
     apply refine_prov_refl; intros; reflexivity.
   Qed.
 
+  Lemma interp_vellvm_prov_h_refines_same {T}
+    (e : MCFGEtop T) (s : FusedS) (U : list N) :
+    refine_prov
+      (fun _ '(s1', r1) '(s2', r2) => s1' = s2' /\ EqA_MCFG T T e r1 e r2)
+      U (interp_vellvm_prov_h e s) (interp_vellvm_prov_h e s).
+  Proof using.
+    apply refine_prov_refl; intros U' [s' r]; split; [reflexivity | apply EqA_MCFG_refl].
+  Qed.
+
   Lemma interp_vellvm_prov_h_refines {T1 T2}
     (e1 : MCFGEtop T1) (e2 : MCFGEtop T2)
     (HE : EqE_MCFG T1 T2 e1 e2)
@@ -2051,15 +2083,40 @@ Section ModelSemantics.
       (fun _ '(s1', r1) '(s2', r2) => s1' = s2' /\ EqA_MCFG T1 T2 e1 r1 e2 r2)
       U (interp_vellvm_prov_h e1 s) (interp_vellvm_prov_h e2 s).
   Proof using.
-    repeat (destruct e1 as [e1 | e1]);
-      repeat (destruct e2 as [e2 | e2]);
-      cbn in HE; try contradiction;
-      destruct e1; destruct e2; cbn in HE; try contradiction;
-      repeat match goal with H : _ /\ _ |- _ => destruct H as [? H] end; subst;
-      eapply refine_prov_antitone with (U := U);
-      try (intros _ _ [s1' r1] [s2' r2] _ <-; split; [reflexivity | cbn; reflexivity]);
-      try apply incl_refl;
-      apply refine_prov_refl; intros; reflexivity.
+    destruct_sum2 e1 e2 HE.
+    - destruct e1, e2; cbn in HE; try contradiction;
+        repeat match goal with H : _ /\ _ |- _ => destruct H as [? H] end; subst;
+        apply interp_vellvm_prov_h_refines_same.
+    - destruct e1, e2; cbn in HE;
+        repeat match goal with H : _ /\ _ |- _ => destruct H as [? H] end; subst;
+        apply interp_vellvm_prov_h_refines_same.
+    - destruct e1, e2; cbn in HE; try contradiction;
+        repeat match goal with H : _ /\ _ |- _ => destruct H as [? H] end; subst;
+        apply interp_vellvm_prov_h_refines_same.
+    - destruct e1, e2; cbn in HE; try contradiction;
+        repeat match goal with H : _ /\ _ |- _ => destruct H as [? H] end; subst;
+        apply interp_vellvm_prov_h_refines_same.
+    - destruct e1, e2; cbn in HE; try contradiction; subst;
+        apply interp_vellvm_prov_h_refines_same.
+    - destruct e1, e2; cbn in HE; try contradiction;
+        repeat match goal with H : _ /\ _ |- _ => destruct H as [? H] end; subst;
+        apply interp_vellvm_prov_h_refines_same.
+    - destruct e1, e2; cbn in HE; subst;
+        apply interp_vellvm_prov_h_refines_same.
+    - destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
+      pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; left; reflexivity.
+    - destruct e1, e2; cbn in HE; subst;
+        apply interp_vellvm_prov_h_refines_same.
+    - destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
+      pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; left; reflexivity.
+    - destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
+      pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn.
+      right; right; split; [exact I | intros [] [] _].
+      left; eapply refine_prov_obs_eq;
+        [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
+      pstep; apply RP_Step; cbn; split; reflexivity.
+    - destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
+      pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; right; right; split; [exact I | intros [] [] _].
   Qed.
 
   Definition model_step_state (R : Type) : Type :=
@@ -4083,11 +4140,13 @@ Section ModelSemantics.
     Forall (fun p => sem_fn_sync (snd p))
       (@defined_intrinsics (@ParamsV IP IPT) (@MCFGEtop (@ParamsV IP IPT)) _ _ _ _).
   Proof using.
-    unfold defined_intrinsics, extra_fp_intrinsics, extra_int_intrinsics.
+    unfold defined_intrinsics, extra_fp_intrinsics, extra_int_intrinsics,
+           mk_int_unop_defs, mk_int_unop_flag_defs, mk_int_binop_defs,
+           mk_expect_int_defs, mk_int_ternop_defs, mk_int_ovf_binop_defs.
     repeat apply Forall_app;
-      try (repeat constructor; cbn [snd]; apply pure_base_to_semantic_sync);
       try (apply Forall_map_pure_to_semantic; intros; cbn [snd];
-           first [apply pure_to_semantic_sync | apply pure_base_to_semantic_sync]).
+           first [apply pure_to_semantic_sync | apply pure_base_to_semantic_sync]);
+      try (repeat constructor; cbn [snd]; apply pure_base_to_semantic_sync).
     repeat constructor; cbn [snd]; try apply pure_base_to_semantic_sync.
     - (* llvm_va_start *)
       intros args va stk env1 env2; unfold llvm_va_start.
@@ -4511,9 +4570,7 @@ Section ModelSemantics.
   Proof using.
     destruct s1 as [m1 [[sf1 fstk1] g1]], s2 as [m2 [[sf2 fstk2] g2]].
     destruct Hmatch as (<- & <- & Hsf & Hsfm).
-    repeat (destruct e1 as [e1 | e1]);
-      repeat (destruct e2 as [e2 | e2]);
-      cbn in HE; try contradiction; try discriminate Hsync.
+    destruct_sum2 e1 e2 HE; try discriminate Hsync.
     - (* ExternalCallE *)
       destruct e1, e2; cbn in HE; try contradiction;
         repeat match goal with H : _ /\ _ |- _ => destruct H as [? H] end; subst;
@@ -4593,10 +4650,12 @@ Section ModelSemantics.
       destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
       pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; left; reflexivity.
     - (* DebugE *)
-      destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov.
-      eapply refine_prov_bind;
-        [apply refine_prov_refl with (RR := fun _ a1 a2 => a1 = a2); intros; reflexivity |].
-      intros U' a1 a2 _ <-; pstep; apply RP_Step; cbn.
+      destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
+      pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn.
+      right; right; split; [exact I | intros [] [] _].
+      left; eapply refine_prov_obs_eq;
+        [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
+      pstep; apply RP_Step; cbn.
       repeat split; try exact Hsf; try exact Hsfm; reflexivity.
     - (* FailureE *)
       destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.

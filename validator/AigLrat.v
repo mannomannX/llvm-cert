@@ -1371,7 +1371,7 @@ Proof.
     apply in_map_iff in Hin_map as [z [Hz_eq Hz_in]].
     rewrite <- Hz_eq; exact (Hall z Hz_in). }
   rewrite Hxor_k_false in Hxk; symmetry in Hxk.
-  apply xorb_false_iff in Hxk; symmetry; exact Hxk.
+  apply (proj1 (xorb_false_iff _ _)) in Hxk; symmetry; exact Hxk.
 Qed.
 
 Lemma blast_refinement_cex_unsat_core :
@@ -5528,7 +5528,7 @@ Proof.
         { apply existsb_exists; exists true; split; [| reflexivity].
           rewrite <- Enth; apply nth_In; rewrite list_map2_length by exact Hlen_ab; exact Hk. }
         congruence. }
-      apply xorb_false_iff in Hx_f; exact Hx_f. }
+      apply (proj1 (xorb_false_iff _ _)) in Hx_f; exact Hx_f. }
     rewrite Heqv; unfold Integers.eq, Numeric.Rocqlib.zeq.
     destruct (Z.eq_dec _ _); [reflexivity | congruence].
 Qed.

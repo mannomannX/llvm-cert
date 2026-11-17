@@ -3935,10 +3935,9 @@ Section InliningSemantics.
     EqE_CFG X1 X2 e1 e2 ->
     exc_of_event e1 = exc_of_event e2.
   Proof using.
-    repeat (destruct e1 as [e1 | e1]);
-      repeat (destruct e2 as [e2 | e2]);
+    intros HE; destruct_sum2 e1 e2 HE;
       cbn in *; try contradiction; try reflexivity.
-    destruct e1 as [ex1], e2 as [ex2]; intros ->; reflexivity.
+    destruct e1 as [ex1], e2 as [ex2]; subst; reflexivity.
   Qed.
 
   Lemma inl_is_ub_cfg_no_exc {X : Type} (e : @CFGEtop PaV X) :
@@ -6156,9 +6155,7 @@ Section InliningSemantics.
       [| discriminate Hsync |].
     - (* IC_Synced *)
       destruct Hmatch as (-> & -> & -> & Hsf & Hsfm).
-      repeat (destruct e1 as [e1 | e1]);
-        repeat (destruct e2 as [e2 | e2]);
-        cbn in HE; try contradiction; try discriminate Hsync.
+      destruct_sum2 e1 e2 HE; try discriminate Hsync.
       + (* ExternalCallE *)
         destruct e1, e2; cbn in HE; try contradiction;
           repeat match goal with H : _ /\ _ |- _ => destruct H as [? H] end; subst;
@@ -6242,19 +6239,19 @@ Section InliningSemantics.
         destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
         pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; left; reflexivity.
       + (* DebugE *)
-        destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov.
-        eapply refine_prov_bind;
-          [apply refine_prov_refl with (RR := fun _ a1 a2 => a1 = a2); intros; reflexivity |].
-        intros U' a1 a2 _ <-; pstep; apply RP_Step; cbn.
+        destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
+        pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn.
+        right; right; split; [exact I | intros [] [] _].
+        left; eapply refine_prov_obs_eq;
+          [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
+        pstep; apply RP_Step; cbn.
         repeat split; try exact Hsf; try exact Hsfm; reflexivity.
       + (* FailureE *)
         destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
         pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; right; right; split; [exact I | intros [] [] _].
     - (* IC_Inlined *)
       destruct Hmatch as (-> & -> & -> & Hvars1 & csf1 & fstk1' & -> & Hcsf & Hsfm).
-      repeat (destruct e1 as [e1 | e1]);
-        repeat (destruct e2 as [e2 | e2]);
-        cbn in HE; try contradiction; try discriminate Hsync.
+      destruct_sum2 e1 e2 HE; try discriminate Hsync.
       + (* GlobalE: GlobalRead *)
         destruct e1 as [k1 v1 | k1], e2 as [k2 v2 | k2];
           cbn in HE; try contradiction; try discriminate Hsync.
@@ -6306,10 +6303,12 @@ Section InliningSemantics.
         destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
         pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; left; reflexivity.
       + (* DebugE *)
-        destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov.
-        eapply refine_prov_bind;
-          [apply refine_prov_refl with (RR := fun _ a1 a2 => a1 = a2); intros; reflexivity |].
-        intros U' a1 a2 _ <-; pstep; apply RP_Step; cbn.
+        destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
+        pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn.
+        right; right; split; [exact I | intros [] [] _].
+        left; eapply refine_prov_obs_eq;
+          [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
+        pstep; apply RP_Step; cbn.
         split; [split; [reflexivity | split; [reflexivity | split; [reflexivity | split; [exact Hvars1 | exists csf1, fstk1'; auto]]]] |].
         split; [reflexivity | exact I].
       + (* FailureE *)

@@ -5589,7 +5589,7 @@ Section ValueDrawRefinement.
           right; apply CIH; [exact Hstk | exact HA].
       + destruct e1 as [c1 | m1], e2 as [c2 | m2];
           cbn in Esync, HE; try discriminate Esync; try contradiction.
-        repeat (destruct m1 as [m1 | m1]); repeat (destruct m2 as [m2 | m2]);
+        destruct_sum2 m1 m2 HE;
           cbn in Esync, HE; try discriminate Esync; try contradiction.
         * destruct m1 as [x1 | x1 v1], m2 as [x2 | x2 v2]; cbn in HE; try contradiction.
           -- subst x2; right; left; cbn; split; [reflexivity | split; [reflexivity |]].
@@ -6797,8 +6797,7 @@ Section ValueDrawRefinement.
       pstep; apply RPD_Step; cbn [rpd_step_body observe EqA_MCFG mcfg_event_post].
       split; [exact Hmatch | split; [reflexivity | exact Hv]].
     - assert (Ed2 : as_draw_mcfg e2 = None).
-      { repeat (destruct e1 as [e1 | e1]); try discriminate Ed1;
-          repeat (destruct e2 as [e2 | e2]); cbn in HE; try contradiction; reflexivity. }
+      { destruct_sum2 e1 e2 HE; try discriminate Ed1; reflexivity. }
       rewrite (interp_vellvm_rel_draw_h_non_draw e1 s1 Ed1),
               (interp_vellvm_rel_draw_h_non_draw e2 s2 Ed2).
       apply refine_prov_to_rel_draw.
