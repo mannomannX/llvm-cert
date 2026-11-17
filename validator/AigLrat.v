@@ -3024,7 +3024,7 @@ Lemma bools_to_Z_repeat_b : forall b n,
   bools_to_Z (List.repeat b n) = (b2z b * (2 ^ Z.of_nat n - 1))%Z.
 Proof.
   intros [|] n;
-    [rewrite bools_to_Z_repeat_true; cbn; lia | rewrite bools_to_Z_repeat_false; cbn; lia].
+    [rewrite bools_to_Z_repeat_true; cbn [b2z]; ring | rewrite bools_to_Z_repeat_false; cbn [b2z]; ring].
 Qed.
 
 Lemma bools_to_Z_zero_iff : forall bs,

@@ -4673,6 +4673,8 @@ Section ValueDrawRefinement.
    (case_ (fun T e s => lift_prov_to_draw (fused_trigger_prov T e s))
           (fun T e s => lift_prov_to_draw (fused_trigger_prov T e s))))))))))).
 
+  Arguments interp_vellvm_rel_draw_h [T] _ _.
+
   Definition interp_mcfg_rel_draw_model {R}
     (t : @MCFGtop PaV R) (s : FusedS) : itree ProvDrawBotE (Res R) :=
     interp_state interp_vellvm_rel_draw_h (interp_intrinsics t) s.

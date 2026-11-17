@@ -1299,19 +1299,21 @@ Section ModelSemantics.
       | Moom s => raiseOOM s
       | Mub s => raiseUB s
       | Merr s => raise s
-      | Mget k => memM_interp_prov (k σ) σ
-      | Mput σ' k => memM_interp_prov (k tt) σ'
+      | Mget k => memM_interp_prov T (k σ) σ
+      | Mput σ' k => memM_interp_prov T (k tt) σ'
       | Mchoose (Cnext_key _ align) k =>
-          memM_interp_prov
+          memM_interp_prov T
             (k (next_key_with_alignment σ.(state_memory_stack).(Memory_stack_memory) align))
             σ
       | Mchoose Cfresh_prov k =>
           ITree.bind (ITree.trigger FreshProv) (fun p =>
-            memM_interp_prov (k p)
+            memM_interp_prov T (k p)
               {| state_memory_stack := σ.(state_memory_stack);
                  state_provenance   := p |})
-      | Mchoose Cexposed_prov k => memM_interp_prov (k None) σ
+      | Mchoose Cexposed_prov k => memM_interp_prov T (k None) σ
       end.
+
+  Arguments memM_interp_prov [T] _ _.
 
   Definition on_mem_prov {T} (f : Monads.stateT state (itree ProvBotE) T)
     : Monads.stateT FusedS (itree ProvBotE) T :=
@@ -1359,6 +1361,8 @@ Section ModelSemantics.
    (case_ (fused_trigger_prov (F := UBE))
    (case_ (fused_trigger_prov (F := DebugE))
           (fused_trigger_prov (F := FailureE))))))))))).
+
+  Arguments interp_vellvm_prov_h [T] _ _.
 
   Definition interp_mcfg_model {R} (t : MCFGtop R) (s : FusedS) : itree ProvBotE (Res R) :=
     interp_state interp_vellvm_prov_h (interp_intrinsics t) s.
