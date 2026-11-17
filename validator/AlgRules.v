@@ -2100,7 +2100,7 @@ Proof.
       forall cur_ms f_in f_out,
         wf_let_dag_binds_fueled wf_let_dag_fueled_with exp_b cur_ms bs f_in = Some f_out ->
         wf_let_dag_binds wf_let_dag exp_b (strip_let_sizes cur_ms) bs = true).
-    { clearbody exp_b; clear Ebs Ewbs Hms';
+    { clearbody exp_b; clear Ebs Eb Ewbs Hms' Hwf;
       induction IHbs as [| [bnm be] rx IHbe _ IHrx];
         intros cur_ms f_in f_out H; cbn in H |- *; cbn [snd] in *.
       - reflexivity.

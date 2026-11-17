@@ -2433,7 +2433,7 @@ Section ModelSemantics.
         destruct (observe t3) as [r3 | m3 | X3 e3 k3] eqn:Hot3.
         * (* observe t3 = RetF r3 *)
           eapply RP_TauL; [exact Hot1 |].
-          punfold Hm23.
+          punfold Hm23; clear Hot1.
           revert m1 Hstep12 Hot3;
             induction Hm23 as [U m2_ t3_ Hs23 | U m2_ m2' t3_ Hm2_ _ IHm23 | U m2_ t3_ m3' Ht3_ _ _];
             intros m1 Hm12 Hot3.
@@ -2504,7 +2504,7 @@ Section ModelSemantics.
           rewrite (itree_eta t3), Hot3; reflexivity.
         * (* observe t3 = VisF e3 k3 *)
           eapply RP_TauL; [exact Hot1 |].
-          punfold Hm23.
+          punfold Hm23; clear Hot1.
           revert m1 Hstep12 Hot3;
             induction Hm23 as [U m2_ t3_ Hs23 | U m2_ m2' t3_ Hm2_ _ IHm23 | U m2_ t3_ m3' Ht3_ _ _];
             intros m1 Hm12 Hot3.
