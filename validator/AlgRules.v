@@ -7848,7 +7848,7 @@ Proof.
                 (bools_to_Z bys =
                  bools_to_Z (List.firstn m' bys) +
                  2 ^ Z.of_nat m' * bools_to_Z (List.skipn m' bys))%Z).
-      { rewrite <- (firstn_skipn_eq m' bys) at 1, bools_to_Z_app.
+      { rewrite <- (firstn_skipn_eq m' bys) at 1; rewrite bools_to_Z_app.
         assert (Hfl : List.length (List.firstn m' bys) = m')
           by (unfold bys; apply len_firstn_le; rewrite length_map; lia).
         rewrite Hfl; reflexivity. }

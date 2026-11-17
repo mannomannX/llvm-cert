@@ -1863,8 +1863,9 @@ Section ModelSemantics.
         unfold resum, ReSum_id, id_, Id_IFun;
         cbn -[print_msg ITree.trigger interp_state ITree.bind];
         rewrite Eqit.bind_bind, bind_trigger; symmetry;
-        rewrite Eqit.bind_bind, bind_trigger;
-        apply eqit_Vis; intros [].
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
+        apply eqit_Vis; intros x;
+        rewrite Eqit.bind_ret_l, interp_state_ret, Eqit.bind_ret_l; reflexivity.
     - (* LLVMExcE *)
       unfold fused_trigger_prov, fused_trigger, ITree.map;
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
@@ -1874,8 +1875,9 @@ Section ModelSemantics.
         unfold resum, ReSum_id, id_, Id_IFun;
         cbn -[print_msg ITree.trigger interp_state ITree.bind];
         rewrite Eqit.bind_bind, bind_trigger; symmetry;
-        rewrite Eqit.bind_bind, bind_trigger;
-        apply eqit_Vis; intros [].
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
+        apply eqit_Vis; intros x;
+        rewrite Eqit.bind_ret_l, interp_state_ret, Eqit.bind_ret_l; reflexivity.
     - (* UBE *)
       unfold fused_trigger_prov, fused_trigger, ITree.map;
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
@@ -1885,8 +1887,9 @@ Section ModelSemantics.
         unfold resum, ReSum_id, id_, Id_IFun;
         cbn -[print_msg ITree.trigger interp_state ITree.bind];
         rewrite Eqit.bind_bind, bind_trigger; symmetry;
-        rewrite Eqit.bind_bind, bind_trigger;
-        apply eqit_Vis; intros [].
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
+        apply eqit_Vis; intros x;
+        rewrite Eqit.bind_ret_l, interp_state_ret, Eqit.bind_ret_l; reflexivity.
     - (* DebugE *)
       unfold fused_trigger_prov, fused_trigger, ITree.map;
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
@@ -1908,8 +1911,9 @@ Section ModelSemantics.
         unfold resum, ReSum_id, id_, Id_IFun;
         cbn -[print_msg ITree.trigger interp_state ITree.bind];
         rewrite Eqit.bind_bind, bind_trigger; symmetry;
-        rewrite Eqit.bind_bind, bind_trigger;
-        apply eqit_Vis; intros [].
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
+        apply eqit_Vis; intros x;
+        rewrite Eqit.bind_ret_l, interp_state_ret, Eqit.bind_ret_l; reflexivity.
   Qed.
 
   Local Opaque det_prov_h.
