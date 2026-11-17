@@ -6495,13 +6495,13 @@ Proof.
     try (apply cert_expr_eqb_eq in Heq; subst sub; exact (conj Hwt (conj Hlf Hfv)));
     cbn [orb] in Hsub; try discriminate Hsub.
   - cbn [wt_cert_expr is_let_free_expr collect_free_vars] in Hwt, Hlf, Hfv.
-    rewrite !andb_true_iff in Hwt, Hlf.
+    rewrite !andb_true_iff in Hwt; rewrite !andb_true_iff in Hlf.
     destruct Hwt as ((((_ & Hwtl) & Hwtr) & _) & _); destruct Hlf as [Hlfl Hlfr].
     apply orb_true_iff in Hsub as [Hsl | Hsr].
     + exact (IHl allowed Hsl Hwtl Hlfl (fun u Hu => Hfv u (proj2 (in_app_iff _ _ _) (or_introl Hu)))).
     + exact (IHr allowed Hsr Hwtr Hlfr (fun u Hu => Hfv u (proj2 (in_app_iff _ _ _) (or_intror Hu)))).
   - cbn [wt_cert_expr is_let_free_expr collect_free_vars] in Hwt, Hlf, Hfv.
-    rewrite !andb_true_iff in Hwt, Hlf.
+    rewrite !andb_true_iff in Hwt; rewrite !andb_true_iff in Hlf.
     destruct Hwt as (((Hwtl & Hwtr) & _) & _); destruct Hlf as [Hlfl Hlfr].
     apply orb_true_iff in Hsub as [Hsl | Hsr].
     + exact (IHl allowed Hsl Hwtl Hlfl (fun u Hu => Hfv u (proj2 (in_app_iff _ _ _) (or_introl Hu)))).
@@ -6510,7 +6510,7 @@ Proof.
     rewrite !andb_true_iff in Hwt; destruct Hwt as ((_ & Hwto) & _).
     exact (IHo allowed Hsub Hwto Hlf Hfv).
   - cbn [wt_cert_expr is_let_free_expr collect_free_vars] in Hwt, Hlf, Hfv.
-    rewrite !andb_true_iff in Hwt, Hlf.
+    rewrite !andb_true_iff in Hwt; rewrite !andb_true_iff in Hlf.
     destruct Hwt as (((((Hwtc & Hwtt) & Hwtf) & _) & _) & _).
     destruct Hlf as ([Hlfc Hlft] & Hlff).
     rewrite !orb_true_iff in Hsub; destruct Hsub as [[Hsc | Hst] | Hsf].
@@ -8444,7 +8444,7 @@ Proof.
     + destruct ro as [| w _ _ _]; [discriminate Hchk |].
       rewrite !andb_true_iff in Hchk; destruct Hchk as ([_ _] & Href).
       cbn [wf_cfg_dag eval_cfg_dag] in Hwfs, Hwft, Hevs.
-      rewrite !andb_true_iff in Hwfs, Hwft.
+      rewrite !andb_true_iff in Hwfs; rewrite !andb_true_iff in Hwft.
       destruct Hwfs as (((_ & _) & _) & Hfvs); destruct Hwft as (((_ & _) & _) & Hfvt).
       pose proof (vars_subset_b_wf_param _ allowed penv Hfvs Hpenv) as Hpes.
       pose proof (vars_subset_b_wf_param _ allowed penv Hfvt Hpenv) as Hpet.

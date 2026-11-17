@@ -2308,7 +2308,8 @@ Section ModelSemantics.
     - unfold rp_step_body in Hstep; rewrite Hot2 in Hstep.
       destruct (observe t1) as [x1 | m1 | X1 e1 k1] eqn:Hot1; try contradiction.
       + pclearbot; punfold Hstep.
-        eapply RP_TauL; [exact Hot1 | eapply refine_prov__mon; [exact Hstep | auto]].
+        eapply RP_TauL;
+          [exact Hot1 | eapply refine_prov__mon; [exact Hstep | intros ? ? ? [Hl | []]; left; exact Hl]].
       + apply RP_Step; unfold rp_step_body; rewrite Hot1.
         destruct Hstep as [Hub | [Hleft | Hboth]]; [left; exact Hub | | contradiction].
         right; left.
@@ -2318,7 +2319,7 @@ Section ModelSemantics.
         eapply refine_prov_obs_eq; [apply reflexivity | rewrite (itree_eta t2), Hot2; reflexivity | exact Hleft].
     - eapply RP_TauL; [exact Ht1 | apply IH, Hot2].
     - rewrite Hot2 in Ht2; inversion Ht2; subst m2'.
-      eapply refine_prov__mon; [exact Hrel | auto].
+      eapply refine_prov__mon; [exact Hrel | intros ? ? ? [Hl | []]; left; exact Hl].
   Qed.
 
   Lemma refine_prov_bind {R1 R2 S1 S2}
