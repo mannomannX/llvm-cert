@@ -3423,7 +3423,8 @@ Proof.
       by (unfold Integers.zwordsize; rewrite <- positive_nat_Z; lia).
     assert (Hdiff : @Integers.or sz va vb <> @Integers.xor sz va vb).
     { intros Heq.
-      pose proof (f_equal (fun v => @Integers.testbit sz v (Z.of_nat k)) Heq) as Htb.
+      pose proof (f_equal (fun v => @Integers.testbit sz v (Z.of_nat k)) Heq) as Htb;
+        cbn beta in Htb.
       rewrite @Integers.bits_or, @Integers.bits_xor in Htb by exact Hi.
       unfold va, vb in Htb; rewrite !eval_rail_val_testbit_nat in Htb by lia.
       fold ba bb in Htb; rewrite Hka, Hkb in Htb; discriminate Htb. }
@@ -3724,7 +3725,7 @@ Proof.
     by (apply @Integers.unsigned_repr; unfold Integers.max_unsigned; lia).
   assert (Hval_eq : @Integers.repr sz us = @Integers.add sz va vb).
   { unfold Integers.add; apply @Integers.eqm_samerepr.
-    exists (- b2z (eval_lit asg1 cout))%Z; lia. }
+    exists (- b2z (eval_lit asg1 cout))%Z; nia. }
   assert (Hcarry_eq :
             @Integers.eq sz (@Integers.add_carry sz va vb (@Integers.zero sz)) (@Integers.one sz) =
             eval_lit asg1 cout).
@@ -3732,7 +3733,7 @@ Proof.
     destruct (eval_lit asg1 cout),
              (Numeric.Rocqlib.zlt (@Integers.unsigned sz va + @Integers.unsigned sz vb)
                                   (@Integers.modulus sz));
-      cbn [b2z negb] in *; try reflexivity; lia. }
+      cbn [b2z negb] in *; try reflexivity; nia. }
   set (nuw_lit := if nuw then cout else lit_false) in *.
   assert (Hwf_nuw : wf_lit_bound (bs_next_var st1) nuw_lit)
     by (unfold nuw_lit; destruct nuw; [exact Hwf_c | exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs1)))))]).
@@ -3817,7 +3818,7 @@ Proof.
       cbn [b2z xorb negb andb] in *;
       destruct (Numeric.Rocqlib.zle (- @Integers.half_modulus sz) _),
                (Numeric.Rocqlib.zle _ (@Integers.half_modulus sz - 1));
-      cbn [andb negb]; try reflexivity; lia. }
+      cbn [andb negb]; try reflexivity; nia. }
   destruct Hnsw_step as (nsw_l & st4 & asg4 & Hnsw_eq & Hs14 & Hwf_nsw & Hev_nsw).
   rewrite Hnsw_eq in Hbl; clear Hnsw_eq.
   destruct (emit_or2_opt (rbv_psn a) (rbv_psn b) st4) as [base_psn st5] eqn:Ebp.
@@ -3935,14 +3936,14 @@ Proof.
     by (apply @Integers.unsigned_repr; unfold Integers.max_unsigned; lia).
   assert (Hval_eq : @Integers.repr sz ud = @Integers.sub sz va vb).
   { unfold Integers.sub; apply @Integers.eqm_samerepr.
-    exists (1 - b2z (eval_lit asg1 cout))%Z; lia. }
+    exists (1 - b2z (eval_lit asg1 cout))%Z; nia. }
   assert (Hborrow_eq :
             @Integers.eq sz (@Integers.sub_borrow sz va vb (@Integers.zero sz)) (@Integers.one sz) =
             negb (eval_lit asg1 cout)).
   { unfold Integers.sub_borrow; rewrite @Integers.unsigned_zero, Z.sub_0_r, eq_one_cond.
     destruct (eval_lit asg1 cout),
              (Numeric.Rocqlib.zlt (@Integers.unsigned sz va - @Integers.unsigned sz vb) 0%Z);
-      cbn [b2z negb] in *; try reflexivity; lia. }
+      cbn [b2z negb] in *; try reflexivity; nia. }
   set (nuw_lit := if nuw then neg_lit cout else lit_false) in *.
   assert (Hwf_nuw : wf_lit_bound (bs_next_var st1) nuw_lit)
     by (unfold nuw_lit; destruct nuw;
@@ -4028,7 +4029,7 @@ Proof.
       cbn [b2z xorb negb andb] in *;
       destruct (Numeric.Rocqlib.zle (- @Integers.half_modulus sz) _),
                (Numeric.Rocqlib.zle _ (@Integers.half_modulus sz - 1));
-      cbn [andb negb]; try reflexivity; lia. }
+      cbn [andb negb]; try reflexivity; nia. }
   destruct Hnsw_step as (nsw_l & st4 & asg4 & Hnsw_eq & Hs14 & Hwf_nsw & Hev_nsw).
   rewrite Hnsw_eq in Hbl; clear Hnsw_eq.
   destruct (emit_or2_opt (rbv_psn a) (rbv_psn b) st4) as [base_psn st5] eqn:Ebp.
@@ -4132,7 +4133,7 @@ Lemma eq_Z_bools_spec : forall bs k_val,
   eq_Z_bools k_val bs = (bools_to_Z bs =? k_val)%Z.
 Proof.
   induction bs as [| b rest IH]; intros k_val Hk; cbn [eq_Z_bools List.length] in *.
-  - assert (k_val = 0)%Z by (cbn in Hk; lia); subst k_val; reflexivity.
+  - assert (k_val = 0)%Z by (cbn in Hk; rewrite Z.pow_0_r in Hk; lia); subst k_val; reflexivity.
   - rewrite Nat2Z.inj_succ, Z.pow_succ_r in Hk by lia.
     pose proof (Integers.Zdecomp k_val) as Hdec.
     rewrite Integers.Zshiftin_spec in Hdec.
@@ -4578,7 +4579,7 @@ Proof.
         symmetry; apply modulus_pow_sz. }
     assert (Hres_eq : @Integers.repr sz (bools_to_Z (spec_bits k)) = @Integers.shl sz va vb).
     { unfold Integers.shl; rewrite Hshl_z; apply @Integers.eqm_samerepr.
-      exists (- bools_to_Z hi)%Z; lia. }
+      exists (- bools_to_Z hi)%Z; nia. }
     assert (Hures : @Integers.unsigned sz (@Integers.shl sz va vb) = bools_to_Z (spec_bits k)).
     { rewrite <- Hres_eq; apply @Integers.unsigned_repr.
       pose proof (bools_to_Z_range (spec_bits k)) as Hr; rewrite Hsb_len in Hr.
@@ -4595,7 +4596,7 @@ Proof.
       destruct (Z.eqb_spec (bools_to_Z hi) 0%Z),
                (Z.ltb_spec (bools_to_Z (spec_bits k))
                            (bools_to_Z (spec_bits k) + @Integers.modulus sz * bools_to_Z hi));
-        cbn [negb]; try reflexivity; lia.
+        cbn [negb]; try reflexivity; nia.
     - f_equal.
       replace (Z.pos sz - @Integers.unsigned sz vb)%Z with (Z.of_nat (n - k))
         by (unfold n; rewrite <- Hk_z, Nat2Z.inj_sub, positive_nat_Z by lia; reflexivity).
@@ -5214,7 +5215,7 @@ Proof.
         pose proof (@Integers.modulus_pos tw) as Hmpt; rewrite modulus_pow_sz in Hmpt.
         destruct (Z.eqb_spec (bools_to_Z b_hi) 0%Z),
                  (Z.eqb_spec (bools_to_Z b_lo) (bools_to_Z b_lo + 2 ^ Z.pos tw * bools_to_Z b_hi));
-          cbn [negb]; try reflexivity; lia.
+          cbn [negb]; try reflexivity; nia.
       * f_equal.
         assert (Hmsb_res : msb_of tw res = b_slo).
         { unfold msb_of, b_slo.

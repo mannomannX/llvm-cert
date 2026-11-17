@@ -1387,19 +1387,29 @@ Section ModelSemantics.
           ITree.bind (ITree.trigger e) (fun r => Ret (pr, r)))
        : @MCFGEbot (@ParamsV IP IPT) ~> Monads.stateT N (itree (@MCFGEbot (@ParamsV IP IPT)))).
 
+  Lemma det_prov_h_inl1 (pr : N) :
+    det_prov_h N (inl1 FreshProv) pr = Ret (N.succ pr, N.succ pr).
+  Proof using. reflexivity. Qed.
+
+  Lemma det_prov_h_inr1 {X} (e : @MCFGEbot (@ParamsV IP IPT) X) (pr : N) :
+    det_prov_h X (inr1 e) pr = ITree.bind (ITree.trigger e) (fun r => Ret (pr, r)).
+  Proof using. reflexivity. Qed.
+
+  Local Opaque det_prov_h.
+
   Lemma interp_det_prov_lift_bot {R} (t : itree MCFGEbot R) (pr : N) :
     interp_state det_prov_h (lift_bot_prov t) pr ≈ ITree.map (fun r => (pr, r)) t.
   Proof using.
-    revert t pr; ginit; gcofix CIH; intros t pr.
     unfold lift_bot_prov, ITree.map.
+    revert t pr; ginit; gcofix CIH; intros t pr.
     rewrite unfold_translate, unfold_interp_state, unfold_bind.
-    destruct (observe t) as [rv | m | X e k]; cbn.
+    destruct (observe t) as [rv | m | X e k]; cbn -[det_prov_h].
     - gstep; constructor; reflexivity.
     - gstep; constructor; gfinal; left; apply CIH.
-    - unfold det_prov_h; cbn [case_]; unfold ITree.trigger.
-      rewrite !Eqit.bind_vis; cbn.
+    - rewrite det_prov_h_inr1; unfold ITree.trigger.
+      rewrite Eqit.bind_bind, Eqit.bind_vis.
       gstep; constructor; intros x.
-      rewrite !Eqit.bind_ret_l, tau_euttge.
+      rewrite 2 Eqit.bind_ret_l; cbn [fst snd]; rewrite tau_euttge.
       gfinal; left; apply CIH.
   Qed.
 
@@ -1410,22 +1420,25 @@ Section ModelSemantics.
     revert σ; induction m as [x | s | s | s | k IH | σ' k IH | c k IH]; intros σ;
       cbn [memM_interp_prov memM_interp].
     - rewrite interp_state_ret; unfold ITree.map; rewrite Eqit.bind_ret_l; reflexivity.
-    - unfold raiseOOM, trigger_cast, ITree.map, ITree.trigger;
-        rewrite interp_state_bind, interp_state_vis; cbn;
-        rewrite !Eqit.bind_vis; apply eqit_Vis; intros [].
-    - unfold raiseUB, trigger_cast, ITree.map, ITree.trigger;
-        rewrite interp_state_bind, interp_state_vis; cbn;
-        rewrite !Eqit.bind_vis; apply eqit_Vis; intros [].
-    - unfold raise, trigger_cast, ITree.map, ITree.trigger;
-        rewrite interp_state_bind, interp_state_vis; cbn;
-        rewrite !Eqit.bind_vis; apply eqit_Vis; intros [].
+    - unfold raiseOOM, trigger_cast, ITree.map;
+        rewrite interp_state_bind, interp_state_trigger, det_prov_h_inr1;
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
+        rewrite Eqit.bind_bind, bind_trigger; apply eqit_Vis; intros [].
+    - unfold raiseUB, trigger_cast, ITree.map;
+        rewrite interp_state_bind, interp_state_trigger, det_prov_h_inr1;
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
+        rewrite Eqit.bind_bind, bind_trigger; apply eqit_Vis; intros [].
+    - unfold raise, trigger_cast, ITree.map;
+        rewrite interp_state_bind, interp_state_trigger, det_prov_h_inr1;
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
+        rewrite Eqit.bind_bind, bind_trigger; apply eqit_Vis; intros [].
     - apply IH.
     - exact (IH tt σ').
-    - destruct c as [sz align | |]; cbn.
+    - destruct c as [sz align | |]; cbn [memM_interp_prov memM_interp].
       + apply IH.
-      + rewrite interp_state_bind, interp_state_trigger; cbn [det_prov_h case_ subevent resum ReSum_inl inl1].
-        unfold fresh_provenance; cbn.
-        rewrite !Eqit.bind_ret_l, tau_eutt.
+      + rewrite interp_state_bind, interp_state_trigger, det_prov_h_inl1, Eqit.bind_ret_l.
+        unfold fresh_provenance, ITree.map; cbn -[memM_interp memM_interp_prov interp_state].
+        rewrite Eqit.bind_bind, Eqit.bind_ret_l.
         exact (IH (N.succ (state_provenance σ))
                   {| state_memory_stack := state_memory_stack σ;
                      state_provenance   := N.succ (state_provenance σ) |}).
@@ -1440,67 +1453,79 @@ Section ModelSemantics.
     unfold interp_vellvm_prov_h, interp_vellvm_h.
     destruct_sum1 e; cbn [case_].
     - (* ExternalCallE *)
-      unfold fused_trigger_prov, fused_trigger, trigger, ITree.map.
-      rewrite interp_state_bind, interp_state_trigger; cbn.
-      unfold ITree.trigger; rewrite !Eqit.bind_vis; apply eqit_Vis; intros x.
-      rewrite !Eqit.bind_ret_l, tau_eutt, interp_state_ret; reflexivity.
+      unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+        rewrite interp_state_bind, interp_state_trigger, det_prov_h_inr1;
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
+        apply eqit_Vis; intros x;
+        rewrite Eqit.bind_ret_l, interp_state_ret, Eqit.bind_ret_l; reflexivity.
     - (* IntrinsicE *)
       unfold fused_intrinsic_prov, fused_intrinsic, on_mem_prov, on_mem.
       rewrite interp_state_bind, memM_interp_prov_det.
       unfold ITree.map; rewrite !Eqit.bind_bind.
-      apply eutt_eq_bind; intros [m' r]; cbn.
+      apply eutt_eq_bind; intros [m' r]; cbn [fst].
       rewrite !Eqit.bind_ret_l, interp_state_ret; reflexivity.
     - (* GlobalE *)
       unfold fused_global_prov, fused_global, on_genv_prov, on_genv.
       rewrite interp_state_bind, interp_det_prov_lift_bot.
       unfold ITree.map; rewrite !Eqit.bind_bind.
-      apply eutt_eq_bind; intros [g' r]; cbn.
+      apply eutt_eq_bind; intros [g' r]; cbn [fst].
       rewrite !Eqit.bind_ret_l, interp_state_ret; reflexivity.
     - (* LocalE *)
       unfold fused_local_prov, fused_local, on_ls_prov, on_ls.
       rewrite interp_state_bind, interp_det_prov_lift_bot.
       unfold ITree.map; rewrite !Eqit.bind_bind.
-      apply eutt_eq_bind; intros [ls' r]; cbn.
+      apply eutt_eq_bind; intros [ls' r]; cbn [fst].
       rewrite !Eqit.bind_ret_l, interp_state_ret; reflexivity.
     - (* StackE *)
       unfold fused_stack_prov, fused_stack, on_ls_prov, on_ls.
       rewrite interp_state_bind, interp_det_prov_lift_bot.
       unfold ITree.map; rewrite !Eqit.bind_bind.
-      apply eutt_eq_bind; intros [ls' r]; cbn.
+      apply eutt_eq_bind; intros [ls' r]; cbn [fst].
       rewrite !Eqit.bind_ret_l, interp_state_ret; reflexivity.
     - (* MemoryE *)
       unfold fused_memory_prov, fused_memory, on_mem_prov, on_mem.
       rewrite interp_state_bind, memM_interp_prov_det.
       unfold ITree.map; rewrite !Eqit.bind_bind.
-      apply eutt_eq_bind; intros [m' r]; cbn.
+      apply eutt_eq_bind; intros [m' r]; cbn [fst].
       rewrite !Eqit.bind_ret_l, interp_state_ret; reflexivity.
     - (* DrawE *)
       unfold fused_draw_prov, fused_draw.
       rewrite interp_state_bind, interp_det_prov_lift_bot.
       unfold ITree.map; rewrite !Eqit.bind_bind.
-      apply eutt_eq_bind; intros r; cbn.
+      apply eutt_eq_bind; intros r; cbn [fst].
       rewrite !Eqit.bind_ret_l, interp_state_ret; reflexivity.
     - (* OOME *)
-      unfold fused_trigger_prov, fused_trigger, trigger, ITree.map.
-      rewrite interp_state_bind, interp_state_trigger; cbn.
-      unfold ITree.trigger; rewrite !Eqit.bind_vis; apply eqit_Vis; intros [].
+      unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+        rewrite interp_state_bind, interp_state_trigger, det_prov_h_inr1;
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
+        rewrite Eqit.bind_bind, bind_trigger;
+        apply eqit_Vis; intros [].
     - (* LLVMExcE *)
-      unfold fused_trigger_prov, fused_trigger, trigger, ITree.map.
-      rewrite interp_state_bind, interp_state_trigger; cbn.
-      unfold ITree.trigger; rewrite !Eqit.bind_vis; apply eqit_Vis; intros [].
+      unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+        rewrite interp_state_bind, interp_state_trigger, det_prov_h_inr1;
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
+        rewrite Eqit.bind_bind, bind_trigger;
+        apply eqit_Vis; intros [].
     - (* UBE *)
-      unfold fused_trigger_prov, fused_trigger, trigger, ITree.map.
-      rewrite interp_state_bind, interp_state_trigger; cbn.
-      unfold ITree.trigger; rewrite !Eqit.bind_vis; apply eqit_Vis; intros [].
+      unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+        rewrite interp_state_bind, interp_state_trigger, det_prov_h_inr1;
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
+        rewrite Eqit.bind_bind, bind_trigger;
+        apply eqit_Vis; intros [].
     - (* DebugE *)
-      unfold fused_trigger_prov, fused_trigger, trigger, ITree.map.
-      rewrite interp_state_bind, interp_state_trigger; cbn.
-      unfold ITree.trigger; rewrite !Eqit.bind_vis; apply eqit_Vis; intros x.
-      rewrite !Eqit.bind_ret_l, tau_eutt, interp_state_ret; reflexivity.
+      unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+        rewrite interp_state_bind, interp_state_trigger, det_prov_h_inr1;
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
+        apply eqit_Vis; intros x;
+        rewrite Eqit.bind_ret_l, interp_state_ret, Eqit.bind_ret_l; reflexivity.
     - (* FailureE *)
-      unfold fused_trigger_prov, fused_trigger, trigger, ITree.map.
-      rewrite interp_state_bind, interp_state_trigger; cbn.
-      unfold ITree.trigger; rewrite !Eqit.bind_vis; apply eqit_Vis; intros [].
+      unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+        rewrite interp_state_bind, interp_state_trigger, det_prov_h_inr1;
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
+        rewrite Eqit.bind_bind, bind_trigger;
+        apply eqit_Vis; intros [].
   Qed.
 
   Theorem interp_mcfg_model_det {R} (t : MCFGtop R) (s : FusedS) :
@@ -2248,7 +2273,7 @@ Section ModelSemantics.
         rewrite Eqit.bind_bind; apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
         intros [s' x] ? <-; rewrite Eqit.bind_ret_l; reflexivity.
       + split; [exact Ew2 |].
-        destruct Hcut as [u].
+        clear Hot1; destruct Hcut as [u].
         pstep; apply RP_Step; unfold rp_step_body.
         rewrite !observe_bind; cbn; left; reflexivity.
     - inversion Hcut.

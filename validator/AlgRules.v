@@ -8185,7 +8185,7 @@ Proof.
         pose proof (Z_div_mod_eq_full rs (@Integers.modulus dw)) as Hdm.
         rewrite Hmod_dw in Hdm.
         exists (- (@Integers.modulus sz * (rs / (@Integers.modulus sz * @Integers.modulus sz))))%Z.
-        lia. }
+        nia. }
       change (eval_rail_val dw a9 (mk_rail_bv dw sbits lit_false)) with prod_s.
       rewrite Hres_s_eq, Hs_prod; exact (signed_repr_neq_iff_oob sz rs). }
     destruct Hnsw_step as (nsw_psn & st10 & asg10 & Hnsw_eq & Hs610 & Hwf_nswp & Hev_nswp).
