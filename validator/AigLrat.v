@@ -3625,7 +3625,7 @@ Proof.
       as (asg4 & Hs4 & Hw_xc & Hev_xc).
     pose proof (step_spec_trans st2 st3 st4 asg2 asg3 asg4 Hs3 Hs4) as Hs24.
     destruct (emit_or2_opt_step asg4 xy_and xc_and st4 cout1 st5 (proj2 (proj2 Hs4))
-                (wf_lit_bound_mono _ _ _ (proj1 Hs24) Hw_xa) Hw_xc Eg5)
+                (wf_lit_bound_mono _ _ _ (proj1 Hs4) Hw_xa) Hw_xc Eg5)
       as (asg5 & Hs5 & Hw_c1 & Hev_c1).
     pose proof (step_spec_trans st2 st4 st5 asg2 asg4 asg5 Hs24 Hs5) as Hs25.
     pose proof (step_spec_trans st st2 st5 asg asg2 asg5 Hs02 Hs25) as Hs05.

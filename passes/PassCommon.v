@@ -1402,15 +1402,27 @@ Section ModelSemantics.
   Proof using.
     unfold lift_bot_prov, ITree.map.
     revert t pr; ginit; gcofix CIH; intros t pr.
-    rewrite unfold_translate, unfold_interp_state, unfold_bind.
-    destruct (observe t) as [rv | m | X e k]; cbn -[det_prov_h].
-    - gstep; constructor; reflexivity.
-    - gstep; constructor; gfinal; left; apply CIH.
-    - rewrite det_prov_h_inr1; unfold ITree.trigger.
-      rewrite Eqit.bind_bind, Eqit.bind_vis.
-      gstep; constructor; intros x.
-      rewrite 2 Eqit.bind_ret_l; cbn [fst snd]; rewrite tau_euttge.
-      gfinal; left; apply CIH.
+    destruct (observe t) as [rv | m | X e k] eqn:Hot.
+    - gclo; econstructor; auto_ctrans_eq.
+      + rewrite unfold_translate, Hot; cbn -[det_prov_h];
+          rewrite interp_state_ret; reflexivity.
+      + rewrite unfold_bind, Hot; cbn; reflexivity.
+      + gstep; constructor; reflexivity.
+    - gclo; econstructor; auto_ctrans_eq.
+      + rewrite unfold_translate, Hot; cbn -[det_prov_h];
+          rewrite interp_state_tau; reflexivity.
+      + rewrite unfold_bind, Hot; cbn; reflexivity.
+      + gstep; constructor; gfinal; left; exact (CIH m pr).
+    - gclo; econstructor; auto_ctrans_eq.
+      + rewrite unfold_translate, Hot; cbn -[det_prov_h].
+        rewrite interp_state_vis, det_prov_h_inr1; unfold ITree.trigger.
+        rewrite Eqit.bind_bind, Eqit.bind_vis; reflexivity.
+      + rewrite unfold_bind, Hot; cbn; reflexivity.
+      + gstep; constructor; intros x.
+        gclo; econstructor; auto_ctrans_eq.
+        * rewrite 2 Eqit.bind_ret_l; cbn [fst snd]; apply eqit_Tau_l; reflexivity.
+        * reflexivity.
+        * gfinal; left; exact (CIH (k x) pr).
   Qed.
 
   Lemma memM_interp_prov_det {R} (m : memM R) (σ : state) :
@@ -1528,28 +1540,52 @@ Section ModelSemantics.
         apply eqit_Vis; intros [].
   Qed.
 
+  Lemma interp_vellvm_prov_h_det_rel {T} (e : MCFGEtop T) (s : FusedS) :
+    eutt (fun '(pr', sx1) sx2 => pr' = (fst sx2).(state_provenance) /\ sx1 = sx2)
+      (interp_state det_prov_h (interp_vellvm_prov_h e s) (fst s).(state_provenance))
+      (interp_vellvm_h e s).
+  Proof using.
+    rewrite interp_vellvm_prov_h_det; unfold ITree.map.
+    bind_ret_r2_eutt.
+    eapply Eqit.eqit_bind'; [reflexivity |].
+    intros [s' r] ? <-; apply Eqit.eqit_Ret; split; reflexivity.
+  Qed.
+
   Theorem interp_mcfg_model_det {R} (t : MCFGtop R) (s : FusedS) :
     ITree.map snd (interp_state det_prov_h (interp_mcfg_model t s) (fst s).(state_provenance)) ≈
       interp_mcfg t s.
   Proof using.
-    unfold interp_mcfg_model, interp_mcfg.
+    unfold interp_mcfg_model, interp_mcfg, ITree.map.
     generalize (interp_intrinsics t) as u; intros u.
     revert u s; ginit; gcofix CIH; intros u s.
-    rewrite (unfold_interp_state interp_vellvm_prov_h u s).
-    rewrite (unfold_interp_state interp_vellvm_h u s).
-    destruct (observe u) as [rv | m | X e k]; cbn -[interp_vellvm_prov_h interp_vellvm_h].
-    - rewrite interp_state_ret; unfold ITree.map; rewrite Eqit.bind_ret_l; gstep; constructor; reflexivity.
-    - rewrite interp_state_tau; unfold ITree.map; rewrite Eqit.bind_tau.
-      gstep; constructor; gfinal; left; apply CIH.
-    - rewrite interp_state_bind.
-      unfold ITree.map.
-      rewrite Eqit.bind_bind.
-      guclo eqit_clo_bind; econstructor.
-      + apply interp_vellvm_prov_h_det.
-      + intros [pr' [s' x]] ? <-; cbn [snd].
-        unfold ITree.map in CIH.
-        rewrite interp_state_tau, Eqit.bind_tau.
-        gstep; constructor; gfinal; left; apply CIH.
+    destruct (observe u) as [rv | m | X e k] eqn:Hou.
+    - gclo; econstructor; auto_ctrans_eq.
+      + rewrite (unfold_interp_state interp_vellvm_prov_h u s), Hou;
+          cbn -[det_prov_h interp_vellvm_prov_h].
+        rewrite interp_state_ret, Eqit.bind_ret_l; reflexivity.
+      + rewrite (unfold_interp_state interp_vellvm_h u s), Hou;
+          cbn -[interp_vellvm_h]; reflexivity.
+      + gstep; constructor; reflexivity.
+    - gclo; econstructor; auto_ctrans_eq.
+      + rewrite (unfold_interp_state interp_vellvm_prov_h u s), Hou;
+          cbn -[det_prov_h interp_vellvm_prov_h].
+        rewrite interp_state_tau, Eqit.bind_tau; reflexivity.
+      + rewrite (unfold_interp_state interp_vellvm_h u s), Hou;
+          cbn -[interp_vellvm_h]; reflexivity.
+      + gstep; constructor; gfinal; left; exact (CIH m s).
+    - gclo; econstructor; auto_ctrans_eq.
+      + rewrite (unfold_interp_state interp_vellvm_prov_h u s), Hou;
+          cbn -[det_prov_h interp_vellvm_prov_h].
+        rewrite interp_state_bind, Eqit.bind_bind; reflexivity.
+      + rewrite (unfold_interp_state interp_vellvm_h u s), Hou;
+          cbn -[interp_vellvm_h]; reflexivity.
+      + guclo eqit_clo_bind; econstructor.
+        * exact (interp_vellvm_prov_h_det_rel e s).
+        * intros [pr' [s' x]] [s2 x2] [-> Hsx]; inversion Hsx; subst s2 x2; clear Hsx; cbn [fst snd].
+          gclo; econstructor; auto_ctrans_eq.
+          -- rewrite interp_state_tau, Eqit.bind_tau; reflexivity.
+          -- reflexivity.
+          -- gstep; constructor; gfinal; left; exact (CIH (k x) s').
   Qed.
 
   (** ** Coinductive Provenance-Elastic Refinement ([refine_prov]) *)
