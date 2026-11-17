@@ -1274,11 +1274,14 @@ Lemma alloc_fresh_bits_spec : forall n st vs st',
   List.length vs = n /\
   wf_lits_nonzero vs.
 Proof.
-  induction n as [| n' IH]; intros st vs st' H; cbn in H.
+  induction n as [| n' IH]; intros st vs st' H; cbn [alloc_fresh_bits] in H.
   - inversion H; subst; repeat split; constructor.
-  - destruct (alloc_fresh_bits n' (snd (alloc_var st))) as [vr st2] eqn:Hr.
+  - destruct (alloc_var st) as [v st1] eqn:Hv.
+    destruct (alloc_fresh_bits n' st1) as [vr st2] eqn:Hr.
     inversion H; subst; clear H.
+    unfold alloc_var in Hv; inversion Hv; subst v st1; clear Hv.
     destruct (IH _ vr st' Hr) as (Hcnf & Hlen & Hwf).
+    cbn [bs_cnf] in Hcnf.
     repeat split; [exact Hcnf | cbn; rewrite Hlen; reflexivity | constructor; [discriminate | exact Hwf]].
 Qed.
 
