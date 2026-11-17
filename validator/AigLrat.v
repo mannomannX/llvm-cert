@@ -2402,30 +2402,30 @@ Proof.
   unfold emit_and2_opt in Hemit.
   destruct (Z.eqb a lit_false) eqn:Eaf; cbn [orb] in Hemit.
   - apply Z.eqb_eq in Eaf; subst a; inversion Hemit; subst.
-    exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
-      [exact (wf_lit_bound_false _ Hge2) | rewrite (sat_eval_lit_false asg st Hsat); reflexivity]].
+    exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
+      [exact (wf_lit_bound_false _ Hge2) | rewrite (sat_eval_lit_false asg _ Hsat); reflexivity]].
   - destruct (Z.eqb b lit_false) eqn:Ebf; cbn [orb] in Hemit.
     + apply Z.eqb_eq in Ebf; subst b; inversion Hemit; subst.
-      exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
+      exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
         [exact (wf_lit_bound_false _ Hge2) |
-         rewrite (sat_eval_lit_false asg st Hsat), andb_false_r; reflexivity]].
+         rewrite (sat_eval_lit_false asg _ Hsat), andb_false_r; reflexivity]].
     + destruct (Z.eqb a lit_true) eqn:Eat.
       * apply Z.eqb_eq in Eat; subst a; inversion Hemit; subst.
-        exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
-          [exact Hwb | rewrite (sat_eval_lit_true asg st Hsat); reflexivity]].
+        exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
+          [exact Hwb | rewrite (sat_eval_lit_true asg _ Hsat); reflexivity]].
       * destruct (Z.eqb b lit_true) eqn:Ebt.
         -- apply Z.eqb_eq in Ebt; subst b; inversion Hemit; subst.
-           exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
-             [exact Hwa | rewrite (sat_eval_lit_true asg st Hsat), andb_true_r; reflexivity]].
+           exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
+             [exact Hwa | rewrite (sat_eval_lit_true asg _ Hsat), andb_true_r; reflexivity]].
         -- destruct (Z.eqb a b) eqn:Eab.
            ++ apply Z.eqb_eq in Eab; subst b; inversion Hemit; subst.
-              exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
+              exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
                 [exact Hwa | rewrite Bool.andb_diag; reflexivity]].
            ++ destruct (Z.eqb a (neg_lit b)) eqn:Eanb.
               ** apply Z.eqb_eq in Eanb; subst a; inversion Hemit; subst.
-                 exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
+                 exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
                    [exact (wf_lit_bound_false _ Hge2) |]].
-                 rewrite (sat_eval_lit_false asg st Hsat),
+                 rewrite (sat_eval_lit_false asg _ Hsat),
                          (eval_neg_lit_nonzero asg b (wf_lit_bound_nonzero _ b Hwb)).
                  destruct (eval_lit asg b); reflexivity.
               ** destruct (emit_and2_sat asg a b st out st' Hsat Hwa Hwb Hemit)
@@ -2464,30 +2464,30 @@ Proof.
   unfold emit_or2_opt in Hemit.
   destruct (Z.eqb a lit_true) eqn:Eat; cbn [orb] in Hemit.
   - apply Z.eqb_eq in Eat; subst a; inversion Hemit; subst.
-    exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
-      [exact (wf_lit_bound_true _ Hge2) | rewrite (sat_eval_lit_true asg st Hsat); reflexivity]].
+    exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
+      [exact (wf_lit_bound_true _ Hge2) | rewrite (sat_eval_lit_true asg _ Hsat); reflexivity]].
   - destruct (Z.eqb b lit_true) eqn:Ebt; cbn [orb] in Hemit.
     + apply Z.eqb_eq in Ebt; subst b; inversion Hemit; subst.
-      exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
+      exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
         [exact (wf_lit_bound_true _ Hge2) |
-         rewrite (sat_eval_lit_true asg st Hsat), orb_true_r; reflexivity]].
+         rewrite (sat_eval_lit_true asg _ Hsat), orb_true_r; reflexivity]].
     + destruct (Z.eqb a lit_false) eqn:Eaf.
       * apply Z.eqb_eq in Eaf; subst a; inversion Hemit; subst.
-        exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
-          [exact Hwb | rewrite (sat_eval_lit_false asg st Hsat); reflexivity]].
+        exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
+          [exact Hwb | rewrite (sat_eval_lit_false asg _ Hsat); reflexivity]].
       * destruct (Z.eqb b lit_false) eqn:Ebf.
         -- apply Z.eqb_eq in Ebf; subst b; inversion Hemit; subst.
-           exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
-             [exact Hwa | rewrite (sat_eval_lit_false asg st Hsat), orb_false_r; reflexivity]].
+           exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
+             [exact Hwa | rewrite (sat_eval_lit_false asg _ Hsat), orb_false_r; reflexivity]].
         -- destruct (Z.eqb a b) eqn:Eab.
            ++ apply Z.eqb_eq in Eab; subst b; inversion Hemit; subst.
-              exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
+              exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
                 [exact Hwa | rewrite Bool.orb_diag; reflexivity]].
            ++ destruct (Z.eqb a (neg_lit b)) eqn:Eanb.
               ** apply Z.eqb_eq in Eanb; subst a; inversion Hemit; subst.
-                 exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
+                 exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
                    [exact (wf_lit_bound_true _ Hge2) |]].
-                 rewrite (sat_eval_lit_true asg st Hsat),
+                 rewrite (sat_eval_lit_true asg _ Hsat),
                          (eval_neg_lit_nonzero asg b (wf_lit_bound_nonzero _ b Hwb)).
                  destruct (eval_lit asg b); reflexivity.
               ** destruct (emit_or2_sat asg a b st out st' Hsat Hwa Hwb Hemit)
@@ -2527,36 +2527,36 @@ Proof.
   unfold emit_xor2_opt in Hemit.
   destruct (Z.eqb a lit_false) eqn:Eaf.
   - apply Z.eqb_eq in Eaf; subst a; inversion Hemit; subst.
-    exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
-      [exact Hwb | rewrite (sat_eval_lit_false asg st Hsat); reflexivity]].
+    exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
+      [exact Hwb | rewrite (sat_eval_lit_false asg _ Hsat); reflexivity]].
   - destruct (Z.eqb b lit_false) eqn:Ebf.
     + apply Z.eqb_eq in Ebf; subst b; inversion Hemit; subst.
-      exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
-        [exact Hwa | rewrite (sat_eval_lit_false asg st Hsat), Bool.xorb_false_r; reflexivity]].
+      exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
+        [exact Hwa | rewrite (sat_eval_lit_false asg _ Hsat), Bool.xorb_false_r; reflexivity]].
     + destruct (Z.eqb a lit_true) eqn:Eat.
       * apply Z.eqb_eq in Eat; subst a; inversion Hemit; subst.
-        exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
+        exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
           [exact (wf_lit_bound_neg _ b Hwb) |
-           rewrite (sat_eval_lit_true asg st Hsat),
+           rewrite (sat_eval_lit_true asg _ Hsat),
                    (eval_neg_lit_nonzero asg b (wf_lit_bound_nonzero _ b Hwb));
            destruct (eval_lit asg b); reflexivity]].
       * destruct (Z.eqb b lit_true) eqn:Ebt.
         -- apply Z.eqb_eq in Ebt; subst b; inversion Hemit; subst.
-           exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
+           exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
              [exact (wf_lit_bound_neg _ a Hwa) |
-              rewrite (sat_eval_lit_true asg st Hsat),
+              rewrite (sat_eval_lit_true asg _ Hsat),
                       (eval_neg_lit_nonzero asg a (wf_lit_bound_nonzero _ a Hwa));
               destruct (eval_lit asg a); reflexivity]].
         -- destruct (Z.eqb a b) eqn:Eab.
            ++ apply Z.eqb_eq in Eab; subst b; inversion Hemit; subst.
-              exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
+              exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
                 [exact (wf_lit_bound_false _ Hge2) |
-                 rewrite (sat_eval_lit_false asg st Hsat), Bool.xorb_nilpotent; reflexivity]].
+                 rewrite (sat_eval_lit_false asg _ Hsat), Bool.xorb_nilpotent; reflexivity]].
            ++ destruct (Z.eqb a (neg_lit b)) eqn:Eanb.
               ** apply Z.eqb_eq in Eanb; subst a; inversion Hemit; subst.
-                 exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
+                 exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
                    [exact (wf_lit_bound_true _ Hge2) |]].
-                 rewrite (sat_eval_lit_true asg st Hsat),
+                 rewrite (sat_eval_lit_true asg _ Hsat),
                          (eval_neg_lit_nonzero asg b (wf_lit_bound_nonzero _ b Hwb)).
                  destruct (eval_lit asg b); reflexivity.
               ** destruct (emit_xor2_sat asg a b st out st' Hsat Hwa Hwb Hemit)
@@ -2595,30 +2595,30 @@ Proof.
   unfold emit_mux2_opt in Hemit.
   destruct (Z.eqb sel lit_true) eqn:Est.
   - apply Z.eqb_eq in Est; subst sel; inversion Hemit; subst.
-    exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
-      [exact Hwt | rewrite (sat_eval_lit_true asg st Hsat); reflexivity]].
+    exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
+      [exact Hwt | rewrite (sat_eval_lit_true asg _ Hsat); reflexivity]].
   - destruct (Z.eqb sel lit_false) eqn:Esf.
     + apply Z.eqb_eq in Esf; subst sel; inversion Hemit; subst.
-      exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
-        [exact Hwf | rewrite (sat_eval_lit_false asg st Hsat); reflexivity]].
+      exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
+        [exact Hwf | rewrite (sat_eval_lit_false asg _ Hsat); reflexivity]].
     + destruct (Z.eqb tl fl) eqn:Etf.
       * apply Z.eqb_eq in Etf; subst fl; inversion Hemit; subst.
-        exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
+        exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
           [exact Hwt | destruct (eval_lit asg sel); reflexivity]].
       * destruct (Z.eqb tl lit_true && Z.eqb fl lit_false) eqn:E10.
         -- apply andb_true_iff in E10 as [Ett Eff];
              apply Z.eqb_eq in Ett; apply Z.eqb_eq in Eff; subst tl fl;
              inversion Hemit; subst.
-           exists asg; split; [exact (step_spec_refl st asg Hsat) | split; [exact Hws |]].
-           rewrite (sat_eval_lit_true asg st Hsat), (sat_eval_lit_false asg st Hsat).
+           exists asg; split; [exact (step_spec_refl _ asg Hsat) | split; [exact Hws |]].
+           rewrite (sat_eval_lit_true asg _ Hsat), (sat_eval_lit_false asg _ Hsat).
            destruct (eval_lit asg sel); reflexivity.
         -- destruct (Z.eqb tl lit_false && Z.eqb fl lit_true) eqn:E01.
            ++ apply andb_true_iff in E01 as [Etf0 Eft];
                 apply Z.eqb_eq in Etf0; apply Z.eqb_eq in Eft; subst tl fl;
                 inversion Hemit; subst.
-              exists asg; split; [exact (step_spec_refl st asg Hsat) | split;
+              exists asg; split; [exact (step_spec_refl _ asg Hsat) | split;
                 [exact (wf_lit_bound_neg _ sel Hws) |]].
-              rewrite (sat_eval_lit_true asg st Hsat), (sat_eval_lit_false asg st Hsat),
+              rewrite (sat_eval_lit_true asg _ Hsat), (sat_eval_lit_false asg _ Hsat),
                       (eval_neg_lit_nonzero asg sel (wf_lit_bound_nonzero _ sel Hws)).
               destruct (eval_lit asg sel); reflexivity.
            ++ destruct (emit_mux2_sat asg sel tl fl st out st' Hsat Hws Hwt Hwf Hemit)
@@ -2691,7 +2691,7 @@ Proof.
     intros [| y ry] asg st zs st' Hlen Hwx Hwy Hsat Hm;
     try discriminate; cbn in Hm.
   - inversion Hm; subst; exists asg; split;
-      [exact (step_spec_refl st asg Hsat) | split; [reflexivity | split; [constructor | reflexivity]]].
+      [exact (step_spec_refl _ asg Hsat) | split; [reflexivity | split; [constructor | reflexivity]]].
   - inversion Hwx as [| ? ? Hx Hwrx]; subst.
     inversion Hwy as [| ? ? Hy Hwry]; subst.
     injection Hlen as Hlen'.
@@ -2734,8 +2734,8 @@ Lemma emit_or_list_opt_step : forall ls asg st out st',
 Proof.
   induction ls as [| x rest IH]; intros asg st out st' Hwf Hsat Hemit; cbn [emit_or_list_opt] in Hemit.
   - inversion Hemit; subst; exists asg; split;
-      [exact (step_spec_refl st asg Hsat) | split;
-       [exact (wf_lit_bound_false _ (proj1 (proj1 Hsat))) | exact (sat_eval_lit_false asg st Hsat)]].
+      [exact (step_spec_refl _ asg Hsat) | split;
+       [exact (wf_lit_bound_false _ (proj1 (proj1 Hsat))) | exact (sat_eval_lit_false asg _ Hsat)]].
   - inversion Hwf as [| ? ? Hx Hwfr]; subst.
     destruct (emit_or_list_opt rest st) as [sub st1] eqn:Hsub.
     destruct (IH asg st sub st1 Hwfr Hsat Hsub) as (asg1 & Hs1 & Hwf_sub & Hev_sub).
@@ -2779,7 +2779,7 @@ Proof.
   induction ts as [| t rt IH]; intros [| f rf] sel asg st ms st' Hlen Hsel Hwt Hwf Hsat Hm;
     try discriminate; cbn [mux_bits_list_opt] in Hm.
   - inversion Hm; subst; exists asg; split;
-      [exact (step_spec_refl st asg Hsat) | split; [reflexivity | split;
+      [exact (step_spec_refl _ asg Hsat) | split; [reflexivity | split;
        [constructor | destruct (eval_lit asg sel); reflexivity]]].
   - inversion Hwt as [| ? ? Ht Hwrt]; subst.
     inversion Hwf as [| ? ? Hf Hwrf]; subst.
@@ -3588,7 +3588,7 @@ Proof.
   induction xs as [| x rx IH]; intros [| y ry] cin asg st sums cout st' Hlen Hcin Hwx Hwy Hsat Hrip;
     try discriminate; cbn [emit_ripple_add] in Hrip.
   - inversion Hrip; subst; exists asg; split;
-      [exact (step_spec_refl st asg Hsat) | split; [reflexivity | split; [constructor |
+      [exact (step_spec_refl _ asg Hsat) | split; [reflexivity | split; [constructor |
        split; [exact Hcin | cbn; lia]]]].
   - inversion Hwx as [| ? ? Hx Hwrx]; subst.
     inversion Hwy as [| ? ? Hy Hwry]; subst.
@@ -3702,7 +3702,7 @@ Proof.
   destruct (emit_ripple_add_step (rbv_bits a) (rbv_bits b) lit_false asg st sums cout st1
               Hlen_ab (wf_lit_bound_false _ (proj1 (proj1 Hsat))) Hba Hbb Hsat Hrip)
     as (asg1 & Hs1 & Hlen_s & Hwf_s & Hwf_c & Heq_sum).
-  rewrite (sat_eval_lit_false asg st Hsat) in Heq_sum; cbn [b2z] in Heq_sum.
+  rewrite (sat_eval_lit_false asg _ Hsat) in Heq_sum; cbn [b2z] in Heq_sum.
   set (va := eval_rail_val sz asg a).
   set (vb := eval_rail_val sz asg b).
   assert (Hua : bools_to_Z (List.map (eval_lit asg) (rbv_bits a)) = @Integers.unsigned sz va)
@@ -3907,7 +3907,7 @@ Proof.
               Hlen_anb (wf_lit_bound_true _ (proj1 (proj1 Hsat)))
               Hba (wf_lits_bound_neg _ _ Hbb) Hsat Hrip)
     as (asg1 & Hs1 & Hlen_d & Hwf_d & Hwf_c & Heq_diff).
-  rewrite (sat_eval_lit_true asg st Hsat) in Heq_diff; cbn [b2z] in Heq_diff.
+  rewrite (sat_eval_lit_true asg _ Hsat) in Heq_diff; cbn [b2z] in Heq_diff.
   unfold not_b in Heq_diff;
     rewrite (map_eval_neg_lits _ asg (rbv_bits b) Hbb) in Heq_diff.
   pose proof (bools_to_Z_negb (List.map (eval_lit asg) (rbv_bits b))) as Hnb.
@@ -4086,7 +4086,7 @@ Lemma emit_xor_const_lits_step : forall s hs asg st xhs st',
 Proof.
   intros s hs; induction hs as [| h rest IH]; intros asg st xhs st' Hws Hwh Hsat He; cbn [emit_xor_const_lits] in He.
   - inversion He; subst; exists asg; split;
-      [exact (step_spec_refl st asg Hsat) | split; [constructor | reflexivity]].
+      [exact (step_spec_refl _ asg Hsat) | split; [constructor | reflexivity]].
   - inversion Hwh as [| ? ? Hh Hwrest]; subst.
     destruct (emit_xor2_opt s h st) as [xh st1] eqn:Ex1.
     destruct (emit_xor_const_lits s rest st1) as [xrest st2] eqn:Ex2.
@@ -4150,8 +4150,8 @@ Lemma emit_eq_const_bits_step : forall bs k_val asg st out st',
 Proof.
   induction bs as [| b rest IH]; intros k_val asg st out st' Hwf Hsat He; cbn [emit_eq_const_bits] in He.
   - inversion He; subst; exists asg; split;
-      [exact (step_spec_refl st asg Hsat) | split;
-       [exact (wf_lit_bound_true _ (proj1 (proj1 Hsat))) | exact (sat_eval_lit_true asg st Hsat)]].
+      [exact (step_spec_refl _ asg Hsat) | split;
+       [exact (wf_lit_bound_true _ (proj1 (proj1 Hsat))) | exact (sat_eval_lit_true asg _ Hsat)]].
   - inversion Hwf as [| ? ? Hb Hwrest]; subst.
     set (want := if Z.odd k_val then b else neg_lit b) in *.
     assert (Hww : wf_lit_bound (bs_next_var st) want)
@@ -4266,14 +4266,14 @@ Proof.
     cbn [mux_shift_table] in Hmux.
   - inversion Hmux; subst; clear Hmux.
     pose proof (proj1 (proj1 Hsat)) as Hge2.
-    exists asg; split; [exact (step_spec_refl st asg Hsat) | split].
+    exists asg; split; [exact (step_spec_refl _ asg Hsat) | split].
     + apply repeat_length.
     + split; [exact (wf_lits_bound_repeat _ _ _ (wf_lit_bound_false _ Hge2)) | split].
       * exact (wf_lit_bound_true _ Hge2).
       * cbn zeta; rewrite Nat.sub_0_r, positive_nat_Z.
         set (ub := bools_to_Z (List.map (eval_lit asg) b_bits)).
         destruct (Z.leb_spec (Z.pos sz) ub), (Z.ltb_spec ub (Z.pos sz));
-          cbn [andb]; try lia; exact (sat_eval_lit_true asg st Hsat).
+          cbn [andb]; try lia; exact (sat_eval_lit_true asg _ Hsat).
   - set (k := (Pos.to_nat sz - S r')%nat) in *.
     assert (Hk : (k < Pos.to_nat sz)%nat) by lia.
     destruct (fn_k k st) as [[bits_k psn_k] st1] eqn:Ef.
@@ -4282,7 +4282,7 @@ Proof.
     destruct (mux_bits_list_opt eq_k bits_k rest_bits st3) as [ob st4] eqn:Em1.
     destruct (emit_mux2_opt eq_k psn_k rest_psn st4) as [op st5] eqn:Em2.
     inversion Hmux; subst out_bits out_psn st5; clear Hmux.
-    destruct (Hfn k asg st bits_k psn_k st1 Hk (step_spec_refl st asg Hsat) Ef)
+    destruct (Hfn k asg st bits_k psn_k st1 Hk (step_spec_refl _ asg Hsat) Ef)
       as (asg1 & Hs1 & Hlen_bk & Hwf_bk & Hwf_pk & Hev_bk & Hev_pk).
     destruct (emit_eq_const_bits_step b_bits (Z.of_nat k) asg1 st1 eq_k st2
                 (wf_lits_bound_mono _ _ _ (proj1 Hs1) Hwfb)
@@ -5008,7 +5008,7 @@ Proof.
     + unfold eval_rail_psn; rewrite Hev_p; f_equal.
       unfold nneg_l; destruct nneg;
         [cbn [andb]; rewrite (eval_msb_lit fw asg a (conj Hwa Hla)), signed_lt_zero_eq_msb; reflexivity
-         | exact (sat_eval_lit_false asg st Hsat)].
+         | exact (sat_eval_lit_false asg _ Hsat)].
     + unfold eval_rail_val; cbn [rbv_bits].
       rewrite map_app, map_repeat_eq, (sat_eval_lit_false asg1 st' (proj2 (proj2 Hs1))),
               (step_spec_eval_lits st st' asg asg1 (rbv_bits a) Hs1 Hba),
@@ -5036,7 +5036,7 @@ Theorem blast_sext_rail_step : forall fw tw a asg st out st',
 Proof.
   intros fw tw a asg st out st' Hlt Hsat ([Hwa Hla] & Hba & Hpa) Hbl.
   unfold blast_sext_rail in Hbl; inversion Hbl; subst out st'; clear Hbl.
-  exists asg; split; [exact (step_spec_refl st asg Hsat) | split].
+  exists asg; split; [exact (step_spec_refl _ asg Hsat) | split].
   - split; [split; [reflexivity | cbn; rewrite length_app, repeat_length, Hla; lia] | split].
     + apply wf_lits_bound_app;
         [exact Hba
@@ -5113,9 +5113,9 @@ Proof.
       exists nl, st1, a1; repeat split; try exact Hs1; try exact Hw_nl.
       cbn [andb]; rewrite Hev_nl; unfold hi, b_hi, ba; rewrite map_skipn_eq; reflexivity.
     - exists lit_false, st, asg; repeat split;
-        try exact (step_spec_refl st asg Hsat);
+        try exact (step_spec_refl _ asg Hsat);
         [exact (wf_lit_bound_false _ (proj1 (proj1 Hsat)))
-         | exact (sat_eval_lit_false asg st Hsat)]. }
+         | exact (sat_eval_lit_false asg _ Hsat)]. }
   destruct Hnuw_step as (nuw_l & st1 & asg1 & Hnuw_eq & Hs1 & Hwf_nuw & Hev_nuw).
   rewrite Hnuw_eq in Hbl; clear Hnuw_eq.
   set (b_slo := List.nth (Pos.to_nat tw - 1) b_lo false).
@@ -5303,7 +5303,7 @@ Proof.
   induction xs as [| x rx IH]; intros [| y ry] bin asg st out st' Hlen Hbin Hwx Hwy Hsat He;
     try discriminate; cbn [emit_ult_borrow] in He.
   - inversion He; subst; exists asg; split;
-      [exact (step_spec_refl st asg Hsat) | split; [exact Hbin |]].
+      [exact (step_spec_refl _ asg Hsat) | split; [exact Hbin |]].
     destruct (eval_lit asg bin); reflexivity.
   - inversion Hwx as [| ? ? Hx Hwrx]; subst.
     inversion Hwy as [| ? ? Hy Hwry]; subst.
@@ -5440,7 +5440,7 @@ Proof.
                 Hwfa Hwfb Hsat He)
       as (asg1 & Hs1 & Hwf_out & Hev_out).
     exists asg1; split; [exact Hs1 | split; [exact Hwf_out |]].
-    rewrite Hev_out, (sat_eval_lit_false asg st Hsat), Hza, Hzb; cbn [b2z].
+    rewrite Hev_out, (sat_eval_lit_false asg _ Hsat), Hza, Hzb; cbn [b2z].
     unfold Integers.lt.
     destruct (Z.ltb_spec _ _), (Numeric.Rocqlib.zlt _ _); try reflexivity; lia.
   - destruct Hwa as ([_ Hla] & Hba & _), Hwb as ([_ Hlb] & Hbb & _).
@@ -5450,7 +5450,7 @@ Proof.
                 Hba Hbb Hsat He)
       as (asg1 & Hs1 & Hwf_out & Hev_out).
     exists asg1; split; [exact Hs1 | split; [exact Hwf_out |]].
-    rewrite Hev_out, (sat_eval_lit_false asg st Hsat),
+    rewrite Hev_out, (sat_eval_lit_false asg _ Hsat),
             <- (unsigned_eval_rail_val sz asg a Hla),
             <- (unsigned_eval_rail_val sz asg b Hlb); cbn [b2z].
     unfold Integers.ltu.

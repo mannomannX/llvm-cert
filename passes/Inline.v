@@ -3944,14 +3944,14 @@ Section InliningSemantics.
     inl_is_ub_cfg e = true ->
     exc_of_event e = None.
   Proof using.
-    repeat (destruct e as [e | e]); try discriminate; destruct e; reflexivity.
+    destruct_sum1 e; try discriminate; destruct e; reflexivity.
   Qed.
 
   Lemma inl_sync_cfg_inlined_no_exc stk ce1 e1 e2 {X : Type} (e : @CFGEtop PaV X) :
     inl_sync_cfg (IC_Inlined stk ce1 e1 e2) e = true ->
     exc_of_event e = None.
   Proof using.
-    repeat (destruct e as [e | e]); try discriminate; try reflexivity.
+    destruct_sum1 e; try discriminate; try reflexivity.
   Qed.
 
   (** ** 8B. Generic Coinductive Inlining Simulation ([gen_inline_sim]) *)
@@ -5056,9 +5056,9 @@ Section InliningSemantics.
           -- destruct (as_local_cfg e1) as [le1 |] eqn:Ele1,
                       (as_local_cfg e2) as [le2 |] eqn:Ele2; try contradiction.
              assert (Hex1 : exc_of_event e1 = None).
-             { repeat (destruct e1 as [e1 | e1]); try discriminate Ele1; reflexivity. }
+             { destruct_sum1 e1; try discriminate Ele1; reflexivity. }
              assert (Hex2 : exc_of_event e2 = None).
-             { repeat (destruct e2 as [e2 | e2]); try discriminate Ele2; reflexivity. }
+             { destruct_sum1 e2; try discriminate Ele2; reflexivity. }
              eapply gen_inline_sim__obs_eq;
                [symmetry; apply (run_exc_vis_none_eq _ _ _ Hou1 Hex1)
                | symmetry; apply (run_exc_vis_none_eq _ _ _ Hou2 Hex2) |].
@@ -5861,7 +5861,7 @@ Section InliningSemantics.
         apply gen_inline_sim_ret; apply gis_cont_to_sim, Hstep.
       - destruct Hstep as [Hub | Hvis].
         + assert (Hni1 : interp_intrinsics_h ev1 = ITree.trigger ev1).
-          { repeat (destruct ev1 as [ev1 | ev1]); try discriminate Hub; reflexivity. }
+          { destruct_sum1 ev1; try discriminate Hub; reflexivity. }
           rewrite Hni1; unfold ITree.trigger.
           pstep; apply GIS_Step; unfold gis_step_body; rewrite observe_bind; cbn [observe].
           left; exact Hub.
@@ -5900,9 +5900,9 @@ Section InliningSemantics.
             -- destruct (as_local_mcfg ev1) as [le1 |] eqn:Ele1,
                         (as_local_mcfg ev2) as [le2 |] eqn:Ele2; try contradiction.
                assert (Hni1 : interp_intrinsics_h ev1 = ITree.trigger ev1).
-               { repeat (destruct ev1 as [ev1 | ev1]); try discriminate Ele1; reflexivity. }
+               { destruct_sum1 ev1; try discriminate Ele1; reflexivity. }
                assert (Hni2 : interp_intrinsics_h ev2 = ITree.trigger ev2).
-               { repeat (destruct ev2 as [ev2 | ev2]); try discriminate Ele2; reflexivity. }
+               { destruct_sum1 ev2; try discriminate Ele2; reflexivity. }
                rewrite Hni1, Hni2; unfold ITree.trigger.
                pstep; apply GIS_Step; unfold gis_step_body; rewrite !observe_bind; cbn [observe].
                right; right; left; rewrite Ele1, Ele2.
@@ -5921,9 +5921,9 @@ Section InliningSemantics.
             -- destruct (as_stack_mcfg ev1) as [se1 |] eqn:Ese1,
                         (as_stack_mcfg ev2) as [se2 |] eqn:Ese2; try contradiction.
                assert (Hni1 : interp_intrinsics_h ev1 = ITree.trigger ev1).
-               { repeat (destruct ev1 as [ev1 | ev1]); try discriminate Ese1; reflexivity. }
+               { destruct_sum1 ev1; try discriminate Ese1; reflexivity. }
                assert (Hni2 : interp_intrinsics_h ev2 = ITree.trigger ev2).
-               { repeat (destruct ev2 as [ev2 | ev2]); try discriminate Ese2; reflexivity. }
+               { destruct_sum1 ev2; try discriminate Ese2; reflexivity. }
                rewrite Hni1, Hni2; unfold ITree.trigger.
                pstep; apply GIS_Step; unfold gis_step_body; rewrite !observe_bind; cbn [observe].
                right; right; right; split; [reflexivity |]; rewrite Ese1, Ese2.
@@ -6367,7 +6367,7 @@ Section InliningSemantics.
       - destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
         pstep; apply RP_Step; cbn; exists ic; split; [exact Hmatch | apply gis_cont_to_sim, Hstep].
       - destruct Hstep as [Hub | Hvis].
-        + repeat (destruct ev1 as [ev1 | ev1]); try discriminate Hub; destruct ev1 as [msg].
+        + destruct_sum1 ev1; try discriminate Hub; destruct ev1 as [msg].
           * pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; left; reflexivity.
           * pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; left; reflexivity.
         + destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
@@ -6382,8 +6382,8 @@ Section InliningSemantics.
             -- destruct (as_local_mcfg ev1) as [le1 |] eqn:Ele1,
                         (as_local_mcfg ev2) as [le2 |] eqn:Ele2; try contradiction.
                destruct le1 as [x1 | x1 v1], le2 as [x2 | x2 v2]; try contradiction;
-                 repeat (destruct ev1 as [ev1 | ev1]); try discriminate Ele1;
-                 repeat (destruct ev2 as [ev2 | ev2]); try discriminate Ele2;
+                 destruct_sum1 ev1; try discriminate Ele1;
+                 destruct_sum1 ev2; try discriminate Ele2;
                  inversion Ele1; subst; inversion Ele2; subst;
                  unfold interp_vellvm_prov_h; cbn [case_];
                  destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]].
@@ -6420,8 +6420,8 @@ Section InliningSemantics.
             -- destruct (as_stack_mcfg ev1) as [se1 |] eqn:Ese1,
                         (as_stack_mcfg ev2) as [se2 |] eqn:Ese2; try contradiction.
                destruct se1, se2; try contradiction;
-                 repeat (destruct ev1 as [ev1 | ev1]); try discriminate Ese1;
-                 repeat (destruct ev2 as [ev2 | ev2]); try discriminate Ese2;
+                 destruct_sum1 ev1; try discriminate Ese1;
+                 destruct_sum1 ev2; try discriminate Ese2;
                  inversion Ese1; subst; inversion Ese2; subst;
                  unfold interp_vellvm_prov_h; cbn [case_];
                  destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]];
@@ -9584,9 +9584,9 @@ Section InliningSemantics.
           -- destruct (as_local_cfg e1) as [le1 |] eqn:Ele1,
                       (as_local_cfg e2) as [le2 |] eqn:Ele2; try contradiction.
              assert (Hex1 : exc_of_event e1 = None).
-             { repeat (destruct e1 as [e1 | e1]); try discriminate Ele1; reflexivity. }
+             { destruct_sum1 e1; try discriminate Ele1; reflexivity. }
              assert (Hex2 : exc_of_event e2 = None).
-             { repeat (destruct e2 as [e2 | e2]); try discriminate Ele2; reflexivity. }
+             { destruct_sum1 e2; try discriminate Ele2; reflexivity. }
              eapply gen_inline_sim__obs_eq;
                [symmetry; apply (run_exc_vis_none_eq _ _ _ Hou1 Hex1)
                | symmetry; apply (run_exc_vis_none_eq _ _ _ Hou2 Hex2) |].

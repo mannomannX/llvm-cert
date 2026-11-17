@@ -998,9 +998,9 @@ Section EventRelations.
   Proof using.
     revert t; ginit; gcofix CIH; intros t.
     destruct (observe t) eqn:Hot.
-    - gstep; rewrite (itree_eta t), Hot; constructor; reflexivity.
-    - gstep; rewrite (itree_eta t), Hot; constructor; gfinal; left; apply CIH.
-    - gstep; rewrite (itree_eta t), Hot; constructor.
+    - gstep; red; rewrite Hot; constructor; reflexivity.
+    - gstep; red; rewrite Hot; constructor; gfinal; left; apply CIH.
+    - gstep; red; rewrite Hot; constructor.
       + apply EqE_CFG_refl.
       + intros a1 a2 Ha; apply EqA_CFG_eq in Ha; subst a2.
         gfinal; left; apply CIH.
@@ -1011,9 +1011,9 @@ Section EventRelations.
   Proof using.
     revert t; ginit; gcofix CIH; intros t.
     destruct (observe t) eqn:Hot.
-    - gstep; rewrite (itree_eta t), Hot; constructor; reflexivity.
-    - gstep; rewrite (itree_eta t), Hot; constructor; gfinal; left; apply CIH.
-    - gstep; rewrite (itree_eta t), Hot; constructor.
+    - gstep; red; rewrite Hot; constructor; reflexivity.
+    - gstep; red; rewrite Hot; constructor; gfinal; left; apply CIH.
+    - gstep; red; rewrite Hot; constructor.
       + apply EqE_MCFG_refl.
       + intros a1 a2 Ha; apply EqA_MCFG_eq in Ha; subst a2.
         gfinal; left; apply CIH.
@@ -1437,7 +1437,7 @@ Section ModelSemantics.
   Proof using.
     destruct s as [m [[sf stk] g]]; cbn [fst].
     unfold interp_vellvm_prov_h, interp_vellvm_h.
-    repeat (destruct e as [e | e]); cbn [case_].
+    destruct_sum1 e; cbn [case_].
     - (* ExternalCallE *)
       unfold fused_trigger_prov, fused_trigger, ITree.map, ITree.trigger.
       rewrite interp_state_bind, interp_state_trigger; cbn.
@@ -2842,9 +2842,9 @@ Section ModelSemantics.
         destruct Hvis as [(Hsync & HE & HA) | Hrd].
         * left; split; [exact Hsync | split; [exact HE | intros a1 a2 Ha Hp; apply LE, (HA a1 a2 Ha Hp)]].
         * right.
-          repeat (destruct e1 as [e1 | e1]); try contradiction;
+          destruct_sum1 e1; try contradiction;
             destruct e1 as [x1 |]; try contradiction;
-            repeat (destruct e2 as [e2 | e2]); try contradiction;
+            destruct_sum1 e2; try contradiction;
             destruct e2 as [x2 |]; try contradiction.
           destruct Hrd as (Hx & Hlk & Hk); split; [exact Hx | split; [exact Hlk | intros v Hv; apply LE, Hk, Hv]].
     - eapply CLS_TauL; [exact Ht1 | exact IH].
@@ -2897,9 +2897,9 @@ Section ModelSemantics.
         * left; split; [exact Hsync | split; [exact HE |]].
           intros a1 a2 Ha Hp; eapply Hr_eq; [apply Hk1 | apply Hk2 | exact (HA a1 a2 Ha Hp)].
         * right.
-          repeat (destruct e1 as [e1 | e1]); try contradiction;
+          destruct_sum1 e1; try contradiction;
             destruct e1 as [x1 |]; try contradiction;
-            repeat (destruct e2 as [e2 | e2]); try contradiction;
+            destruct_sum1 e2; try contradiction;
             destruct e2 as [x2 |]; try contradiction.
           destruct Hrd as (Hx & Hlk & Hk); split; [exact Hx | split; [exact Hlk |]].
           intros v Hv; eapply Hr_eq; [apply Hk1 | apply Hk2 | apply Hk, Hv].
@@ -2982,9 +2982,9 @@ Section ModelSemantics.
           intros a1 a2 Ha Hp; specialize (HA a1 a2 Ha Hp); pclearbot.
           right; eapply CIH; [exact HA | exact Hk].
         * right.
-          repeat (destruct e1 as [e1 | e1]); try contradiction;
+          destruct_sum1 e1; try contradiction;
             destruct e1 as [x1 |]; try contradiction;
-            repeat (destruct e2 as [e2 | e2]); try contradiction;
+            destruct_sum1 e2; try contradiction;
             destruct e2 as [x2 |]; try contradiction.
           destruct Hrd as (Hx & Hlk & Hrd'); split; [exact Hx | split; [exact Hlk |]].
           intros v Hv; specialize (Hrd' v Hv); pclearbot.
@@ -3112,9 +3112,9 @@ Section ModelSemantics.
             intros a1 a2 Ha Hp; specialize (HA a1 a2 Ha Hp); pclearbot.
             exists (kw1 a1), (kw2 a2); split; [reflexivity | split; [reflexivity | exact HA]].
           * right.
-            repeat (destruct ev1 as [ev1 | ev1]); try contradiction;
+            destruct_sum1 ev1; try contradiction;
               destruct ev1 as [x1 |]; try contradiction;
-              repeat (destruct ev2 as [ev2 | ev2]); try contradiction;
+              destruct_sum1 ev2; try contradiction;
               destruct ev2 as [x2 |]; try contradiction.
             destruct Hrd as (Hx & Hlk & Hrd'); split; [exact Hx | split; [exact Hlk |]].
             intros v Hv; specialize (Hrd' v Hv); pclearbot.
@@ -3151,7 +3151,7 @@ Section ModelSemantics.
     is_ub_cfg e = true -> exc_of_event e = None.
   Proof using.
     destruct e as [c | m]; [discriminate |].
-    repeat (destruct m as [m | m]); try discriminate; destruct m; reflexivity.
+    destruct_sum1 m; try discriminate; destruct m; reflexivity.
   Qed.
 
   Lemma cfg_local_sim_run_exc_aux {R1 R2}
@@ -3234,9 +3234,9 @@ Section ModelSemantics.
                 pstep; eapply CLS_TauL; [reflexivity |];
                   eapply CLS_TauR; [reflexivity |].
                 punfold HA; eapply cfg_local_sim__mon; [exact HA | intros ? ? ? ? Hb; inversion Hb].
-          -- repeat (destruct ev1 as [ev1 | ev1]); try contradiction;
+          -- destruct_sum1 ev1; try contradiction;
                destruct ev1 as [x1 |]; try contradiction;
-               repeat (destruct ev2 as [ev2 | ev2]); try contradiction;
+               destruct_sum1 ev2; try contradiction;
                destruct ev2 as [x2 |]; try contradiction.
              destruct Hrd as (Hx & Hlk & Hrd'); cbn [exc_of_event].
              apply CLS_Step; cbn; right; right.
@@ -3724,9 +3724,9 @@ Section ModelSemantics.
         * left; split; [exact Hsync | split; [exact HE |]].
           intros a1 a2 Ha Hp; specialize (HA a1 a2 Ha Hp); pclearbot; right; apply CIH, HA.
         * right; left.
-          repeat (destruct e1 as [e1 | e1]); try contradiction;
+          destruct_sum1 e1; try contradiction;
             destruct e1 as [x1 |]; try contradiction;
-            repeat (destruct e2 as [e2 | e2]); try contradiction;
+            destruct_sum1 e2; try contradiction;
             destruct e2 as [x2 |]; try contradiction.
           cbn [as_local_cfg as_local_mcfg].
           destruct Hrd as (Hx & Hlk & Hrd'); split; [exact Hx | split; [exact Hlk |]].
@@ -4282,7 +4282,7 @@ Section ModelSemantics.
         destruct Hstep as [Hstep | Hb]; [| inversion Hb].
         apply gen_stack_sim_ret; exact Hstep.
       - destruct Hstep as [Hub | Hvis].
-        + repeat (destruct ev1 as [ev1 | ev1]); try discriminate Hub; destruct ev1 as [u].
+        + destruct_sum1 ev1; try discriminate Hub; destruct ev1 as [u].
           pstep; apply GSS_Step; unfold gss_step_body; rewrite observe_bind; cbn; left; reflexivity.
         + destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
           destruct Hvis as [(Hsync & HE & HA) | [Hloc | Hstk]].
@@ -4310,8 +4310,8 @@ Section ModelSemantics.
           * destruct (as_local_mcfg ev1) as [le1 |] eqn:Ele1,
                      (as_local_mcfg ev2) as [le2 |] eqn:Ele2; try contradiction.
             destruct le1 as [x1 | x1 v1], le2 as [x2 | x2 v2]; try contradiction;
-              repeat (destruct ev1 as [ev1 | ev1]); try discriminate Ele1;
-              repeat (destruct ev2 as [ev2 | ev2]); try discriminate Ele2;
+              destruct_sum1 ev1; try discriminate Ele1;
+              destruct_sum1 ev2; try discriminate Ele2;
               inversion Ele1; subst; inversion Ele2; subst;
               cbn [interp_intrinsics_h case_ F_trigger]; unfold ITree.trigger.
             -- destruct Hloc as (<- & Hlk & Hrd).
@@ -4330,8 +4330,8 @@ Section ModelSemantics.
           * destruct (as_stack_mcfg ev1) as [se1 |] eqn:Ese1,
                      (as_stack_mcfg ev2) as [se2 |] eqn:Ese2; try contradiction.
             destruct se1, se2; try contradiction;
-              repeat (destruct ev1 as [ev1 | ev1]); try discriminate Ese1;
-              repeat (destruct ev2 as [ev2 | ev2]); try discriminate Ese2;
+              destruct_sum1 ev1; try discriminate Ese1;
+              destruct_sum1 ev2; try discriminate Ese2;
               inversion Ese1; subst; inversion Ese2; subst;
               cbn [interp_intrinsics_h case_ F_trigger]; unfold ITree.trigger.
             -- destruct Hstk as [<- [Hr | Hb]]; [| inversion Hb].
@@ -4756,7 +4756,7 @@ Section ModelSemantics.
         destruct Hstep as [Hstep | Hb]; [| inversion Hb].
         pstep; apply RP_Step; cbn; exists stk, env1, env2; split; assumption.
       - destruct Hstep as [Hub | Hvis].
-        + repeat (destruct ev1 as [ev1 | ev1]); try discriminate Hub; destruct ev1 as [u].
+        + destruct_sum1 ev1; try discriminate Hub; destruct ev1 as [u].
           pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; left; reflexivity.
         + destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
           destruct Hvis as [(Hsync & HE & HA) | [Hloc | Hstk]].
@@ -4768,8 +4768,8 @@ Section ModelSemantics.
           * destruct (as_local_mcfg ev1) as [le1 |] eqn:Ele1,
                      (as_local_mcfg ev2) as [le2 |] eqn:Ele2; try contradiction.
             destruct le1 as [x1 | x1 v1], le2 as [x2 | x2 v2]; try contradiction;
-              repeat (destruct ev1 as [ev1 | ev1]); try discriminate Ele1;
-              repeat (destruct ev2 as [ev2 | ev2]); try discriminate Ele2;
+              destruct_sum1 ev1; try discriminate Ele1;
+              destruct_sum1 ev2; try discriminate Ele2;
               inversion Ele1; subst; inversion Ele2; subst;
               unfold interp_vellvm_prov_h; cbn [case_];
               destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]].
@@ -4804,8 +4804,8 @@ Section ModelSemantics.
           * destruct (as_stack_mcfg ev1) as [se1 |] eqn:Ese1,
                      (as_stack_mcfg ev2) as [se2 |] eqn:Ese2; try contradiction.
             destruct se1, se2; try contradiction;
-              repeat (destruct ev1 as [ev1 | ev1]); try discriminate Ese1;
-              repeat (destruct ev2 as [ev2 | ev2]); try discriminate Ese2;
+              destruct_sum1 ev1; try discriminate Ese1;
+              destruct_sum1 ev2; try discriminate Ese2;
               inversion Ese1; subst; inversion Ese2; subst;
               unfold interp_vellvm_prov_h; cbn [case_];
               destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]];
@@ -5005,7 +5005,7 @@ Section ModelSemantics.
       destruct (sync_non_local_mcfg ev) eqn:Esync.
       + left; split; [exact Esync | split; [apply EqE_MCFG_refl |]].
         intros a1 a2 Ha _; apply EqA_MCFG_eq in Ha; subst a2; right; apply CIH, Hstk.
-      + repeat (destruct ev as [ev | ev]); try discriminate Esync.
+      + destruct_sum1 ev; try discriminate Esync.
         * destruct ev as [x | x v]; right; left; cbn.
           -- split; [reflexivity | split; [reflexivity | intros v _; right; apply CIH, Hstk]].
           -- split; [reflexivity | split; [reflexivity | right; apply CIH, Hstk]].

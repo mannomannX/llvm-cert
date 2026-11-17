@@ -5537,9 +5537,9 @@ Section ValueDrawRefinement.
         * left; split; [exact Hsync | split; [exact HE |]].
           intros a1 a2 Ha Hp; specialize (HA a1 a2 Ha Hp); pclearbot; right; apply CIH, HA.
         * right; left.
-          repeat (destruct e1 as [e1 | e1]); try contradiction;
+          destruct_sum1 e1; try contradiction;
             destruct e1 as [x1 |]; try contradiction;
-            repeat (destruct e2 as [e2 | e2]); try contradiction;
+            destruct_sum1 e2; try contradiction;
             destruct e2 as [x2 |]; try contradiction.
           destruct Hrd as (Hx & Hlk & Hrd'); split; [exact Hx | split; [exact Hlk |]].
           intros v Hv; specialize (Hrd' v Hv); pclearbot; right; apply CIH, Hrd'.
@@ -5578,7 +5578,7 @@ Section ValueDrawRefinement.
         right; apply CIH; [exact Hstk | exact Hrel].
     - apply VDS_Step; unfold vds_step_body; rewrite <- Hot1; left.
       destruct t1_ as [c1 | m1]; [inversion Hcut |].
-      repeat (destruct m1 as [m1 | m1]); inversion Hcut; reflexivity.
+      destruct_sum1 m1; inversion Hcut; reflexivity.
     - exfalso; inversion H.
     - eapply VDS_TauL; [symmetry; exact Hot1 | apply (IH m1 t2 Logic.eq_refl Hot2)].
     - eapply VDS_TauR; [symmetry; exact Hot2 | apply (IH t1 m2 Hot1 Logic.eq_refl)].
@@ -5728,9 +5728,9 @@ Section ValueDrawRefinement.
         * left; split; [apply sync_non_local_cfg_to_sync_cfg_true, Hsync | split; [exact HE |]].
           intros a1 a2 Ha Hp; specialize (HA a1 a2 Ha Hp); pclearbot; right; apply CIH, HA.
         * right; left.
-          repeat (destruct e1 as [e1 | e1]); try contradiction;
+          destruct_sum1 e1; try contradiction;
             destruct e1 as [x1 |]; try contradiction;
-            repeat (destruct e2 as [e2 | e2]); try contradiction;
+            destruct_sum1 e2; try contradiction;
             destruct e2 as [x2 |]; try contradiction.
           destruct Hrd as (Hx & Hlk & Hrd'); split; [exact Hx | split; [exact Hlk |]].
           intros v Hv; specialize (Hrd' v Hv); pclearbot; right; apply CIH, Hrd'.
@@ -5874,8 +5874,8 @@ Section ValueDrawRefinement.
              destruct (as_local_mcfg me1) as [le1 |] eqn:Ele1,
                       (as_local_mcfg me2) as [le2 |] eqn:Ele2; try contradiction.
              destruct le1 as [x1 | x1 v1], le2 as [x2 | x2 v2]; try contradiction;
-               repeat (destruct me1 as [me1 | me1]); try discriminate Ele1;
-               repeat (destruct me2 as [me2 | me2]); try discriminate Ele2;
+               destruct_sum1 me1; try discriminate Ele1;
+               destruct_sum1 me2; try discriminate Ele2;
                inversion Ele1; subst; inversion Ele2; subst; cbn [exc_of_event].
              ++ destruct Hloc as (Hx & Hlk & Hrd); subst x2.
                 apply VDS_Step; cbn; right; right; left.
@@ -6520,7 +6520,7 @@ Section ValueDrawRefinement.
         destruct Hstep as [Hstep | Hb]; [| inversion Hb].
         apply vds_sim_ret; exact Hstep.
       - destruct Hstep as [Hub | Hvis].
-        + repeat (destruct ev1 as [ev1 | ev1]); try discriminate Hub; destruct ev1 as [u].
+        + destruct_sum1 ev1; try discriminate Hub; destruct ev1 as [u].
           pstep; apply VDS_Step; unfold vds_step_body; rewrite observe_bind; cbn; left; reflexivity.
         + destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
           destruct Hvis as [(Hsync & HE & HA) | [Hloc | Hstk]].
@@ -6548,8 +6548,8 @@ Section ValueDrawRefinement.
           * destruct (as_local_mcfg ev1) as [le1 |] eqn:Ele1,
                      (as_local_mcfg ev2) as [le2 |] eqn:Ele2; try contradiction.
             destruct le1 as [x1 | x1 v1], le2 as [x2 | x2 v2]; try contradiction;
-              repeat (destruct ev1 as [ev1 | ev1]); try discriminate Ele1;
-              repeat (destruct ev2 as [ev2 | ev2]); try discriminate Ele2;
+              destruct_sum1 ev1; try discriminate Ele1;
+              destruct_sum1 ev2; try discriminate Ele2;
               inversion Ele1; subst; inversion Ele2; subst;
               cbn [interp_intrinsics_h case_ F_trigger]; unfold ITree.trigger.
             -- destruct Hloc as (<- & Hlk & Hrd).
@@ -6568,8 +6568,8 @@ Section ValueDrawRefinement.
           * destruct (as_stack_mcfg ev1) as [se1 |] eqn:Ese1,
                      (as_stack_mcfg ev2) as [se2 |] eqn:Ese2; try contradiction.
             destruct se1, se2; try contradiction;
-              repeat (destruct ev1 as [ev1 | ev1]); try discriminate Ese1;
-              repeat (destruct ev2 as [ev2 | ev2]); try discriminate Ese2;
+              destruct_sum1 ev1; try discriminate Ese1;
+              destruct_sum1 ev2; try discriminate Ese2;
               inversion Ese1; subst; inversion Ese2; subst;
               cbn [interp_intrinsics_h case_ F_trigger]; unfold ITree.trigger.
             -- destruct Hstk as [Hr | Hb]; [| inversion Hb].
@@ -6751,7 +6751,7 @@ Section ValueDrawRefinement.
     (Hnd : as_draw_mcfg e = None) :
     interp_vellvm_rel_draw_h e s = lift_prov_to_draw (interp_vellvm_prov_h e s).
   Proof using.
-    repeat (destruct e as [e | e]); try discriminate Hnd; reflexivity.
+    destruct_sum1 e; try discriminate Hnd; reflexivity.
   Qed.
 
   Lemma lift_prov_to_draw_eq {T} (t1 t2 : itree ProvBotE T) :
@@ -6786,8 +6786,8 @@ Section ValueDrawRefinement.
       U (interp_vellvm_rel_draw_h e1 s1) (interp_vellvm_rel_draw_h e2 s2).
   Proof using.
     destruct (as_draw_mcfg e1) as [d1 |] eqn:Ed1.
-    - repeat (destruct e1 as [e1 | e1]); try discriminate Ed1;
-        repeat (destruct e2 as [e2 | e2]); cbn in HE; try contradiction.
+    - destruct_sum1 e1; try discriminate Ed1;
+        destruct_sum1 e2; cbn in HE; try contradiction.
       destruct e1 as [dt1], e2 as [dt2]; subst dt2.
       unfold interp_vellvm_rel_draw_h; cbn [case_]; unfold ITree.trigger.
       pstep; apply RPD_Step; unfold rpd_step_body; rewrite !observe_bind; cbn.
@@ -6882,7 +6882,7 @@ Section ValueDrawRefinement.
         destruct Hstep as [Hstep | Hb]; [| inversion Hb].
         pstep; apply RPD_Step; cbn; exists stk, env1, env2; split; assumption.
       - destruct Hstep as [Hub | Hvis].
-        + repeat (destruct ev1 as [ev1 | ev1]); try discriminate Hub; destruct ev1 as [u].
+        + destruct_sum1 ev1; try discriminate Hub; destruct ev1 as [u].
           pstep; apply RPD_Step; unfold rpd_step_body, interp_vellvm_rel_draw_h;
             cbn [case_]; unfold fused_trigger_prov, ITree.trigger, lift_prov_to_draw;
             repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
@@ -6896,8 +6896,8 @@ Section ValueDrawRefinement.
           * destruct (as_local_mcfg ev1) as [le1 |] eqn:Ele1,
                      (as_local_mcfg ev2) as [le2 |] eqn:Ele2; try contradiction.
             destruct le1 as [x1 | x1 v1], le2 as [x2 | x2 v2]; try contradiction;
-              repeat (destruct ev1 as [ev1 | ev1]); try discriminate Ele1;
-              repeat (destruct ev2 as [ev2 | ev2]); try discriminate Ele2;
+              destruct_sum1 ev1; try discriminate Ele1;
+              destruct_sum1 ev2; try discriminate Ele2;
               inversion Ele1; subst; inversion Ele2; subst;
               unfold interp_vellvm_rel_draw_h; cbn [case_];
               destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]].
@@ -6940,8 +6940,8 @@ Section ValueDrawRefinement.
           * destruct (as_stack_mcfg ev1) as [se1 |] eqn:Ese1,
                      (as_stack_mcfg ev2) as [se2 |] eqn:Ese2; try contradiction.
             destruct se1 as [bs1 | | |], se2 as [bs2 | | |]; try contradiction;
-              repeat (destruct ev1 as [ev1 | ev1]); try discriminate Ese1;
-              repeat (destruct ev2 as [ev2 | ev2]); try discriminate Ese2;
+              destruct_sum1 ev1; try discriminate Ese1;
+              destruct_sum1 ev2; try discriminate Ese2;
               inversion Ese1; subst; inversion Ese2; subst;
               unfold interp_vellvm_rel_draw_h; cbn [case_];
               destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]];

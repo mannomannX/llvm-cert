@@ -7624,7 +7624,7 @@ Lemma alloc_aligned_bits_any_step :
 Proof.
   induction rem as [| rem' IH]; intros zp idx asg st bits st' Hsat Hal; cbn in Hal.
   - inversion Hal; subst; exists asg; split;
-      [exact (step_spec_refl st asg Hsat) | split; [reflexivity | constructor]].
+      [exact (step_spec_refl _ asg Hsat) | split; [reflexivity | constructor]].
   - assert (Hb_step :
               exists b st1 asg1,
                 (if zp idx then (lit_false, st) else alloc_var st) = (b, st1) /\
@@ -7632,7 +7632,7 @@ Proof.
                 wf_lit_bound (bs_next_var st1) b).
     { destruct (zp idx).
       - exists lit_false, st, asg; split; [reflexivity | split;
-          [exact (step_spec_refl st asg Hsat)
+          [exact (step_spec_refl _ asg Hsat)
            | exact (wf_lit_bound_false _ (proj1 (proj1 Hsat)))]].
       - destruct (alloc_var st) as [b st1] eqn:Eb.
         destruct (alloc_var_sat asg st false b st1 Hsat Eb)
@@ -7663,7 +7663,7 @@ Lemma alloc_aligned_bits_val_step :
 Proof.
   induction target as [| tb tr IH]; intros zp idx asg st bits st' Hsat Hzp Hal; cbn in Hal.
   - inversion Hal; subst; exists asg; split;
-      [exact (step_spec_refl st asg Hsat) | split; [reflexivity | split; [constructor | reflexivity]]].
+      [exact (step_spec_refl _ asg Hsat) | split; [reflexivity | split; [constructor | reflexivity]]].
   - assert (Hb_step :
               exists b st1 asg1,
                 (if zp idx then (lit_false, st) else alloc_var st) = (b, st1) /\
@@ -7674,9 +7674,9 @@ Proof.
       - assert (Htb : tb = false)
           by (pose proof (Hzp 0%nat) as H0; rewrite Nat.add_0_r in H0; exact (H0 Ez)).
         subst tb; exists lit_false, st, asg; split; [reflexivity | split;
-          [exact (step_spec_refl st asg Hsat) | split;
+          [exact (step_spec_refl _ asg Hsat) | split;
            [exact (wf_lit_bound_false _ (proj1 (proj1 Hsat)))
-            | exact (sat_eval_lit_false asg st Hsat)]]].
+            | exact (sat_eval_lit_false asg _ Hsat)]]].
       - destruct (alloc_var st) as [b st1] eqn:Eb.
         destruct (alloc_var_sat asg st tb b st1 Hsat Eb)
           as (a1 & Hle1 & Hag1 & Hsat1 & Hwb & Hevb).
@@ -7728,7 +7728,7 @@ Lemma emit_scale_bits_step :
 Proof.
   induction ys as [| y ry IH]; intros x asg st out st' Hsat Hwx Hwy He; cbn in He.
   - inversion He; subst; exists asg; split;
-      [exact (step_spec_refl st asg Hsat) | split; [reflexivity | split;
+      [exact (step_spec_refl _ asg Hsat) | split; [reflexivity | split;
        [constructor | cbn; lia]]].
   - inversion Hwy as [| ? ? Hy Hwry]; subst.
     destruct (emit_and2_opt x y st) as [p st1] eqn:Ep.
@@ -7789,14 +7789,14 @@ Lemma emit_mul_bits_step :
 Proof.
   induction xs as [| x rx IH]; intros ys asg st out st' Hsat Hwx Hwy He; cbn in He.
   - inversion He; subst; exists asg; split;
-      [exact (step_spec_refl st asg Hsat) | split; [apply repeat_length | split]].
+      [exact (step_spec_refl _ asg Hsat) | split; [apply repeat_length | split]].
     + exact (wf_lits_bound_repeat _ _ _ (wf_lit_bound_false _ (proj1 (proj1 Hsat)))).
-    + rewrite map_repeat_eq, (sat_eval_lit_false asg st Hsat), bools_to_Z_repeat_false.
+    + rewrite map_repeat_eq, (sat_eval_lit_false asg _ Hsat), bools_to_Z_repeat_false.
       exists 0%Z; cbn [List.map bools_to_Z]; lia.
   - inversion Hwx as [| ? ? Hx Hwrx]; subst.
     destruct ys as [| y0 ry].
     + inversion He; subst; exists asg; split;
-        [exact (step_spec_refl st asg Hsat) | split; [reflexivity | split;
+        [exact (step_spec_refl _ asg Hsat) | split; [reflexivity | split;
          [constructor | exists 0%Z; cbn; lia]]].
     + set (ys_full := y0 :: ry) in *.
       set (m' := (List.length ys_full - 1)%nat) in *.
