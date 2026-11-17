@@ -8680,7 +8680,7 @@ Proof.
               Hptr64 Hbase Hne Hinb Hviol)
     as [Hrng Hwrap].
   rewrite Haddr.
-  repeat split; [exact Hprov | reflexivity | exact Hrng | exact Hwrap].
+  split; [exact Hprov | split; [reflexivity | split; [exact Hrng | exact Hwrap]]].
 Qed.
 
 Theorem gep_chained_no_flags_reassoc_sound {Pa : Params} :

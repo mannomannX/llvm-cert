@@ -7006,7 +7006,7 @@ Section ValueDrawRefinement.
                     | symmetry; rewrite (lift_prov_to_draw_eq _ _ Hpp2), lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity |].
                   pstep; apply RPD_Step; cbn.
                   exists rest, p1, p2; split; [| exact Hr].
-                  repeat split; try exact Hsf'; try exact Hsfm'; reflexivity.
+                  repeat (first [exact Hsf' | exact Hsfm' | reflexivity | split]).
                ++ inversion Hsfm; subst.
                   unfold fused_stack_prov, on_ls_prov, handle_stack, raise, trigger_cast,
                          ITree.trigger, lift_bot_prov, lift_prov_to_draw;

@@ -3767,10 +3767,12 @@ Proof.
               eval_lit asg4 nsw_lit =
                 (nsw && @Integers.eq sz (@Integers.add_overflow sz va vb (@Integers.zero sz))
                                         (@Integers.one sz))).
-  { destruct nsw; [| exists lit_false, st1, asg1; repeat split;
-                      try exact (step_spec_refl st1 asg1 (proj2 (proj2 Hs1)));
-                      [exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs1)))))
-                       | exact (sat_eval_lit_false asg1 st1 (proj2 (proj2 Hs1)))]].
+  { destruct nsw;
+      [| exists lit_false, st1, asg1;
+         split; [reflexivity |
+         split; [exact (step_spec_refl st1 asg1 (proj2 (proj2 Hs1))) |
+         split; [exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs1))))) |
+                 exact (sat_eval_lit_false asg1 st1 (proj2 (proj2 Hs1)))]]]].
     set (sa := msb_lit a); set (sb := msb_lit b);
       set (ss := List.nth (Pos.to_nat sz - 1) sums lit_false).
     assert (Hw_sa : wf_lit_bound (bs_next_var st) sa)
@@ -3982,10 +3984,12 @@ Proof.
               eval_lit asg4 nsw_lit =
                 (nsw && @Integers.eq sz (@Integers.sub_overflow sz va vb (@Integers.zero sz))
                                         (@Integers.one sz))).
-  { destruct nsw; [| exists lit_false, st1, asg1; repeat split;
-                      try exact (step_spec_refl st1 asg1 (proj2 (proj2 Hs1)));
-                      [exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs1)))))
-                       | exact (sat_eval_lit_false asg1 st1 (proj2 (proj2 Hs1)))]].
+  { destruct nsw;
+      [| exists lit_false, st1, asg1;
+         split; [reflexivity |
+         split; [exact (step_spec_refl st1 asg1 (proj2 (proj2 Hs1))) |
+         split; [exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs1))))) |
+                 exact (sat_eval_lit_false asg1 st1 (proj2 (proj2 Hs1)))]]]].
     set (sa := msb_lit a); set (sb := msb_lit b);
       set (sd := List.nth (Pos.to_nat sz - 1) diffs lit_false).
     assert (Hw_sa : wf_lit_bound (bs_next_var st) sa)
@@ -4456,12 +4460,14 @@ Proof.
       - destruct (emit_or_list_opt hi st0) as [nl s01] eqn:Enl.
         destruct (emit_or_list_opt_step hi asg0 st0 nl s01 Hw_hi0 Hsat0 Enl)
           as (a01 & Hs01 & Hw_nl & Hev_nl).
-        exists nl, s01, a01; repeat split; try exact Hs01; try exact Hw_nl.
+        exists nl, s01, a01;
+          split; [reflexivity | split; [exact Hs01 | split; [exact Hw_nl |]]].
         cbn [andb]; rewrite Hev_nl; unfold hi; rewrite map_skipn_eq, Hev_ba0; reflexivity.
-      - exists lit_false, st0, asg0; repeat split;
-          try exact (step_spec_refl st0 asg0 Hsat0);
-          [exact (wf_lit_bound_false _ (proj1 (proj1 Hsat0)))
-           | exact (sat_eval_lit_false asg0 st0 Hsat0)]. }
+      - exists lit_false, st0, asg0;
+          split; [reflexivity |
+          split; [exact (step_spec_refl st0 asg0 Hsat0) |
+          split; [exact (wf_lit_bound_false _ (proj1 (proj1 Hsat0))) |
+                  exact (sat_eval_lit_false asg0 st0 Hsat0)]]]. }
     destruct Hnuw_step as (nuw_l & s01 & asg01 & Hnuw_eq & Hs01 & Hw_nuw & Hev_nuw).
     rewrite Hnuw_eq in Efk; clear Hnuw_eq.
     assert (Hnsw_step :
@@ -4504,10 +4510,11 @@ Proof.
             by (rewrite length_map, Hla; fold n; lia).
           reflexivity. }
         rewrite Hsr_ev; reflexivity.
-      - exists lit_false, s01, asg01; repeat split;
-          try exact (step_spec_refl s01 asg01 (proj2 (proj2 Hs01)));
-          [exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs01)))))
-           | exact (sat_eval_lit_false asg01 s01 (proj2 (proj2 Hs01)))]. }
+      - exists lit_false, s01, asg01;
+          split; [reflexivity |
+          split; [exact (step_spec_refl s01 asg01 (proj2 (proj2 Hs01))) |
+          split; [exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs01))))) |
+                  exact (sat_eval_lit_false asg01 s01 (proj2 (proj2 Hs01)))]]]. }
     destruct Hnsw_step as (nsw_l & s03 & asg03 & Hnsw_eq & Hs13 & Hw_nsw & Hev_nsw).
     rewrite Hnsw_eq in Efk; clear Hnsw_eq.
     destruct (emit_or2_opt nuw_l nsw_l s03) as [pk0 s04] eqn:Epk.
@@ -5129,12 +5136,14 @@ Proof.
     - destruct (emit_or_list_opt hi st) as [nl st1] eqn:Enl.
       destruct (emit_or_list_opt_step hi asg st nl st1 Hw_hi Hsat Enl)
         as (a1 & Hs1 & Hw_nl & Hev_nl).
-      exists nl, st1, a1; repeat split; try exact Hs1; try exact Hw_nl.
+      exists nl, st1, a1;
+        split; [reflexivity | split; [exact Hs1 | split; [exact Hw_nl |]]].
       cbn [andb]; rewrite Hev_nl; unfold hi, b_hi, ba; rewrite map_skipn_eq; reflexivity.
-    - exists lit_false, st, asg; repeat split;
-        try exact (step_spec_refl _ asg Hsat);
-        [exact (wf_lit_bound_false _ (proj1 (proj1 Hsat)))
-         | exact (sat_eval_lit_false asg _ Hsat)]. }
+    - exists lit_false, st, asg;
+        split; [reflexivity |
+        split; [exact (step_spec_refl _ asg Hsat) |
+        split; [exact (wf_lit_bound_false _ (proj1 (proj1 Hsat))) |
+                exact (sat_eval_lit_false asg _ Hsat)]]]. }
   destruct Hnuw_step as (nuw_l & st1 & asg1 & Hnuw_eq & Hs1 & Hwf_nuw & Hev_nuw).
   rewrite Hnuw_eq in Hbl; clear Hnuw_eq.
   set (b_slo := List.nth (Pos.to_nat tw - 1) b_lo false).
@@ -5175,10 +5184,11 @@ Proof.
                        (Pos.to_nat tw - 1)), map_firstn_eq.
         apply nth_indep; rewrite len_firstn_le by (rewrite length_map, Hla; lia); lia. }
       rewrite Hev_slo; reflexivity.
-    - exists lit_false, st1, asg1; repeat split;
-        try exact (step_spec_refl st1 asg1 (proj2 (proj2 Hs1)));
-        [exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs1)))))
-         | exact (sat_eval_lit_false asg1 st1 (proj2 (proj2 Hs1)))]. }
+    - exists lit_false, st1, asg1;
+        split; [reflexivity |
+        split; [exact (step_spec_refl st1 asg1 (proj2 (proj2 Hs1))) |
+        split; [exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs1))))) |
+                exact (sat_eval_lit_false asg1 st1 (proj2 (proj2 Hs1)))]]]. }
   destruct Hnsw_step as (nsw_l & st3 & asg3 & Hnsw_eq & Hs13 & Hwf_nsw & Hev_nsw).
   rewrite Hnsw_eq in Hbl; clear Hnsw_eq.
   destruct (emit_or2_opt nuw_l nsw_l st3) as [ov_psn st4] eqn:Eov.
@@ -5688,10 +5698,11 @@ Proof.
         (step_spec_eval_lit st st2 asg asg2 (msb_lit b) Hs02 Hw_mb),
         (eval_msb_lit sz asg a (conj Hwa_w Hla)),
         (eval_msb_lit sz asg b (conj Hwb_w Hlb)); reflexivity.
-    - exists lit_false, st2, asg2; repeat split;
-        try exact (step_spec_refl st2 asg2 (proj2 (proj2 Hs02)));
-        [exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs02)))))
-         | exact (sat_eval_lit_false asg2 st2 (proj2 (proj2 Hs02)))]. }
+    - exists lit_false, st2, asg2;
+        split; [reflexivity |
+        split; [exact (step_spec_refl st2 asg2 (proj2 (proj2 Hs02))) |
+        split; [exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs02))))) |
+                exact (sat_eval_lit_false asg2 st2 (proj2 (proj2 Hs02)))]]]. }
   destruct Hss_step as (ss_l & st3 & asg3 & Hss_eq & Hs23 & Hwf_ss & Hev_ss).
   rewrite Hss_eq in Hbl; clear Hss_eq.
   destruct (emit_or2_opt (rbv_psn a) (rbv_psn b) st3) as [ab_psn st4] eqn:Eab.

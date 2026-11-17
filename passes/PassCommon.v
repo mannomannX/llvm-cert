@@ -1434,17 +1434,17 @@ Section ModelSemantics.
     - rewrite interp_state_ret; unfold ITree.map; rewrite Eqit.bind_ret_l; reflexivity.
     - unfold raiseOOM, trigger_cast, ITree.map;
         rewrite interp_state_bind, interp_state_trigger;
-        cbn -[det_prov_h print_msg ITree.trigger interp_state ITree.bind];
+        unfold subevent, resum, ReSum_inr, resum; cbn beta;
         rewrite det_prov_h_inr1, Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger; apply eqit_Vis; intros [].
     - unfold raiseUB, trigger_cast, ITree.map;
         rewrite interp_state_bind, interp_state_trigger;
-        cbn -[det_prov_h print_msg ITree.trigger interp_state ITree.bind];
+        unfold subevent, resum, ReSum_inr, resum; cbn beta;
         rewrite det_prov_h_inr1, Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger; apply eqit_Vis; intros [].
     - unfold raise, trigger_cast, ITree.map;
         rewrite interp_state_bind, interp_state_trigger;
-        cbn -[det_prov_h print_msg ITree.trigger interp_state ITree.bind];
+        unfold subevent, resum, ReSum_inr, resum; cbn beta;
         rewrite det_prov_h_inr1, Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger; apply eqit_Vis; intros [].
     - apply IH.
@@ -1472,8 +1472,9 @@ Section ModelSemantics.
     destruct_sum1 e; cbn [case_].
     - (* ExternalCallE *)
       unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger;
-        cbn -[det_prov_h print_msg ITree.trigger interp_state ITree.bind];
+        unfold subevent, resum, ReSum_inr, resum; cbn beta;
         rewrite det_prov_h_inr1, Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger; symmetry;
         apply eqit_Vis; intros x;
@@ -1522,37 +1523,42 @@ Section ModelSemantics.
       rewrite !Eqit.bind_ret_l, interp_state_ret; reflexivity.
     - (* OOME *)
       unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger;
-        cbn -[det_prov_h print_msg ITree.trigger interp_state ITree.bind];
+        unfold subevent, resum, ReSum_inr, resum; cbn beta;
         rewrite det_prov_h_inr1, Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger;
         apply eqit_Vis; intros [].
     - (* LLVMExcE *)
       unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger;
-        cbn -[det_prov_h print_msg ITree.trigger interp_state ITree.bind];
+        unfold subevent, resum, ReSum_inr, resum; cbn beta;
         rewrite det_prov_h_inr1, Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger;
         apply eqit_Vis; intros [].
     - (* UBE *)
       unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger;
-        cbn -[det_prov_h print_msg ITree.trigger interp_state ITree.bind];
+        unfold subevent, resum, ReSum_inr, resum; cbn beta;
         rewrite det_prov_h_inr1, Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger;
         apply eqit_Vis; intros [].
     - (* DebugE *)
       unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger;
-        cbn -[det_prov_h print_msg ITree.trigger interp_state ITree.bind];
+        unfold subevent, resum, ReSum_inr, resum; cbn beta;
         rewrite det_prov_h_inr1, Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger; symmetry;
         apply eqit_Vis; intros x;
         rewrite Eqit.bind_ret_l, interp_state_ret, Eqit.bind_ret_l; reflexivity.
     - (* FailureE *)
       unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger;
-        cbn -[det_prov_h print_msg ITree.trigger interp_state ITree.bind];
+        unfold subevent, resum, ReSum_inr, resum; cbn beta;
         rewrite det_prov_h_inr1, Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger;
         apply eqit_Vis; intros [].
@@ -4688,14 +4694,14 @@ Section ModelSemantics.
         (eapply refine_prov_bind;
          [apply refine_prov_refl with (RR := fun _ a1 a2 => a1 = a2); intros; reflexivity
          | intros U' a1 a2 _ <-; pstep; apply RP_Step; cbn;
-           repeat split; try exact Hsf; try exact Hsfm; reflexivity]).
+           repeat (first [exact Hsf | exact Hsfm | reflexivity | split])]).
     - (* IntrinsicE *)
       destruct e1, e2; destruct HE as (<- & <- & <- & <-).
       unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_intrinsic_prov, on_mem_prov.
       eapply refine_prov_bind;
         [apply refine_prov_refl with (RR := fun _ p1 p2 => p1 = p2); intros; reflexivity |].
       intros U' [m' r] _ _ <-; pstep; apply RP_Step; cbn.
-      repeat split; try exact Hsf; try exact Hsfm; reflexivity.
+      repeat (first [exact Hsf | exact Hsfm | reflexivity | split]).
     - (* GlobalE *)
       destruct e1, e2; cbn in HE; try contradiction;
         repeat match goal with H : _ /\ _ |- _ => destruct H as [? H] end; subst;
@@ -4703,7 +4709,7 @@ Section ModelSemantics.
         (eapply refine_prov_bind;
          [apply refine_prov_refl with (RR := fun _ p1 p2 => p1 = p2); intros; reflexivity
          | intros U' [g' r] _ _ <-; pstep; apply RP_Step; cbn;
-           repeat split; try exact Hsf; try exact Hsfm; reflexivity]).
+           repeat (first [exact Hsf | exact Hsfm | reflexivity | split])]).
     - (* StackE: only StackRaise / StackGetExc satisfy Hsync *)
       destruct e1, e2; cbn in HE; try contradiction; try discriminate Hsync.
       + subst; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_stack_prov, on_ls_prov, handle_stack.
@@ -4729,7 +4735,7 @@ Section ModelSemantics.
       + apply (memM_interp_prov_post _ (handle_memoryM e1) (handle_memoryM_post e1)).
       + intros U' [m1' r1] [m2' r2] _ (-> & <- & Hpost).
         pstep; apply RP_Step; cbn [rp_step_body observe fused_state_match mcfg_event_post].
-        split; [repeat split; try exact Hsf; try exact Hsfm; reflexivity |].
+        split; [repeat (first [exact Hsf | exact Hsfm | reflexivity | split]) |].
         split; [destruct e1; cbn; reflexivity | exact Hpost].
     - (* DrawE *)
       destruct e1 as [dt1], e2 as [dt2]; cbn in HE; subst dt2.
@@ -4748,7 +4754,7 @@ Section ModelSemantics.
           [symmetry; rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity
           | symmetry; rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity |].
         pstep; apply RP_Step; cbn.
-        split; [repeat split; try exact Hsf; try exact Hsfm; reflexivity |].
+        split; [repeat (first [exact Hsf | exact Hsfm | reflexivity | split]) |].
         split; [reflexivity | intros Hsc; eapply default_dvalue_scalar_typ; eassumption].
     - (* OOME *)
       destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
@@ -4766,7 +4772,7 @@ Section ModelSemantics.
       left; eapply refine_prov_obs_eq;
         [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
       pstep; apply RP_Step; cbn.
-      repeat split; try exact Hsf; try exact Hsfm; reflexivity.
+      repeat (first [exact Hsf | exact Hsfm | reflexivity | split]).
     - (* FailureE *)
       destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
       pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; right; right; split; [exact I | intros [] [] _].
@@ -4913,7 +4919,7 @@ Section ModelSemantics.
                     | symmetry; rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity |].
                   pstep; apply RP_Step; cbn.
                   exists rest, p1, p2; split; [| exact Hr].
-                  repeat split; try exact Hsf'; try exact Hsfm'; reflexivity.
+                  repeat (first [exact Hsf' | exact Hsfm' | reflexivity | split]).
                ++ inversion Hsfm; subst.
                   unfold fused_stack_prov, on_ls_prov, handle_stack, raise, trigger_cast, ITree.trigger, lift_bot_prov;
                     cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].

@@ -2529,7 +2529,7 @@ Section MemoryAndSerialization.
     revert ms1 ms2; induction ks as [| k ks' IH]; intros [m1 s1 h1] [m2 s2 h2] (Hm & Hfs & Hh);
       cbn [add_all_to_frame fold_left Memory_stack_memory Memory_stack_frame_stack Memory_stack_heap] in *.
     - exact (conj Hm (conj Hfs Hh)).
-    - subst s2 h2; destruct s1; apply IH; repeat split; try exact Hm; reflexivity.
+    - subst s2 h2; destruct s1; apply IH; repeat (first [exact Hm | reflexivity | split]).
   Qed.
 
   Lemma add_all_to_heap_equal
@@ -2543,7 +2543,7 @@ Section MemoryAndSerialization.
     revert ms1 ms2; induction all_ks as [| k rest IH]; intros [m1 s1 h1] [m2 s2 h2] (Hm & Hfs & Hh);
       cbn [add_all_to_heap' fold_left add_to_heap Memory_stack_memory Memory_stack_frame_stack Memory_stack_heap] in *.
     - exact (conj Hm (conj Hfs Hh)).
-    - subst s2 h2; apply IH; repeat split; [exact Hm | reflexivity | reflexivity].
+    - subst s2 h2; apply IH; split; [exact Hm | split; reflexivity].
   Qed.
 
   Lemma Allocate_bytes_with_pr_equal_sync
@@ -3757,7 +3757,7 @@ Section MemoryAndSerialization.
     split; [exact Hnd |].
     split.
     - eapply Forall_impl; [| exact Hall].
-      intros gs (Hwf & HinU & HninP); repeat split; [exact Hwf | apply Hinc, HinU | exact HninP].
+      intros gs (Hwf & HinU & HninP); split; [exact Hwf | split; [apply Hinc, HinU | exact HninP]].
     - exact (conj Hdisj (conj Hfgw (conj Hfs (conj Hh (conj Hout Hgs))))).
   Qed.
 
@@ -5129,14 +5129,14 @@ Section MemoryAndSerialization.
   Proof using.
     intros Hinv Hall; revert σ1 σ2 Hinv;
       induction Hall as [| [q mb] pbs' Hq _ IH]; intros σ1 σ2 Hinv; cbn [loop_monad].
-    - apply refine_prov_ret; repeat split; try exact Hinv; reflexivity.
+    - apply refine_prov_ret; repeat (first [exact Hinv | reflexivity | split]).
     - eapply refine_prov_obs_eq;
         [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
       eapply refine_prov_bind; [apply (stage1_Write_byte_unprom q mb U P_unprom G σ1 σ2 Hinv Hq) |].
       intros U1 [σ1' []] [σ2' []] (-> & _ & _ & Hinv1 & Hfs1).
       eapply refine_prov_weaken; [apply IH, Hinv1 |].
       intros U2 [σ1'' r1] [σ2'' r2] (-> & -> & -> & Hinv2 & Hfs2).
-      repeat split; [exact Hinv2 | congruence].
+      repeat (first [exact Hinv2 | reflexivity | split]); congruence.
   Qed.
 
   Lemma stage1_store_unprom (dt : dtyp) (a v : @dvalue (@ParamsV IP IPT))
@@ -5787,7 +5787,7 @@ Section MemoryAndSerialization.
   Proof using.
     intros Hinv Hall; revert σ1 σ2 Hinv;
       induction Hall as [| [q mb] pbs' Hq _ IH]; intros σ1 σ2 Hinv; cbn [loop_monad].
-    - apply refine_prov_ret; repeat split; try exact Hinv; reflexivity.
+    - apply refine_prov_ret; repeat (first [exact Hinv | reflexivity | split]).
     - eapply refine_prov_obs_eq;
         [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
       eapply refine_prov_bind;
@@ -13475,7 +13475,7 @@ Section MemoryAndSerialization.
     intros U1 s1' dvs1 s2' dvs2 _ (-> & -> & -> & <- & Hfst).
     eapply refine_prov_tau_star_l; [apply tau_star_cfg_exc_write_phi_dvs |].
     eapply refine_prov_tau_star_r; [apply tau_star_cfg_exc_write_phi_dvs |].
-    apply refine_prov_ret; exists dvs1; repeat split; try exact Hfst; reflexivity.
+    apply refine_prov_ret; exists dvs1; repeat (first [exact Hfst | reflexivity | split]).
   Qed.
 
   Lemma stage1_alloca_lwrite_exc_sim
@@ -14886,7 +14886,7 @@ Section MemoryAndSerialization.
     intros U1 s1' dvs1 s2' dvs2 _ (-> & -> & -> & <- & Hfst).
     eapply refine_prov_tau_star_l; [apply tau_star_cfg_exc_write_phi_dvs |].
     eapply refine_prov_tau_star_r; [apply tau_star_cfg_exc_write_phi_dvs |].
-    apply refine_prov_ret; exists dvs1; repeat split; try exact Hfst; reflexivity.
+    apply refine_prov_ret; exists dvs1; repeat (first [exact Hfst | reflexivity | split]).
   Qed.
 
   Lemma pass1_end_map_fst

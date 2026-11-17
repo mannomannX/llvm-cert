@@ -8006,10 +8006,12 @@ Proof.
                 eval_lit asg6 nuw_psn =
                   (nuw && ((@Integers.unsigned sz va * @Integers.unsigned sz vb) >?
                            @Integers.unsigned sz (@Integers.mul sz va vb))%Z)).
-    { destruct nuw; [| exists lit_false, st2, asg2; repeat split;
-                        try exact (step_spec_refl st2 asg2 (proj2 (proj2 Hs02)));
-                        [exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs02)))))
-                         | exact (sat_eval_lit_false asg2 st2 (proj2 (proj2 Hs02)))]].
+    { destruct nuw;
+        [| exists lit_false, st2, asg2;
+           split; [reflexivity |
+           split; [exact (step_spec_refl st2 asg2 (proj2 (proj2 Hs02))) |
+           split; [exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs02))))) |
+                   exact (sat_eval_lit_false asg2 st2 (proj2 (proj2 Hs02)))]]]].
       destruct (blast_zext_rail false sz dw a st2) as [za st3] eqn:Eza.
       destruct (blast_zext_rail false sz dw b st3) as [zb st4] eqn:Ezb.
       destruct (emit_mul_bits (rbv_bits za) (rbv_bits zb) st4) as [ubits st5] eqn:Eum.
@@ -8099,10 +8101,12 @@ Proof.
                 eval_lit asg10 nsw_psn =
                   (nsw && ((@Integers.min_signed sz >? (@Integers.signed sz va * @Integers.signed sz vb))%Z ||
                            ((@Integers.signed sz va * @Integers.signed sz vb) >? @Integers.max_signed sz)%Z))).
-    { destruct nsw; [| exists lit_false, st6, asg6; repeat split;
-                        try exact (step_spec_refl st6 asg6 (proj2 (proj2 Hs06)));
-                        [exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs06)))))
-                         | exact (sat_eval_lit_false asg6 st6 (proj2 (proj2 Hs06)))]].
+    { destruct nsw;
+        [| exists lit_false, st6, asg6;
+           split; [reflexivity |
+           split; [exact (step_spec_refl st6 asg6 (proj2 (proj2 Hs06))) |
+           split; [exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs06))))) |
+                   exact (sat_eval_lit_false asg6 st6 (proj2 (proj2 Hs06)))]]]].
       destruct (blast_sext_rail sz dw a st6) as [sa st7] eqn:Esa.
       destruct (blast_sext_rail sz dw b st7) as [sb st8] eqn:Esb.
       destruct (emit_mul_bits (rbv_bits sa) (rbv_bits sb) st8) as [sbits st9] eqn:Esm.

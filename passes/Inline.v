@@ -6163,14 +6163,14 @@ Section InliningSemantics.
           (eapply refine_prov_bind;
            [apply refine_prov_refl with (RR := fun _ a1 a2 => a1 = a2); intros; reflexivity
            | intros U' a1 a2 _ <-; pstep; apply RP_Step; cbn;
-             repeat split; try exact Hsf; try exact Hsfm; reflexivity]).
+             repeat (first [exact Hsf | exact Hsfm | reflexivity | split])]).
       + (* IntrinsicE *)
         destruct e1, e2; destruct HE as (<- & <- & <- & <-).
         unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_intrinsic_prov, on_mem_prov.
         eapply refine_prov_bind;
           [apply refine_prov_refl with (RR := fun _ p1 p2 => p1 = p2); intros; reflexivity |].
         intros U' [m' r] _ _ <-; pstep; apply RP_Step; cbn.
-        repeat split; try exact Hsf; try exact Hsfm; reflexivity.
+        repeat (first [exact Hsf | exact Hsfm | reflexivity | split]).
       + (* GlobalE: only GlobalRead *)
         destruct e1 as [k1 v1 | k1], e2 as [k2 v2 | k2];
           cbn in HE; try contradiction; try discriminate Hsync.
@@ -6179,7 +6179,7 @@ Section InliningSemantics.
         * eapply refine_prov_obs_eq;
             [symmetry; apply (fused_global_prov_read_some k1 gv (m2, ((sf1, fstk1), g0)) Egv)
             | symmetry; apply (fused_global_prov_read_some k1 gv (m2, ((sf2, fstk2), g0)) Egv) |].
-          pstep; apply RP_Step; cbn; repeat split; try exact Hsf; try exact Hsfm; reflexivity.
+          pstep; apply RP_Step; cbn; repeat (first [exact Hsf | exact Hsfm | reflexivity | split]).
         * destruct (fused_global_prov_read_none k1 (m2, ((sf1, fstk1), g0)) Egv) as (u1 & kf1 & Ef1).
           destruct (fused_global_prov_read_none k1 (m2, ((sf2, fstk2), g0)) Egv) as (u2 & kf2 & Ef2).
           eapply refine_prov_obs_eq; [symmetry; exact Ef1 | symmetry; exact Ef2 |].
@@ -6211,7 +6211,7 @@ Section InliningSemantics.
         * apply (memM_interp_prov_post _ (handle_memoryM e1) (handle_memoryM_inl_post e1)).
         * intros U' [m1' r1] [m2' r2] _ (-> & <- & Hpost).
           pstep; apply RP_Step; cbn [rp_step_body observe inline_fused_match inl_mcfg_event_post].
-          split; [repeat split; try exact Hsf; try exact Hsfm; reflexivity |].
+          split; [repeat (first [exact Hsf | exact Hsfm | reflexivity | split]) |].
           split; [destruct e1; cbn; reflexivity | exact Hpost].
       + (* DrawE *)
         destruct e1 as [dt1], e2 as [dt2]; cbn in HE; subst dt2.
@@ -6228,7 +6228,7 @@ Section InliningSemantics.
             [symmetry; rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity
             | symmetry; rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity |].
           pstep; apply RP_Step; cbn;
-            repeat split; try exact Hsf; try exact Hsfm; reflexivity.
+            repeat (first [exact Hsf | exact Hsfm | reflexivity | split]).
       + (* OOME *)
         destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
         pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; left; reflexivity.
@@ -6245,7 +6245,7 @@ Section InliningSemantics.
         left; eapply refine_prov_obs_eq;
           [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
         pstep; apply RP_Step; cbn.
-        repeat split; try exact Hsf; try exact Hsfm; reflexivity.
+        repeat (first [exact Hsf | exact Hsfm | reflexivity | split]).
       + (* FailureE *)
         destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_trigger_prov, ITree.trigger.
         pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; right; right; split; [exact I | intros [] [] _].
@@ -6444,7 +6444,7 @@ Section InliningSemantics.
                        | symmetry; rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity |].
                      pstep; apply RP_Step; cbn.
                      exists (IC_Synced rest p1 p2); split; [| apply gis_cont_to_sim, Hstk].
-                     repeat split; try exact Hsf'; try exact Hsfm'; reflexivity.
+                     repeat (first [exact Hsf' | exact Hsfm' | reflexivity | split]).
                   ** inversion Hsfm; subst.
                      unfold fused_stack_prov, on_ls_prov, handle_stack, raise, trigger_cast, ITree.trigger, lift_bot_prov;
                        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
@@ -6657,7 +6657,7 @@ Section InliningSemantics.
           rewrite (mempush_empty_frame mm2), !Eqit.bind_ret_l; reflexivity.
         + reflexivity.
         + eapply RP_TauL; [reflexivity | apply IH].
-          cbn [inline_fused_match]; repeat split; try exact Hsf; try exact Hsfm; reflexivity.
+          cbn [inline_fused_match]; repeat (first [exact Hsf | exact Hsfm | reflexivity | split]).
       - destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]].
         destruct Hmatch as (-> & -> & -> & Hsf & Hsfm).
         set (new_sf1 := {| stack_vars := init_local_env bs;
@@ -6692,7 +6692,7 @@ Section InliningSemantics.
           rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity.
         + reflexivity.
         + eapply RP_TauL; [reflexivity | apply IH].
-          cbn [inline_fused_match]; repeat split; try exact Hcsf; try exact Hsfm; reflexivity.
+          cbn [inline_fused_match]; repeat (first [exact Hcsf | exact Hsfm | reflexivity | split]).
       - destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]].
         destruct Hmatch as (-> & -> & -> & Hsf & Hsfm).
         eapply refine_prov__obs_eq with
@@ -6706,7 +6706,7 @@ Section InliningSemantics.
           rewrite (mempop_empty_frame mm2), !Eqit.bind_ret_l; reflexivity.
         + reflexivity.
         + eapply RP_TauL; [reflexivity | apply IH].
-          cbn [inline_fused_match]; repeat split; try exact Hsf; try exact Hsfm; reflexivity. }
+          cbn [inline_fused_match]; repeat (first [exact Hsf | exact Hsfm | reflexivity | split]). }
     assert (Hmain :
       forall U0 t1 t2,
         r_both U0 t1 t2 ->
@@ -11794,7 +11794,7 @@ Section InliningSemantics.
     eapply (mcfg_inline_sim_to_model g0 (fun _ r1 r2 => r1 = r2)
               U2 (IC_Synced [] Maps.empty Maps.empty)).
     { split; [reflexivity | split; [reflexivity | split; [reflexivity |]]].
-      split; [repeat split; try exact Hsf_vars; reflexivity | constructor]. }
+      split; [repeat (first [exact Hsf_vars | reflexivity | split]) | constructor]. }
     apply mcfg_inline_sim_interp_intrinsics.
     eapply gen_inline_sim_bind;
       [apply (map_monad_address_library_inline_sim opt_c g0
