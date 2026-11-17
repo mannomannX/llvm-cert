@@ -124,7 +124,7 @@ Section ITreeObsLemmas.
     | VisF _ e ke => VisF e (fun x => ITree.bind (ke x) k)
     end.
   Proof using Type.
-    unfold ITree.bind, ITree.subst; cbn; destruct (observe t); reflexivity.
+    unfold ITree.bind, ITree.subst; unfold observe at 1; cbn; destruct (observe t); reflexivity.
   Qed.
 
   Lemma observe_translate {E F : Type -> Type} {R : Type}
@@ -136,7 +136,7 @@ Section ITreeObsLemmas.
     | VisF _ e ke => VisF (h _ e) (fun x => translate h (ke x))
     end.
   Proof using Type.
-    unfold translate; cbn; destruct (observe t); reflexivity.
+    unfold translate; unfold observe at 1; cbn; destruct (observe t); reflexivity.
   Qed.
 
   Lemma observe_iter {E : Type -> Type} {I R : Type}
@@ -241,7 +241,7 @@ Section OpenWorldEvents.
         end
     end.
   Proof using Type.
-    cbn; destruct (observe t) as [r | t' | X e k]; [reflexivity | reflexivity |].
+    unfold observe at 1; cbn; destruct (observe t) as [r | t' | X e k]; [reflexivity | reflexivity |].
     destruct (classify_cfg_event e) as [le | oe]; [| reflexivity].
     destruct le as [id dv | id]; [reflexivity |].
     destruct (RM.find id env); reflexivity.
@@ -498,7 +498,7 @@ Section OpenWorldEvents.
         end
     end.
   Proof using Type.
-    cbn; destruct (observe t) as [r | t' | X e k]; [reflexivity | reflexivity |].
+    unfold observe at 1; cbn; destruct (observe t) as [r | t' | X e k]; [reflexivity | reflexivity |].
     destruct (classify_ow_event e) as [de | de']; [destruct de; reflexivity | reflexivity].
   Qed.
 
@@ -1333,7 +1333,8 @@ Section OpenWorldEvents.
       observe (run_draws sigma_tgt' (ITree.bind (ow_draw dt) k_tgt)) =
       TauF (run_draws sigma_tgt (ITree.bind (Ret v) k_tgt))).
     { rewrite observe_run_draws; unfold ow_draw, ITree.trigger;
-        rewrite observe_bind; cbn [observe classify_ow_event].
+        rewrite observe_bind;
+        cbn [observe classify_ow_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
       unfold sigma_tgt'; cbn [prepend_draws].
       destruct (dtyp_eq_dec dt dt) as [_ | Hneq]; [reflexivity | exfalso; exact (Hneq eq_refl)]. }
     eapply det_ref_obs_eq; [reflexivity | apply observe_run_draws_bind_ret |].
@@ -1379,7 +1380,8 @@ Section OpenWorldEvents.
                        (ow_freeze (DTYPE_Base (DTYPE_I w)) (DVALUE_Base DVALUE_Poison))) =
                      TauF (run_draws default_draw_strat (Ret v1))).
     { rewrite observe_run_draws; unfold ow_freeze; rewrite observe_freeze_poison;
-        cbn [classify_ow_event]; unfold sigma1; cbn [prepend_draws].
+        cbn [classify_ow_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun];
+        unfold sigma1; cbn [prepend_draws].
       destruct (dtyp_eq_dec (DTYPE_Base (DTYPE_I w)) (DTYPE_Base (DTYPE_I w))) as [_ | Hneq];
         [reflexivity | exfalso; exact (Hneq eq_refl)]. }
     assert (Hdet' : det_ref dvalue_refines
@@ -8080,16 +8082,12 @@ Qed.
 
 Lemma bit1_unsigned_zero : @Integers.unsigned 1 (@Integers.zero 1) = 0%Z.
 Proof.
-  unfold Integers.zero; apply @Integers.unsigned_repr; unfold Integers.max_unsigned.
-  rewrite (@Integers.modulus_two_power_nat 1), (@Integers.natwordsize_def 1).
-  cbn; lia.
+  exact (@Integers.unsigned_zero 1).
 Qed.
 
 Lemma bit1_unsigned_one : @Integers.unsigned 1 (@Integers.one 1) = 1%Z.
 Proof.
-  unfold Integers.one; apply @Integers.unsigned_repr; unfold Integers.max_unsigned.
-  rewrite (@Integers.modulus_two_power_nat 1), (@Integers.natwordsize_def 1).
-  cbn; lia.
+  exact (@Integers.unsigned_one 1).
 Qed.
 
 Definition is_zero_bv_const (e : cert_expr) : bool :=
@@ -12317,7 +12315,7 @@ Lemma observe_run_fn_frames {Pa : Params} {R : Type}
       end
   end.
 Proof.
-  cbn; destruct (observe t) as [r | t' | X e k]; [reflexivity | reflexivity |].
+  unfold observe at 1; cbn; destruct (observe t) as [r | t' | X e k]; [reflexivity | reflexivity |].
   destruct (classify_fn_event e) as [le | [se | oe]]; [| | reflexivity].
   - destruct le as [id dv | id]; [reflexivity | destruct (RM.find id env); reflexivity].
   - destruct se as [bs | | x |]; try reflexivity.

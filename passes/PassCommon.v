@@ -2157,7 +2157,7 @@ Section ModelSemantics.
       | VisF _ e h => VisF e (fun x => ITree.bind (h x) k)
       end.
   Proof using.
-    unfold ITree.bind, ITree.subst; cbn.
+    unfold ITree.bind, ITree.subst; unfold observe at 1; cbn.
     destruct (observe t); reflexivity.
   Qed.
 
@@ -2170,7 +2170,7 @@ Section ModelSemantics.
       | VisF _ e k => VisF (h _ e) (fun x => translate h (k x))
       end.
   Proof using.
-    unfold translate; cbn; destruct (observe t); reflexivity.
+    unfold translate; unfold observe at 1; cbn; destruct (observe t); reflexivity.
   Qed.
 
   Lemma refine_prov__obs_eq {R1 R2}

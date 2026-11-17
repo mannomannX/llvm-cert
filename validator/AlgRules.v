@@ -161,8 +161,7 @@ Lemma alg_bit_int_1_cases (val : @Integers.bit_int 1) :
   else val = @Integers.zero 1.
 Proof.
   pose proof (@Integers.unsigned_range 1 val) as Hrng.
-  rewrite (@Integers.modulus_two_power_nat 1), (@Integers.natwordsize_def 1) in Hrng.
-  cbn in Hrng.
+  change (@Integers.modulus 1) with 2%Z in Hrng.
   destruct (@Integers.unsigned 1 val =? 1)%Z eqn:E.
   - apply Z.eqb_eq in E.
     apply alg_bit_int_unsigned_inj.
