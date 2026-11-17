@@ -2943,7 +2943,7 @@ Lemma bools_to_Z_range : forall bs,
   (0 <= bools_to_Z bs < 2 ^ Z.of_nat (List.length bs))%Z.
 Proof.
   induction bs as [| b rest IH]; [cbn; lia |].
-  cbn [List.length]; rewrite Nat2Z.inj_succ, Z.pow_succ_r by lia, bools_to_Z_cons.
+  cbn [List.length]; rewrite Nat2Z.inj_succ, Z.pow_succ_r, bools_to_Z_cons by lia.
   destruct b; cbn [b2z]; lia.
 Qed.
 
@@ -3204,7 +3204,7 @@ Proof.
   assert (Hlt : (Pos.to_nat sz - 1 < Pos.to_nat sz)%nat) by lia.
   rewrite bit_int_to_bools_nth by exact Hlt.
   replace (Z.of_nat (Pos.to_nat sz - 1)) with (@Integers.zwordsize sz - 1)%Z
-    by (unfold Integers.zwordsize; rewrite Nat2Z.inj_sub by lia, positive_nat_Z; reflexivity).
+    by (unfold Integers.zwordsize; rewrite Nat2Z.inj_sub, positive_nat_Z by lia; reflexivity).
   apply @Integers.sign_bit_of_unsigned.
 Qed.
 
@@ -4568,11 +4568,11 @@ Proof.
       by (unfold spec_bits; fold lo; rewrite length_app, repeat_length, Hlo_len; lia).
     assert (Hshl_z : (Z.shiftl (@Integers.unsigned sz va) (@Integers.unsigned sz vb) =
                       bools_to_Z (spec_bits k) + @Integers.modulus sz * bools_to_Z hi)%Z).
-    { rewrite <- Hk_z, Z.shiftl_mul_pow2 by lia, Hua_split, Hsb_z.
+    { rewrite <- Hk_z, Z.shiftl_mul_pow2, Hua_split, Hsb_z by lia.
       replace (@Integers.modulus sz) with (2 ^ Z.of_nat (n - k) * 2 ^ Z.of_nat k)%Z.
       - ring.
       - rewrite <- Z.pow_add_r by lia; replace (Z.of_nat (n - k) + Z.of_nat k)%Z with (Z.pos sz)
-          by (unfold n; rewrite <- Nat2Z.inj_add, Nat.sub_add by lia, positive_nat_Z; reflexivity).
+          by (unfold n; rewrite <- Nat2Z.inj_add, Nat.sub_add, positive_nat_Z by lia; reflexivity).
         symmetry; apply modulus_pow_sz. }
     assert (Hres_eq : @Integers.repr sz (bools_to_Z (spec_bits k)) = @Integers.shl sz va vb).
     { unfold Integers.shl; rewrite Hshl_z; apply @Integers.eqm_samerepr.
@@ -4596,8 +4596,8 @@ Proof.
         cbn [negb]; try reflexivity; lia.
     - f_equal.
       replace (Z.pos sz - @Integers.unsigned sz vb)%Z with (Z.of_nat (n - k))
-        by (unfold n; rewrite <- Hk_z, Nat2Z.inj_sub by lia, positive_nat_Z; reflexivity).
-      rewrite Z.shiftr_div_pow2 by lia, Hua_split.
+        by (unfold n; rewrite <- Hk_z, Nat2Z.inj_sub, positive_nat_Z by lia; reflexivity).
+      rewrite Z.shiftr_div_pow2, Hua_split by lia.
       pose proof (bools_to_Z_range lo) as Hlo_r; rewrite Hlo_len in Hlo_r.
       rewrite (div_low_high_pow2 (bools_to_Z lo) (bools_to_Z hi) (2 ^ Z.of_nat (n - k)))
         by lia.
@@ -4762,7 +4762,7 @@ Proof.
       rewrite bools_to_Z_zero_iff, Bool.negb_involutive; reflexivity.
     - unfold Integers.shru, spec_bits; fold hi.
       rewrite bools_to_Z_app, bools_to_Z_repeat_false, Z.mul_0_r, Z.add_0_r.
-      rewrite <- Hk_z, Z.shiftr_div_pow2 by lia, Hua_split.
+      rewrite <- Hk_z, Z.shiftr_div_pow2, Hua_split by lia.
       rewrite (div_low_high_pow2 (bools_to_Z lo) (bools_to_Z hi) (2 ^ Z.of_nat k)) by lia; reflexivity. }
   exists asg3; split; [exact Hs03 | split].
   - split; [split; [reflexivity | cbn; exact Hlen_bits] |
@@ -5054,7 +5054,7 @@ Proof.
     set (va := eval_rail_val fw asg a).
     rewrite <- (unsigned_eval_rail_val fw asg a Hla).
     replace (Z.of_nat (Pos.to_nat tw - Pos.to_nat fw)) with (Z.pos tw - Z.pos fw)%Z
-      by (rewrite Nat2Z.inj_sub by lia, !positive_nat_Z; reflexivity).
+      by (rewrite Nat2Z.inj_sub, !positive_nat_Z by lia; reflexivity).
     apply @Integers.eqm_samerepr.
     rewrite signed_eq_unsigned_msb, modulus_pow_sz.
     exists (b2z (msb_of fw va)).
@@ -5232,7 +5232,7 @@ Proof.
                 Hmsb_res, Hmsb_va, Hures, Hua_split, !modulus_pow_sz.
         replace (2 ^ Z.pos fw)%Z with (2 ^ Z.pos tw * 2 ^ Z.of_nat k)%Z
           by (rewrite <- Z.pow_add_r by lia; f_equal; unfold k;
-              rewrite Nat2Z.inj_sub by lia, !positive_nat_Z; lia).
+              rewrite Nat2Z.inj_sub, !positive_nat_Z by lia; lia).
         pose proof (bools_to_Z_range b_hi) as Hhi_r; rewrite Hhi_len in Hhi_r.
         pose proof (@Integers.modulus_pos tw) as Hmpt; rewrite modulus_pow_sz in Hmpt.
         assert (Hk2 : (2 <= 2 ^ Z.of_nat k)%Z)

@@ -1122,20 +1122,12 @@ Section EventRelations.
       refine_cfg Logic.eq (denote_function df1 cc args) (denote_function df2 cc args).
   Proof using.
     intros cc args.
-    unfold denote_function, push_call_frame.
-    rewrite Hproto, Hargs.
+    unfold denote_function.
+    rewrite Hproto.
     destruct (dc_param_attrs (df_prototype df2)) as [ret_attrs args_attrs].
     eapply ruttc_bind; [apply refine_cfg_refl | intros [] _ <-].
     eapply ruttc_bind; [apply refine_cfg_refl | intros args' _ <-].
-    eapply ruttc_bind; [apply refine_cfg_refl | intros [bs vs] _ <-].
-    eapply ruttc_bind; [apply refine_cfg_refl | intros dts _ <-].
-    eapply ruttc_bind; [apply refine_cfg_refl | intros [] _ <-].
-    eapply ruttc_bind; [apply refine_cfg_refl | intros [] _ <-].
-    eapply ruttc_bind; [apply refine_cfg_refl | intros varargs _ <-].
-    eapply ruttc_bind; [apply refine_cfg_refl | intros [] _ <-].
-    eapply ruttc_bind.
-    { destruct varargs as [[p | | | | | | |] | |]; apply refine_cfg_refl. }
-    intros varg _ <-.
+    eapply ruttc_bind; [unfold push_call_frame; rewrite Hargs; apply refine_cfg_refl | intros varg _ <-].
     eapply ruttc_bind.
     { eapply ruttc_weaken; cycle -1.
       - apply refine_cfg_run_exc; apply (Hbody (Some varg)).
@@ -3841,6 +3833,8 @@ Section ModelSemantics.
     destruct (dc_param_attrs (df_prototype df2)) as [ret_attrs args_attrs].
     eapply gen_stack_sim_bind; [apply cfg_stack_sim_EOU | intros ? ? ? [] _ (-> & -> & -> & <-)].
     eapply gen_stack_sim_bind; [apply cfg_stack_sim_apply_args_attrs | intros ? ? ? args' _ (-> & -> & -> & <-)].
+    eapply gen_stack_sim_obs_eq;
+      [symmetry; rewrite !Eqit.bind_bind; reflexivity | symmetry; rewrite !Eqit.bind_bind; reflexivity |].
     eapply gen_stack_sim_bind; [apply cfg_stack_sim_EOU_ret | intros ? ? ? [bs vs] _ (-> & -> & -> & <- & Ecomb)].
     eapply gen_stack_sim_bind; [apply cfg_stack_sim_EOU | intros ? ? ? dts _ (-> & -> & -> & <-)].
     eapply gen_stack_sim_bind.
@@ -3876,6 +3870,8 @@ Section ModelSemantics.
       apply init_local_env_in.
       rewrite (combine_lists_varargs_dom _ _ _ _ Ecomb); exact Hx. }
     intros ? final_e1 final_e2 rv _ (-> & <-).
+    eapply gen_stack_sim_obs_eq;
+      [symmetry; rewrite !Eqit.bind_bind; reflexivity | symmetry; rewrite !Eqit.bind_bind; reflexivity |].
     eapply gen_stack_sim_bind.
     { unfold stack_pop, trigger_cast; pstep; apply GSS_Step; unfold gss_step_body, ITree.trigger; cbn.
       right; right; right.

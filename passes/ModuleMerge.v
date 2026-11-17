@@ -6195,6 +6195,9 @@ Section ValueDrawRefinement.
           apply cfg_local_vdraw_sim_run_exc.
           exact (Hbody fvs (Some varg) Hlf).
         * intros ? final_e1 final_e2 rv1 rv2 (-> & Hrv).
+          eapply vds_sim_obs_eq;
+            [symmetry; rewrite !Eqit.bind_bind; reflexivity
+            | symmetry; rewrite !Eqit.bind_bind; reflexivity |].
           eapply vds_sim_bind.
           { unfold stack_pop, trigger_cast; pstep; apply VDS_Step;
               unfold vds_step_body, ITree.trigger; cbn.
