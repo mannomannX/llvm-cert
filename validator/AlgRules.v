@@ -1961,7 +1961,7 @@ Proof.
         (forall k ce, In (k, ce) (expand_let_binds expand_lets_with cur_m bs) ->
                       ub_free_expr ce = true)).
     { clear Hbs; intros exp_body; induction IHbs as [| [bnm be] rx IHbe _ IHrx];
-        intros cur_m Hcm Hxs; cbn in Hxs |- *.
+        intros cur_m Hcm Hxs; cbn in Hxs |- *; cbn [snd] in *.
       - split; [reflexivity | exact Hcm].
       - apply andb_true_iff in Hxs as [Hbe Hrx].
         pose proof (IHbe cur_m Hcm Hbe) as Hwf_be.
@@ -2102,7 +2102,7 @@ Proof.
         wf_let_dag_binds wf_let_dag exp_b (strip_let_sizes cur_ms) bs = true).
     { clearbody exp_b; clear Ebs Ewbs Hms';
       induction IHbs as [| [bnm be] rx IHbe _ IHrx];
-        intros cur_ms f_in f_out H; cbn in H |- *.
+        intros cur_ms f_in f_out H; cbn in H |- *; cbn [snd] in *.
       - reflexivity.
       - destruct (wf_let_dag_fueled_with cur_ms be f_in) as [fa |] eqn:Ebe1; [| discriminate H].
         destruct (expand_lets_fueled_with cur_ms be fa) as [[[exp_be bsz] fb] |] eqn:Ebe2;

@@ -2341,11 +2341,12 @@ Section ModelSemantics.
     - unfold rp_step_body in Hstep.
       destruct (observe t1) as [r1 | m1 | X1 e1 k1'] eqn:Hot1.
       + destruct (observe t2) as [r2 | m2 | X2 e2 k2'] eqn:Hot2; try contradiction.
-        eapply paco3_mon; [| intros ? ? ? []].
-        eapply refine_prov_obs_eq.
-        * symmetry; rewrite (itree_eta t1), Hot1, Eqit.bind_ret_l; reflexivity.
-        * symmetry; rewrite (itree_eta t2), Hot2, Eqit.bind_ret_l; reflexivity.
-        * exact (Hk U r1 r2 (incl_refl U) Hstep).
+        eapply paco3_mon;
+          [eapply refine_prov_obs_eq;
+             [symmetry; rewrite (itree_eta t1), Hot1, Eqit.bind_ret_l; reflexivity
+             | symmetry; rewrite (itree_eta t2), Hot2, Eqit.bind_ret_l; reflexivity
+             | exact (Hk U r1 r2 (incl_refl U) Hstep)]
+          | intros ? ? ? []].
       + destruct (observe t2) as [r2 | m2 | X2 e2 k2'] eqn:Hot2; try contradiction.
         pclearbot; pstep; apply RP_Step; unfold rp_step_body.
         rewrite (observe_bind t1 k1), Hot1, (observe_bind t2 k2), Hot2.
@@ -3475,11 +3476,12 @@ Section ModelSemantics.
     - unfold cls_step_body in Hstep.
       destruct (observe t1) as [r1 | m1 | X1 e1 k1'] eqn:Hot1.
       + destruct (observe t2) as [r2 | m2 | X2 e2 k2'] eqn:Hot2; try contradiction.
-        eapply paco4_mon; [| intros ? ? ? ? []].
-        eapply cfg_local_sim_obs_eq.
-        * symmetry; rewrite (itree_eta t1), Hot1, Eqit.bind_ret_l; reflexivity.
-        * symmetry; rewrite (itree_eta t2), Hot2, Eqit.bind_ret_l; reflexivity.
-        * exact (Hk env1 env2 r1 r2 Hstep).
+        eapply paco4_mon;
+          [eapply cfg_local_sim_obs_eq;
+             [symmetry; rewrite (itree_eta t1), Hot1, Eqit.bind_ret_l; reflexivity
+             | symmetry; rewrite (itree_eta t2), Hot2, Eqit.bind_ret_l; reflexivity
+             | exact (Hk env1 env2 r1 r2 Hstep)]
+          | intros ? ? ? ? []].
       + destruct (observe t2) as [r2 | m2 | X2 e2 k2'] eqn:Hot2; try contradiction; pclearbot.
         pstep; apply CLS_Step; unfold cls_step_body.
         rewrite (observe_bind t1 k1), Hot1, (observe_bind t2 k2), Hot2.
@@ -4129,11 +4131,12 @@ Section ModelSemantics.
       - unfold gss_step_body in Hstep.
         destruct (observe t1) as [r1 | m1 | X1 e1 k1'] eqn:Hot1.
         + destruct (observe t2) as [r2 | m2 | X2 e2 k2'] eqn:Hot2; try contradiction.
-          eapply paco5_mon; [| intros ? ? ? ? ? []].
-          eapply gen_stack_sim_obs_eq.
-          * symmetry; rewrite (itree_eta t1), Hot1, Eqit.bind_ret_l; reflexivity.
-          * symmetry; rewrite (itree_eta t2), Hot2, Eqit.bind_ret_l; reflexivity.
-          * exact (Hk stk env1 env2 r1 r2 Hstep).
+          eapply paco5_mon;
+            [eapply gen_stack_sim_obs_eq;
+               [symmetry; rewrite (itree_eta t1), Hot1, Eqit.bind_ret_l; reflexivity
+               | symmetry; rewrite (itree_eta t2), Hot2, Eqit.bind_ret_l; reflexivity
+               | exact (Hk stk env1 env2 r1 r2 Hstep)]
+            | intros ? ? ? ? ? []].
         + destruct (observe t2) as [r2 | m2 | X2 e2 k2'] eqn:Hot2; try contradiction.
           destruct Hstep as [Hstep | Hbot]; [| inversion Hbot].
           pstep; apply GSS_Step; unfold gss_step_body.
