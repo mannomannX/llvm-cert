@@ -1508,7 +1508,11 @@ Section ModelSemantics.
     (Hf : forall a, memM_wf_prov (f a)) :
     memM_wf_prov (map_monad_acc f l).
   Proof using.
-    unfold map_monad_acc; generalize (@nil B) as acc.
+    unfold map_monad_acc.
+    lazymatch goal with
+    | |- memM_wf_prov (?go [] l) =>
+        cut (forall acc : list B, memM_wf_prov (go acc l)); [intros H; exact (H []) |]
+    end.
     induction l as [| a l' IH]; intros acc;
       [apply memM_wf_prov_ret
       | apply memM_wf_prov_bind; [exact (Hf a) | intros b; exact (IH (b :: acc))]].

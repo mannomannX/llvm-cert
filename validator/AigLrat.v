@@ -4149,7 +4149,7 @@ Lemma eq_Z_bools_spec : forall bs k_val,
   eq_Z_bools k_val bs = (bools_to_Z bs =? k_val)%Z.
 Proof.
   induction bs as [| b rest IH]; intros k_val Hk; cbn [eq_Z_bools List.length] in *.
-  - assert (k_val = 0)%Z by (cbn in Hk; rewrite Z.pow_0_r in Hk; lia); subst k_val; reflexivity.
+  - assert (k_val = 0)%Z by (cbn in Hk; lia); subst k_val; reflexivity.
   - rewrite Nat2Z.inj_succ, Z.pow_succ_r in Hk by lia.
     pose proof (Integers.Zdecomp k_val) as Hdec.
     rewrite Integers.Zshiftin_spec in Hdec.
@@ -4299,9 +4299,9 @@ Proof.
           cbn [andb]; try lia; exact (sat_eval_lit_true asg _ Hsat).
   - set (k := (Pos.to_nat sz - S r')%nat) in *.
     assert (Hk : (k < Pos.to_nat sz)%nat) by lia.
-    destruct (fn_k k st) as [[bits_k psn_k] st1] eqn:Ef.
+    destruct (fn_k k st) as [[bits_k psn_k] st1] eqn:Ef; cbn iota zeta in Hmux.
     destruct (emit_eq_const_bits (Z.of_nat k) b_bits st1) as [eq_k st2] eqn:Eeq.
-    destruct (mux_shift_table sz fn_k b_bits r' st2) as [[rest_bits rest_psn] st3] eqn:Er.
+    destruct (mux_shift_table sz fn_k b_bits r' st2) as [[rest_bits rest_psn] st3] eqn:Er; cbn iota zeta in Hmux.
     destruct (mux_bits_list_opt eq_k bits_k rest_bits st3) as [ob st4] eqn:Em1.
     destruct (emit_mux2_opt eq_k psn_k rest_psn st4) as [op st5] eqn:Em2.
     inversion Hmux; subst out_bits out_psn st5; clear Hmux.
@@ -4422,10 +4422,10 @@ Theorem blast_shl_rail_step : forall nuw nsw sz a b asg st out st',
 Proof.
   intros nuw nsw sz a b asg st out st' Hsat
          ([Hwa Hla] & Hba & Hpa) ([Hwb Hlb] & Hbb & Hpb) Hbl.
-  unfold blast_shl_rail in Hbl.
+  unfold blast_shl_rail in Hbl; cbn zeta in Hbl.
   destruct (mux_shift_table sz (blast_shl_k nuw nsw sz (rbv_bits a))
                             (rbv_bits b) (Pos.to_nat sz) st)
-    as [[bits sh_psn] st1] eqn:Hmux.
+    as [[bits sh_psn] st1] eqn:Hmux; cbn iota zeta in Hbl.
   destruct (emit_or2_opt (rbv_psn a) (rbv_psn b) st1) as [ab_psn st2] eqn:Eab.
   destruct (emit_or2_opt ab_psn sh_psn st2) as [psn st3] eqn:Ep.
   inversion Hbl; subst out st3; clear Hbl.
@@ -4694,10 +4694,10 @@ Theorem blast_lshr_rail_step : forall ex sz a b asg st out st',
 Proof.
   intros ex sz a b asg st out st' Hsat
          ([Hwa Hla] & Hba & Hpa) ([Hwb Hlb] & Hbb & Hpb) Hbl.
-  unfold blast_lshr_rail in Hbl.
+  unfold blast_lshr_rail in Hbl; cbn zeta in Hbl.
   destruct (mux_shift_table sz (blast_lshr_k ex sz (rbv_bits a))
                             (rbv_bits b) (Pos.to_nat sz) st)
-    as [[bits sh_psn] st1] eqn:Hmux.
+    as [[bits sh_psn] st1] eqn:Hmux; cbn iota zeta in Hbl.
   destruct (emit_or2_opt (rbv_psn a) (rbv_psn b) st1) as [ab_psn st2] eqn:Eab.
   destruct (emit_or2_opt ab_psn sh_psn st2) as [psn st3] eqn:Ep.
   inversion Hbl; subst out st3; clear Hbl.
@@ -4847,10 +4847,10 @@ Theorem blast_ashr_rail_step : forall ex sz a b asg st out st',
 Proof.
   intros ex sz a b asg st out st' Hsat
          ([Hwa Hla] & Hba & Hpa) ([Hwb Hlb] & Hbb & Hpb) Hbl.
-  unfold blast_ashr_rail in Hbl.
+  unfold blast_ashr_rail in Hbl; cbn zeta in Hbl.
   destruct (mux_shift_table sz (blast_ashr_k ex sz (rbv_bits a))
                             (rbv_bits b) (Pos.to_nat sz) st)
-    as [[bits sh_psn] st1] eqn:Hmux.
+    as [[bits sh_psn] st1] eqn:Hmux; cbn iota zeta in Hbl.
   destruct (emit_or2_opt (rbv_psn a) (rbv_psn b) st1) as [ab_psn st2] eqn:Eab.
   destruct (emit_or2_opt ab_psn sh_psn st2) as [psn st3] eqn:Ep.
   inversion Hbl; subst out st3; clear Hbl.
