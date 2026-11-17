@@ -5032,7 +5032,7 @@ Section ValueDrawRefinement.
     pcofix CIH; intros U t1 t2 Ht; pstep; punfold Ht.
     induction Ht as [U t1 t2 Hstep | U t1 m1 t2 Ht1 _ IH | U t1 t2 m2 Ht2 _ IH].
     - apply RPD_Step; unfold rpd_step_body, rp_step_body, lift_prov_to_draw in *.
-      rewrite !unfold_translate.
+      rewrite !observe_translate.
       destruct (observe t1) as [r1 | m1 | X1 e1 k1].
       + destruct (observe t2); try contradiction; exact Hstep.
       + destruct (observe t2); try contradiction; pclearbot; right; apply CIH, Hstep.
@@ -5045,8 +5045,8 @@ Section ValueDrawRefinement.
           -- destruct p1, p2; intros p Hp; specialize (Hboth p Hp); pclearbot; right; apply CIH, Hboth.
           -- destruct Hboth as [HE HA]; split; [exact HE |].
              intros a1 a2 Ha; specialize (HA a1 a2 Ha); pclearbot; right; apply CIH, HA.
-    - eapply RPD_TauL; [unfold lift_prov_to_draw; rewrite unfold_translate, Ht1; reflexivity | exact IH].
-    - eapply RPD_TauR; [unfold lift_prov_to_draw; rewrite unfold_translate, Ht2; reflexivity | exact IH].
+    - eapply RPD_TauL; [unfold lift_prov_to_draw; rewrite observe_translate, Ht1; reflexivity | exact IH].
+    - eapply RPD_TauR; [unfold lift_prov_to_draw; rewrite observe_translate, Ht2; reflexivity | exact IH].
   Qed.
 
   Lemma lift_prov_to_draw_ret {T} (x : T) :
@@ -6758,7 +6758,7 @@ Section ValueDrawRefinement.
     t1 ≅ t2 -> lift_prov_to_draw t1 ≅ lift_prov_to_draw t2.
   Proof using.
     revert t1 t2; pcofix CIH; intros t1 t2 Heq; pstep; red.
-    unfold lift_prov_to_draw; rewrite !unfold_translate.
+    unfold lift_prov_to_draw; rewrite !observe_translate.
     punfold Heq; red in Heq.
     destruct Heq as [r1 r2 <- | m1 m2 Hm | X e k1 k2 Hk]; cbn; constructor.
     - pclearbot; right; apply CIH, Hm.
@@ -6885,7 +6885,7 @@ Section ValueDrawRefinement.
         + repeat (destruct ev1 as [ev1 | ev1]); try discriminate Hub; destruct ev1 as [u].
           pstep; apply RPD_Step; unfold rpd_step_body, interp_vellvm_rel_draw_h;
             cbn [case_]; unfold fused_trigger_prov, ITree.trigger, lift_prov_to_draw;
-            rewrite !observe_bind, !unfold_translate; cbn; left; reflexivity.
+            repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
         + destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
           destruct Hvis as [(Hsync & HE & HA) | [Hloc | Hstk]].
           * eapply refine_prov_draw_bind;
@@ -6995,7 +6995,7 @@ Section ValueDrawRefinement.
                          ITree.trigger, lift_bot_prov, lift_prov_to_draw;
                     cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
                   pstep; apply RPD_Step; unfold rpd_step_body;
-                    rewrite !observe_bind, !unfold_translate; cbn.
+                    repeat (rewrite observe_bind || rewrite observe_translate); cbn.
                   right; right; split; [exact I | intros [] [] _]. }
     set (r_both := fun U0 (a1 : itree ProvDrawBotE (FusedS * R1)) (a2 : itree ProvDrawBotE (FusedS * R2)) =>
                      (exists stk e1 e2 s1 s2 v1 v2,

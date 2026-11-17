@@ -7488,7 +7488,7 @@ Section MemoryAndSerialization.
           cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
         rewrite Elk.
         pstep; apply RP_Step; unfold rp_step_body.
-        rewrite !observe_bind, !unfold_translate; cbn; right; right; split; [exact I | intros [] [] _].
+        repeat (rewrite observe_bind || rewrite observe_translate); cbn; right; right; split; [exact I | intros [] [] _].
   Qed.
 
   Lemma refine_mcfg_lread_same_opt
@@ -7544,21 +7544,21 @@ Section MemoryAndSerialization.
       unfold interp_vellvm_prov_h; cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
       unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree].
       unfold raiseOOM, trigger_cast, ITree.trigger, lift_bot_prov.
-      pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind, !unfold_translate; cbn; left; reflexivity.
+      pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
     - eapply refine_prov_obs_eq;
         [symmetry; apply interp_mcfg_model_non_intr; reflexivity
         | symmetry; apply interp_mcfg_model_non_intr; reflexivity |].
       unfold interp_vellvm_prov_h; cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
       unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree].
       unfold raiseUB, trigger_cast, ITree.trigger, lift_bot_prov.
-      pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind, !unfold_translate; cbn; left; reflexivity.
+      pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
     - eapply refine_prov_obs_eq;
         [symmetry; apply interp_mcfg_model_non_intr; reflexivity
         | symmetry; apply interp_mcfg_model_non_intr; reflexivity |].
       unfold interp_vellvm_prov_h; cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
       unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree].
       unfold raise, trigger_cast, ITree.trigger, lift_bot_prov.
-      pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind, !unfold_translate; cbn;
+      pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn;
         right; right; split; [exact I | intros [] [] _].
     - assert (Hd1 : interp_vellvm_prov_h (subevent _ (Draw dt)) s1 ≅ Ret (s1, dv)).
       { unfold interp_vellvm_prov_h; cbn [case_ subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
@@ -11528,7 +11528,7 @@ Section MemoryAndSerialization.
       + unfold raise, trigger_cast, ITree.trigger, lift_bot_prov;
           cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
         pstep; apply RP_Step; unfold rp_step_body.
-        rewrite !observe_bind, !unfold_translate; cbn; right; right; split; [exact I | intros [] [] _].
+        repeat (rewrite observe_bind || rewrite observe_translate); cbn; right; right; split; [exact I | intros [] [] _].
     - unfold fused_local_prov; apply on_ls_prov_g_sync, Heq.
     - unfold fused_stack_prov; apply on_ls_prov_g_sync, Heq.
     - unfold fused_memory_prov, handle_memory.

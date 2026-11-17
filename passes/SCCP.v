@@ -2053,7 +2053,7 @@ Section SCCPSimulation.
   Proof using.
     unfold withCall, raise, trigger_cast, ITree.trigger.
     pstep; apply CLS_Step; unfold cls_step_body.
-    rewrite !observe_bind, !unfold_translate; cbn.
+    repeat (rewrite observe_bind || rewrite observe_translate); cbn.
     right; left; split; [reflexivity | split; [apply EqE_CFG_refl | intros [] [] _ _]].
   Qed.
 
@@ -2109,10 +2109,10 @@ Section SCCPSimulation.
     destruct m as [s | s | s | x]; cbn [EOU_to_itree].
     - apply cfg_local_sim_withCall_raise_sync.
     - unfold withCall, raiseOOM, trigger_cast, ITree.trigger; pstep; apply CLS_Step;
-        unfold cls_step_body; rewrite !observe_bind, !unfold_translate; cbn.
+        unfold cls_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn.
       right; left; split; [reflexivity | split; [apply EqE_CFG_refl | intros [] [] _ _]].
     - unfold withCall, raiseUB, trigger_cast, ITree.trigger; pstep; apply CLS_Step;
-        unfold cls_step_body; rewrite observe_bind, !unfold_translate; cbn; left; reflexivity.
+        unfold cls_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
     - apply cfg_local_sim_withCall_ret; repeat split; reflexivity.
   Qed.
 
@@ -2134,7 +2134,7 @@ Section SCCPSimulation.
   Proof using.
     unfold withCall, gread, ITree.trigger.
     pstep; apply CLS_Step; unfold cls_step_body.
-    rewrite !unfold_translate; cbn.
+    rewrite !observe_translate; cbn.
     right; left; split; [reflexivity | split; [apply EqE_CFG_refl |]].
     intros a1 a2 Ha _; apply EqA_CFG_eq in Ha; subst a2.
     left; apply cfg_local_sim_withCall_ret; repeat split; reflexivity.
@@ -2151,8 +2151,8 @@ Section SCCPSimulation.
     intros Hlk.
     unfold withCall, lread, ITree.trigger.
     pstep; apply CLS_Step; unfold cls_step_body.
-    rewrite !unfold_translate;
-      cbn [observe translateF subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+    rewrite !observe_translate;
+      cbn [observe subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
     right; right.
     split; [reflexivity | split; [exact Hlk |]].
     intros v _; left.
@@ -2180,8 +2180,8 @@ Section SCCPSimulation.
   Proof using.
     unfold withCall, draw, ITree.trigger.
     pstep; apply CLS_Step; unfold cls_step_body.
-    rewrite !unfold_translate;
-      cbn [observe translateF subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
+    rewrite !observe_translate;
+      cbn [observe subevent resum ReSum_inr ReSum_inl ReSum_id id_ Id_IFun inr1 inl1].
     right; left; split; [reflexivity | split; [apply EqE_CFG_refl |]].
     intros a1 a2 Ha _; apply EqA_CFG_eq in Ha; subst a2.
     left; apply cfg_local_sim_withCall_ret; repeat split; reflexivity.
@@ -2197,7 +2197,7 @@ Section SCCPSimulation.
   Proof using.
     unfold withCall, conv, ITree.trigger.
     pstep; apply CLS_Step; unfold cls_step_body.
-    rewrite !unfold_translate; cbn.
+    rewrite !observe_translate; cbn.
     right; left; split; [reflexivity | split; [apply EqE_CFG_refl |]].
     intros a1 a2 Ha _; apply EqA_CFG_eq in Ha; subst a2.
     left; apply cfg_local_sim_withCall_ret; repeat split; reflexivity.

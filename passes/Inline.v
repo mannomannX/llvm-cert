@@ -3234,11 +3234,11 @@ Section InliningSemantics.
     unfold fused_draw_prov, handle_draw.
     destruct (default_dvalue_of_dtyp dt) as [msg | msg | msg | dv]; cbn [EOU_to_itree].
     - unfold raiseOOM, trigger_cast, ITree.trigger, lift_bot_prov.
-      pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind, !unfold_translate; cbn; left; reflexivity.
+      pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
     - unfold raiseUB, trigger_cast, ITree.trigger, lift_bot_prov.
-      pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind, !unfold_translate; cbn; left; reflexivity.
+      pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
     - unfold raise, trigger_cast, ITree.trigger, lift_bot_prov.
-      pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind, !unfold_translate; cbn.
+      pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn.
       right; right; split; [exact I | intros [] [] _].
     - eapply refine_prov_obs_eq;
         [symmetry; rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity
@@ -5427,14 +5427,14 @@ Section InliningSemantics.
                        | stk e1 e2 u1 X ce body1 k1 u2 Hfr];
       try discriminate Hfr.
     - apply GIS_Step; unfold gis_step_body in *.
-      unfold withCall; rewrite !unfold_translate.
+      unfold withCall; rewrite !observe_translate.
       destruct (observe u1) as [r1 | m1 | X1 e1 k1].
       + destruct (observe u2); exact Hstep.
       + destruct (observe u2); try contradiction; apply Hlift_cont, Hstep.
-      + cbn [observe _translate subevent resum ReSum_inr inr1].
+      + cbn [observe subevent resum ReSum_inr inr1].
         destruct Hstep as [Hub | Hvis]; [left; exact Hub | right].
         destruct (observe u2) as [r2 | m2 | X2 e2 k2]; try contradiction.
-        cbn [observe _translate subevent resum ReSum_inr inr1].
+        cbn [observe subevent resum ReSum_inr inr1].
         destruct Hvis as [(Hsync & HE & HA) | Hls].
         * left; split; [exact Hsync | split; [exact HE |]].
           intros a1 a2 Ha Hp; apply Hlift_cont, (HA a1 a2 Ha Hp).
@@ -5446,8 +5446,8 @@ Section InliningSemantics.
           -- destruct Hloc as (Hx & Hlk & Hrd); split; [exact Hx | split; [exact Hlk |]].
              intros v Hv; apply Hlift_cont, Hrd, Hv.
           -- destruct Hloc as (Hx & Hv & Hr); split; [exact Hx | split; [exact Hv | apply Hlift_cont, Hr]].
-    - eapply GIS_TauL; [unfold withCall; rewrite unfold_translate, Hu1; reflexivity | exact IH].
-    - eapply GIS_TauR; [unfold withCall; rewrite unfold_translate, Hu2; reflexivity | exact IH].
+    - eapply GIS_TauL; [unfold withCall; rewrite observe_translate, Hu1; reflexivity | exact IH].
+    - eapply GIS_TauR; [unfold withCall; rewrite observe_translate, Hu2; reflexivity | exact IH].
     - eapply GIS_ReadL;
         [exact He1
         | rewrite (inl_withCall_proper _ _ Hu1); apply inl_withCall_bind_trigger
@@ -6218,11 +6218,11 @@ Section InliningSemantics.
         unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_draw_prov, handle_draw.
         destruct (default_dvalue_of_dtyp dt1) as [s | s | s | dv]; cbn [EOU_to_itree].
         * unfold raiseOOM, trigger_cast, ITree.trigger, lift_bot_prov.
-          pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind, !unfold_translate; cbn; left; reflexivity.
+          pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
         * unfold raiseUB, trigger_cast, ITree.trigger, lift_bot_prov.
-          pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind, !unfold_translate; cbn; left; reflexivity.
+          pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
         * unfold raise, trigger_cast, ITree.trigger, lift_bot_prov.
-          pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind, !unfold_translate; cbn.
+          pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn.
           right; right; split; [exact I | intros [] [] _].
         * eapply refine_prov_obs_eq;
             [symmetry; rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity
@@ -6284,11 +6284,11 @@ Section InliningSemantics.
         unfold interp_vellvm_prov_h; cbn [case_]; unfold fused_draw_prov, handle_draw.
         destruct (default_dvalue_of_dtyp dt1) as [s | s | s | dv]; cbn [EOU_to_itree].
         * unfold raiseOOM, trigger_cast, ITree.trigger, lift_bot_prov.
-          pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind, !unfold_translate; cbn; left; reflexivity.
+          pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
         * unfold raiseUB, trigger_cast, ITree.trigger, lift_bot_prov.
-          pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind, !unfold_translate; cbn; left; reflexivity.
+          pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
         * unfold raise, trigger_cast, ITree.trigger, lift_bot_prov.
-          pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind, !unfold_translate; cbn.
+          pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn.
           right; right; split; [exact I | intros [] [] _].
         * eapply refine_prov_obs_eq;
             [symmetry; rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity
@@ -6448,7 +6448,7 @@ Section InliningSemantics.
                   ** inversion Hsfm; subst.
                      unfold fused_stack_prov, on_ls_prov, handle_stack, raise, trigger_cast, ITree.trigger, lift_bot_prov;
                        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
-                     pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind, !unfold_translate; cbn.
+                     pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn.
                      right; right; split; [exact I | intros [] [] _]. }
     set (r_both :=
       fun U0 (a1 : itree ProvBotE (FusedS * R1)) (a2 : itree ProvBotE (FusedS * R2)) =>

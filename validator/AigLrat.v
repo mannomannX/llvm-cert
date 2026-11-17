@@ -1475,7 +1475,7 @@ Proof.
   intros assign f1; induction f1 as [| [cid cl] rest IH]; intros f2 H1 H2; cbn in *.
   - exact H2.
   - apply andb_true_iff in H1 as [Hcl Hrest].
-    apply IH; [exact Hrest | cbn; rewrite Hcl, H2; reflexivity].
+    apply IH; [exact Hrest | unfold eval_cnf in H2 |- *; cbn [forallb]; rewrite Hcl, H2; reflexivity].
 Qed.
 
 Variant bcp_pass_res : Type :=
@@ -1538,7 +1538,7 @@ Proof.
           as [[] | Hv]; cbn in Hv; apply negb_true_iff in Hv.
         exact (IH (pt_set v false trail) true kept_rev
                   (trail_sound_set assign trail v false Htr Hv) Hkept Hrest).
-      * apply IH; [exact Htr | cbn; rewrite Hcl, Hkept; reflexivity | exact Hrest].
+      * apply IH; [exact Htr | unfold eval_cnf in Hkept |- *; cbn [forallb]; rewrite Hcl, Hkept; reflexivity | exact Hrest].
 Qed.
 
 Variant bcp_loop_res : Type :=

@@ -1710,6 +1710,18 @@ Section ModelSemantics.
     destruct (observe t); reflexivity.
   Qed.
 
+  Lemma observe_translate {E F : Type -> Type} {R : Type}
+    (h : E ~> F) (t : itree E R) :
+    observe (translate h t) =
+      match observe t with
+      | RetF r => RetF r
+      | TauF m => TauF (translate h m)
+      | VisF e k => VisF (h _ e) (fun x => translate h (k x))
+      end.
+  Proof using.
+    unfold translate; cbn; destruct (observe t); reflexivity.
+  Qed.
+
   Lemma refine_prov__obs_eq {R1 R2}
     (RR : list N -> R1 -> R2 -> Prop)
     (r : list N -> itree ProvBotE R1 -> itree ProvBotE R2 -> Prop)
@@ -4627,13 +4639,13 @@ Section ModelSemantics.
       destruct (default_dvalue_of_dtyp dt1) as [s | s | s | dv] eqn:Edef; cbn [EOU_to_itree].
       + unfold raiseOOM, trigger_cast, ITree.trigger, lift_bot_prov.
         pstep; apply RP_Step; unfold rp_step_body.
-        rewrite !observe_bind, !unfold_translate; cbn; right; right; split; [exact I | intros [] [] _].
+        repeat (rewrite observe_bind || rewrite observe_translate); cbn; right; right; split; [exact I | intros [] [] _].
       + unfold raiseUB, trigger_cast, ITree.trigger, lift_bot_prov.
         pstep; apply RP_Step; unfold rp_step_body.
-        rewrite !observe_bind, !unfold_translate; cbn; left; reflexivity.
+        repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
       + unfold raise, trigger_cast, ITree.trigger, lift_bot_prov.
         pstep; apply RP_Step; unfold rp_step_body.
-        rewrite !observe_bind, !unfold_translate; cbn; right; right; split; [exact I | intros [] [] _].
+        repeat (rewrite observe_bind || rewrite observe_translate); cbn; right; right; split; [exact I | intros [] [] _].
       + eapply refine_prov_obs_eq;
           [symmetry; rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity
           | symmetry; rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity |].
@@ -4807,7 +4819,7 @@ Section ModelSemantics.
                ++ inversion Hsfm; subst.
                   unfold fused_stack_prov, on_ls_prov, handle_stack, raise, trigger_cast, ITree.trigger, lift_bot_prov;
                     cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
-                  pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind, !unfold_translate; cbn.
+                  pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn.
                   right; right; split; [exact I | intros [] [] _]. }
     set (r_both := fun U0 (a1 : itree ProvBotE (FusedS * R1)) (a2 : itree ProvBotE (FusedS * R2)) =>
                      (exists stk e1 e2 s1 s2 v1 v2,
@@ -5125,7 +5137,7 @@ Section ModelSemantics.
       (library_functions decls).
   Proof using.
     unfold library_functions, _LIBRARIES; cbn [List.filter].
-    repeat match goal with |- context [if ?b then _ else _] => destruct b end;
+    destruct (existsb _ _); destruct (existsb _ _);
       repeat constructor;
       first [apply puts_denotation_sync | apply putchar_denotation_sync].
   Qed.
