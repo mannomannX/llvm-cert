@@ -1041,7 +1041,7 @@ Section EventRelations.
         [cbn; unfold resum, ReSum_id, id_, Id_IFun; exact I | intros [] [] _].
     - unfold raiseOOM, trigger_cast; eapply ruttc_trigger';
         [cbn; unfold resum, ReSum_id, id_, Id_IFun; exact I | intros [] [] _].
-    - unfold raiseUB, trigger_cast; apply ruttc_trigger_cutl, (CutUB_rel _).
+    - unfold raiseUB, trigger_cast; apply ruttc_trigger_cutl; exact (CutUB_rel (print_msg s)).
   Qed.
 
   Lemma refine_EOU_to_mcfg {A1 A2} (RR : A1 -> A2 -> Prop) (m1 : EOU A1) (m2 : EOU A2) :
@@ -1054,7 +1054,7 @@ Section EventRelations.
         [cbn; unfold resum, ReSum_id, id_, Id_IFun; exact I | intros [] [] _].
     - unfold raiseOOM, trigger_cast; eapply ruttc_trigger';
         [cbn; unfold resum, ReSum_id, id_, Id_IFun; exact I | intros [] [] _].
-    - unfold raiseUB, trigger_cast; apply ruttc_trigger_cutl, (CutUB_rel _).
+    - unfold raiseUB, trigger_cast; apply ruttc_trigger_cutl; exact (CutUB_rel (print_msg s)).
   Qed.
 
   Lemma unfold_run_exc_obs {A} (t : CFGtop A) :

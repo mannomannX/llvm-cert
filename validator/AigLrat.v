@@ -2865,7 +2865,7 @@ Proof.
   pose proof (Hunsat asg5) as Hqf.
   unfold add_clauses in Hqf; cbn [append_clauses bs_cnf] in Hqf.
   rewrite eval_cnf_app, (proj2 (proj2 (proj2 (proj2 Hs5)))) in Hqf; cbn in Hqf.
-  rewrite orb_false_r in Hqf.
+  rewrite orb_false_r, andb_true_r in Hqf.
   rewrite Hcex_ev,
           (step_spec_eval_lit st st4 asg asg4 src_no_ub Hs14 Hnub),
           Hev_nub, Hdb_ev,
