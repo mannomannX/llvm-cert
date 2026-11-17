@@ -61,6 +61,7 @@ From Vellvm Require Import
   Semantics.InterpretationStack
   Semantics.TopLevel
   Semantics.Libraries.
+Export LLVMAst.
 
 Set Default Goal Selector "!".
 Unset Implicit Arguments.

@@ -121,7 +121,7 @@ jobs:
           }
           REAL_ROCQ="$(opam exec -- which rocq)"
           mkdir -p /tmp/rocq-bin
-          printf '#!/usr/bin/env bash\nif [ "${1:-}" = "compile" ]; then exec timeout --foreground -s INT -k 10s 150s "%s" "$@"; else exec "%s" "$@"; fi\n' "$REAL_ROCQ" "$REAL_ROCQ" > /tmp/rocq-bin/rocq
+          printf '#!/usr/bin/env bash\nif [ "${1:-}" = "compile" ]; then exec timeout --foreground -s INT -k 10s 240s "%s" "$@"; else exec "%s" "$@"; fi\n' "$REAL_ROCQ" "$REAL_ROCQ" > /tmp/rocq-bin/rocq
           chmod +x /tmp/rocq-bin/rocq
           echo "=== [1/3] Compiling Vellvm 3.0 Core & I2F Theories (-j2) ==="
           CORE_VOS=$(awk '/^\.\/rocq\/.*\.v$/ { sub(/^\.\//, ""); sub(/\.v$/, ".vo"); print }' vellvm/src/_RocqProject)

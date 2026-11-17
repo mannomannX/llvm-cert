@@ -1966,7 +1966,7 @@ Proof.
                 (fun cl H => Hsat cl (or_intror H)) Htr) as [Hwf Hev].
     split.
     + constructor; [exact Hc | exact Hwf].
-    + cbn; rewrite (Hsat c (or_introl eq_refl)), Hev; reflexivity.
+    + unfold eval_cnf in Hev |- *; cbn [forallb]; rewrite (Hsat c (or_introl eq_refl)), Hev; reflexivity.
 Qed.
 
 Lemma add_clauses_sat_intro : forall asg st cls,
