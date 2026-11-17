@@ -475,7 +475,7 @@ Theorem model_refine :
 Proof.
   intros ret_typ entry args1 args2 mcfg s1 s2 Hargs Hs.
   unfold interp_mcfg.
-  apply ruttc_interp_state_specialized; [exact Hs |].
+  apply ruttc_interp_state_specialized; [| exact Hs].
   apply I2F_interp_intrinsics.
   apply I2F_denote_vellvm, Hargs.
 Qed.
