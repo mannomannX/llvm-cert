@@ -5038,7 +5038,7 @@ Proof.
       unfold nneg_l; destruct nneg;
         [cbn [andb]; rewrite (eval_msb_lit fw asg a (conj Hwa Hla)), signed_lt_zero_eq_msb; reflexivity
          | exact (sat_eval_lit_false asg _ Hsat)].
-    + unfold eval_rail_val; cbn [rbv_bits].
+    + unfold eval_rail_val at 1; cbn [rbv_bits].
       rewrite map_app, map_repeat_eq, (sat_eval_lit_false asg1 st' (proj2 (proj2 Hs1))),
               (step_spec_eval_lits st st' asg asg1 (rbv_bits a) Hs1 Hba),
               bools_to_Z_app, bools_to_Z_repeat_false, Z.mul_0_r, Z.add_0_r,
@@ -5073,7 +5073,7 @@ Proof.
                     (wf_msb_lit fw _ a (proj1 (proj1 Hsat)) (conj (conj Hwa Hla) (conj Hba Hpa))))].
     + exact Hpa.
   - split; [reflexivity |].
-    unfold eval_rail_val; cbn [rbv_bits].
+    unfold eval_rail_val at 1; cbn [rbv_bits].
     rewrite map_app, map_repeat_eq, (eval_msb_lit fw asg a (conj Hwa Hla)),
             bools_to_Z_app, bools_to_Z_repeat_b, length_map, Hla, positive_nat_Z.
     set (va := eval_rail_val fw asg a).
@@ -5303,7 +5303,7 @@ Proof.
                                   (bools_to_Z b_lo + 2 ^ Z.pos tw * bools_to_Z b_hi -
                                    0 * (2 ^ Z.pos tw * 2 ^ Z.of_nat k)));
              cbn [negb]; try reflexivity; nia.
-    + unfold eval_rail_val; cbn [rbv_bits].
+    + unfold eval_rail_val at 1; cbn [rbv_bits].
       unfold lo; rewrite (step_spec_eval_lits st st' asg asg5 _ Hs05 (wf_lits_bound_firstn _ _ _ Hba)),
                          map_firstn_eq; exact Hres_eq.
 Qed.
@@ -5734,7 +5734,7 @@ Proof.
         (step_spec_eval_lit st st3 asg asg3 (rbv_psn b) Hs03 Hpb),
         (step_spec_eval_lit st3 st4 asg3 asg4 ss_l Hs34 Hwf_ss),
         Hev_ss; reflexivity.
-    + unfold eval_rail_val, Integers.one, Integers.zero; cbn [rbv_bits List.map].
+    + unfold eval_rail_val at 1; unfold Integers.one, Integers.zero; cbn [rbv_bits List.map].
       rewrite (step_spec_eval_lit st2 st' asg2 asg5 res_bit Hs25 Hwf_rb), Hev_rb.
       destruct (if is_signed
                 then @Integers.cmp sz c (eval_rail_val sz asg a) (eval_rail_val sz asg b)

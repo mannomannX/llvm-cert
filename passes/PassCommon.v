@@ -1801,7 +1801,7 @@ Section ModelSemantics.
     unfold interp_vellvm_prov_h, interp_vellvm_h.
     destruct_sum1 e; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_].
     - (* ExternalCallE *)
-      unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+      unfold fused_trigger_prov, fused_trigger, ITree.map;
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger;
         unfold det_prov_h, subevent, resum;
@@ -1855,7 +1855,7 @@ Section ModelSemantics.
       apply eutt_eq_bind; intros r; cbn [fst].
       rewrite !Eqit.bind_ret_l, interp_state_ret; reflexivity.
     - (* OOME *)
-      unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+      unfold fused_trigger_prov, fused_trigger, ITree.map;
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger;
         unfold det_prov_h, subevent, resum;
@@ -1866,7 +1866,7 @@ Section ModelSemantics.
         rewrite Eqit.bind_bind, bind_trigger;
         apply eqit_Vis; intros [].
     - (* LLVMExcE *)
-      unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+      unfold fused_trigger_prov, fused_trigger, ITree.map;
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger;
         unfold det_prov_h, subevent, resum;
@@ -1877,7 +1877,7 @@ Section ModelSemantics.
         rewrite Eqit.bind_bind, bind_trigger;
         apply eqit_Vis; intros [].
     - (* UBE *)
-      unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+      unfold fused_trigger_prov, fused_trigger, ITree.map;
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger;
         unfold det_prov_h, subevent, resum;
@@ -1888,7 +1888,7 @@ Section ModelSemantics.
         rewrite Eqit.bind_bind, bind_trigger;
         apply eqit_Vis; intros [].
     - (* DebugE *)
-      unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+      unfold fused_trigger_prov, fused_trigger, ITree.map;
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger;
         unfold det_prov_h, subevent, resum;
@@ -1900,7 +1900,7 @@ Section ModelSemantics.
         apply eqit_Vis; intros x;
         rewrite Eqit.bind_ret_l, interp_state_ret, Eqit.bind_ret_l; reflexivity.
     - (* FailureE *)
-      unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
+      unfold fused_trigger_prov, fused_trigger, ITree.map;
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger;
         unfold det_prov_h, subevent, resum;
