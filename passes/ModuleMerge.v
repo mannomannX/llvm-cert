@@ -3929,7 +3929,7 @@ Section StripFileInfoRefinement.
   Lemma refine_cfg_raiseUB_any {A : Type} (s1 s2 : string) :
     @refine_cfg PaV A A Logic.eq (raiseUB s1) (raiseUB s2).
   Proof using.
-    unfold raiseUB, trigger_cast; apply ruttc_trigger_cutl; constructor.
+    unfold raiseUB, trigger_cast; apply ruttc_trigger_cutl, (CutUB_rel _).
   Qed.
 
   Lemma refine_cfg_assert_alignment_msg

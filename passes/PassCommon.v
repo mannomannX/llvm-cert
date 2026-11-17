@@ -1041,7 +1041,7 @@ Section EventRelations.
         [cbn; unfold resum, ReSum_id, id_, Id_IFun; exact I | intros [] [] _].
     - unfold raiseOOM, trigger_cast; eapply ruttc_trigger';
         [cbn; unfold resum, ReSum_id, id_, Id_IFun; exact I | intros [] [] _].
-    - unfold raiseUB, trigger_cast; apply ruttc_trigger_cutl; constructor.
+    - unfold raiseUB, trigger_cast; apply ruttc_trigger_cutl, (CutUB_rel _).
   Qed.
 
   Lemma refine_EOU_to_mcfg {A1 A2} (RR : A1 -> A2 -> Prop) (m1 : EOU A1) (m2 : EOU A2) :
@@ -1054,7 +1054,7 @@ Section EventRelations.
         [cbn; unfold resum, ReSum_id, id_, Id_IFun; exact I | intros [] [] _].
     - unfold raiseOOM, trigger_cast; eapply ruttc_trigger';
         [cbn; unfold resum, ReSum_id, id_, Id_IFun; exact I | intros [] [] _].
-    - unfold raiseUB, trigger_cast; apply ruttc_trigger_cutl; constructor.
+    - unfold raiseUB, trigger_cast; apply ruttc_trigger_cutl, (CutUB_rel _).
   Qed.
 
   Lemma unfold_run_exc_obs {A} (t : CFGtop A) :
@@ -1155,18 +1155,17 @@ Section EventRelations.
         (lookup k ctx1) (lookup k ctx2).
 
   Lemma cutUB_cfg_sum {A} (e : (CallE +' MCFGEtop) A) :
-    cutUB_rel e <-> sum_pred (@cutNone CallE) (@cutUB_rel MCFGEtop _) A e.
+    cutUB_rel e <-> sum_pred1 (@FF1 CallE) (@cutUB_rel MCFGEtop _) A e.
   Proof using.
     split; intros H.
-    - inversion H; constructor; constructor.
-    - destruct e as [c | m]; [inversion H; subst; inversion H1 |].
-      inversion H; subst; inversion H1; constructor.
+    - destruct H as [u]; constructor; exact (CutUB_rel u).
+    - destruct H as [? ? [] | ? ? HC]; destruct HC as [u]; exact (CutUB_rel u).
   Qed.
 
   Lemma cutNone_cfg_sum {A} (e : (CallE +' MCFGEtop) A) :
-    cutNone e <-> sum_pred (@cutNone CallE) (@cutNone MCFGEtop) A e.
+    cutNone e <-> sum_pred1 (@FF1 CallE) (@cutNone MCFGEtop) A e.
   Proof using.
-    split; intros H; [inversion H | destruct e; inversion H; subst; inversion H1].
+    split; intros H; [inversion H | destruct H as [? ? [] | ? ? HC]; inversion HC].
   Qed.
 
   Lemma refine_mcfg_denote_mcfg (ctx1 ctx2 : IntMap function_denotation)
@@ -1183,8 +1182,8 @@ Section EventRelations.
       eapply ruttc_weaken with (RR := @Logic.eq (exc + dvalue)).
       { intros ? e Hcut; exact (proj1 (cutUB_cfg_sum e) Hcut). }
       { intros ? e Hcut; exact (proj1 (cutNone_cfg_sum e) Hcut). }
-      { intros * HE; exact HE. }
-      { intros * HA; exact HA. }
+      { intros * HE; destruct e1 as [c1 | m1], e2 as [c2 | m2]; cbn in HE; try contradiction; constructor; exact HE. }
+      { intros * HA; destruct HA; exact H. }
       { intros r1 r2 <-; cbn; reflexivity. }
       eapply ruttc_bind; [apply refine_cfg_refl | intros [] _ <-].
       unfold lookup_defn.
@@ -1203,18 +1202,20 @@ Section EventRelations.
   Proof using.
     intros HR.
     apply ruttc_interp_itree; auto.
-    - intros A1 e1 Hcut; inversion Hcut; reflexivity.
+    - intros A1 e1 Hcut; destruct Hcut as [u]; reflexivity.
     - intros A2 e2 Hcut; inversion Hcut.
     - intros A1 A2 e1 e2 HEv.
       destruct e1 as [e1 | e1], e2 as [e2 | e2]; cbn in HEv; try contradiction.
-      + apply ruttc_trigger; [cbn; exact HEv | intros a b Hab; exact Hab].
+      + cbn [interp_intrinsics_h case_ E_trigger]; unfold trigger.
+        apply ruttc_trigger; [cbn; exact HEv | intros a b Hab; exact Hab].
       + destruct e1 as [i1 | f1], e2 as [i2 | f2]; cbn in HEv; try contradiction.
         * destruct i1 as [dt1 fn1 args1 va1], i2 as [dt2 fn2 args2 va2].
           destruct HEv as (<- & <- & <- & <-).
           cbn [interp_intrinsics_h case_].
           eapply ruttc_weaken; cycle -1; [apply refine_mcfg_refl | auto | auto | auto | auto |].
           intros r1 r2 <-; cbn; reflexivity.
-        * apply ruttc_trigger; [cbn; exact HEv | intros a b Hab; exact Hab].
+        * cbn [interp_intrinsics_h case_ F_trigger]; unfold trigger.
+          apply ruttc_trigger; [cbn; exact HEv | intros a b Hab; exact Hab].
   Qed.
 
 End EventRelations.

@@ -229,7 +229,7 @@ Lemma refine_cfg_raiseUB {Pa : Params} {R1 R2} (RR : R1 -> R2 -> Prop)
   refine_cfg RR (raiseUB s) t2.
 Proof.
   unfold refine_cfg, raiseUB, trigger_cast.
-  apply ruttc_trigger_cutl; constructor.
+  apply ruttc_trigger_cutl, (CutUB_rel _).
 Qed.
 
 Lemma refine_cfg_raiseLLVM {Pa : Params} {R1 R2} (RR : R1 -> R2 -> Prop)
