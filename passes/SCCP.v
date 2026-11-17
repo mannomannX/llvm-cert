@@ -82,9 +82,8 @@ Qed.
 Lemma sccp_pos_uip_refl (x : positive) (p : x = x) :
   p = Logic.eq_refl.
 Proof.
-  rewrite <- (sccp_pos_nu_left_inv p), <- (sccp_pos_nu_left_inv Logic.eq_refl).
-  rewrite (sccp_pos_nu_const p Logic.eq_refl).
-  reflexivity.
+  rewrite <- (sccp_pos_nu_left_inv p), (sccp_pos_nu_const p Logic.eq_refl);
+    apply sccp_pos_nu_left_inv.
 Qed.
 
 Lemma sccp_pos_eq_dec_refl (sz : positive) :

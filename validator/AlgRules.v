@@ -110,9 +110,8 @@ Qed.
 Lemma alg_pos_uip_refl (x : positive) (p : x = x) :
   p = Logic.eq_refl.
 Proof.
-  rewrite <- (alg_pos_nu_left_inv p), <- (alg_pos_nu_left_inv Logic.eq_refl).
-  rewrite (alg_pos_nu_const p Logic.eq_refl).
-  reflexivity.
+  rewrite <- (alg_pos_nu_left_inv p), (alg_pos_nu_const p Logic.eq_refl);
+    apply alg_pos_nu_left_inv.
 Qed.
 
 Lemma alg_pos_eq_dec_refl (sz : positive) :

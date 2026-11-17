@@ -4728,17 +4728,17 @@ Section ValueDrawRefinement.
         | inr1 pe2 => fun k2' =>
             match pe1 return (X1 -> itree ProvDrawBotE R1) -> Prop with
             | inl1 p1 => fun kp1 =>
-                match p1 in ProvE Z1 return (Z1 -> itree ProvDrawBotE R1) -> Prop with
-                | FreshProv => fun kp1' =>
-                    match pe2 return (X2 -> itree ProvDrawBotE R2) -> Prop with
-                    | inl1 p2 => fun kp2 =>
+                match pe2 return (X2 -> itree ProvDrawBotE R2) -> Prop with
+                | inl1 p2 => fun kp2 =>
+                    match p1 in ProvE Z1 return (Z1 -> itree ProvDrawBotE R1) -> Prop with
+                    | FreshProv => fun kp1' =>
                         match p2 in ProvE Z2 return (Z2 -> itree ProvDrawBotE R2) -> Prop with
                         | FreshProv => fun kp2' =>
                             forall p : N, ~ In p U -> r (p :: U) (kp1' p) (kp2' p)
                         end kp2
-                    | inr1 _ => fun _ => False
-                    end k2'
-                end kp1
+                    end kp1
+                | inr1 _ => fun _ => False
+                end k2'
             | inr1 b1 => fun kb1 =>
                 match pe2 return (X2 -> itree ProvDrawBotE R2) -> Prop with
                 | inl1 _ => fun _ => False
