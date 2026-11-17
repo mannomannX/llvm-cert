@@ -1376,14 +1376,16 @@ Section ModelSemantics.
 
   (** ** Deterministic Specialization Equivalence ([interp_mcfg_model] -> [interp_mcfg]) *)
 
-  Definition det_prov_h : ProvBotE ~> Monads.stateT N (itree MCFGEbot) :=
+  Definition det_prov_h
+    : ProvBotE ~> Monads.stateT N (itree (@MCFGEbot (@ParamsV IP IPT))) :=
     case_
-      (fun T (e : ProvE T) (pr : N) =>
-         match e in ProvE Y return itree MCFGEbot (N * Y) with
-         | FreshProv => let p' := N.succ pr in Ret (p', p')
-         end)
-      (fun T (e : MCFGEbot T) (pr : N) =>
-         ITree.bind (ITree.trigger e) (fun r => Ret (pr, r))).
+      ((fun T (e : ProvE T) (pr : N) =>
+          match e in ProvE Y return itree (@MCFGEbot (@ParamsV IP IPT)) (N * Y) with
+          | FreshProv => let p' := N.succ pr in Ret (p', p')
+          end) : ProvE ~> Monads.stateT N (itree (@MCFGEbot (@ParamsV IP IPT))))
+      ((fun T (e : @MCFGEbot (@ParamsV IP IPT) T) (pr : N) =>
+          ITree.bind (ITree.trigger e) (fun r => Ret (pr, r)))
+       : @MCFGEbot (@ParamsV IP IPT) ~> Monads.stateT N (itree (@MCFGEbot (@ParamsV IP IPT)))).
 
   Lemma interp_det_prov_lift_bot {R} (t : itree MCFGEbot R) (pr : N) :
     interp_state det_prov_h (lift_bot_prov t) pr ≈ ITree.map (fun r => (pr, r)) t.

@@ -4659,19 +4659,31 @@ Section ValueDrawRefinement.
 
   Definition interp_vellvm_rel_draw_h :
     @MCFGEtop PaV ~> Monads.stateT FusedS (itree ProvDrawBotE) :=
-    case_ (fun T e s => lift_prov_to_draw (fused_trigger_prov T e s))
-   (case_ (fun T e s => lift_prov_to_draw (fused_intrinsic_prov T e s))
-   (case_ (fun T e s => lift_prov_to_draw (fused_global_prov T e s))
-   (case_ (case_ (fun T e s => lift_prov_to_draw (fused_local_prov T e s))
-                 (fun T e s => lift_prov_to_draw (fused_stack_prov T e s)))
-   (case_ (fun T e s => lift_prov_to_draw (fused_memory_prov T e s))
-   (case_ (fun T (e : @DrawE PaV T) s =>
+    case_ ((fun T e s => lift_prov_to_draw (fused_trigger_prov T e s))
+             : @ExternalCallE PaV ~> Monads.stateT FusedS (itree ProvDrawBotE))
+   (case_ ((fun T e s => lift_prov_to_draw (fused_intrinsic_prov T e s))
+             : @IntrinsicE PaV ~> Monads.stateT FusedS (itree ProvDrawBotE))
+   (case_ ((fun T e s => lift_prov_to_draw (fused_global_prov T e s))
+             : @GlobalE PaV ~> Monads.stateT FusedS (itree ProvDrawBotE))
+   (case_ (case_ ((fun T e s => lift_prov_to_draw (fused_local_prov T e s))
+                    : @LocalE PaV ~> Monads.stateT FusedS (itree ProvDrawBotE))
+                 ((fun T e s => lift_prov_to_draw (fused_stack_prov T e s))
+                    : @StackE PaV ~> Monads.stateT FusedS (itree ProvDrawBotE)))
+   (case_ ((fun T e s => lift_prov_to_draw (fused_memory_prov T e s))
+             : @MemoryE PaV ~> Monads.stateT FusedS (itree ProvDrawBotE))
+   (case_ ((fun T (e : @DrawE PaV T) s =>
              ITree.bind (ITree.trigger (inl1 e)) (fun r => Ret (s, r)))
-   (case_ (fun T e s => lift_prov_to_draw (fused_trigger_prov T e s))
-   (case_ (fun T e s => lift_prov_to_draw (fused_trigger_prov T e s))
-   (case_ (fun T e s => lift_prov_to_draw (fused_trigger_prov T e s))
-   (case_ (fun T e s => lift_prov_to_draw (fused_trigger_prov T e s))
-          (fun T e s => lift_prov_to_draw (fused_trigger_prov T e s))))))))))).
+             : @DrawE PaV ~> Monads.stateT FusedS (itree ProvDrawBotE))
+   (case_ ((fun T e s => lift_prov_to_draw (fused_trigger_prov T e s))
+             : OOME ~> Monads.stateT FusedS (itree ProvDrawBotE))
+   (case_ ((fun T e s => lift_prov_to_draw (fused_trigger_prov T e s))
+             : @LLVMExcE PaV ~> Monads.stateT FusedS (itree ProvDrawBotE))
+   (case_ ((fun T e s => lift_prov_to_draw (fused_trigger_prov T e s))
+             : UBE ~> Monads.stateT FusedS (itree ProvDrawBotE))
+   (case_ ((fun T e s => lift_prov_to_draw (fused_trigger_prov T e s))
+             : DebugE ~> Monads.stateT FusedS (itree ProvDrawBotE))
+          ((fun T e s => lift_prov_to_draw (fused_trigger_prov T e s))
+             : FailureE ~> Monads.stateT FusedS (itree ProvDrawBotE)))))))))))).
 
   Arguments interp_vellvm_rel_draw_h [T] _ _.
 

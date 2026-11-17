@@ -3102,8 +3102,9 @@ Lemma wf_lits_bound_firstn : forall bound n ls,
   wf_lits_bound bound (List.firstn n ls).
 Proof.
   intros bound n; induction n as [| n' IH]; intros [| x r] Hwf; cbn;
-    try constructor; inversion Hwf as [| ? ? Hx Hr]; subst;
-    constructor; [exact Hx | exact (IH r Hr)].
+    [constructor | constructor | constructor |].
+  inversion Hwf as [| ? ? Hx Hr]; subst.
+  constructor; [exact Hx | exact (IH r Hr)].
 Qed.
 
 Lemma wf_lits_bound_skipn : forall bound n ls,
