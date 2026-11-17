@@ -1397,9 +1397,9 @@ Section ModelSemantics.
     - gstep; constructor; reflexivity.
     - gstep; constructor; gfinal; left; apply CIH.
     - unfold det_prov_h; cbn [case_]; unfold ITree.trigger.
-      rewrite Eqit.bind_vis; cbn.
+      rewrite !Eqit.bind_vis; cbn.
       gstep; constructor; intros x.
-      rewrite Eqit.bind_ret_l, tau_euttge.
+      rewrite !Eqit.bind_ret_l, tau_euttge.
       gfinal; left; apply CIH.
   Qed.
 

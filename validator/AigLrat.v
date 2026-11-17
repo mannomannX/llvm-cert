@@ -3336,7 +3336,7 @@ Proof.
   - split; [split; [reflexivity | cbn; congruence] |
             split; [exact (wf_lits_bound_mono _ _ bits (proj1 Hs2) Hbwf) | exact Hpwf]].
   - split.
-    + unfold eval_rail_psn; rewrite Hpev,
+    + unfold eval_rail_psn; cbn [rbv_psn]; rewrite Hpev,
         (step_spec_eval_lit st st1 asg asg1 (rbv_psn a) Hs1 Hpa),
         (step_spec_eval_lit st st1 asg asg1 (rbv_psn b) Hs1 Hpb); reflexivity.
     + apply @Integers.same_bits_eq; intros i Hi.
@@ -3384,7 +3384,7 @@ Proof.
   - split; [split; [reflexivity | cbn; congruence] |
             split; [exact (wf_lits_bound_mono _ _ bits (proj1 Hs2) Hbwf) | exact Hpwf]].
   - split.
-    + unfold eval_rail_psn; rewrite Hpev,
+    + unfold eval_rail_psn; cbn [rbv_psn]; rewrite Hpev,
         (step_spec_eval_lit st st1 asg asg1 (rbv_psn a) Hs1 Hpa),
         (step_spec_eval_lit st st1 asg asg1 (rbv_psn b) Hs1 Hpb); reflexivity.
     + apply @Integers.same_bits_eq; intros i Hi.
@@ -3519,7 +3519,7 @@ Proof.
     + split; [split; [reflexivity | cbn; congruence] |
               split; [exact (wf_lits_bound_mono _ _ bits (proj1 Hs15) Hbwf) | exact Hpwf]].
     + split.
-      * unfold eval_rail_psn; cbn [andb].
+      * unfold eval_rail_psn; cbn [rbv_psn]; cbn [andb].
         rewrite Hpev,
                 (step_spec_eval_lit st2 st4 asg2 asg4 base_psn Hs24 Hbp_wf),
                 Hbp_ev,
@@ -3541,7 +3541,7 @@ Proof.
     + split; [split; [reflexivity | cbn; congruence] |
               split; [exact (wf_lits_bound_mono _ _ bits (proj1 Hs2) Hbwf) | exact Hbp_wf]].
     + split.
-      * unfold eval_rail_psn; cbn [andb]; rewrite orb_false_r, Hbp_ev,
+      * unfold eval_rail_psn; cbn [rbv_psn]; cbn [andb]; rewrite orb_false_r, Hbp_ev,
           (step_spec_eval_lit st st1 asg asg1 (rbv_psn a) Hs1 Hpa),
           (step_spec_eval_lit st st1 asg asg1 (rbv_psn b) Hs1 Hpb); reflexivity.
       * apply @Integers.same_bits_eq; intros i Hi.
@@ -3845,7 +3845,7 @@ Proof.
   - split; [split; [reflexivity | cbn; congruence] |
             split; [exact (wf_lits_bound_mono _ _ sums (proj1 Hs17) Hwf_s) | exact Hwf_p]].
   - split.
-    + unfold eval_rail_psn; rewrite Hev_p,
+    + unfold eval_rail_psn; cbn [rbv_psn]; rewrite Hev_p,
         (step_spec_eval_lit st5 st6 asg5 asg6 base_psn Hs56 Hwf_bp),
         Hev_bp,
         (step_spec_eval_lit st st4 asg asg4 (rbv_psn a) Hs04 Hpa),
@@ -4055,7 +4055,7 @@ Proof.
   - split; [split; [reflexivity | cbn; congruence] |
             split; [exact (wf_lits_bound_mono _ _ diffs (proj1 Hs17) Hwf_d) | exact Hwf_p]].
   - split.
-    + unfold eval_rail_psn; rewrite Hev_p,
+    + unfold eval_rail_psn; cbn [rbv_psn]; rewrite Hev_p,
         (step_spec_eval_lit st5 st6 asg5 asg6 base_psn Hs56 Hwf_bp),
         Hev_bp,
         (step_spec_eval_lit st st4 asg asg4 (rbv_psn a) Hs04 Hpa),
@@ -4618,7 +4618,7 @@ Proof.
   - split; [split; [reflexivity | cbn; exact Hlen_bits] |
             split; [exact (wf_lits_bound_mono _ _ bits (proj1 Hs13) Hwf_bits) | exact Hwf_p]].
   - split.
-    + unfold eval_rail_psn; cbn zeta; fold va vb.
+    + unfold eval_rail_psn; cbn [rbv_psn]; cbn zeta; fold va vb.
       rewrite Hev_p, Hev_ab,
               (step_spec_eval_lit st st1 asg asg1 (rbv_psn a) Hs1 Hpa),
               (step_spec_eval_lit st st1 asg asg1 (rbv_psn b) Hs1 Hpb),
@@ -4770,7 +4770,7 @@ Proof.
   - split; [split; [reflexivity | cbn; exact Hlen_bits] |
             split; [exact (wf_lits_bound_mono _ _ bits (proj1 Hs13) Hwf_bits) | exact Hwf_p]].
   - split.
-    + unfold eval_rail_psn; cbn zeta; fold va vb.
+    + unfold eval_rail_psn; cbn [rbv_psn]; cbn zeta; fold va vb.
       rewrite Hev_p, Hev_ab,
               (step_spec_eval_lit st st1 asg asg1 (rbv_psn a) Hs1 Hpa),
               (step_spec_eval_lit st st1 asg asg1 (rbv_psn b) Hs1 Hpb),
@@ -4952,7 +4952,7 @@ Proof.
   - split; [split; [reflexivity | cbn; exact Hlen_bits] |
             split; [exact (wf_lits_bound_mono _ _ bits (proj1 Hs13) Hwf_bits) | exact Hwf_p]].
   - split.
-    + unfold eval_rail_psn; cbn zeta; fold va vb.
+    + unfold eval_rail_psn; cbn [rbv_psn]; cbn zeta; fold va vb.
       rewrite Hev_p, Hev_ab,
               (step_spec_eval_lit st st1 asg asg1 (rbv_psn a) Hs1 Hpa),
               (step_spec_eval_lit st st1 asg asg1 (rbv_psn b) Hs1 Hpb),
@@ -5011,7 +5011,7 @@ Proof.
          | exact (wf_lits_bound_repeat _ _ _ (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs1))))))].
     + exact Hwf_p.
   - split.
-    + unfold eval_rail_psn; rewrite Hev_p; f_equal.
+    + unfold eval_rail_psn; cbn [rbv_psn]; rewrite Hev_p; f_equal.
       unfold nneg_l; destruct nneg;
         [cbn [andb]; rewrite (eval_msb_lit fw asg a (conj Hwa Hla)), signed_lt_zero_eq_msb; reflexivity
          | exact (sat_eval_lit_false asg _ Hsat)].
@@ -5203,7 +5203,7 @@ Proof.
             split; [exact (wf_lits_bound_mono _ _ _ (proj1 Hs05) (wf_lits_bound_firstn _ _ _ Hba))
                     | exact Hwf_p]].
   - split.
-    + unfold eval_rail_psn; cbn zeta; fold va res.
+    + unfold eval_rail_psn; cbn [rbv_psn]; cbn zeta; fold va res.
       rewrite Hev_p,
               (step_spec_eval_lit st st4 asg asg4 (rbv_psn a) Hs04 Hpa),
               Hev_ov,
@@ -5700,7 +5700,7 @@ Proof.
     + constructor; [exact (wf_lit_bound_mono _ _ _ (proj1 Hs25) Hwf_rb) | constructor].
     + exact Hwf_p.
   - split.
-    + unfold eval_rail_psn; rewrite Hev_p, Hev_ab,
+    + unfold eval_rail_psn; cbn [rbv_psn]; rewrite Hev_p, Hev_ab,
         (step_spec_eval_lit st st3 asg asg3 (rbv_psn a) Hs03 Hpa),
         (step_spec_eval_lit st st3 asg asg3 (rbv_psn b) Hs03 Hpb),
         (step_spec_eval_lit st3 st4 asg3 asg4 ss_l Hs34 Hwf_ss),
@@ -5779,7 +5779,7 @@ Proof.
   - split; [split; [reflexivity | cbn; congruence] |
             split; [exact (wf_lits_bound_mono _ _ _ (proj1 Hs13) Hwf_bits) | exact Hwf_p]].
   - split.
-    + unfold eval_rail_psn; rewrite Hev_p,
+    + unfold eval_rail_psn; cbn [rbv_psn]; rewrite Hev_p,
         (step_spec_eval_lit st st2 asg asg2 (rbv_psn cond) Hs02 Hpc),
         Hev_brp,
         (step_spec_eval_lit st st1 asg asg1 cbit Hs1 Hw_cbit),

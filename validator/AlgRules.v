@@ -7975,7 +7975,7 @@ Proof.
     + split; [split; [reflexivity | cbn; congruence] |
               split; [exact (wf_lits_bound_mono _ _ prod_bits (proj1 Hs2) Hwf_pb) | exact Hwf_bp]].
     + split.
-      * unfold eval_rail_psn; rewrite Hev_bp,
+      * unfold eval_rail_psn; cbn [rbv_psn]; rewrite Hev_bp,
           (step_spec_eval_lit st st1 asg asg1 (rbv_psn a) Hs1 Hpa),
           (step_spec_eval_lit st st1 asg asg1 (rbv_psn b) Hs1 Hpb).
         apply orb_true_iff in Efast as [Esz1 | Eflags].
@@ -8208,7 +8208,7 @@ Proof.
     + split; [split; [reflexivity | cbn; congruence] |
               split; [exact (wf_lits_bound_mono _ _ prod_bits (proj1 Hs112) Hwf_pb) | exact Hwf_p]].
     + split.
-      * unfold eval_rail_psn; rewrite Esz_gt1, Hev_p,
+      * unfold eval_rail_psn; cbn [rbv_psn]; rewrite Esz_gt1, Hev_p,
           (step_spec_eval_lit st2 st11 asg2 asg11 base_psn Hs211 Hwf_bp),
           Hev_bp,
           (step_spec_eval_lit st st1 asg asg1 (rbv_psn a) Hs1 Hpa),
