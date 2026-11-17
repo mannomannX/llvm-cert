@@ -88,6 +88,7 @@ From CertValidator Require Import
 Import ListNotations.
 Import Sum.
 Import Subevent.
+Import Logic.
 
 Unset Implicit Arguments.
 Unset Strict Implicit.

@@ -56,6 +56,7 @@ From Vellvm Require Import
 From CertValidator Require Import
   CertFormat
   AigLrat.
+Import Logic.
 
 Unset Implicit Arguments.
 Unset Strict Implicit.

@@ -66,6 +66,7 @@ From Vellvm Require Import
   Semantics.Libraries.
 
 From CertPasses Require Import PassCommon.
+Import Logic.
 
 Set Default Goal Selector "!".
 Unset Implicit Arguments.
@@ -6840,7 +6841,7 @@ Section MemoryAndSerialization.
   Lemma m2r_exp_size_pos {T : Set} (e : exp T) :
     (1 <= m2r_exp_size e)%nat.
   Proof using.
-    destruct e; try (destruct m as [[] | | | | | |]); cbn; lia.
+    destruct e; try (destruct m as [| | [] | | | |]); cbn; lia.
   Qed.
 
   Fixpoint m2r_dvalue_size (dv : @dvalue (@ParamsV IP IPT)) : nat :=
@@ -7008,7 +7009,7 @@ Section MemoryAndSerialization.
       (interp_mcfg_model (freeze_base dt db) s).
   Proof using.
     unfold freeze_base.
-    destruct db as [| | | | | sz bv | |].
+    destruct db as [| | | | | | | sz bv].
     - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply tau_expand_cfg_withCall_bind;
         [apply tau_expand_cfg_withCall_ret | intros ? ?; apply tau_expand_cfg_withCall_ret].
@@ -7021,6 +7022,10 @@ Section MemoryAndSerialization.
     - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply tau_expand_cfg_withCall_bind;
         [apply tau_expand_cfg_withCall_ret | intros ? ?; apply tau_expand_cfg_withCall_ret].
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
+        eapply tau_expand_cfg_withCall_bind;
+        [apply tau_expand_cfg_withCall_ret | intros ? ?; apply tau_expand_cfg_withCall_ret].
+    - unfold draw, Subevent.trigger; try unfold trigger_cast; apply tau_expand_cfg_withCall_trigger.
     - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply tau_expand_cfg_withCall_bind;
         [apply tau_expand_cfg_withCall_ret | intros ? ?; apply tau_expand_cfg_withCall_ret].
@@ -7038,10 +7043,6 @@ Section MemoryAndSerialization.
         * unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
             eapply tau_expand_cfg_withCall_bind;
             [apply tau_expand_cfg_withCall_ret | intros ? ?; apply tau_expand_cfg_withCall_ret].
-    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
-        eapply tau_expand_cfg_withCall_bind;
-        [apply tau_expand_cfg_withCall_ret | intros ? ?; apply tau_expand_cfg_withCall_ret].
-    - unfold draw, Subevent.trigger; try unfold trigger_cast; apply tau_expand_cfg_withCall_trigger.
   Qed.
 
   Lemma tau_expand_cfg_withCall_freeze
@@ -7057,13 +7058,21 @@ Section MemoryAndSerialization.
     - pose proof (m2r_dvalue_size_pos dv); lia.
     - destruct dv as [db | p fields | vec elts]; cbn [freeze].
       + apply tau_expand_cfg_withCall_freeze_base.
-      + destruct dt as [| | p' dts];
+      + destruct dt as [| p' dts |];
           try apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _).
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply tau_expand_cfg_withCall_bind; [| intros ? ?; apply tau_expand_cfg_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
         assert (Hfld : ( (fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) fields <= sz)%nat) by lia.
-        clear Hle; generalize (@nil (@dvalue (@ParamsV IP IPT))) as acc.
+        clear Hle.
+        lazymatch goal with
+        | |- tau_expand (interp_cfg_model ctx (withCall (?go1 fields dts [])) s)
+                        (interp_mcfg_model (?go2 fields dts []) s) =>
+            cut (forall acc : list (@dvalue (@ParamsV IP IPT)),
+                    tau_expand (interp_cfg_model ctx (withCall (go1 fields dts acc)) s)
+                               (interp_mcfg_model (go2 fields dts acc) s));
+              [intros Hcut; exact (Hcut []) |]
+        end.
         revert dts s Hfld; induction fields as [| v vs IHf]; intros [| t ts] s Hfld acc;
           cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         * apply tau_expand_cfg_withCall_ret.
@@ -7072,13 +7081,21 @@ Section MemoryAndSerialization.
         * eapply tau_expand_cfg_withCall_bind.
           -- fold (@freeze (@ParamsV IP IPT) _ _ _ _ t v); apply IH; lia.
           -- intros s1 v'; apply IHf; lia.
-      + destruct dt as [| v' sz_n t |];
+      + destruct dt as [| | v' sz_n t];
           try apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _).
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply tau_expand_cfg_withCall_bind; [| intros ? ?; apply tau_expand_cfg_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
         assert (Helt : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) elts <= sz)%nat) by lia.
-        clear Hle; generalize (@nil (@dvalue (@ParamsV IP IPT))) as acc.
+        clear Hle.
+        lazymatch goal with
+        | |- tau_expand (interp_cfg_model ctx (withCall (?go1 elts [])) s)
+                        (interp_mcfg_model (?go2 elts []) s) =>
+            cut (forall acc : list (@dvalue (@ParamsV IP IPT)),
+                    tau_expand (interp_cfg_model ctx (withCall (go1 elts acc)) s)
+                               (interp_mcfg_model (go2 elts acc) s));
+              [intros Hcut; exact (Hcut []) |]
+        end.
         revert s Helt; induction elts as [| v vs IHe]; intros s Helt acc;
           cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         * apply tau_expand_cfg_withCall_ret.
@@ -7152,7 +7169,7 @@ Section MemoryAndSerialization.
         eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 vc; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros s2 vv1; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]]].
       + destruct v as [dt1 e1]; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_freeze].
       + apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _).
-      + destruct md as [[dt1 ex1] | | | | | |];
+      + destruct md as [| | [dt1 ex1] | | | |];
           try apply tau_expand_cfg_withCall_ret.
         apply IH; cbn in Hle; lia.
       + destruct elt as [dt1 e1].
@@ -7291,7 +7308,7 @@ Section MemoryAndSerialization.
       (mcfg_inr_exc (freeze_base dt db) s).
   Proof using.
     unfold freeze_base.
-    destruct db as [| | | | | sz bv | |].
+    destruct db as [| | | | | | | sz bv].
     - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply tau_expand_exc_withCall_bind;
         [apply tau_expand_exc_withCall_ret | intros ? ?; apply tau_expand_exc_withCall_ret].
@@ -7304,6 +7321,11 @@ Section MemoryAndSerialization.
     - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply tau_expand_exc_withCall_bind;
         [apply tau_expand_exc_withCall_ret | intros ? ?; apply tau_expand_exc_withCall_ret].
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
+        eapply tau_expand_exc_withCall_bind;
+        [apply tau_expand_exc_withCall_ret | intros ? ?; apply tau_expand_exc_withCall_ret].
+    - unfold draw, Subevent.trigger; try unfold trigger_cast;
+        apply tau_expand_exc_withCall_trigger; reflexivity.
     - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
         eapply tau_expand_exc_withCall_bind;
         [apply tau_expand_exc_withCall_ret | intros ? ?; apply tau_expand_exc_withCall_ret].
@@ -7322,11 +7344,6 @@ Section MemoryAndSerialization.
         * unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
             eapply tau_expand_exc_withCall_bind;
             [apply tau_expand_exc_withCall_ret | intros ? ?; apply tau_expand_exc_withCall_ret].
-    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
-        eapply tau_expand_exc_withCall_bind;
-        [apply tau_expand_exc_withCall_ret | intros ? ?; apply tau_expand_exc_withCall_ret].
-    - unfold draw, Subevent.trigger; try unfold trigger_cast;
-        apply tau_expand_exc_withCall_trigger; reflexivity.
   Qed.
 
   Lemma tau_expand_exc_withCall_freeze
@@ -7342,13 +7359,21 @@ Section MemoryAndSerialization.
     - pose proof (m2r_dvalue_size_pos dv); lia.
     - destruct dv as [db | p fields | vec elts]; cbn [freeze].
       + apply tau_expand_exc_withCall_freeze_base.
-      + destruct dt as [| | p' dts];
+      + destruct dt as [| p' dts |];
           try apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _).
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply tau_expand_exc_withCall_bind; [| intros ? ?; apply tau_expand_exc_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
         assert (Hfld : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) fields <= sz)%nat) by lia.
-        clear Hle; generalize (@nil (@dvalue (@ParamsV IP IPT))) as acc.
+        clear Hle.
+        lazymatch goal with
+        | |- tau_expand (interp_cfg_exc ctx (withCall (?go1 fields dts [])) s)
+                        (mcfg_inr_exc (?go2 fields dts []) s) =>
+            cut (forall acc : list (@dvalue (@ParamsV IP IPT)),
+                    tau_expand (interp_cfg_exc ctx (withCall (go1 fields dts acc)) s)
+                               (mcfg_inr_exc (go2 fields dts acc) s));
+              [intros Hcut; exact (Hcut []) |]
+        end.
         revert dts s Hfld; induction fields as [| v vs IHf]; intros [| t ts] s Hfld acc;
           cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         * apply tau_expand_exc_withCall_ret.
@@ -7357,13 +7382,21 @@ Section MemoryAndSerialization.
         * eapply tau_expand_exc_withCall_bind.
           -- fold (@freeze (@ParamsV IP IPT) _ _ _ _ t v); apply IH; lia.
           -- intros s1 v'; apply IHf; lia.
-      + destruct dt as [| v' sz_n t |];
+      + destruct dt as [| | v' sz_n t];
           try apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _).
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply tau_expand_exc_withCall_bind; [| intros ? ?; apply tau_expand_exc_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
         assert (Helt : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) elts <= sz)%nat) by lia.
-        clear Hle; generalize (@nil (@dvalue (@ParamsV IP IPT))) as acc.
+        clear Hle.
+        lazymatch goal with
+        | |- tau_expand (interp_cfg_exc ctx (withCall (?go1 elts [])) s)
+                        (mcfg_inr_exc (?go2 elts []) s) =>
+            cut (forall acc : list (@dvalue (@ParamsV IP IPT)),
+                    tau_expand (interp_cfg_exc ctx (withCall (go1 elts acc)) s)
+                               (mcfg_inr_exc (go2 elts acc) s));
+              [intros Hcut; exact (Hcut []) |]
+        end.
         revert s Helt; induction elts as [| v vs IHe]; intros s Helt acc;
           cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         * apply tau_expand_exc_withCall_ret.
@@ -7437,7 +7470,7 @@ Section MemoryAndSerialization.
         eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 vc; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros s2 vv1; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]]].
       + destruct v as [dt1 e1]; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_freeze].
       + apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _).
-      + destruct md as [[dt1 ex1] | | | | | |];
+      + destruct md as [| | [dt1 ex1] | | | |];
           try apply tau_expand_exc_withCall_ret.
         apply IH; cbn in Hle; lia.
       + destruct elt as [dt1 e1].
@@ -7624,8 +7657,8 @@ Section MemoryAndSerialization.
         refine_prov (fun U' '(s1', r1) '(s2', r2) => U' = U0 /\ s1' = a1 /\ s2' = a2 /\ r1 = r2) U0
           (interp_mcfg_model (freeze_base dt0 db0) a1)
           (interp_mcfg_model (freeze_base dt0 db0) a2)).
-    { intros dt0 db0 U0 a1 a2; unfold freeze_base; destruct db0 as [| | | | | sz_b bv | |];
-        try apply Hfmap_ret; [| apply refine_mcfg_draw_sync].
+    { intros dt0 db0 U0 a1 a2; unfold freeze_base; destruct db0 as [| | | | | | | sz_b bv];
+        try apply Hfmap_ret; [apply refine_mcfg_draw_sync |].
       destruct bv as [| | bits]; try apply Hfmap_ret.
       destruct (existsb is_poison_bit bits); [| apply Hfmap_ret].
       cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
@@ -7636,24 +7669,40 @@ Section MemoryAndSerialization.
     - pose proof (m2r_dvalue_size_pos dv); lia.
     - destruct dv as [db | p fields | vec elts]; cbn [freeze].
       + apply Hbase.
-      + destruct dt as [| | p' dts]; try apply refine_mcfg_raise_both.
+      + destruct dt as [| p' dts |]; try apply refine_mcfg_raise_both.
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply refine_mcfg_model_bind; [| intros ? ? ? ? ? _ (-> & -> & -> & ->); apply Hret_sync].
         cbn [m2r_dvalue_size] in Hle.
         assert (Hfld : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) fields <= sz)%nat) by lia.
-        clear Hle; generalize (@nil (@dvalue (@ParamsV IP IPT))) as acc.
+        clear Hle.
+        lazymatch goal with
+        | |- refine_prov ?R U (interp_mcfg_model (?go fields dts []) s1)
+                              (interp_mcfg_model (?go fields dts []) s2) =>
+            cut (forall acc : list (@dvalue (@ParamsV IP IPT)),
+                    refine_prov R U (interp_mcfg_model (go fields dts acc) s1)
+                                    (interp_mcfg_model (go fields dts acc) s2));
+              [intros Hcut; exact (Hcut []) |]
+        end.
         revert dts U s1 s2 Hfld; induction fields as [| v vs IHf]; intros [| t ts] U s1 s2 Hfld acc;
           cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
           try apply refine_mcfg_raise_both; [apply Hret_sync |].
         eapply refine_mcfg_model_bind.
         * fold (@freeze (@ParamsV IP IPT) _ _ _ _ t v); apply IH; lia.
         * intros ? ? ? ? ? _ (-> & -> & -> & ->); apply IHf; lia.
-      + destruct dt as [| v' sz_n t |]; try apply refine_mcfg_raise_both.
+      + destruct dt as [| | v' sz_n t]; try apply refine_mcfg_raise_both.
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply refine_mcfg_model_bind; [| intros ? ? ? ? ? _ (-> & -> & -> & ->); apply Hret_sync].
         cbn [m2r_dvalue_size] in Hle.
         assert (Helt : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) elts <= sz)%nat) by lia.
-        clear Hle; generalize (@nil (@dvalue (@ParamsV IP IPT))) as acc.
+        clear Hle.
+        lazymatch goal with
+        | |- refine_prov ?R U (interp_mcfg_model (?go elts []) s1)
+                              (interp_mcfg_model (?go elts []) s2) =>
+            cut (forall acc : list (@dvalue (@ParamsV IP IPT)),
+                    refine_prov R U (interp_mcfg_model (go elts acc) s1)
+                                    (interp_mcfg_model (go elts acc) s2));
+              [intros Hcut; exact (Hcut []) |]
+        end.
         revert U s1 s2 Helt; induction elts as [| v vs IHe]; intros U s1 s2 Helt acc;
           cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; [apply Hret_sync |].
         eapply refine_mcfg_model_bind.
@@ -7848,7 +7897,7 @@ Section MemoryAndSerialization.
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
         eapply refine_prov_weaken; [apply refine_mcfg_freeze_sync | intros ? [? ?] [? ?] (-> & -> & -> & ->); repeat split; intros; discriminate].
       + apply refine_mcfg_raise_both.
-      + destruct md as [[dt1 ex1] | | | | | |];
+      + destruct md as [| | [dt1 ex1] | | | |];
           try (eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret | apply refine_prov_ret; repeat split; intros; discriminate]).
         eapply refine_prov_weaken; [apply IH; [cbn in Hle; lia | exact Hvars] |].
         intros ? [? ?] [? ?] (-> & -> & -> & -> & _); repeat split; intros; discriminate.
@@ -11706,14 +11755,14 @@ Section MemoryAndSerialization.
         * destruct db;
             try (eapply ev_ok_bind;
                  [unfold store, Subevent.trigger; try unfold trigger_cast; apply ev_ok_trigger; reflexivity
-                 | intros _; apply ev_ok_ret]).
+                 | intros u0; apply ev_ok_ret]).
           unfold raiseUB, trigger_cast; eapply ev_ok_bind; [apply ev_ok_trigger; reflexivity | intros []].
         * eapply ev_ok_bind;
             [unfold store, Subevent.trigger; try unfold trigger_cast; apply ev_ok_trigger; reflexivity
-            | intros _; apply ev_ok_ret].
+            | intros u0; apply ev_ok_ret].
         * eapply ev_ok_bind;
             [unfold store, Subevent.trigger; try unfold trigger_cast; apply ev_ok_trigger; reflexivity
-            | intros _; apply ev_ok_ret].
+            | intros u0; apply ev_ok_ret].
       + constructor.
         * intros args va; unfold llvm_va_end; apply ev_ok_ret.
         * constructor; [| constructor].
@@ -11724,7 +11773,7 @@ Section MemoryAndSerialization.
             [unfold load, Subevent.trigger; try unfold trigger_cast; apply ev_ok_trigger; reflexivity |].
           intros vargs; eapply ev_ok_bind;
             [unfold store, Subevent.trigger; try unfold trigger_cast; apply ev_ok_trigger; reflexivity |].
-          intros _; apply ev_ok_ret.
+          intros u0; apply ev_ok_ret.
   Qed.
 
   Lemma interp_state_ev_ok_g_sync {R : Type}
@@ -12091,33 +12140,33 @@ Section MemoryAndSerialization.
     ev_ok (@is_non_global_cfg_ev) (withCall (freeze_base dt db)).
   Proof using.
     unfold freeze_base.
-    destruct db as [| | | | | sz bv | |].
+    destruct db as [| | | | | | | sz bv].
     - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
-        eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros _; apply ev_ok_withCall_ret].
+        eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros x0; apply ev_ok_withCall_ret].
     - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
-        eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros _; apply ev_ok_withCall_ret].
+        eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros x0; apply ev_ok_withCall_ret].
     - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
-        eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros _; apply ev_ok_withCall_ret].
+        eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros x0; apply ev_ok_withCall_ret].
     - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
-        eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros _; apply ev_ok_withCall_ret].
+        eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros x0; apply ev_ok_withCall_ret].
     - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
-        eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros _; apply ev_ok_withCall_ret].
+        eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros x0; apply ev_ok_withCall_ret].
+    - unfold draw, Subevent.trigger; try unfold trigger_cast;
+        apply ev_ok_withCall_trigger; reflexivity.
+    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
+        eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros x0; apply ev_ok_withCall_ret].
     - destruct bv as [| | bits].
       + unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
-          eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros _; apply ev_ok_withCall_ret].
+          eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros x0; apply ev_ok_withCall_ret].
       + unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
-          eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros _; apply ev_ok_withCall_ret].
+          eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros x0; apply ev_ok_withCall_ret].
       + destruct (existsb is_poison_bit bits); cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         * eapply ev_ok_withCall_bind.
           -- unfold draw, Subevent.trigger; try unfold trigger_cast;
                apply ev_ok_withCall_trigger; reflexivity.
           -- intros x; apply ev_ok_withCall_ret.
         * unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
-            eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros _; apply ev_ok_withCall_ret].
-    - unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
-        eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros _; apply ev_ok_withCall_ret].
-    - unfold draw, Subevent.trigger; try unfold trigger_cast;
-        apply ev_ok_withCall_trigger; reflexivity.
+            eapply ev_ok_withCall_bind; [apply ev_ok_withCall_ret | intros x0; apply ev_ok_withCall_ret].
   Qed.
 
   Lemma ev_ok_withCall_freeze
@@ -12130,13 +12179,19 @@ Section MemoryAndSerialization.
     - pose proof (m2r_dvalue_size_pos dv); lia.
     - destruct dv as [db | p fields | vec elts]; cbn [freeze].
       + apply ev_ok_withCall_freeze_base.
-      + destruct dt as [| | p' dts];
+      + destruct dt as [| p' dts |];
           try apply (ev_ok_withCall_EOU (raise_error _)).
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-        eapply ev_ok_withCall_bind; [| intros _; apply ev_ok_withCall_ret].
+        eapply ev_ok_withCall_bind; [| intros vals; apply ev_ok_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
         assert (Hfld : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) fields <= sz)%nat) by lia.
-        clear Hle; generalize (@nil (@dvalue (@ParamsV IP IPT))) as acc.
+        clear Hle.
+        lazymatch goal with
+        | |- ev_ok ?P (withCall (?go fields dts [])) =>
+            cut (forall acc : list (@dvalue (@ParamsV IP IPT)),
+                    ev_ok P (withCall (go fields dts acc)));
+              [intros Hcut; exact (Hcut []) |]
+        end.
         revert dts Hfld; induction fields as [| v vs IHf]; intros [| t ts] Hfld acc;
           cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         * apply ev_ok_withCall_ret.
@@ -12145,13 +12200,19 @@ Section MemoryAndSerialization.
         * eapply ev_ok_withCall_bind.
           -- fold (@freeze (@ParamsV IP IPT) _ _ _ _ t v); apply IH; lia.
           -- intros v'; apply IHf; lia.
-      + destruct dt as [| v' sz_n t |];
+      + destruct dt as [| | v' sz_n t];
           try apply (ev_ok_withCall_EOU (raise_error _)).
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-        eapply ev_ok_withCall_bind; [| intros _; apply ev_ok_withCall_ret].
+        eapply ev_ok_withCall_bind; [| intros vals; apply ev_ok_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
         assert (Helt : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) elts <= sz)%nat) by lia.
-        clear Hle; generalize (@nil (@dvalue (@ParamsV IP IPT))) as acc.
+        clear Hle.
+        lazymatch goal with
+        | |- ev_ok ?P (withCall (?go elts [])) =>
+            cut (forall acc : list (@dvalue (@ParamsV IP IPT)),
+                    ev_ok P (withCall (go elts acc)));
+              [intros Hcut; exact (Hcut []) |]
+        end.
         revert Helt; induction elts as [| v vs IHe]; intros Helt acc;
           cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         * apply ev_ok_withCall_ret.
@@ -12186,45 +12247,45 @@ Section MemoryAndSerialization.
       + destruct b; apply ev_ok_withCall_ret.
       + apply ev_ok_withCall_ret.
       + destruct top as [t |]; [apply ev_ok_withCall_EOU | apply (ev_ok_withCall_EOU (raise_error _))].
-      + eapply ev_ok_withCall_bind; [apply (Hlist elts Hle) | intros _; apply ev_ok_withCall_ret].
+      + eapply ev_ok_withCall_bind; [apply (Hlist elts Hle) | intros vs0; apply ev_ok_withCall_ret].
       + apply ev_ok_withCall_ret.
       + apply ev_ok_withCall_ret.
-      + eapply ev_ok_withCall_bind; [apply (Hlist fields Hle) | intros _; apply ev_ok_withCall_ret].
+      + eapply ev_ok_withCall_bind; [apply (Hlist fields Hle) | intros vs0; apply ev_ok_withCall_ret].
       + eapply ev_ok_withCall_bind; [apply ev_ok_withCall_EOU |].
-        intros []; eapply ev_ok_withCall_bind; [apply (Hlist fields Hle) | intros _; apply ev_ok_withCall_ret].
-      + eapply ev_ok_withCall_bind; [apply (Hlist elts Hle) | intros _; apply ev_ok_withCall_ret].
-      + eapply ev_ok_withCall_bind; [apply (Hlist elts Hle) | intros _; apply ev_ok_withCall_ret].
-      + eapply ev_ok_withCall_bind; [apply IH; lia | intros _; eapply ev_ok_withCall_bind; [apply IH; lia | intros _; apply ev_ok_withCall_EOU]].
-      + eapply ev_ok_withCall_bind; [apply IH; lia | intros _; eapply ev_ok_withCall_bind; [apply IH; lia | intros _; apply ev_ok_withCall_EOU]].
-      + eapply ev_ok_withCall_bind; [apply IH; lia | intros _; eapply ev_ok_withCall_bind; [apply IH; lia | intros _; apply ev_ok_withCall_EOU]].
-      + destruct op as [dt1 op1]; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros _; apply ev_ok_withCall_EOU].
-      + eapply ev_ok_withCall_bind; [apply IH; lia | intros _; eapply ev_ok_withCall_bind; [apply IH; lia | intros _; apply ev_ok_withCall_EOU]].
-      + eapply ev_ok_withCall_bind; [apply IH; lia | intros _; apply ev_ok_withCall_convert].
+        intros []; eapply ev_ok_withCall_bind; [apply (Hlist fields Hle) | intros vs0; apply ev_ok_withCall_ret].
+      + eapply ev_ok_withCall_bind; [apply (Hlist elts Hle) | intros vs0; apply ev_ok_withCall_ret].
+      + eapply ev_ok_withCall_bind; [apply (Hlist elts Hle) | intros vs0; apply ev_ok_withCall_ret].
+      + eapply ev_ok_withCall_bind; [apply IH; lia | intros x1; eapply ev_ok_withCall_bind; [apply IH; lia | intros x2; apply ev_ok_withCall_EOU]].
+      + eapply ev_ok_withCall_bind; [apply IH; lia | intros x1; eapply ev_ok_withCall_bind; [apply IH; lia | intros x2; apply ev_ok_withCall_EOU]].
+      + eapply ev_ok_withCall_bind; [apply IH; lia | intros x1; eapply ev_ok_withCall_bind; [apply IH; lia | intros x2; apply ev_ok_withCall_EOU]].
+      + destruct op as [dt1 op1]; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x1; apply ev_ok_withCall_EOU].
+      + eapply ev_ok_withCall_bind; [apply IH; lia | intros x1; eapply ev_ok_withCall_bind; [apply IH; lia | intros x2; apply ev_ok_withCall_EOU]].
+      + eapply ev_ok_withCall_bind; [apply IH; lia | intros x1; apply ev_ok_withCall_convert].
       + destruct ptrval as [dt2 ptr_e].
         eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia |].
-        intros _; eapply ev_ok_withCall_bind; [apply Hlist; cbn in Hle; lia | intros _; apply ev_ok_withCall_EOU].
+        intros x1; eapply ev_ok_withCall_bind; [apply Hlist; cbn in Hle; lia | intros x2; apply ev_ok_withCall_EOU].
       + destruct vec as [dt1 e1], idx as [dt2 e2].
-        eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros _; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros _; apply ev_ok_withCall_EOU]].
+        eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x1; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x2; apply ev_ok_withCall_EOU]].
       + destruct vec as [dt1 e1], elt as [dt2 e2], idx as [dt3 e3].
         eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia |].
-        intros _; eapply ev_ok_withCall_bind.
-        * eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros _; apply ev_ok_withCall_EOU].
-        * intros _; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros _; apply ev_ok_withCall_EOU].
+        intros x1; eapply ev_ok_withCall_bind.
+        * eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x2; apply ev_ok_withCall_EOU].
+        * intros x2; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x3; apply ev_ok_withCall_EOU].
       + destruct vec1 as [dt1 e1], vec2 as [dt2 e2], idxmask as [dt3 e3].
-        eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros _; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros _; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros _; apply ev_ok_withCall_EOU]]].
-      + destruct vec as [dt1 e1]; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros _; apply ev_ok_withCall_EOU].
+        eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x1; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x2; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x3; apply ev_ok_withCall_EOU]]].
+      + destruct vec as [dt1 e1]; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x1; apply ev_ok_withCall_EOU].
       + destruct vec as [dt1 e1], elt as [dt2 e2].
-        eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros _; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros _; apply ev_ok_withCall_EOU]].
+        eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x1; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x2; apply ev_ok_withCall_EOU]].
       + destruct cnd as [dt1 e1], v1 as [dt2 e2], v2 as [dt3 e3].
-        eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros _; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros _; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros _; apply ev_ok_withCall_EOU]]].
-      + destruct v as [dt1 e1]; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros _; apply ev_ok_withCall_freeze].
+        eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x1; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x2; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x3; apply ev_ok_withCall_EOU]]].
+      + destruct v as [dt1 e1]; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x1; apply ev_ok_withCall_freeze].
       + apply (ev_ok_withCall_EOU (raise_error _)).
-      + destruct md as [[dt1 ex1] | | | | | |];
+      + destruct md as [| | [dt1 ex1] | | | |];
           try apply ev_ok_withCall_ret.
         apply IH; cbn in Hle; lia.
       + destruct elt as [dt1 e1].
         eapply ev_ok_withCall_bind; [apply ev_ok_withCall_EOU |].
-        intros [sz_v t_v]; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros _; apply ev_ok_withCall_ret].
+        intros [sz_v t_v]; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x1; apply ev_ok_withCall_ret].
       + unfold gread, Subevent.trigger; try unfold trigger_cast;
           apply ev_ok_withCall_trigger; reflexivity.
   Qed.
@@ -12278,11 +12339,11 @@ Section MemoryAndSerialization.
   Proof using.
     unfold assert_dereferenceable.
     destruct v as [db | |]; [| apply ev_ok_cfg_raise | apply ev_ok_cfg_raise].
-    destruct db as [p | ? ? | ? | ? | ? | ? ? | |]; try apply ev_ok_cfg_raise.
+    destruct db as [p | ? ? | ? | ? | ? | | | ? ?]; try apply ev_ok_cfg_raise.
     - destruct ((or_null && (ptr_to_int p =? ptr_to_int null)%Z) || (n =? 0)%N).
       + apply ev_ok_ret.
       + eapply ev_ok_bind;
-          [unfold load; apply ev_ok_cfg_subevent; reflexivity | intros _; apply ev_ok_ret].
+          [unfold load; apply ev_ok_cfg_subevent; reflexivity | intros r0; apply ev_ok_ret].
     - apply ev_ok_cfg_raiseUB.
   Qed.
 
@@ -12313,7 +12374,7 @@ Section MemoryAndSerialization.
     unfold apply_attrs.
     eapply ev_ok_bind; [apply ev_ok_EOU_cfg |].
     intros v'; eapply ev_ok_bind;
-      [apply ev_ok_assert_attrs_dereferenceable | intros _; apply ev_ok_ret].
+      [apply ev_ok_assert_attrs_dereferenceable | intros r0; apply ev_ok_ret].
   Qed.
 
   Lemma ev_ok_apply_args_attrs
@@ -12337,7 +12398,7 @@ Section MemoryAndSerialization.
   Proof using.
     unfold check_call_return.
     eapply ev_ok_bind; [apply ev_ok_EOU_cfg |].
-    intros _; destruct res as [ex | v]; [apply ev_ok_ret |].
+    intros r0; destruct res as [ex | v]; [apply ev_ok_ret |].
     eapply ev_ok_bind; [apply ev_ok_apply_attrs | intros v'; apply ev_ok_ret].
   Qed.
 
@@ -12393,7 +12454,7 @@ Section MemoryAndSerialization.
     ev_ok (@is_non_global_cfg_ev) (@denote_operand_bundles (@ParamsV IP IPT) loc f obs).
   Proof using.
     unfold denote_operand_bundles.
-    eapply ev_ok_bind; [| intros _; apply ev_ok_ret].
+    eapply ev_ok_bind; [| intros r0; apply ev_ok_ret].
     apply ev_ok_map_monad; intros ob _.
     eapply ev_ok_bind.
     - apply ev_ok_map_monad; intros [[t e] | s] _;
@@ -12413,16 +12474,16 @@ Section MemoryAndSerialization.
     eapply ev_ok_bind; [apply ev_ok_denote_exp' | intros ptr_v].
     eapply ev_ok_bind; [apply ev_ok_denote_exp' | intros cmp_v].
     eapply ev_ok_bind; [apply ev_ok_denote_exp' | intros new_v].
-    eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros _].
+    eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros u0].
     eapply ev_ok_bind; [unfold load; apply ev_ok_cfg_subevent; reflexivity | intros loaded_v].
     eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros dv].
     destruct dv as [db | |]; [| apply ev_ok_cfg_raise | apply ev_ok_cfg_raise].
-    destruct db as [? | sz x | ? | ? | ? | ? ? | |]; try apply ev_ok_cfg_raise.
+    destruct db as [? | sz x | ? | ? | ? | | | ? ?]; try apply ev_ok_cfg_raise.
     - destruct sz as [? | ? |]; [apply ev_ok_cfg_raise | apply ev_ok_cfg_raise |].
       destruct (equ x one).
       + eapply ev_ok_bind;
           [unfold store; apply ev_ok_cfg_subevent; reflexivity
-          | intros _; unfold lwrite; apply ev_ok_cfg_subevent; reflexivity].
+          | intros u1; unfold lwrite; apply ev_ok_cfg_subevent; reflexivity].
       + unfold lwrite; apply ev_ok_cfg_subevent; reflexivity.
     - apply ev_ok_cfg_raiseUB.
   Qed.
@@ -12447,12 +12508,12 @@ Section MemoryAndSerialization.
     destruct (a_ptr armw) as [ptr_ty ptr_val], (a_val armw) as [a_ty a_val].
     eapply ev_ok_bind; [apply ev_ok_denote_exp' | intros ptr_v].
     eapply ev_ok_bind; [apply ev_ok_denote_exp' | intros a_v].
-    eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros _].
+    eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros u0].
     eapply ev_ok_bind; [unfold load; apply ev_ok_cfg_subevent; reflexivity | intros loaded_v].
     eapply ev_ok_bind; [apply ev_ok_denote_atomic_rmw_operation | intros stored_v].
-    eapply ev_ok_bind; [unfold store; apply ev_ok_cfg_subevent; reflexivity | intros _].
+    eapply ev_ok_bind; [unfold store; apply ev_ok_cfg_subevent; reflexivity | intros u1].
     eapply ev_ok_bind;
-      [unfold lwrite; apply ev_ok_cfg_subevent; reflexivity | intros _; apply ev_ok_ret].
+      [unfold lwrite; apply ev_ok_cfg_subevent; reflexivity | intros u2; apply ev_ok_ret].
   Qed.
 
   Lemma ev_ok_denote_instr
@@ -12468,9 +12529,9 @@ Section MemoryAndSerialization.
     - destruct iid as [id |]; [| apply ev_ok_cfg_raise].
       eapply ev_ok_bind; [apply ev_ok_denote_exp' | intros uv].
       eapply ev_ok_bind;
-        [unfold lwrite; apply ev_ok_cfg_subevent; reflexivity | intros _; apply ev_ok_ret].
+        [unfold lwrite; apply ev_ok_cfg_subevent; reflexivity | intros u0; apply ev_ok_ret].
     - eapply ev_ok_bind; [apply ev_ok_denote_call_args | intros vs].
-      eapply ev_ok_bind; [apply ev_ok_denote_operand_bundles | intros _].
+      eapply ev_ok_bind; [apply ev_ok_denote_operand_bundles | intros u0].
       eapply ev_ok_bind.
       + destruct (intrinsic_exp f) as [s |].
         * unfold intrinsic; apply ev_ok_cfg_subevent; reflexivity.
@@ -12482,7 +12543,7 @@ Section MemoryAndSerialization.
         intros rv; destruct iid as [id |];
           [unfold lwrite; apply ev_ok_cfg_subevent; reflexivity | apply ev_ok_ret].
     - destruct iid as [id |]; [| apply ev_ok_cfg_raise].
-      eapply ev_ok_bind; [| intros _; apply ev_ok_ret].
+      eapply ev_ok_bind; [| intros u0; apply ev_ok_ret].
       destruct (find_option ann_num_elements annotations) as [[t num_exp] |].
       + eapply ev_ok_bind; [apply ev_ok_denote_exp' | intros n].
         destruct (dvalue_is_poison n); [apply ev_ok_cfg_raiseUB |].
@@ -12495,17 +12556,17 @@ Section MemoryAndSerialization.
           | intros v; unfold lwrite; apply ev_ok_cfg_subevent; reflexivity].
     - destruct iid as [id |]; [| apply ev_ok_cfg_raise].
       eapply ev_ok_bind; [apply ev_ok_denote_exp' | intros a].
-      eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros _].
+      eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros u0].
       eapply ev_ok_bind; [unfold load; apply ev_ok_cfg_subevent; reflexivity | intros v].
       eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros v'].
       eapply ev_ok_bind;
         [apply ev_ok_assert_load_dereferenceable
-        | intros _; unfold lwrite; apply ev_ok_cfg_subevent; reflexivity].
+        | intros u1; unfold lwrite; apply ev_ok_cfg_subevent; reflexivity].
     - destruct iid; [apply ev_ok_cfg_raise |].
       eapply ev_ok_bind; [apply ev_ok_denote_exp' | intros v].
       eapply ev_ok_bind; [apply ev_ok_denote_exp' | intros a].
-      eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros _].
-      eapply ev_ok_bind; [| intros _; apply ev_ok_ret].
+      eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros u0].
+      eapply ev_ok_bind; [| intros u1; apply ev_ok_ret].
       destruct a as [db | |];
         [destruct db; try (unfold store; apply ev_ok_cfg_subevent; reflexivity);
          apply ev_ok_cfg_raiseUB
@@ -12519,7 +12580,7 @@ Section MemoryAndSerialization.
       eapply ev_ok_bind; [unfold load; apply ev_ok_cfg_subevent; reflexivity | intros retv].
       eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros ix].
       eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros args'].
-      eapply ev_ok_bind; [unfold store; apply ev_ok_cfg_subevent; reflexivity | intros _].
+      eapply ev_ok_bind; [unfold store; apply ev_ok_cfg_subevent; reflexivity | intros u0].
       destruct iid as [id |];
         [unfold lwrite; apply ev_ok_cfg_subevent; reflexivity | apply ev_ok_ret].
     - destruct iid as [id |]; [| apply ev_ok_cfg_raise].
@@ -12554,7 +12615,7 @@ Section MemoryAndSerialization.
     intros dvs; eapply ev_ok_bind.
     - apply ev_ok_map_monad; intros [id dv] _;
         unfold lwrite; apply ev_ok_cfg_subevent; reflexivity.
-    - intros _; apply ev_ok_ret.
+    - intros u0; apply ev_ok_ret.
   Qed.
 
   Lemma ev_ok_denote_terminator
@@ -12569,7 +12630,7 @@ Section MemoryAndSerialization.
     - apply ev_ok_ret.
     - eapply ev_ok_bind; [apply ev_ok_denote_exp' | intros v].
       destruct v as [db | |]; [| apply ev_ok_cfg_raise | apply ev_ok_cfg_raise].
-      destruct db as [? | sz x | ? | ? | ? | ? ? | |]; try apply ev_ok_cfg_raise.
+      destruct db as [? | sz x | ? | ? | ? | | | ? ?]; try apply ev_ok_cfg_raise.
       + destruct sz as [? | ? |]; [apply ev_ok_cfg_raise | apply ev_ok_cfg_raise |].
         destruct (equ x one); apply ev_ok_ret.
       + apply ev_ok_cfg_raiseUB.
@@ -12583,22 +12644,22 @@ Section MemoryAndSerialization.
       eapply ev_ok_bind.
       + apply ev_ok_map_monad; intros b _.
         eapply ev_ok_bind;
-          [unfold gread; apply ev_ok_cfg_subevent; reflexivity | intros _; apply ev_ok_ret].
+          [unfold gread; apply ev_ok_cfg_subevent; reflexivity | intros ba; apply ev_ok_ret].
       + intros addrs; destruct (dvalue_ptr_address a) as [z |]; [| apply ev_ok_cfg_raise].
         destruct (indirectbr_target z (List.combine brs addrs)) as [b |];
           [apply ev_ok_ret | apply ev_ok_cfg_raiseUB].
     - eapply ev_ok_bind; [apply ev_ok_denote_exp' | intros exn; apply ev_ok_cfg_raiseLLVM].
     - eapply ev_ok_bind; [apply ev_ok_denote_call_args | intros uvs].
-      eapply ev_ok_bind; [apply ev_ok_denote_operand_bundles | intros _].
+      eapply ev_ok_bind; [apply ev_ok_denote_operand_bundles | intros u0].
       eapply ev_ok_bind; [apply ev_ok_denote_exp' | intros fv].
       eapply ev_ok_bind; [unfold call; apply ev_ok_cfg_subevent; reflexivity | intros rv].
       eapply ev_ok_bind; [apply ev_ok_check_call_return | intros [exn | retv]].
       + eapply ev_ok_bind;
-          [unfold stack_raise; apply ev_ok_cfg_subevent; reflexivity | intros _; apply ev_ok_ret].
+          [unfold stack_raise; apply ev_ok_cfg_subevent; reflexivity | intros u1; apply ev_ok_ret].
       + eapply ev_ok_bind;
           [destruct iid as [id |];
              [unfold lwrite; apply ev_ok_cfg_subevent; reflexivity | apply ev_ok_ret]
-          | intros _; apply ev_ok_ret].
+          | intros u1; apply ev_ok_ret].
     - apply ev_ok_cfg_raiseUB.
   Qed.
 
@@ -12608,8 +12669,8 @@ Section MemoryAndSerialization.
     ev_ok (@is_non_global_cfg_ev) (@denote_block (@ParamsV IP IPT) b bid_from va).
   Proof using.
     unfold denote_block.
-    eapply ev_ok_bind; [apply ev_ok_denote_phis | intros _].
-    eapply ev_ok_bind; [apply ev_ok_denote_code | intros _].
+    eapply ev_ok_bind; [apply ev_ok_denote_phis | intros u0].
+    eapply ev_ok_bind; [apply ev_ok_denote_code | intros u1].
     apply ev_ok_denote_terminator.
   Qed.
 
@@ -12641,12 +12702,12 @@ Section MemoryAndSerialization.
     unfold push_call_frame.
     eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros [bs vs]].
     eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros dts].
-    eapply ev_ok_bind; [unfold mem_push; apply ev_ok_cfg_subevent; reflexivity | intros _].
-    eapply ev_ok_bind; [unfold stack_push; apply ev_ok_cfg_subevent; reflexivity | intros _].
+    eapply ev_ok_bind; [unfold mem_push; apply ev_ok_cfg_subevent; reflexivity | intros u0].
+    eapply ev_ok_bind; [unfold stack_push; apply ev_ok_cfg_subevent; reflexivity | intros u1].
     eapply ev_ok_bind; [unfold alloca; apply ev_ok_cfg_subevent; reflexivity | intros varargs].
-    eapply ev_ok_bind; [unfold store; apply ev_ok_cfg_subevent; reflexivity | intros _].
+    eapply ev_ok_bind; [unfold store; apply ev_ok_cfg_subevent; reflexivity | intros u2].
     destruct varargs as [db | |]; [| apply ev_ok_cfg_raise | apply ev_ok_cfg_raise].
-    destruct db as [varg | ? ? | ? | ? | ? | ? ? | |];
+    destruct db as [varg | ? ? | ? | ? | ? | | | ? ?];
       try apply ev_ok_cfg_raise; apply ev_ok_ret.
   Qed.
 
@@ -12656,7 +12717,7 @@ Section MemoryAndSerialization.
     unfold pop_call_frame.
     eapply ev_ok_bind;
       [unfold stack_pop; apply ev_ok_cfg_subevent; reflexivity
-      | intros _; unfold mem_pop; apply ev_ok_cfg_subevent; reflexivity].
+      | intros u0; unfold mem_pop; apply ev_ok_cfg_subevent; reflexivity].
   Qed.
 
   Lemma ev_ok_denote_function
@@ -12666,11 +12727,11 @@ Section MemoryAndSerialization.
   Proof using.
     unfold denote_function.
     destruct (dc_param_attrs (df_prototype df)) as [ret_attrs args_attrs].
-    eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros _].
+    eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros u0].
     eapply ev_ok_bind; [apply ev_ok_apply_args_attrs | intros args'].
     eapply ev_ok_bind; [apply ev_ok_push_call_frame | intros varg].
     eapply ev_ok_bind; [apply ev_ok_run_exc, ev_ok_denote_cfg_map | intros rv].
-    eapply ev_ok_bind; [apply ev_ok_pop_call_frame | intros _].
+    eapply ev_ok_bind; [apply ev_ok_pop_call_frame | intros u1].
     apply ev_ok_check_call_return.
   Qed.
 
@@ -12684,7 +12745,7 @@ Section MemoryAndSerialization.
     eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros addr].
     eapply ev_ok_bind; [unfold load; apply ev_ok_cfg_subevent; reflexivity | intros d_byte].
     destruct d_byte as [db | |]; [| apply ev_ok_cfg_raise | apply ev_ok_cfg_raise].
-    destruct db as [? | sz b | ? | ? | ? | ? ? | |]; try apply ev_ok_cfg_raise.
+    destruct db as [? | sz b | ? | ? | ? | | | ? ?]; try apply ev_ok_cfg_raise.
     destruct sz as [p | p |]; try apply ev_ok_cfg_raise;
       destruct p as [p | p |]; try apply ev_ok_cfg_raise;
       destruct p as [p | p |]; try apply ev_ok_cfg_raise;
@@ -12700,10 +12761,10 @@ Section MemoryAndSerialization.
     destruct args as [| ch [| ? ?]]; try apply ev_ok_cfg_raise.
     apply ev_ok_fmap.
     destruct ch as [db | |]; [| apply ev_ok_cfg_raiseUB | apply ev_ok_cfg_raiseUB].
-    destruct db as [? | sz x32 | ? | ? | ? | ? ? | |]; try apply ev_ok_cfg_raiseUB.
+    destruct db as [? | sz x32 | ? | ? | ? | | | ? ?]; try apply ev_ok_cfg_raiseUB.
     destruct (Pos.eq_dec 32 sz) as [<- | _]; [| apply ev_ok_cfg_raiseUB].
     eapply ev_ok_bind;
-      [unfold io_stdout; apply ev_ok_cfg_subevent; reflexivity | intros _; apply ev_ok_ret].
+      [unfold io_stdout; apply ev_ok_cfg_subevent; reflexivity | intros u0; apply ev_ok_ret].
   Qed.
 
   Lemma ev_ok_puts_denotation
@@ -12714,15 +12775,15 @@ Section MemoryAndSerialization.
     destruct args as [| u_strptr [| ? ?]]; try apply ev_ok_cfg_raise.
     apply ev_ok_fmap.
     destruct u_strptr as [db | |]; [| apply ev_ok_cfg_raiseUB | apply ev_ok_cfg_raiseUB].
-    destruct db as [strptr | ? ? | ? | ? | ? | ? ? | |]; try apply ev_ok_cfg_raiseUB.
+    destruct db as [strptr | ? ? | ? | ? | ? | | | ? ?]; try apply ev_ok_cfg_raiseUB.
     eapply ev_ok_bind; [apply ev_ok_i8_str_index | intros ch].
     eapply ev_ok_bind.
     - apply ev_ok_iter.
       intros [[c bytes] offset].
       destruct (@Integers.eq 8 c (@Integers.zero 8)); [apply ev_ok_ret |].
-      eapply ev_ok_bind; [apply ev_ok_i8_str_index | intros _; apply ev_ok_ret].
+      eapply ev_ok_bind; [apply ev_ok_i8_str_index | intros c'; apply ev_ok_ret].
     - intros bytes; eapply ev_ok_bind;
-        [unfold io_stdout; apply ev_ok_cfg_subevent; reflexivity | intros _; apply ev_ok_ret].
+        [unfold io_stdout; apply ev_ok_cfg_subevent; reflexivity | intros u0; apply ev_ok_ret].
   Qed.
 
   Lemma library_functions_ev_ok (decls : list (declaration dtyp)) :
@@ -12874,7 +12935,7 @@ Section MemoryAndSerialization.
              [apply refine_cfg_raise_both | intros _ _ _ _ _ _ []]
         | right; eapply refine_cfg_model_bind with (RA := fun _ _ _ => False);
              [apply refine_cfg_raise_both | intros _ _ _ _ _ _ []]].
-      destruct db as [addr | ? ? | ? | ? | ? | ? ? | |];
+      destruct db as [addr | ? ? | ? | ? | ? | | | ? ?];
         try (right; eapply refine_cfg_model_bind with (RA := fun _ _ _ => False);
              [apply refine_cfg_raise_both | intros _ _ _ _ _ _ []]).
       - cbn [check_callee].
@@ -13242,7 +13303,7 @@ Section MemoryAndSerialization.
       intros U1 s1' v1 s2' v2 _ (-> & -> & -> & <- & _).
       destruct v1 as [db | |];
         [| apply refine_cfg_exc_raise_both | apply refine_cfg_exc_raise_both].
-      destruct db as [? | sz x | ? | ? | ? | ? ? | |]; try apply refine_cfg_exc_raise_both.
+      destruct db as [? | sz x | ? | ? | ? | | | ? ?]; try apply refine_cfg_exc_raise_both.
       + destruct sz as [? | ? |];
           [apply refine_cfg_exc_raise_both | apply refine_cfg_exc_raise_both |].
         destruct (equ x one).
@@ -13768,7 +13829,7 @@ Section MemoryAndSerialization.
                                (conj Hinv' (conj (HTF_eq σ2 σ2' Hfs' HTF)
                                  (conj Hgenv (conj Hsafe_loc _)))))))))).
                  left; split; reflexivity. }
-             destruct a1 as [[? | ? ? | ? | ? | ? | ? ? | |] | |];
+             destruct a1 as [[? | ? ? | ? | ? | ? | | | ? ?] | |];
                try (apply Hdo_store, Ha_safe).
              eapply refine_prov_obs_eq;
                [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (raiseUB_bind_eq _ _)) | reflexivity |].
@@ -14158,7 +14219,7 @@ Section MemoryAndSerialization.
                - intros U4 [σ1' rest1'] _ [σ2' rest2'] _ _ ((<- & <-) & (-> & _ & _ & Hinv')).
                  apply refine_cfg_exc_ret.
                  exists σ1', σ2', sf1, sf2; repeat split; assumption. }
-             destruct a1 as [[? | ? ? | ? | ? | ? | ? ? | |] | |];
+             destruct a1 as [[? | ? ? | ? | ? | ? | | | ? ?] | |];
                try (apply Hdo_store, Ha_safe).
              eapply refine_prov_obs_eq;
                [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (raiseUB_bind_eq _ _)) | reflexivity |].
@@ -18344,7 +18405,7 @@ Section MemoryAndSerialization.
                [apply refine_prov_to_s1_cps, refine_cfg_raise_both | intros _ _ _ _ _ _ []]
           | eapply s1_cps_cfg_bind with (RA := fun _ _ _ => False);
                [apply refine_prov_to_s1_cps, refine_cfg_raise_both | intros _ _ _ _ _ _ []]].
-        destruct db as [addr | ? ? | ? | ? | ? | ? ? | |];
+        destruct db as [addr | ? ? | ? | ? | ? | | | ? ?];
           try (eapply s1_cps_cfg_bind with (RA := fun _ _ _ => False);
                [apply refine_prov_to_s1_cps, refine_cfg_raise_both | intros _ _ _ _ _ _ []]).
         + cbn [check_callee].

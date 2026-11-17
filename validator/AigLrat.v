@@ -37,6 +37,7 @@ From Vellvm Require
 From Vellvm Require Import
   Numeric.Zbits
   Numeric.Integers.
+Import Logic.
 
 Unset Implicit Arguments.
 Unset Strict Implicit.

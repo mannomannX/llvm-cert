@@ -94,6 +94,7 @@ From CertPasses Require Import
   Inline
   Pipeline
   McfgExport.
+Import Logic.
 
 Set Default Goal Selector "!".
 Unset Implicit Arguments.

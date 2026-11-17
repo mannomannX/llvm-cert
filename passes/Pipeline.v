@@ -41,6 +41,7 @@ From CertPasses Require Import
   SCCP
   Mem2Reg
   Inline.
+Import Logic.
 
 #[local] Existing Instance MemoryModelStateV.
 #[local] Existing Instance MemoryModelPrimitivesV.

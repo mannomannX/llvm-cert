@@ -63,6 +63,7 @@ From Vellvm Require Import
   Semantics.TopLevel
   Semantics.Libraries.
 Export LLVMAst.
+Import Logic.
 
 Arguments exp_block_addresses {T} _.
 Arguments texps_block_addresses {T} _.
@@ -1526,7 +1527,7 @@ Section ModelSemantics.
         cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind get
              ExtLib.Structures.Monad.ret memM_put_preserves_prov];
         destruct (read_byte_raw_mem _ _); exact I.
-    - intros [_ aid]; destruct (access_allowed _ _); intros σ; exact I.
+    - intros [b0 aid]; destruct (access_allowed _ _); intros σ; exact I.
   Qed.
 
   Local Lemma Write_byte_wf_prov (p : ptr) (b : memory_byte) :
@@ -1537,9 +1538,9 @@ Section ModelSemantics.
         cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind get
              ExtLib.Structures.Monad.ret memM_put_preserves_prov];
         destruct (read_byte_raw_mem _ _); exact I.
-    - intros [_ aid]; destruct (access_allowed _ _); [| intros σ; exact I].
+    - intros [b0 aid]; destruct (access_allowed _ _); [| intros σ; exact I].
       unfold set_byte_raw; apply memM_wf_prov_bind;
-        [intros σ; exact I | intros _ σ; exact (conj Logic.eq_refl I)].
+        [intros σ; exact I | intros m0 σ; exact (conj Logic.eq_refl I)].
   Qed.
 
   Local Lemma get_free_block_wf_prov (size align : N) (pr : provenance) :
@@ -1557,9 +1558,9 @@ Section ModelSemantics.
     unfold Allocate_bytes_with_pr, add_block_to_stack, add_block, add_ptrs_to_frame; cbn zeta.
     apply memM_wf_prov_bind; [apply get_free_block_wf_prov | intros [p ptrs]].
     apply memM_wf_prov_bind.
-    - apply memM_wf_prov_bind; [intros σ; exact I | intros _ σ; exact (conj Logic.eq_refl I)].
-    - intros _; apply memM_wf_prov_bind;
-        [intros σ; exact (conj Logic.eq_refl I) | intros _; apply memM_wf_prov_ret].
+    - apply memM_wf_prov_bind; [intros σ; exact I | intros m0 σ; exact (conj Logic.eq_refl I)].
+    - intros u0; apply memM_wf_prov_bind;
+        [intros σ; exact (conj Logic.eq_refl I) | intros u1; apply memM_wf_prov_ret].
   Qed.
 
   Local Lemma Malloc_bytes_with_pr_wf_prov (init_bytes : list memory_byte) (align : N) (pr : provenance) :
@@ -1568,9 +1569,9 @@ Section ModelSemantics.
     unfold Malloc_bytes_with_pr, add_block_to_heap, add_block, add_ptrs_to_heap; cbn zeta.
     apply memM_wf_prov_bind; [apply get_free_block_wf_prov | intros [p ptrs]].
     apply memM_wf_prov_bind.
-    - apply memM_wf_prov_bind; [intros σ; exact I | intros _ σ; exact (conj Logic.eq_refl I)].
-    - intros _; apply memM_wf_prov_bind;
-        [intros σ; exact (conj Logic.eq_refl I) | intros _; apply memM_wf_prov_ret].
+    - apply memM_wf_prov_bind; [intros σ; exact I | intros m0 σ; exact (conj Logic.eq_refl I)].
+    - intros u0; apply memM_wf_prov_bind;
+        [intros σ; exact (conj Logic.eq_refl I) | intros u1; apply memM_wf_prov_ret].
   Qed.
 
   Local Lemma Mempop_wf_prov :
@@ -1578,12 +1579,12 @@ Section ModelSemantics.
   Proof using.
     unfold Mempop; apply memM_wf_prov_bind.
     - unfold get_frame; apply memM_wf_prov_bind;
-        [intros σ; exact I | intros []; apply memM_wf_prov_ret].
+        [intros σ; exact I | intros [f0 | s0 f0]; apply memM_wf_prov_ret].
     - intros f; apply memM_wf_prov_bind.
       + unfold app_frame_stack_eob; apply memM_wf_prov_bind; [intros σ; exact I | intros fs].
         apply memM_wf_prov_bind;
-          [apply memM_wf_prov_lift | intros _ σ; exact (conj Logic.eq_refl I)].
-      + intros _ σ; exact (conj Logic.eq_refl I).
+          [apply memM_wf_prov_lift | intros fs' σ; exact (conj Logic.eq_refl I)].
+      + intros u0 σ; exact (conj Logic.eq_refl I).
   Qed.
 
   Local Lemma Free_wf_prov (p : ptr) :
@@ -1594,7 +1595,7 @@ Section ModelSemantics.
     | |- memM_wf_prov match ?e with _ => _ end => destruct e as [blk |]
     end; [| intros σ; exact I].
     cbn zeta; apply memM_wf_prov_bind;
-      [intros σ; exact (conj Logic.eq_refl I) | intros _ σ; exact (conj Logic.eq_refl I)].
+      [intros σ; exact (conj Logic.eq_refl I) | intros u0 σ; exact (conj Logic.eq_refl I)].
   Qed.
 
   Local Lemma read_bytes_wf_prov (p : ptr) (size : N) :
@@ -1620,7 +1621,7 @@ Section ModelSemantics.
     unfold convert_impure_base; destruct conv.
     - apply memM_wf_prov_bind.
       + unfold assert_inttoptr_types_ok; destruct tf, tt0; intros σ; exact I.
-      + intros _; destruct dv; apply memM_wf_prov_lift.
+      + intros u0; destruct dv; apply memM_wf_prov_lift.
     - destruct dv, tt0; try apply memM_wf_prov_lift; intros σ; exact I.
     - destruct dv, tt0; try apply memM_wf_prov_lift; intros σ; exact I.
     - intros σ; exact I.
@@ -1633,13 +1634,13 @@ Section ModelSemantics.
     unfold convert_impure; destruct dv as [db | ? ? | vc elts]; try (intros σ; exact I).
     - destruct (get_base_conversion_type tf tt0) as [[tf' tt'] |]; [| intros σ; exact I].
       cbn [Functor.fmap Functor_Monad].
-      apply memM_wf_prov_bind; [apply convert_impure_base_wf_prov | intros _; apply memM_wf_prov_ret].
+      apply memM_wf_prov_bind; [apply convert_impure_base_wf_prov | intros db'; apply memM_wf_prov_ret].
     - destruct vc; [| intros σ; exact I].
       destruct (get_vector_conversion_type tf tt0) as [[tf' tt'] |]; [| intros σ; exact I].
       apply memM_wf_prov_bind; [apply memM_wf_prov_lift | intros elts'].
       apply memM_wf_prov_bind.
       + apply memM_wf_prov_map_monad; intros v; apply convert_impure_base_wf_prov.
-      + intros _; apply memM_wf_prov_ret.
+      + intros val; apply memM_wf_prov_ret.
   Qed.
 
   Local Lemma handle_memoryM_wf_prov {T} (e : MemoryE T) :
@@ -1648,13 +1649,13 @@ Section ModelSemantics.
     destruct e as [| | dt n al | dt a | dt a v | ct tf v tt0]; cbn [handle_memoryM].
     - intros σ; exact (conj Logic.eq_refl I).
     - exact Mempop_wf_prov.
-    - cbn zeta; apply memM_wf_prov_bind; [| intros _; apply memM_wf_prov_ret].
+    - cbn zeta; apply memM_wf_prov_bind; [| intros p; apply memM_wf_prov_ret].
       unfold allocate_dtyp; destruct (dtyp_eqb dt DTYPE_Void); [intros σ; exact I |].
       cbn zeta; unfold allocate_bytes; cbn [allocate_bytes_with_pr MemoryModelPrimitivesV].
       apply memM_wf_prov_bind; [intros σ p; exact I | intros pr; apply Allocate_bytes_with_pr_wf_prov].
     - destruct a as [[p | | | | | | |] | |]; try (intros σ; exact I).
       unfold read_dvalue; apply memM_wf_prov_bind;
-        [apply read_bytes_wf_prov | intros _; apply memM_wf_prov_lift].
+        [apply read_bytes_wf_prov | intros bs; apply memM_wf_prov_lift].
     - destruct a as [[p | | | | | | |] | |]; try (intros σ; exact I).
       unfold write_dvalue; apply memM_wf_prov_bind;
         [apply memM_wf_prov_lift | intros bs; apply write_bytes_wf_prov].
@@ -1721,19 +1722,19 @@ Section ModelSemantics.
     apply memM_wf_prov_bind; [apply memM_wf_prov_lift | intros args'].
     destruct (is_memcpy_name name);
       [apply memM_wf_prov_bind;
-       [apply handle_memtransfer_wf_prov | intros _; apply memM_wf_prov_ret] |].
+       [apply handle_memtransfer_wf_prov | intros r; apply memM_wf_prov_ret] |].
     destruct (is_memmove_name name);
       [apply memM_wf_prov_bind;
-       [apply handle_memtransfer_wf_prov | intros _; apply memM_wf_prov_ret] |].
+       [apply handle_memtransfer_wf_prov | intros r; apply memM_wf_prov_ret] |].
     destruct (is_memset_name name);
       [apply memM_wf_prov_bind;
-       [apply handle_memset_wf_prov | intros _; apply memM_wf_prov_ret] |].
+       [apply handle_memset_wf_prov | intros r; apply memM_wf_prov_ret] |].
     destruct (Numeric.Rocqlib.proj_sumbool (string_dec name "malloc"));
       [apply memM_wf_prov_bind;
-       [apply handle_malloc_wf_prov | intros _; apply memM_wf_prov_ret] |].
+       [apply handle_malloc_wf_prov | intros r; apply memM_wf_prov_ret] |].
     destruct (Numeric.Rocqlib.proj_sumbool (string_dec name "free"));
       [apply memM_wf_prov_bind;
-       [apply handle_free_wf_prov | intros _; apply memM_wf_prov_ret]
+       [apply handle_free_wf_prov | intros r; apply memM_wf_prov_ret]
       | intros σ; exact I].
   Qed.
 

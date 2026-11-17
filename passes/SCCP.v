@@ -47,6 +47,7 @@ From Vellvm Require Import
   Semantics.TopLevel.
 
 From CertPasses Require Import PassCommon.
+Import Logic.
 
 Set Default Goal Selector "!".
 #[local] Unset Implicit Arguments.
@@ -2258,7 +2259,12 @@ Section SCCPSimulation.
         try (cbn [freeze]; apply cfg_local_sim_withCall_raise_sync).
       cbn [freeze].
       eapply cfg_local_sim_withCall_bind.
-      + generalize ([] : list (@dvalue PaV)) as acc.
+      + lazymatch goal with
+        | |- cfg_local_sim ?R ?e1 ?e2 (withCall (?go ?flds dts [])) (withCall (?go ?flds dts [])) =>
+            cut (forall acc : list (@dvalue PaV),
+                    cfg_local_sim R e1 e2 (withCall (go flds dts acc)) (withCall (go flds dts acc)));
+              [intros Hcut; exact (Hcut []) |]
+        end.
         revert dts env1 env2;
           induction IHfs as [| fv fvs Hfv _ IH];
           intros [| t ts] env1 env2 acc;
@@ -2272,7 +2278,12 @@ Section SCCPSimulation.
         try (cbn [freeze]; apply cfg_local_sim_withCall_raise_sync).
       cbn [freeze].
       eapply cfg_local_sim_withCall_bind.
-      + generalize ([] : list (@dvalue PaV)) as acc.
+      + lazymatch goal with
+        | |- cfg_local_sim ?R ?e1 ?e2 (withCall (?go ?els [])) (withCall (?go ?els [])) =>
+            cut (forall acc : list (@dvalue PaV),
+                    cfg_local_sim R e1 e2 (withCall (go els acc)) (withCall (go els acc)));
+              [intros Hcut; exact (Hcut []) |]
+        end.
         revert env1 env2;
           induction IHes as [| ev evs Hev _ IH];
           intros env1 env2 acc.

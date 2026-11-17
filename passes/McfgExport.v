@@ -57,6 +57,7 @@ From Vellvm Require Import
 
 From CertPasses Require Import
   PassCommon.
+Import Logic.
 
 Set Default Goal Selector "!".
 Unset Implicit Arguments.

@@ -62,6 +62,7 @@ From Vellvm Require Import
   Semantics.Libraries.
 
 From CertPasses Require Import PassCommon.
+Import Logic.
 
 Set Default Goal Selector "!".
 Unset Implicit Arguments.
@@ -3293,15 +3294,24 @@ Section InliningSemantics.
             | symmetry; rewrite Eqit.bind_ret_l; apply interp_mcfg_model_ret_eq |];
             pstep; apply RP_Step; cbn; auto.
     - destruct dt as [| p dts |]; try apply model_hoare_raise.
-      eapply model_hoare_bind; [| intros _; apply model_hoare_ret; intros s Hs; exact Hs].
-      revert dts; generalize ([] : list (@dvalue PaV)) as acc.
-      induction IHfs as [| f fs' Hf _ IH]; intros acc [| t ts];
+      eapply model_hoare_bind; [| intros val; apply model_hoare_ret; intros s Hs; exact Hs].
+      lazymatch goal with
+      | |- model_hoare ?I0 (?go fs dts []) ?Q0 =>
+          cut (forall acc : list (@dvalue PaV), model_hoare I0 (go fs dts acc) Q0);
+            [intros Hcut; exact (Hcut []) |]
+      end.
+      revert dts;
+      induction IHfs as [| f fs' Hf _ IH]; intros [| t ts] acc;
         try apply model_hoare_raise.
       + apply model_hoare_ret; intros s Hs; exact Hs.
       + eapply model_hoare_bind; [apply (Hf t) | intros v; apply IH].
     - destruct dt as [| | v sz t]; try apply model_hoare_raise.
-      eapply model_hoare_bind; [| intros _; apply model_hoare_ret; intros s Hs; exact Hs].
-      generalize ([] : list (@dvalue PaV)) as acc.
+      eapply model_hoare_bind; [| intros val; apply model_hoare_ret; intros s Hs; exact Hs].
+      lazymatch goal with
+      | |- model_hoare ?I0 (?go es []) ?Q0 =>
+          cut (forall acc : list (@dvalue PaV), model_hoare I0 (go es acc) Q0);
+            [intros Hcut; exact (Hcut []) |]
+      end.
       induction IHes as [| e es' He _ IH]; intros acc.
       + apply model_hoare_ret; intros s Hs; exact Hs.
       + eapply model_hoare_bind; [apply (He t) | intros v'; apply IH].
@@ -3325,42 +3335,42 @@ Section InliningSemantics.
       eapply model_hoare_bind;
         [apply model_hoare_map_monad; intros [t ex] Hin;
          rewrite Forall_forall in H; exact (H (t, ex) Hin (Some t))
-        | intros _; apply model_hoare_ret; auto].
+        | intros vs; apply model_hoare_ret; auto].
     - (* EXP_Struct *)
       eapply model_hoare_bind;
         [apply model_hoare_map_monad; intros [t ex] Hin;
          rewrite Forall_forall in H; exact (H (t, ex) Hin (Some t))
-        | intros _; apply model_hoare_ret; auto].
+        | intros vs; apply model_hoare_ret; auto].
     - (* EXP_Packed_struct *)
-      eapply model_hoare_bind; [apply model_hoare_EOU | intros _].
+      eapply model_hoare_bind; [apply model_hoare_EOU | intros u0].
       eapply model_hoare_bind;
         [apply model_hoare_map_monad; intros [t ex] Hin;
          rewrite Forall_forall in H; exact (H (t, ex) Hin (Some t))
-        | intros _; apply model_hoare_ret; auto].
+        | intros vs; apply model_hoare_ret; auto].
     - (* EXP_Array *)
       eapply model_hoare_bind;
         [apply model_hoare_map_monad; intros [t ex] Hin;
          rewrite Forall_forall in H; exact (H (t, ex) Hin (Some t))
-        | intros _; apply model_hoare_ret; auto].
+        | intros vs; apply model_hoare_ret; auto].
     - (* EXP_Vector *)
       eapply model_hoare_bind;
         [apply model_hoare_map_monad; intros [t ex] Hin;
          rewrite Forall_forall in H; exact (H (t, ex) Hin (Some t))
-        | intros _; apply model_hoare_ret; auto].
+        | intros vs; apply model_hoare_ret; auto].
     - (* OP_IBinop *)
-      eapply model_hoare_bind; [apply IHe1 | intros _].
-      eapply model_hoare_bind; [apply IHe2 | intros _; apply model_hoare_EOU].
+      eapply model_hoare_bind; [apply IHe1 | intros v1].
+      eapply model_hoare_bind; [apply IHe2 | intros v2; apply model_hoare_EOU].
     - (* OP_ICmp *)
-      eapply model_hoare_bind; [apply IHe1 | intros _].
-      eapply model_hoare_bind; [apply IHe2 | intros _; apply model_hoare_EOU].
+      eapply model_hoare_bind; [apply IHe1 | intros v1].
+      eapply model_hoare_bind; [apply IHe2 | intros v2; apply model_hoare_EOU].
     - (* OP_FBinop *)
-      eapply model_hoare_bind; [apply IHe1 | intros _].
-      eapply model_hoare_bind; [apply IHe2 | intros _; apply model_hoare_EOU].
+      eapply model_hoare_bind; [apply IHe1 | intros v1].
+      eapply model_hoare_bind; [apply IHe2 | intros v2; apply model_hoare_EOU].
     - (* OP_Fneg *)
-      eapply model_hoare_bind; [apply IHe | intros _; apply model_hoare_EOU].
+      eapply model_hoare_bind; [apply IHe | intros v1; apply model_hoare_EOU].
     - (* OP_FCmp *)
-      eapply model_hoare_bind; [apply IHe1 | intros _].
-      eapply model_hoare_bind; [apply IHe2 | intros _; apply model_hoare_EOU].
+      eapply model_hoare_bind; [apply IHe1 | intros v1].
+      eapply model_hoare_bind; [apply IHe2 | intros v2; apply model_hoare_EOU].
     - (* OP_Conversion *)
       eapply model_hoare_bind; [apply IHe | intros dv].
       unfold convert; destruct ct as [| pct | ict].
@@ -3370,38 +3380,38 @@ Section InliningSemantics.
       + apply model_hoare_EOU.
       + unfold conv; apply (model_hoare_memory_lsg_preserve I _ Hlsg).
     - (* OP_GetElementPtr *)
-      eapply model_hoare_bind; [apply IHe | intros _].
+      eapply model_hoare_bind; [apply IHe | intros vp].
       eapply model_hoare_bind;
         [apply model_hoare_map_monad; intros [t ex] Hin;
          rewrite Forall_forall in H; exact (H (t, ex) Hin (Some t))
-        | intros _; apply model_hoare_EOU].
+        | intros vs; apply model_hoare_EOU].
     - (* OP_ExtractElement *)
-      eapply model_hoare_bind; [apply IHe1 | intros _].
-      eapply model_hoare_bind; [apply IHe2 | intros _; apply model_hoare_EOU].
+      eapply model_hoare_bind; [apply IHe1 | intros v1].
+      eapply model_hoare_bind; [apply IHe2 | intros v2; apply model_hoare_EOU].
     - (* OP_InsertElement *)
-      eapply model_hoare_bind; [apply IHe1 | intros _].
-      eapply model_hoare_bind; [eapply model_hoare_bind; [apply IHe2 | intros _; apply model_hoare_EOU] | intros _].
-      eapply model_hoare_bind; [apply IHe3 | intros _; apply model_hoare_EOU].
+      eapply model_hoare_bind; [apply IHe1 | intros v1].
+      eapply model_hoare_bind; [eapply model_hoare_bind; [apply IHe2 | intros v2; apply model_hoare_EOU] | intros b2].
+      eapply model_hoare_bind; [apply IHe3 | intros v3; apply model_hoare_EOU].
     - (* OP_ShuffleVector *)
-      eapply model_hoare_bind; [apply IHe1 | intros _].
-      eapply model_hoare_bind; [apply IHe2 | intros _].
-      eapply model_hoare_bind; [apply IHe3 | intros _; apply model_hoare_EOU].
+      eapply model_hoare_bind; [apply IHe1 | intros v1].
+      eapply model_hoare_bind; [apply IHe2 | intros v2].
+      eapply model_hoare_bind; [apply IHe3 | intros v3; apply model_hoare_EOU].
     - (* OP_ExtractValue *)
-      eapply model_hoare_bind; [apply IHe | intros _; apply model_hoare_EOU].
+      eapply model_hoare_bind; [apply IHe | intros v1; apply model_hoare_EOU].
     - (* OP_InsertValue *)
-      eapply model_hoare_bind; [apply IHe1 | intros _].
-      eapply model_hoare_bind; [apply IHe2 | intros _; apply model_hoare_EOU].
+      eapply model_hoare_bind; [apply IHe1 | intros v1].
+      eapply model_hoare_bind; [apply IHe2 | intros v2; apply model_hoare_EOU].
     - (* OP_Select *)
-      eapply model_hoare_bind; [apply IHe1 | intros _].
-      eapply model_hoare_bind; [apply IHe2 | intros _].
-      eapply model_hoare_bind; [apply IHe3 | intros _; apply model_hoare_EOU].
+      eapply model_hoare_bind; [apply IHe1 | intros v1].
+      eapply model_hoare_bind; [apply IHe2 | intros v2].
+      eapply model_hoare_bind; [apply IHe3 | intros v3; apply model_hoare_EOU].
     - (* OP_Freeze *)
       eapply model_hoare_bind; [apply IHe | intros dv; apply model_hoare_freeze_preserve].
     - (* EXP_BlockAddress *)
       apply model_hoare_gread_preserve.
     - (* EXP_Splat *)
       eapply model_hoare_bind; [apply model_hoare_EOU | intros [_sz _t]].
-      eapply model_hoare_bind; [apply IHe | intros _; apply model_hoare_ret; auto].
+      eapply model_hoare_bind; [apply IHe | intros v1; apply model_hoare_ret; auto].
     - (* EXP_Metadata (METADATA_Const) *)
       apply IHe.
     - (* EXP_Metadata (other) *)
@@ -7016,15 +7026,26 @@ Section InliningSemantics.
     - destruct dt as [| p dts |]; try (apply mcfg_inline_sim_raise, Hact).
       eapply gen_inline_sim_bind;
         [| intros ? v1 v2 [-> <-]; apply gen_inline_sim_ret; split; reflexivity].
-      revert dts; generalize ([] : list (@dvalue PaV)) as acc.
-      induction IHfs as [| f fs' Hf _ IH]; intros acc [| t ts];
+      lazymatch goal with
+      | |- gen_inline_sim ?o1 ?o2 ?g ?R ?ic0 (?go fs dts []) (?go fs dts []) =>
+          cut (forall acc : list (@dvalue PaV),
+                  gen_inline_sim o1 o2 g R ic0 (go fs dts acc) (go fs dts acc));
+            [intros Hcut; exact (Hcut []) |]
+      end.
+      revert dts;
+      induction IHfs as [| f fs' Hf _ IH]; intros [| t ts] acc;
         try (apply mcfg_inline_sim_raise, Hact).
       + apply gen_inline_sim_ret; split; reflexivity.
       + eapply gen_inline_sim_bind; [apply (Hf t) | intros ? v1 v2 [-> <-]; apply IH].
     - destruct dt as [| | v sz t]; try (apply mcfg_inline_sim_raise, Hact).
       eapply gen_inline_sim_bind;
         [| intros ? v1 v2 [-> <-]; apply gen_inline_sim_ret; split; reflexivity].
-      generalize ([] : list (@dvalue PaV)) as acc.
+      lazymatch goal with
+      | |- gen_inline_sim ?o1 ?o2 ?g ?R ?ic0 (?go es []) (?go es []) =>
+          cut (forall acc : list (@dvalue PaV),
+                  gen_inline_sim o1 o2 g R ic0 (go es acc) (go es acc));
+            [intros Hcut; exact (Hcut []) |]
+      end.
       induction IHes as [| e es' He _ IH]; intros acc.
       + apply gen_inline_sim_ret; split; reflexivity.
       + eapply gen_inline_sim_bind; [apply (He t) | intros ? v1 v2 [-> <-]; apply IH].
@@ -8544,7 +8565,7 @@ Section InliningSemantics.
   Proof.
     destruct ins as [s_cmt | op | [dt f] args anns obs | dt annotations
                      | dt [du ptr] anns | [dt val] [du ptr] anns
-                     | cpx | armw | [t ptr_exp] argty | s_f1 s_f2 | lp_t lp_b lp_cs].
+                     | s_f1 s_f2 | cpx | armw | [t ptr_exp] argty | lp_t lp_b lp_cs].
     - (* INSTR_Comment *)
       destruct iid as [id | vn]; cbn [denote_instr].
       + apply cfg_inline_sim_raise; reflexivity.
@@ -8688,6 +8709,9 @@ Section InliningSemantics.
              apply cfg_inline_sim_raiseUB.
           -- intros ? [] _ [-> _]; apply gen_inline_sim_ret.
              split; [reflexivity | split; [reflexivity | exists e1, e2; auto]].
+    - (* INSTR_Fence *)
+      cbn [denote_instr].
+      apply gen_inline_sim_ret; split; [reflexivity | split; [reflexivity | exists e1, e2; auto]].
     - (* INSTR_AtomicCmpXchg *)
       destruct iid as [id | vn]; cbn [denote_instr]; [| apply cfg_inline_sim_raise; reflexivity].
       apply denote_cmpxchg_caller_sim; [| exact Hagree].
@@ -8723,9 +8747,6 @@ Section InliningSemantics.
           split; [reflexivity | split; [reflexivity |]].
           eexists _, _; split; [reflexivity | apply env_agree_outside_add_both, Hagree].
         * apply gen_inline_sim_ret; split; [reflexivity | split; [reflexivity | exists e1, e2; auto]].
-    - (* INSTR_Fence *)
-      cbn [denote_instr].
-      apply gen_inline_sim_ret; split; [reflexivity | split; [reflexivity | exists e1, e2; auto]].
     - (* INSTR_LandingPad *)
       destruct iid as [id | vn]; cbn [denote_instr]; [| apply cfg_inline_sim_raise; reflexivity].
       eapply gen_inline_sim_bind;

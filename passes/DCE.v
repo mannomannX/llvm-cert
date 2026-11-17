@@ -64,6 +64,7 @@ From Vellvm Require Import
   Semantics.Libraries.
 
 From CertPasses Require Import PassCommon.
+Import Logic.
 
 Set Default Goal Selector "!".
 Unset Implicit Arguments.
@@ -2825,7 +2826,12 @@ Section DCESoundness.
         [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
       eapply cfg_local_sim_bind with
         (RR := fun e1' e2' r1 r2 => e1' = env1 /\ e2' = env2 /\ r1 = r2).
-      + generalize ([] : list (@dvalue PaV)) as acc.
+      + lazymatch goal with
+        | |- cfg_local_sim ?R ?e1 ?e2 (withCall (?go fields dts [])) (withCall (?go fields dts [])) =>
+            cut (forall acc : list (@dvalue PaV),
+                    cfg_local_sim R e1 e2 (withCall (go fields dts acc)) (withCall (go fields dts acc)));
+              [intros Hcut; exact (Hcut []) |]
+        end.
         revert dts env1 env2;
           induction IHfs as [| fv fvs Hfv _ IH];
           intros [| t ts] env1 env2 acc;
@@ -2850,7 +2856,12 @@ Section DCESoundness.
         [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
       eapply cfg_local_sim_bind with
         (RR := fun e1' e2' r1 r2 => e1' = env1 /\ e2' = env2 /\ r1 = r2).
-      + generalize ([] : list (@dvalue PaV)) as acc.
+      + lazymatch goal with
+        | |- cfg_local_sim ?R ?e1 ?e2 (withCall (?go elts [])) (withCall (?go elts [])) =>
+            cut (forall acc : list (@dvalue PaV),
+                    cfg_local_sim R e1 e2 (withCall (go elts acc)) (withCall (go elts acc)));
+              [intros Hcut; exact (Hcut []) |]
+        end.
         revert env1 env2;
           induction IHes as [| ev evs Hev _ IH];
           intros env1 env2 acc.
