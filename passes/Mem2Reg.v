@@ -6280,9 +6280,9 @@ Section MemoryAndSerialization.
             | inl1 p2 =>
                 match p2 in ProvE Y2 return (Y2 -> itree ProvBotE R) -> Prop with
                 | FreshProv => fun k2' => forall p : N, r (k1' p) (k2' p)
-                end k2
+                end
             | inr1 _ => fun _ => False
-            end
+            end k2
         end
     | inr1 b1 => fun k1' =>
         match e2 return (X2 -> itree ProvBotE R) -> Prop with

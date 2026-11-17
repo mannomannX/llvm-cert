@@ -1999,9 +1999,9 @@ Section ModelSemantics.
                 match p2 in ProvE Y2 return (Y2 -> itree ProvBotE R2) -> Prop with
                 | FreshProv => fun k2' =>
                     forall p : N, ~ In p U -> r (p :: U) (k1' p) (k2' p)
-                end k2
+                end
             | inr1 _ => fun _ => False
-            end
+            end k2
         end
     | inr1 b1 => fun k1' =>
         match e2 return (X2 -> itree ProvBotE R2) -> Prop with
@@ -3188,9 +3188,9 @@ Section ModelSemantics.
                      Maps.lookup x1 env1 = Maps.lookup x1 env2 /\
                      forall v, Maps.lookup x1 env1 = Some v -> r env1 env2 (k1' v) (k2' v)
                  | _ => fun _ => False
-                 end k2
+                 end
              | _ => fun _ => False
-             end
+             end k2
          | _ => fun _ => False
          end
      | _ => fun _ => False

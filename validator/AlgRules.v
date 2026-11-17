@@ -98,7 +98,7 @@ Lemma alg_pos_nu_const {x y : positive} (p q : x = y) :
   alg_pos_nu p = alg_pos_nu q.
 Proof.
   unfold alg_pos_nu.
-  destruct (Pos.eq_dec x y) as [_ | Hne]; [reflexivity | contradiction (Hne p)].
+  destruct (Pos.eq_dec x y) as [Heq | Hne]; [reflexivity | contradiction (Hne p)].
 Qed.
 
 Lemma alg_pos_nu_left_inv {x y : positive} (p : x = y) :
