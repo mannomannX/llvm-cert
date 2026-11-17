@@ -3773,7 +3773,7 @@ Proof.
          split; [exact (step_spec_refl st1 asg1 (proj2 (proj2 Hs1))) |
          split; [exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs1))))) |
                  exact (sat_eval_lit_false asg1 st1 (proj2 (proj2 Hs1)))]]]].
-    set (sa := msb_lit a); set (sb := msb_lit b);
+    cbn zeta; set (sa := msb_lit a); set (sb := msb_lit b);
       set (ss := List.nth (Pos.to_nat sz - 1) sums lit_false).
     assert (Hw_sa : wf_lit_bound (bs_next_var st) sa)
       by exact (wf_msb_lit sz _ a (proj1 (proj1 Hsat)) (conj (conj Hwa Hla) (conj Hba Hpa))).
@@ -3990,7 +3990,7 @@ Proof.
          split; [exact (step_spec_refl st1 asg1 (proj2 (proj2 Hs1))) |
          split; [exact (wf_lit_bound_false _ (proj1 (proj1 (proj2 (proj2 Hs1))))) |
                  exact (sat_eval_lit_false asg1 st1 (proj2 (proj2 Hs1)))]]]].
-    set (sa := msb_lit a); set (sb := msb_lit b);
+    cbn zeta; set (sa := msb_lit a); set (sb := msb_lit b);
       set (sd := List.nth (Pos.to_nat sz - 1) diffs lit_false).
     assert (Hw_sa : wf_lit_bound (bs_next_var st) sa)
       by exact (wf_msb_lit sz _ a (proj1 (proj1 Hsat)) (conj (conj Hwa Hla) (conj Hba Hpa))).
@@ -4482,7 +4482,7 @@ Proof.
                 eval_lit asg03 nsw_l =
                   (nsw && existsb (xorb (List.nth (n - 1 - k) ba false)) (List.skipn (n - k) ba))).
     { destruct nsw.
-      - set (s_res := List.nth (n - 1 - k) (rbv_bits a) lit_false).
+      - cbn zeta; set (s_res := List.nth (n - 1 - k) (rbv_bits a) lit_false).
         assert (Hw_sr : wf_lit_bound (bs_next_var s01) s_res).
         { unfold s_res; apply wf_lits_bound_nth;
             [exact (wf_lits_bound_mono _ _ _ (proj1 Hs01) Hba0)
@@ -5158,7 +5158,7 @@ Proof.
               wf_lit_bound (bs_next_var st3) nsw_l /\
               eval_lit asg3 nsw_l = (nsw && existsb (xorb b_slo) b_hi)).
   { destruct nsw.
-    - set (s_lo := List.nth (Pos.to_nat tw - 1) lo lit_false).
+    - cbn zeta; set (s_lo := List.nth (Pos.to_nat tw - 1) lo lit_false).
       assert (Hw_slo0 : wf_lit_bound (bs_next_var st) s_lo)
         by exact (wf_lits_bound_nth _ _ lo lit_false (wf_lits_bound_firstn _ _ _ Hba)
                     (wf_lit_bound_false _ (proj1 (proj1 Hsat)))).

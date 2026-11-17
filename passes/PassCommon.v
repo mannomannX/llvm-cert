@@ -1425,6 +1425,8 @@ Section ModelSemantics.
         * gfinal; left; exact (CIH (k x) pr).
   Qed.
 
+  Local Transparent det_prov_h.
+
   Lemma memM_interp_prov_det {R} (m : memM R) (σ : state) :
     interp_state det_prov_h (memM_interp_prov m σ) σ.(state_provenance) ≈
       ITree.map (fun '(σ', r) => (σ'.(state_provenance), (σ', r))) (memM_interp m σ).
@@ -1434,18 +1436,27 @@ Section ModelSemantics.
     - rewrite interp_state_ret; unfold ITree.map; rewrite Eqit.bind_ret_l; reflexivity.
     - unfold raiseOOM, trigger_cast, ITree.map;
         rewrite interp_state_bind, interp_state_trigger;
-        unfold subevent, resum, ReSum_inr, resum; cbn beta;
-        rewrite det_prov_h_inr1, Eqit.bind_bind, bind_trigger; symmetry;
+        unfold det_prov_h, subevent, resum;
+        cbn -[print_msg ITree.trigger interp_state ITree.bind];
+        unfold resum, ReSum_id, id_, Id_IFun;
+        cbn -[print_msg ITree.trigger interp_state ITree.bind];
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger; apply eqit_Vis; intros [].
     - unfold raiseUB, trigger_cast, ITree.map;
         rewrite interp_state_bind, interp_state_trigger;
-        unfold subevent, resum, ReSum_inr, resum; cbn beta;
-        rewrite det_prov_h_inr1, Eqit.bind_bind, bind_trigger; symmetry;
+        unfold det_prov_h, subevent, resum;
+        cbn -[print_msg ITree.trigger interp_state ITree.bind];
+        unfold resum, ReSum_id, id_, Id_IFun;
+        cbn -[print_msg ITree.trigger interp_state ITree.bind];
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger; apply eqit_Vis; intros [].
     - unfold raise, trigger_cast, ITree.map;
         rewrite interp_state_bind, interp_state_trigger;
-        unfold subevent, resum, ReSum_inr, resum; cbn beta;
-        rewrite det_prov_h_inr1, Eqit.bind_bind, bind_trigger; symmetry;
+        unfold det_prov_h, subevent, resum;
+        cbn -[print_msg ITree.trigger interp_state ITree.bind];
+        unfold resum, ReSum_id, id_, Id_IFun;
+        cbn -[print_msg ITree.trigger interp_state ITree.bind];
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger; apply eqit_Vis; intros [].
     - apply IH.
     - exact (IH tt σ').
@@ -1474,8 +1485,11 @@ Section ModelSemantics.
       unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger;
-        unfold subevent, resum, ReSum_inr, resum; cbn beta;
-        rewrite det_prov_h_inr1, Eqit.bind_bind, bind_trigger; symmetry;
+        unfold det_prov_h, subevent, resum;
+        cbn -[print_msg ITree.trigger interp_state ITree.bind];
+        unfold resum, ReSum_id, id_, Id_IFun;
+        cbn -[print_msg ITree.trigger interp_state ITree.bind];
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger; symmetry;
         apply eqit_Vis; intros x;
         rewrite Eqit.bind_ret_l, interp_state_ret, Eqit.bind_ret_l; reflexivity.
@@ -1525,32 +1539,44 @@ Section ModelSemantics.
       unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger;
-        unfold subevent, resum, ReSum_inr, resum; cbn beta;
-        rewrite det_prov_h_inr1, Eqit.bind_bind, bind_trigger; symmetry;
+        unfold det_prov_h, subevent, resum;
+        cbn -[print_msg ITree.trigger interp_state ITree.bind];
+        unfold resum, ReSum_id, id_, Id_IFun;
+        cbn -[print_msg ITree.trigger interp_state ITree.bind];
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger;
         apply eqit_Vis; intros [].
     - (* LLVMExcE *)
       unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger;
-        unfold subevent, resum, ReSum_inr, resum; cbn beta;
-        rewrite det_prov_h_inr1, Eqit.bind_bind, bind_trigger; symmetry;
+        unfold det_prov_h, subevent, resum;
+        cbn -[print_msg ITree.trigger interp_state ITree.bind];
+        unfold resum, ReSum_id, id_, Id_IFun;
+        cbn -[print_msg ITree.trigger interp_state ITree.bind];
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger;
         apply eqit_Vis; intros [].
     - (* UBE *)
       unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger;
-        unfold subevent, resum, ReSum_inr, resum; cbn beta;
-        rewrite det_prov_h_inr1, Eqit.bind_bind, bind_trigger; symmetry;
+        unfold det_prov_h, subevent, resum;
+        cbn -[print_msg ITree.trigger interp_state ITree.bind];
+        unfold resum, ReSum_id, id_, Id_IFun;
+        cbn -[print_msg ITree.trigger interp_state ITree.bind];
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger;
         apply eqit_Vis; intros [].
     - (* DebugE *)
       unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger;
-        unfold subevent, resum, ReSum_inr, resum; cbn beta;
-        rewrite det_prov_h_inr1, Eqit.bind_bind, bind_trigger; symmetry;
+        unfold det_prov_h, subevent, resum;
+        cbn -[print_msg ITree.trigger interp_state ITree.bind];
+        unfold resum, ReSum_id, id_, Id_IFun;
+        cbn -[print_msg ITree.trigger interp_state ITree.bind];
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger; symmetry;
         apply eqit_Vis; intros x;
         rewrite Eqit.bind_ret_l, interp_state_ret, Eqit.bind_ret_l; reflexivity.
@@ -1558,11 +1584,16 @@ Section ModelSemantics.
       unfold fused_trigger_prov, fused_trigger, trigger, ITree.map;
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
         rewrite interp_state_bind, interp_state_trigger;
-        unfold subevent, resum, ReSum_inr, resum; cbn beta;
-        rewrite det_prov_h_inr1, Eqit.bind_bind, bind_trigger; symmetry;
+        unfold det_prov_h, subevent, resum;
+        cbn -[print_msg ITree.trigger interp_state ITree.bind];
+        unfold resum, ReSum_id, id_, Id_IFun;
+        cbn -[print_msg ITree.trigger interp_state ITree.bind];
+        rewrite Eqit.bind_bind, bind_trigger; symmetry;
         rewrite Eqit.bind_bind, bind_trigger;
         apply eqit_Vis; intros [].
   Qed.
+
+  Local Opaque det_prov_h.
 
   Lemma interp_vellvm_prov_h_det_rel {T} (e : MCFGEtop T) (s : FusedS) :
     eutt (fun '(pr', sx1) sx2 => pr' = (fst sx2).(state_provenance) /\ sx1 = sx2)
