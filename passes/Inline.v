@@ -2629,19 +2629,19 @@ Section InliningSemantics.
     end.
 
   Definition inl_mcfg_event_post {X : Type} (e : @MCFGEtop PaV X) (a : X) : Prop :=
-    match e in (_ +' _) Y return Y -> Prop with
+    match e return X -> Prop with
     | inl1 _ => fun _ => True
     | inr1 e1 =>
-        match e1 in (_ +' _) Y return Y -> Prop with
+        match e1 return X -> Prop with
         | inl1 _ => fun _ => True
         | inr1 e2 =>
-            match e2 in (_ +' _) Y return Y -> Prop with
+            match e2 return X -> Prop with
             | inl1 _ => fun _ => True
             | inr1 e3 =>
-                match e3 in (_ +' _) Y return Y -> Prop with
+                match e3 return X -> Prop with
                 | inl1 _ => fun _ => True
                 | inr1 e4 =>
-                    match e4 in (_ +' _) Y return Y -> Prop with
+                    match e4 return X -> Prop with
                     | inl1 me =>
                         match me in MemoryE Y return Y -> Prop with
                         | Alloca _ _ _ =>
@@ -2656,7 +2656,7 @@ Section InliningSemantics.
     end a.
 
   Definition inl_cfg_event_post {X : Type} (e : @CFGEtop PaV X) (a : X) : Prop :=
-    match e in (_ +' _) Y return Y -> Prop with
+    match e return X -> Prop with
     | inl1 _ => fun _ => True
     | inr1 m => inl_mcfg_event_post m
     end a.
@@ -4596,7 +4596,7 @@ Section InliningSemantics.
   Definition callee_opt_call (p_callee : @ptr PaV) (callee_fn : @function_denotation PaV)
     : forall X, @CFGEtop PaV X -> option (@CFGtop PaV X) :=
     fun X e =>
-      match e in (_ +' _) Y return option (@CFGtop PaV Y) with
+      match e return option (@CFGtop PaV X) with
       | inl1 ce =>
           match ce in CallE Y return option (@CFGtop PaV Y) with
           | Call _ cc fv args =>

@@ -561,14 +561,14 @@ Definition sum_prerel_c {E1 E2 D1 D2 : Type -> Type}
 Definition sum_postrel_c {E1 E2 D1 D2 : Type -> Type}
   (PO1 : postrel E1 D1) (PO2 : postrel E2 D2) : postrel (E1 +' E2) (D1 +' D2) :=
   fun A B e1 a1 e2 a2 =>
-    match e1 in (_ +' _) A' return A' -> (D1 +' D2) B -> B -> Prop with
+    match e1 return A -> (D1 +' D2) B -> B -> Prop with
     | inl1 x1 => fun a1' e2' a2' =>
-        match e2' in (_ +' _) B' return B' -> Prop with
+        match e2' return B -> Prop with
         | inl1 x2 => fun a2'' => PO1 _ _ x1 a1' x2 a2''
         | inr1 _ => fun _ => False
         end a2'
     | inr1 y1 => fun a1' e2' a2' =>
-        match e2' in (_ +' _) B' return B' -> Prop with
+        match e2' return B -> Prop with
         | inl1 _ => fun _ => False
         | inr1 y2 => fun a2'' => PO2 _ _ y1 a1' y2 a2''
         end a2'
@@ -1266,7 +1266,7 @@ Section ModelSemantics.
     end.
 
   Definition bot_ans_provs {X} (e : @MCFGEbot (@ParamsV IP IPT) X) (a : X) : list N :=
-    match e in (_ +' _) Y return Y -> list N with
+    match e return X -> list N with
     | inl1 ec =>
         match ec in ExternalCallE Y return Y -> list N with
         | ExternalCall _ _ _ => dvalue_provs
@@ -1546,11 +1546,11 @@ Section ModelSemantics.
     (U : list N)
     {X1} (e1 : ProvBotE X1) (k1 : X1 -> itree ProvBotE R1)
     {X2} (e2 : ProvBotE X2) (k2 : X2 -> itree ProvBotE R2) : Prop :=
-    match e1 in (_ +' _) Y1 return (Y1 -> itree ProvBotE R1) -> Prop with
+    match e1 return (X1 -> itree ProvBotE R1) -> Prop with
     | inl1 p1 =>
         match p1 in ProvE Y1 return (Y1 -> itree ProvBotE R1) -> Prop with
         | FreshProv => fun k1' =>
-            match e2 in (_ +' _) Y2 return (Y2 -> itree ProvBotE R2) -> Prop with
+            match e2 return (X2 -> itree ProvBotE R2) -> Prop with
             | inl1 p2 =>
                 match p2 in ProvE Y2 return (Y2 -> itree ProvBotE R2) -> Prop with
                 | FreshProv => fun k2' =>
@@ -1560,7 +1560,7 @@ Section ModelSemantics.
             end
         end
     | inr1 b1 => fun k1' =>
-        match e2 in (_ +' _) Y2 return (Y2 -> itree ProvBotE R2) -> Prop with
+        match e2 return (X2 -> itree ProvBotE R2) -> Prop with
         | inl1 _ => fun _ => False
         | inr1 b2 => fun k2' =>
             EqE_bot _ _ b1 b2 /\
@@ -1587,7 +1587,7 @@ Section ModelSemantics.
         end
     | VisF e1 k1 =>
         is_ub_prov e1 = true
-        \/ (match e1 in (_ +' _) Y1 return (Y1 -> itree ProvBotE R1) -> Prop with
+        \/ (match e1 with
             | inl1 p1 =>
                 match p1 in ProvE Y1 return (Y1 -> itree ProvBotE R1) -> Prop with
                 | FreshProv => fun k1' =>
@@ -2569,19 +2569,19 @@ Section ModelSemantics.
   Qed.
 
   Definition mcfg_event_post {X : Type} (e : @MCFGEtop (@ParamsV IP IPT) X) (a : X) : Prop :=
-    match e in (_ +' _) Y return Y -> Prop with
+    match e return X -> Prop with
     | inl1 _ => fun _ => True
     | inr1 e1 =>
-        match e1 in (_ +' _) Y return Y -> Prop with
+        match e1 return X -> Prop with
         | inl1 _ => fun _ => True
         | inr1 e2 =>
-            match e2 in (_ +' _) Y return Y -> Prop with
+            match e2 return X -> Prop with
             | inl1 _ => fun _ => True
             | inr1 e3 =>
-                match e3 in (_ +' _) Y return Y -> Prop with
+                match e3 return X -> Prop with
                 | inl1 _ => fun _ => True
                 | inr1 e4 =>
-                    match e4 in (_ +' _) Y return Y -> Prop with
+                    match e4 return X -> Prop with
                     | inl1 me =>
                         match me in MemoryE Y return Y -> Prop with
                         | Load dt _ => fun dv => is_scalar_dtyp dt = true -> dvalue_has_dtyp dv dt
@@ -2589,7 +2589,7 @@ Section ModelSemantics.
                         | _ => fun _ => True
                         end
                     | inr1 e5 =>
-                        match e5 in (_ +' _) Y return Y -> Prop with
+                        match e5 return X -> Prop with
                         | inl1 de =>
                             match de in DrawE Y return Y -> Prop with
                             | Draw dt => fun dv => is_scalar_dtyp dt = true -> dvalue_has_dtyp dv dt
@@ -2603,7 +2603,7 @@ Section ModelSemantics.
     end a.
 
   Definition cfg_event_post {X : Type} (e : @CFGEtop (@ParamsV IP IPT) X) (a : X) : Prop :=
-    match e in (_ +' _) Y return Y -> Prop with
+    match e return X -> Prop with
     | inl1 _ => fun _ => True
     | inr1 m => mcfg_event_post m
     end a.
@@ -2732,11 +2732,11 @@ Section ModelSemantics.
        cfg_event_post e1 a1 ->
        r env1 env2 (k1 a1) (k2 a2))
     \/
-    (match e1 in (_ +' _) Y1 return (Y1 -> @CFGtop (@ParamsV IP IPT) R1) -> Prop with
+    (match e1 return (X1 -> @CFGtop (@ParamsV IP IPT) R1) -> Prop with
      | inr1 (inr1 (inr1 (inr1 (inl1 (inl1 le1))))) =>
          match le1 in LocalE Y1 return (Y1 -> @CFGtop (@ParamsV IP IPT) R1) -> Prop with
          | LocalRead x1 => fun k1' =>
-             match e2 in (_ +' _) Y2 return (Y2 -> @CFGtop (@ParamsV IP IPT) R2) -> Prop with
+             match e2 return (X2 -> @CFGtop (@ParamsV IP IPT) R2) -> Prop with
              | inr1 (inr1 (inr1 (inr1 (inl1 (inl1 le2))))) =>
                  match le2 in LocalE Y2 return (Y2 -> @CFGtop (@ParamsV IP IPT) R2) -> Prop with
                  | LocalRead x2 => fun k2' =>

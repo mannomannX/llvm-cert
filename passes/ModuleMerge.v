@@ -4693,9 +4693,9 @@ Section ValueDrawRefinement.
     (U : list N)
     {X1} (e1 : ProvDrawBotE X1) (k1 : X1 -> itree ProvDrawBotE R1)
     {X2} (e2 : ProvDrawBotE X2) (k2 : X2 -> itree ProvDrawBotE R2) : Prop :=
-    match e1 in (_ +' _) Y1 return (Y1 -> itree ProvDrawBotE R1) -> Prop with
+    match e1 return (X1 -> itree ProvDrawBotE R1) -> Prop with
     | inl1 d1 => fun k1' =>
-        match e2 in (_ +' _) Y2 return (Y2 -> itree ProvDrawBotE R2) -> Prop with
+        match e2 return (X2 -> itree ProvDrawBotE R2) -> Prop with
         | inl1 d2 => fun k2' =>
             match d1 in DrawE Z1 return (Z1 -> itree ProvDrawBotE R1) -> Prop with
             | Draw dt1 => fun k1'' =>
@@ -4708,14 +4708,14 @@ Section ValueDrawRefinement.
         | inr1 _ => fun _ => False
         end k2
     | inr1 pe1 => fun k1' =>
-        match e2 in (_ +' _) Y2 return (Y2 -> itree ProvDrawBotE R2) -> Prop with
+        match e2 return (X2 -> itree ProvDrawBotE R2) -> Prop with
         | inl1 _ => fun _ => False
         | inr1 pe2 => fun k2' =>
-            match pe1 in (_ +' _) Y1' return (Y1' -> itree ProvDrawBotE R1) -> Prop with
+            match pe1 return (X1 -> itree ProvDrawBotE R1) -> Prop with
             | inl1 p1 => fun kp1 =>
                 match p1 in ProvE Z1 return (Z1 -> itree ProvDrawBotE R1) -> Prop with
                 | FreshProv => fun kp1' =>
-                    match pe2 in (_ +' _) Y2' return (Y2' -> itree ProvDrawBotE R2) -> Prop with
+                    match pe2 return (X2 -> itree ProvDrawBotE R2) -> Prop with
                     | inl1 p2 => fun kp2 =>
                         match p2 in ProvE Z2 return (Z2 -> itree ProvDrawBotE R2) -> Prop with
                         | FreshProv => fun kp2' =>
@@ -4725,7 +4725,7 @@ Section ValueDrawRefinement.
                     end k2'
                 end kp1
             | inr1 b1 => fun kb1 =>
-                match pe2 in (_ +' _) Y2' return (Y2' -> itree ProvDrawBotE R2) -> Prop with
+                match pe2 return (X2 -> itree ProvDrawBotE R2) -> Prop with
                 | inl1 _ => fun _ => False
                 | inr1 b2 => fun kb2 =>
                     EqE_bot _ _ b1 b2 /\
@@ -4755,10 +4755,10 @@ Section ValueDrawRefinement.
         end
     | VisF e1 k1 =>
         is_ub_prov_draw e1 = true
-        \/ (match e1 in (_ +' _) Y1 return (Y1 -> itree ProvDrawBotE R1) -> Prop with
+        \/ (match e1 with
             | inl1 _ => fun _ => False
             | inr1 pe1 => fun k1' =>
-                match pe1 in (_ +' _) Y1' return (Y1' -> itree ProvDrawBotE R1) -> Prop with
+                match pe1 with
                 | inl1 p1 => fun kp1 =>
                     match p1 in ProvE Z1 return (Z1 -> itree ProvDrawBotE R1) -> Prop with
                     | FreshProv => fun kp1' =>

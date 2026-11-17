@@ -2010,10 +2010,10 @@ Proof.
   - exact Hag.
   - lia.
   - apply (wf_cnf_bound_mono v (Pos.succ v)); [lia | exact Hwf].
-  - rewrite <- (Hag 1%positive) by lia; exact Ha1.
+  - unfold asg1; rewrite <- (Hag 1%positive) by lia; exact Ha1.
   - rewrite <- (eval_cnf_agree v asg asg1 (bs_cnf st) Hag Hwf); exact Hev.
   - lia.
-  - apply set_asg_same.
+  - unfold asg1; apply set_asg_same.
 Qed.
 
 Lemma alloc_fresh_bits_sat : forall bs asg st lits st',

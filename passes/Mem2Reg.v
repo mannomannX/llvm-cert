@@ -6271,11 +6271,11 @@ Section MemoryAndSerialization.
     (r : itree ProvBotE R -> itree ProvBotE R -> Prop)
     {X1} (e1 : ProvBotE X1) (k1 : X1 -> itree ProvBotE R)
     {X2} (e2 : ProvBotE X2) (k2 : X2 -> itree ProvBotE R) : Prop :=
-    match e1 in (_ +' _) Y1 return (Y1 -> itree ProvBotE R) -> Prop with
+    match e1 return (X1 -> itree ProvBotE R) -> Prop with
     | inl1 p1 =>
         match p1 in ProvE Y1 return (Y1 -> itree ProvBotE R) -> Prop with
         | FreshProv => fun k1' =>
-            match e2 in (_ +' _) Y2 return (Y2 -> itree ProvBotE R) -> Prop with
+            match e2 return (X2 -> itree ProvBotE R) -> Prop with
             | inl1 p2 =>
                 match p2 in ProvE Y2 return (Y2 -> itree ProvBotE R) -> Prop with
                 | FreshProv => fun k2' => forall p : N, r (k1' p) (k2' p)
@@ -6284,7 +6284,7 @@ Section MemoryAndSerialization.
             end
         end
     | inr1 b1 => fun k1' =>
-        match e2 in (_ +' _) Y2 return (Y2 -> itree ProvBotE R) -> Prop with
+        match e2 return (X2 -> itree ProvBotE R) -> Prop with
         | inl1 _ => fun _ => False
         | inr1 b2 => fun k2' =>
             EqE_bot _ _ b1 b2 /\
