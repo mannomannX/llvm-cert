@@ -2318,7 +2318,8 @@ Section ModelSemantics.
         destruct e1 as [p1 | b1]; [| contradiction]; destruct p1.
         intros p Hp; specialize (Hleft p Hp); pclearbot.
         right; apply CIH.
-        eapply refine_prov_obs_eq; [apply reflexivity | rewrite (itree_eta t2), Hot2; reflexivity | exact Hleft].
+        eapply refine_prov_obs_eq; [apply reflexivity | | exact Hleft].
+        rewrite (itree_eta t2), Hot2; reflexivity.
     - eapply RP_TauL; [exact Ht1 | apply IH, Hot2].
     - rewrite Hot2 in Ht2; inversion Ht2; subst m2'.
       eapply refine_prov__mon;
@@ -5091,7 +5092,7 @@ Section ModelSemantics.
         U (memM_interp_prov m σ) (memM_interp_prov m σ).
   Proof using.
     induction m as [x | s | s | s | k IH | σ' k IH | c k IH]; intros σ U; cbn in *.
-    - pstep; apply RP_Step; cbn; repeat split; [reflexivity | reflexivity | exact Hm].
+    - pstep; apply RP_Step; cbn; split; [reflexivity | split; [reflexivity | exact Hm]].
     - unfold raiseOOM, trigger_cast, ITree.trigger; pstep; apply RP_Step; cbn.
       right; right; split; [exact I | intros [] [] _].
     - unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply RP_Step; cbn; left; reflexivity.
@@ -5774,7 +5775,7 @@ Section ModelSemantics.
         (map_monad address_one_function (List.map (map_defn_with_args f) defs)).
   Proof using.
     induction defs as [| df defs' IH]; intros stk env1 env2; cbn [List.map map_monad].
-    - apply gen_stack_sim_ret; repeat split; [reflexivity | constructor].
+    - apply gen_stack_sim_ret; repeat split; constructor.
     - eapply gen_stack_sim_bind.
       + unfold address_one_function; cbn [map_defn_with_args df_prototype].
         eapply gen_stack_sim_bind.
@@ -5790,7 +5791,7 @@ Section ModelSemantics.
       + intros ? ? ? [k1 fn1] [k2 fn2] (-> & -> & -> & Hhd).
         eapply gen_stack_sim_bind; [apply IH |].
         intros ? ? ? tl1 tl2 (-> & -> & -> & Htl).
-        apply gen_stack_sim_ret; repeat split; [reflexivity | constructor; assumption].
+        apply gen_stack_sim_ret; repeat split; constructor; assumption.
   Qed.
 
   Lemma map_monad_address_library_stack_sim
@@ -5819,7 +5820,7 @@ Section ModelSemantics.
         (map_monad address_one_library_function libs).
   Proof using.
     induction Hlibs as [| [fid den] rest Hden _ IH]; intros stk env1 env2; cbn [map_monad].
-    - apply gen_stack_sim_ret; repeat split; [reflexivity | constructor].
+    - apply gen_stack_sim_ret; repeat split; constructor.
     - eapply gen_stack_sim_bind.
       + unfold address_one_library_function.
         eapply gen_stack_sim_bind.
@@ -5829,11 +5830,11 @@ Section ModelSemantics.
           destruct fv as [[p | | | | | | |] | |];
             try (unfold raise, trigger_cast; apply gen_stack_sim_trigger_sync;
                  [reflexivity | apply EqE_MCFG_refl | apply EqA_MCFG_eq]).
-          apply gen_stack_sim_ret; repeat split; [reflexivity | exact Hden].
+          apply gen_stack_sim_ret; repeat split; exact Hden.
       + intros ? ? ? [k1 fn1] [k2 fn2] (-> & -> & -> & Hhd).
         eapply gen_stack_sim_bind; [apply IH |].
         intros ? ? ? tl1 tl2 (-> & -> & -> & Htl).
-        apply gen_stack_sim_ret; repeat split; [reflexivity | constructor; assumption].
+        apply gen_stack_sim_ret; repeat split; constructor; assumption.
   Qed.
 
   Theorem lift_cfg_with_args_local_pass

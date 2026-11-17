@@ -2463,7 +2463,7 @@ Section DCESoundness.
     P x ->
     left_evals_to P env1 (Ret x).
   Proof.
-    intros HP env2; apply cfg_local_sim_ret; repeat split; [reflexivity | reflexivity | exact HP].
+    intros HP env2; apply cfg_local_sim_ret; split; [reflexivity | split; [reflexivity | exact HP]].
   Qed.
 
   Lemma left_evals_to_withCall_ret {R : Type}
@@ -2483,7 +2483,7 @@ Section DCESoundness.
   Proof.
     intros HPQ H env2.
     eapply cfg_local_sim_weaken; [| apply H].
-    intros ? ? r1 _ (-> & -> & Hr); repeat split; [reflexivity | reflexivity | apply HPQ, Hr].
+    intros ? ? r1 _ (-> & -> & Hr); split; [reflexivity | split; [reflexivity | apply HPQ, Hr]].
   Qed.
 
   Lemma left_evals_to_bind {R S : Type}
@@ -2523,7 +2523,7 @@ Section DCESoundness.
     pstep; eapply CLS_ReadL.
     - apply withCall_lread.
     - exact Hlk.
-    - left; apply cfg_local_sim_ret; repeat split; [reflexivity | reflexivity | exact HP].
+    - left; apply cfg_local_sim_ret; split; [reflexivity | split; [reflexivity | exact HP]].
   Qed.
 
   Lemma left_evals_to_withCall_EOU {R : Type}
@@ -2536,7 +2536,7 @@ Section DCESoundness.
       pstep; apply CLS_Step; unfold cls_step_body.
       repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
     - eapply cfg_local_sim_obs_eq; [symmetry; apply withCall_ret | reflexivity |].
-      apply cfg_local_sim_ret; repeat split; [reflexivity | reflexivity | exact Hm].
+      apply cfg_local_sim_ret; split; [reflexivity | split; [reflexivity | exact Hm]].
   Qed.
 
   Lemma left_evals_to_bind_sim {R1 S1 S2 : Type}
@@ -2573,7 +2573,7 @@ Section DCESoundness.
     right; left; split; [exact Hsync | split; [apply EqE_CFG_refl |]].
     intros a1 a2 Ha Hp; apply EqA_CFG_eq in Ha; subst a2.
     left; apply cfg_local_sim_ret.
-    repeat split; [reflexivity | reflexivity | reflexivity | apply Hpost, Hp].
+    split; [reflexivity | split; [reflexivity | split; [reflexivity | apply Hpost, Hp]]].
   Qed.
 
   Lemma cfg_local_sim_raise_sync {R1 R2 : Type}
@@ -2626,7 +2626,7 @@ Section DCESoundness.
     - unfold raiseOOM, trigger_cast, ITree.trigger; pstep; apply CLS_Step; cbn;
         right; left; split; [reflexivity | split; [apply EqE_CFG_refl | intros [] [] _ _]].
     - apply cfg_local_sim_raiseUB_cut.
-    - apply cfg_local_sim_ret; repeat split; [reflexivity | reflexivity | reflexivity | exact Hm].
+    - apply cfg_local_sim_ret; split; [reflexivity | split; [reflexivity | split; [reflexivity | exact Hm]]].
   Qed.
 
   Lemma cfg_local_sim_EOU_sync {R : Type}
@@ -2656,7 +2656,7 @@ Section DCESoundness.
         unfold cls_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
     - eapply cfg_local_sim_obs_eq;
         [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
-      apply cfg_local_sim_ret; repeat split; [reflexivity | reflexivity | reflexivity | exact Hm].
+      apply cfg_local_sim_ret; split; [reflexivity | split; [reflexivity | split; [reflexivity | exact Hm]]].
   Qed.
 
   Lemma cfg_local_sim_withCall_EOU_sync {R : Type}
@@ -2716,7 +2716,7 @@ Section DCESoundness.
     intros a1 a2 Ha Hp; apply EqA_CFG_eq in Ha; subst a2.
     left; eapply cfg_local_sim_obs_eq;
       [symmetry; apply translate_ret | symmetry; apply translate_ret |].
-    apply cfg_local_sim_ret; repeat split; [reflexivity | reflexivity | reflexivity | exact Hp].
+    apply cfg_local_sim_ret; split; [reflexivity | split; [reflexivity | split; [reflexivity | exact Hp]]].
   Qed.
 
   Lemma cfg_local_sim_withCall_conv_sync
@@ -2780,7 +2780,7 @@ Section DCESoundness.
       + (* DVALUE_Poison -> draw dt *)
         eapply cfg_local_sim_weaken; [| apply cfg_local_sim_withCall_draw_sync].
         intros ? ? ? ? (-> & -> & <- & Hdr).
-        repeat split; [reflexivity | reflexivity | reflexivity | intros Hsc _; apply Hdr, Hsc].
+        split; [reflexivity | split; [reflexivity | split; [reflexivity | intros Hsc _; apply Hdr, Hsc]]].
       + cbn [Functor.fmap Functor_itree ITree.map].
         eapply cfg_local_sim_obs_eq;
           [symmetry; rewrite Eqit.bind_ret_l; apply withCall_ret
@@ -2811,8 +2811,8 @@ Section DCESoundness.
              intros ? ? x _ (-> & -> & <- & _).
              eapply cfg_local_sim_obs_eq;
                [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
-             apply cfg_local_sim_ret; repeat split;
-               [reflexivity | reflexivity | reflexivity | intros Hsc Hty; exfalso; exact (Hnot_sc Hsc Hty)].
+             apply cfg_local_sim_ret; split;
+               [reflexivity | split; [reflexivity | split; [reflexivity | intros Hsc Hty; exfalso; exact (Hnot_sc Hsc Hty)]]].
           -- cbn [Functor.fmap Functor_itree ITree.map].
              eapply cfg_local_sim_obs_eq;
                [symmetry; rewrite Eqit.bind_ret_l; apply withCall_ret
@@ -2846,8 +2846,8 @@ Section DCESoundness.
       + intros ? ? val _ (-> & -> & <-).
         eapply cfg_local_sim_obs_eq;
           [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
-        apply cfg_local_sim_ret; repeat split;
-          [reflexivity | reflexivity | reflexivity | intros Hsc; discriminate Hsc].
+        apply cfg_local_sim_ret; split;
+          [reflexivity | split; [reflexivity | split; [reflexivity | intros Hsc; discriminate Hsc]]].
     - (* DVALUE_Array *)
       destruct dt as [| | v' sz t];
         try (cbn [freeze]; apply cfg_local_sim_withCall_raise_sync).
@@ -2875,8 +2875,8 @@ Section DCESoundness.
       + intros ? ? val _ (-> & -> & <-).
         eapply cfg_local_sim_obs_eq;
           [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
-        apply cfg_local_sim_ret; repeat split;
-          [reflexivity | reflexivity | reflexivity | intros Hsc; discriminate Hsc].
+        apply cfg_local_sim_ret; split;
+          [reflexivity | split; [reflexivity | split; [reflexivity | intros Hsc; discriminate Hsc]]].
   Qed.
 
   Lemma cfg_local_sim_withCall_lread_sync
@@ -2898,7 +2898,7 @@ Section DCESoundness.
     intros v Hv; left.
     eapply cfg_local_sim_obs_eq;
       [symmetry; apply translate_ret | symmetry; apply translate_ret |].
-    apply cfg_local_sim_ret; repeat split; [reflexivity | reflexivity | reflexivity | exact Hv].
+    apply cfg_local_sim_ret; split; [reflexivity | split; [reflexivity | split; [reflexivity | exact Hv]]].
   Qed.
 
   Lemma cfg_local_sim_lwrite_both
@@ -4618,11 +4618,11 @@ Section DCESoundness.
           eapply cfg_local_sim_bind; [apply cfg_local_sim_alloca_sync |].
           intros ? ? v _ (-> & -> & <- & Hv).
           eapply cfg_local_sim_weaken; [| apply cfg_local_sim_lwrite_both].
-          intros ? ? _ _ (-> & -> & _); exists v; repeat split; [reflexivity | reflexivity | exact Hv].
+          intros ? ? _ _ (-> & -> & _); exists v; split; [reflexivity | split; [reflexivity | exact Hv]].
         * eapply cfg_local_sim_bind; [apply cfg_local_sim_alloca_sync |].
           intros ? ? v _ (-> & -> & <- & Hv).
           eapply cfg_local_sim_weaken; [| apply cfg_local_sim_lwrite_both].
-          intros ? ? _ _ (-> & -> & _); exists v; repeat split; [reflexivity | reflexivity | exact Hv].
+          intros ? ? _ _ (-> & -> & _); exists v; split; [reflexivity | split; [reflexivity | exact Hv]].
       + intros ? ? _ _ (v & -> & -> & Hv).
         apply cfg_local_sim_ret; split; [intros ->; reflexivity |].
         split.
@@ -4993,7 +4993,7 @@ Section DCESoundness.
     intros Hin Hte.
     induction phis as [| [[id [pfm dt args]] md] rest IH]; intros Huses.
     - cbn [dce_phis kept_phi_defs List.map map_monad].
-      apply cfg_local_sim_ret; repeat split; [reflexivity | reflexivity | constructor].
+      apply cfg_local_sim_ret; split; [reflexivity | split; [reflexivity | constructor]].
     - cbn [dce_phis List.map] in Huses |- *.
       destruct (negb (in_raw_ids id live_after) &&
                 forallb (fun '(pred, te_e) =>
@@ -5032,8 +5032,8 @@ Section DCESoundness.
           [reflexivity | symmetry; apply Eqit.bind_ret_r |].
         eapply cfg_local_sim_bind; [exact (IH Huses) |].
         intros ? ? dvs1 dvs2 (-> & -> & Hpvr).
-        apply cfg_local_sim_ret; repeat split;
-          [reflexivity | reflexivity | apply PVR_drop; assumption].
+        apply cfg_local_sim_ret; split;
+          [reflexivity | split; [reflexivity | apply PVR_drop; assumption]].
       + (* Kept phi *)
         cbn [kept_phis_uses_from flat_map] in Huses.
         pose proof (env_agree_on_app_l _ _ _ _ Huses) as Hag_hd.
@@ -5063,8 +5063,8 @@ Section DCESoundness.
         * intros ? ? _ _ (-> & -> & <- & uv & -> & Huv).
           eapply cfg_local_sim_bind; [exact (IH Hag_tl) |].
           intros ? ? dvs1 dvs2 (-> & -> & Hpvr).
-          apply cfg_local_sim_ret; repeat split;
-            [reflexivity | reflexivity | apply PVR_keep; assumption].
+          apply cfg_local_sim_ret; split;
+            [reflexivity | split; [reflexivity | apply PVR_keep; assumption]].
   Qed.
 
   Lemma dce_phis_sim

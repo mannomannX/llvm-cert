@@ -1818,7 +1818,7 @@ Proof.
       destruct (lookup_let_expr m nm) as [ce |]; [| contradiction].
       exact Hnm.
     + destruct (lookup_let_expr m nm) as [ce |]; [contradiction |].
-      cbn; repeat split; [exact Hwt | reflexivity].
+      cbn; repeat split; exact Hwt.
   - cbn [wt_cert_expr expand_lets_with cert_expr_bit_width is_let_free_expr] in *.
     rewrite !andb_true_iff in Hwt; destruct Hwt as ((((Hfl & Hwtl) & Hwtr) & Hwl) & Hwr).
     destruct (IHl lw m Hwtl (conj Hdom Hsub)) as (Hbl & Htl & Hfl_l).
@@ -3669,7 +3669,7 @@ Proof.
     incl (collect_free_vars [] (CE_BinOp op w fl nl nr))
          (collect_free_vars [] nl ++ collect_free_vars [] nr)).
   { cbn; rewrite Hfl, Htl, Htr, Hwl, Hwr, !Pos.eqb_refl, Hfl_l, Hfl_r;
-      repeat split; [reflexivity | apply incl_refl]. }
+      repeat split; apply incl_refl. }
   assert (Hl_out :
     cert_expr_bit_width nl = w /\
     wt_cert_expr [] nl = true /\
@@ -4801,7 +4801,7 @@ Proof.
     incl (collect_free_vars [] (CE_ICmp pr ss w nl nr))
          (collect_free_vars [] nl ++ collect_free_vars [] nr)).
   { cbn; rewrite Htl, Htr, Hwl, Hwr, !Pos.eqb_refl, Hfl_l, Hfl_r.
-    repeat split; [reflexivity | apply incl_refl]. }
+    repeat split; apply incl_refl. }
   assert (Hswp_out : forall ic,
     cert_expr_bit_width (CE_ICmp (swap_cert_icmp pr) ss w nr (mk_bv_const w ic)) = 1%positive /\
     wt_cert_expr [] (CE_ICmp (swap_cert_icmp pr) ss w nr (mk_bv_const w ic)) = true /\
@@ -5062,7 +5062,7 @@ Proof.
     wt_cert_expr [] (CE_Cast k fw tw fl no) = true /\
     is_let_free_expr (CE_Cast k fw tw fl no) = true /\
     incl (collect_free_vars [] (CE_Cast k fw tw fl no)) (collect_free_vars [] no)).
-  { cbn; rewrite Hk, Hto, Hwo, Pos.eqb_refl, Hfl_o; repeat split; [reflexivity | apply incl_refl]. }
+  { cbn; rewrite Hk, Hto, Hwo, Pos.eqb_refl, Hfl_o; repeat split; apply incl_refl. }
   unfold norm_cast_step.
   destruct (try_fold_const_cast k fw tw fl no) as [c |] eqn:Etc.
   - destruct no as [fw' val | pw | | | | | | |]; try discriminate Etc;
@@ -5242,7 +5242,7 @@ Proof.
     incl (collect_free_vars [] (CE_Select w nc nt nf))
          (collect_free_vars [] nc ++ collect_free_vars [] nt ++ collect_free_vars [] nf)).
   { cbn; rewrite Htc, Htt, Htf, Hwc, Hwt0, Hwf0, !Pos.eqb_refl, Hlc, Hlt, Hlf.
-    repeat split; [reflexivity | apply incl_refl]. }
+    repeat split; apply incl_refl. }
   unfold norm_select_step.
   destruct (is_one_const_expr 1 nc && ub_free_expr nf).
   - repeat split; [exact Hwt0 | exact Htt | exact Hlt |].

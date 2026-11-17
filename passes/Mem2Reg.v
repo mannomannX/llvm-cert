@@ -2330,7 +2330,7 @@ Section MemoryAndSerialization.
     - eapply refine_prov_obs_eq;
         [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
       destruct (access_allowed (ptr_provenance p) aid).
-      + apply refine_prov_ret; repeat split; [apply incl_refl | exact Hmem | exact Hfs | exact Hh | reflexivity].
+      + apply refine_prov_ret; repeat split; [apply incl_refl | exact Hmem | exact Hfs | exact Hh].
       + apply memM_interp_prov_raiseUB_l.
     - cbn [memM_interp_prov]; eapply refine_prov_obs_eq;
         [symmetry; unfold raiseUB, trigger_cast, ITree.trigger; rewrite Eqit.bind_bind, Eqit.bind_vis; reflexivity
@@ -2367,8 +2367,7 @@ Section MemoryAndSerialization.
           [apply incl_refl
           | apply Equal_add, Hmem
           | exact Hfs
-          | exact Hh
-          | reflexivity].
+          | exact Hh].
       + apply memM_interp_prov_raiseUB_l.
     - cbn [memM_interp_prov]; eapply refine_prov_obs_eq;
         [symmetry; unfold raiseUB, trigger_cast, ITree.trigger; rewrite Eqit.bind_bind, Eqit.bind_vis; reflexivity
@@ -2386,7 +2385,7 @@ Section MemoryAndSerialization.
   Proof using.
     revert U σ1 σ2 Heq; induction ptrs as [| p ptrs' IH]; intros U σ1 σ2 Heq;
       cbn [map_monad].
-    - apply refine_prov_ret; repeat split; [apply incl_refl | apply Heq | apply Heq | apply Heq | reflexivity].
+    - apply refine_prov_ret; split; [apply incl_refl | split; [exact Heq | reflexivity]].
     - eapply refine_prov_obs_eq;
         [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
       eapply refine_prov_bind; [apply Read_byte_equal_sync, Heq |].
@@ -2431,7 +2430,7 @@ Section MemoryAndSerialization.
   Proof using.
     revert U σ1 σ2 Heq; induction pbs as [| [pt mb] pbs' IH]; intros U σ1 σ2 Heq;
       cbn [loop_monad].
-    - apply refine_prov_ret; repeat split; [apply incl_refl | apply Heq | apply Heq | apply Heq | reflexivity].
+    - apply refine_prov_ret; split; [apply incl_refl | split; [exact Heq | reflexivity]].
     - eapply refine_prov_obs_eq;
         [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
       eapply refine_prov_bind; [apply Write_byte_equal_sync, Heq |].
@@ -2689,7 +2688,7 @@ Section MemoryAndSerialization.
     unfold Mempush, app_frame_stack, get, put;
       cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
     apply refine_prov_ret; repeat split; cbn;
-      [apply incl_refl | exact Hmem | unfold push_frame_stack; congruence | exact Hh | reflexivity].
+      [apply incl_refl | exact Hmem | unfold push_frame_stack; congruence | exact Hh].
   Qed.
 
   Lemma Mempop_equal_sync (U : list N) (σ1 σ2 : state)
@@ -2714,7 +2713,7 @@ Section MemoryAndSerialization.
         [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
       cbn [pop_frame_stack Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
       apply refine_prov_ret; repeat split; cbn;
-        [apply incl_refl | apply Equal_free_frame_memory, Hmem | reflexivity | exact Hh | reflexivity].
+        [apply incl_refl | apply Equal_free_frame_memory, Hmem | exact Hh].
   Qed.
 
   Lemma Free_equal_sync (p : @ptr ProvenanceV (@PointerV IP))
@@ -2735,7 +2734,7 @@ Section MemoryAndSerialization.
     destruct (IntMaps.lookup (ptr_to_int p) (Memory_stack_heap (state_memory_stack σ2))) as [blk |].
     - cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
       apply refine_prov_ret; repeat split; cbn;
-        [apply incl_refl | apply Equal_free_frame_memory, Hmem | exact Hfs | reflexivity | reflexivity].
+        [apply incl_refl | apply Equal_free_frame_memory, Hmem | exact Hfs].
     - apply memM_interp_prov_raiseUB_l.
   Qed.
 

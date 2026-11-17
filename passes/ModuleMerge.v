@@ -2362,7 +2362,7 @@ Section CompositionalLinking.
   Proof using.
     induction Hdefs as [| d1 d2 r1 r2 (Hpr & Har & Hbd) _ IH];
       intros stk env1 env2; cbn [map_monad].
-    - apply gen_stack_sim_ret; repeat split; [reflexivity | constructor].
+    - apply gen_stack_sim_ret; repeat split; constructor.
     - eapply gen_stack_sim_bind.
       + unfold address_one_function; rewrite Hpr.
         eapply gen_stack_sim_bind.
@@ -2378,7 +2378,7 @@ Section CompositionalLinking.
       + intros ? ? ? [k1 fn1] [k2 fn2] (-> & -> & -> & Hhd).
         eapply gen_stack_sim_bind; [apply IH |].
         intros ? ? ? tl1 tl2 (-> & -> & -> & Htl).
-        apply gen_stack_sim_ret; repeat split; [reflexivity | constructor; assumption].
+        apply gen_stack_sim_ret; repeat split; constructor; assumption.
   Qed.
 
   #[local] Definition mm_mrec_ctx
@@ -7553,7 +7553,7 @@ Section ValueDrawRefinement.
   Proof using.
     induction Hdefs as [| d1 d2 r1 r2 (Hpr & Hlen & RR_b & Hsub & Hup & Hbd) _ IH];
       intros stk env1 env2; cbn [map_monad].
-    - apply vds_sim_ret; repeat split; [reflexivity | constructor].
+    - apply vds_sim_ret; repeat split; constructor.
     - eapply vds_sim_bind.
       + unfold address_one_function; rewrite Hpr.
         eapply vds_sim_bind.
@@ -7575,7 +7575,7 @@ Section ValueDrawRefinement.
       + intros ? ? ? [k1 fn1] [k2 fn2] (-> & -> & -> & Hhd).
         eapply vds_sim_bind; [apply IH |].
         intros ? ? ? tl1 tl2 (-> & -> & -> & Htl).
-        apply vds_sim_ret; repeat split; [reflexivity | constructor; assumption].
+        apply vds_sim_ret; repeat split; constructor; assumption.
   Qed.
 
   Lemma map_monad_address_library_vdraw_sim (allow_call : bool)
@@ -7609,7 +7609,7 @@ Section ValueDrawRefinement.
         (map_monad address_one_library_function libs).
   Proof using.
     induction Hlibs as [| [fid den] rest Hden _ IH]; intros stk env1 env2; cbn [map_monad].
-    - apply vds_sim_ret; repeat split; [reflexivity | constructor].
+    - apply vds_sim_ret; repeat split; constructor.
     - eapply vds_sim_bind.
       + unfold address_one_library_function.
         eapply vds_sim_bind.
@@ -7628,7 +7628,7 @@ Section ValueDrawRefinement.
       + intros ? ? ? [k1 fn1] [k2 fn2] (-> & -> & -> & Hhd).
         eapply vds_sim_bind; [apply IH |].
         intros ? ? ? tl1 tl2 (-> & -> & -> & Htl).
-        apply vds_sim_ret; repeat split; [reflexivity | constructor; assumption].
+        apply vds_sim_ret; repeat split; constructor; assumption.
   Qed.
 
   (** General Whole-Module Lifter for Value-Refinement & Relational-[DrawE] ([F-59]). *)

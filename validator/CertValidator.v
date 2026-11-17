@@ -9002,9 +9002,8 @@ Proof.
     destruct (IH1 allowed lmap _ w1 ce1 Hlmap Hr1) as (Hcw1 & Hwt1 & Hbw1 & Hlf1 & Hfv1).
     destruct (IH2 allowed lmap _ w2 ce2 Hlmap Hr2) as (Hcw2 & Hwt2 & Hbw2 & Hlf2 & Hfv2).
     apply check_opt_int_width_some_inv in Hcw1; apply check_opt_int_width_some_inv in Hcw2; subst w1 w2.
-    repeat split; [exact Hcw | | | |].
+    repeat split; [exact Hcw | | |].
     + cbn; rewrite Hfl, Hwt1, Hwt2, Hbw1, Hbw2, !Pos.eqb_refl; reflexivity.
-    + reflexivity.
     + cbn; rewrite Hlf1, Hlf2; reflexivity.
     + cbn; apply incl_app; assumption.
   - intros ss cmp dt e1 e2 IH1 IH2 allowed lmap top w ce Hlmap Hr.
@@ -9017,9 +9016,8 @@ Proof.
     destruct (IH1 allowed lmap _ w1 ce1 Hlmap Hr1) as (Hcw1 & Hwt1 & Hbw1 & Hlf1 & Hfv1).
     destruct (IH2 allowed lmap _ w2 ce2 Hlmap Hr2) as (Hcw2 & Hwt2 & Hbw2 & Hlf2 & Hfv2).
     apply check_opt_int_width_some_inv in Hcw1; apply check_opt_int_width_some_inv in Hcw2; subst w1 w2.
-    repeat split; [exact Hcw | | | |].
+    repeat split; [exact Hcw | | |].
     + cbn; rewrite Hwt1, Hwt2, Hbw1, Hbw2, !Pos.eqb_refl; reflexivity.
-    + reflexivity.
     + cbn; rewrite Hlf1, Hlf2; reflexivity.
     + cbn; apply incl_app; assumption.
   - intros ct dtf e1 dtt IH1 allowed lmap top w ce Hlmap Hr.
@@ -9040,9 +9038,8 @@ Proof.
     inversion Hr; subst w ce; clear Hr.
     destruct (IH1 allowed lmap _ w1 ce1 Hlmap Hr1) as (Hcw1 & Hwt1 & Hbw1 & Hlf1 & Hfv1).
     apply check_opt_int_width_some_inv in Hcw1; subst w1.
-    repeat split; [exact Hcw | | | exact Hlf1 | exact Hfv1].
+    repeat split; [exact Hcw | | exact Hlf1 | exact Hfv1].
     + cbn; unfold w_ok in Hwok; rewrite Hwok, Hwt1, Hbw1, Pos.eqb_refl; reflexivity.
-    + reflexivity.
   - intros fm dtc ec dt1 e1 dt2 e2 IHc IH1 IH2 allowed lmap top w ce Hlmap Hr.
     cbn [reify_pure_exp] in Hr.
     destruct dtc as [tbc | |]; try discriminate; destruct tbc as [wc | | | | | | | | | |]; try discriminate.
@@ -9061,9 +9058,8 @@ Proof.
     apply check_opt_int_width_some_inv in Hcwc;
     apply check_opt_int_width_some_inv in Hcwa;
     apply check_opt_int_width_some_inv in Hcwb; subst wc' wa wb.
-    repeat split; [exact Hcw | | | |].
+    repeat split; [exact Hcw | | |].
     + cbn; rewrite Hwtc, Hwta, Hwtb, Hbwc, Hbwa, Hbwb, !Pos.eqb_refl; reflexivity.
-    + reflexivity.
     + cbn; rewrite Hlfc, Hlfa, Hlfb; reflexivity.
     + cbn; apply incl_app; [exact Hfvc | apply incl_app; assumption].
   - intros dt e1 _ allowed lmap top w ce _ Hr; cbn [reify_pure_exp] in Hr; discriminate Hr.

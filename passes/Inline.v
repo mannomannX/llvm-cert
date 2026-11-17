@@ -11521,7 +11521,7 @@ Section InliningSemantics.
     - eapply refine_prov_obs_eq;
         [symmetry; rewrite (fused_global_prov_read_some k v s0 Elk), Eqit.bind_ret_l; reflexivity
         | symmetry; rewrite (fused_global_prov_read_some k v s0 Elk), Eqit.bind_ret_l; reflexivity |].
-      apply refine_prov_tau2_ret; repeat split; [reflexivity | exact Elk].
+      apply refine_prov_tau2_ret; repeat split; exact Elk.
     - destruct (fused_global_prov_read_none k s0 Elk) as (u & kf & Ef).
       eapply refine_prov_obs_eq;
         [symmetry; rewrite Ef, Eqit.bind_vis; reflexivity
