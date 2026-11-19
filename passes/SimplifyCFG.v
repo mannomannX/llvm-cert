@@ -134,6 +134,13 @@ Proof.
   destruct (RawIDOrd.eq_dec x k); reflexivity.
 Qed.
 
+Lemma assoc_block_id_cons {B : Type} (x k : block_id) (v : B) (rest : list (block_id * B)) :
+  @assoc block_id B eq_dec_raw_id x ((k, v) :: rest) =
+    if raw_id_eqb x k then Some v else @assoc block_id B eq_dec_raw_id x rest.
+Proof.
+  exact (@assoc_raw_id_cons B x k v rest).
+Qed.
+
 (** [find_block] lookup lemmas over filtered and duplicate-free block lists. *)
 Lemma find_block_filter_id (p : raw_id -> bool) (bks : ocfg dtyp) (x : block_id)
   (Hx : p x = true) :
@@ -264,7 +271,7 @@ Lemma eval_switch_dests {Pa : Params} (dests : list (tint_literal * block_id)) :
   = raise_ret (List.map (@eval_one_switch_dest Pa) dests).
 Proof.
   induction dests as [| [[sz x] id] rest IH]; [reflexivity |].
-  cbn [map_monad List.map eval_one_switch_dest coerce_integer_to_int ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad].
+  cbn [map_monad List.map eval_one_switch_dest coerce_integer_to_int ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad] in IH |- *.
   rewrite IH; reflexivity.
 Qed.
 
@@ -288,7 +295,7 @@ Proof.
       try (intros H; discriminate H).
     cbn [select_switch].
     destruct (Pos.eq_dec sz1 sz2) as [Heq | Hneq]; [subst sz2 | intros H; discriminate H].
-    cbn [eq_rect eq_ind eq_ind_r eq_sym].
+    cbn [eq_rec_r eq_rec eq_rect_r eq_rect eq_ind eq_ind_r eq_sym ExtLib.Structures.Monad.ret EOU_monad].
     destruct (VellvmIntegers.cmp Ceq i1 i2).
     + intros H; inversion H; right; left; reflexivity.
     + intros H; destruct (IH H) as [Heq | Hin];
@@ -324,9 +331,16 @@ Proof.
   - (* TERM_Br *)
     eapply ruttc_bind; [apply refine_cfg_refl | intros v _ <-].
     destruct v as [[p | sz bit | ip | d | f | | | bsz bv] | ? ? | ? ?];
-      try apply refine_cfg_raise.
-    + destruct sz as [? | ? | ]; try apply refine_cfg_raise.
-      destruct (equ bit one).
+      lazymatch goal with
+      | |- ruttc _ _ _ _ _ (raise _) (raise _) => apply refine_cfg_raise
+      | _ => idtac
+      end.
+    + destruct sz as [? | ? | ];
+        lazymatch goal with
+        | |- ruttc _ _ _ _ _ (raise _) (raise _) => apply refine_cfg_raise
+        | _ => idtac
+        end.
+      destruct (VellvmIntegers.equ bit VellvmIntegers.one).
       * apply ruttc_ret; constructor; split; [reflexivity | cbn; left; reflexivity].
       * apply ruttc_ret; constructor; split; [reflexivity | cbn; right; left; reflexivity].
     + apply refine_cfg_raiseUB.
@@ -345,7 +359,9 @@ Proof.
       apply select_switch_in in Esel.
       rewrite switch_dests_snd in Esel; exact Esel.
     + intros bid1 bid2 [<- Hin].
-      apply ruttc_ret; constructor; split; [reflexivity | cbn; exact Hin].
+      cbn [ExtLib.Structures.Monad.ret Monad_itree].
+      apply ruttc_ret; constructor 1; split;
+        [reflexivity | cbn; destruct Hin as [-> | Hin]; [left; reflexivity | right; exact Hin]].
   - (* TERM_IndirectBr *)
     eapply ruttc_bind; [apply refine_cfg_refl | intros a _ <-].
     destruct (dvalue_is_poison a); [apply refine_cfg_raiseUB |].
@@ -445,7 +461,7 @@ Proof.
   - destruct (Pos.eqb sz sz') eqn:Esz; [| intros H; discriminate H].
     apply Pos.eqb_eq in Esz; subst sz'.
     destruct (Pos.eq_dec sz sz) as [Heq | Hneq]; [| exfalso; exact (Hneq eq_refl)].
-    rewrite (pos_uip Heq); cbn [eq_rect eq_ind eq_ind_r eq_sym VellvmIntegers.cmp VInt_Bounded].
+    rewrite (pos_uip Heq); cbn [eq_rec_r eq_rec eq_rect_r eq_rect eq_ind eq_ind_r eq_sym VellvmIntegers.cmp VellvmIntegers.VInt_Bounded].
     destruct (@Integers.cmp sz Ceq val (@Integers.repr sz (denote_int_syntax x'))).
     + intros H; inversion H; reflexivity.
     + exact IH.
@@ -476,7 +492,7 @@ Proof.
       cbn [denote_exp denote_int_syntax_as_int coerce_integer_to_int
            ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad EOU_to_itree Monad_itree].
       rewrite translate_ret, Eqit.bind_ret_l.
-      cbv iota; cbn [equ repr one VInt_Bounded].
+      cbv iota; cbn [VellvmIntegers.equ VellvmIntegers.repr VellvmIntegers.one VellvmIntegers.VInt_Bounded].
       destruct (@Integers.eq 1%positive
                   (@Integers.repr 1%positive (denote_int_syntax x))
                   (@Integers.one 1%positive)); reflexivity.
@@ -493,18 +509,20 @@ Proof.
     destruct (find_switch_dest sz (@Integers.repr sz (denote_int_syntax x)) default_br dests)
       as [target |] eqn:Efind; [| reflexivity].
     unfold denote_terminator, denote_exp', withCall.
-    cbn [denote_exp denote_int_syntax_as_int coerce_integer_to_int
+    rewrite eval_switch_dests.
+    cbn [denote_exp denote_int_syntax_as_int
          ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad EOU_to_itree Monad_itree].
+    unfold coerce_integer_to_int at 1.
+    cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad EOU_to_itree Monad_itree].
     rewrite translate_ret, Eqit.bind_ret_l.
-    cbn [dvalue_is_poison repr VInt_Bounded].
-    rewrite eval_switch_dests; cbn [ExtLib.Structures.Monad.bind EOU_monad].
+    cbn [dvalue_is_poison VellvmIntegers.repr VellvmIntegers.VInt_Bounded].
     rewrite (find_switch_dest_sound sz _ default_br dests target Efind).
     cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     rewrite Eqit.bind_ret_l; reflexivity.
 Qed.
 
 Lemma denote_block_fold_const {Pa : Params}
-  (b : block dtyp) (from : block_id) (va : option (@ptr Pa)) :
+  (b : block dtyp) (from : block_id) (va : option (@ptr (@PROV Pa) (@PTR Pa))) :
   denote_block b from va ≅ denote_block (fold_const_term_block b) from va.
 Proof.
   unfold denote_block, fold_const_term_block; cbn [blk_phis blk_code blk_term].
@@ -557,13 +575,13 @@ Proof.
 Qed.
 
 Lemma denote_cfg_fold_const {Pa : Params}
-  (c : CFG.cfg dtyp) (va : option (@ptr Pa)) :
+  (c : CFG.cfg dtyp) (va : option (@ptr (@PROV Pa) (@PTR Pa))) :
   refine_cfg Logic.eq (denote_cfg c va) (denote_cfg (fold_const_term_cfg c) va).
 Proof.
   unfold fold_const_term_cfg.
   destruct (cfg_no_block_addresses c); [cbv iota | apply refine_cfg_refl].
   unfold denote_cfg, denote_cfg_map; cbn [init blks].
-  eapply ruttc_bind.
+  eapply ruttc_bind with (RR := Logic.eq).
   - unfold denote_ocfg_map, refine_cfg.
     eapply ruttc_iter with (II := Logic.eq); [| reflexivity].
     intros [from src] _ <-; cbv beta iota.
@@ -652,20 +670,20 @@ Definition elim_unreachable_cfg (c : CFG.cfg dtyp) : CFG.cfg dtyp :=
 Definition elim_unreachable_mcfg (M : CFG.mcfg dtyp) : CFG.mcfg dtyp :=
   map_mcfg_cfg elim_unreachable_cfg M.
 
-Lemma assoc_filter_reach {B : Type} (reach : list raw_id) (from : raw_id)
-  (pargs : list (raw_id * B))
+Lemma assoc_filter_reach {B : Type} (reach : list raw_id) (from : block_id)
+  (pargs : list (block_id * B))
   (Hfrom : in_raw_ids from reach = true) :
   assoc from (List.filter (fun '(pred, _) => in_raw_ids pred reach) pargs) =
   assoc from pargs.
 Proof.
   induction pargs as [| [pred e] rest IH]; [reflexivity |].
   cbn [List.filter].
-  rewrite (assoc_raw_id_cons from pred e rest).
+  rewrite (assoc_block_id_cons from pred e rest).
   destruct (raw_id_eqb from pred) eqn:Efp.
   - apply raw_id_eqb_spec in Efp; subst pred.
-    rewrite Hfrom; cbv iota; rewrite assoc_raw_id_cons, raw_id_eqb_refl; reflexivity.
+    rewrite Hfrom; cbv iota; rewrite assoc_block_id_cons, raw_id_eqb_refl; reflexivity.
   - destruct (in_raw_ids pred reach); cbv iota.
-    + rewrite assoc_raw_id_cons, Efp; exact IH.
+    + rewrite assoc_block_id_cons, Efp; exact IH.
     + exact IH.
 Qed.
 
@@ -680,7 +698,7 @@ Proof.
   assert (Hhd : @denote_phi Pa from
                   (lid, Phi fm dt (List.filter (fun '(pred, _) => in_raw_ids pred reach) pargs), mds)
                 = @denote_phi Pa from (lid, Phi fm dt pargs, mds)).
-  { unfold denote_phi; cbv beta iota; rewrite (assoc_filter_reach reach from pargs Hfrom); reflexivity. }
+  { unfold denote_phi; cbv beta iota zeta; rewrite (assoc_filter_reach reach from pargs Hfrom); reflexivity. }
   rewrite Hhd, IH; reflexivity.
 Qed.
 
@@ -748,7 +766,7 @@ Proof.
 Qed.
 
 Lemma denote_cfg_elim_unreachable {Pa : Params}
-  (c : CFG.cfg dtyp) (va : option (@ptr Pa)) :
+  (c : CFG.cfg dtyp) (va : option (@ptr (@PROV Pa) (@PTR Pa))) :
   refine_cfg Logic.eq (denote_cfg c va) (denote_cfg (elim_unreachable_cfg c) va).
 Proof.
   unfold elim_unreachable_cfg.
@@ -757,7 +775,7 @@ Proof.
   destruct (check_reach_closed c reach) eqn:Echk; [cbv iota | apply refine_cfg_refl].
   destruct (check_reach_closed_spec c reach Echk) as [Hinit Hclosed].
   unfold denote_cfg, denote_cfg_map; cbn [init blks].
-  eapply ruttc_bind.
+  eapply ruttc_bind with (RR := Logic.eq).
   - unfold denote_ocfg_map, refine_cfg.
     eapply ruttc_iter with
       (II := fun '(from1, src1) '(from2, src2) =>
@@ -777,8 +795,8 @@ Proof.
            eapply ruttc_bind; [apply refine_cfg_refl | intros [] _ <-].
            eapply ruttc_bind; [apply refine_cfg_refl | intros [] _ <-].
            apply refine_cfg_terminator_outputs.
-        -- intros [tgt1 | dv1] [tgt2 | dv2] Htrm;
-             inversion Htrm as [t1 t2 [<- Hout] | v1 v2 <-]; subst; cbv beta iota.
+        -- intros bd1 bd2 Htrm;
+             destruct Htrm as [t1 t2 [<- Hout] | v1 v2 <-]; cbv beta iota.
            ++ apply ruttc_ret; constructor.
               refine (conj eq_refl (conj eq_refl (conj Hsrc _))).
               eapply (Hclosed bk t1 Hin_bk);
@@ -856,7 +874,7 @@ Fixpoint find_coalesce_pair (init_id : block_id) (all_bks rem : ocfg dtyp)
       end
   end.
 
-Fixpoint coalesce_phi_args (id1 id2 : raw_id) (pargs : list (block_id * exp dtyp))
+Fixpoint coalesce_phi_args (id1 id2 : block_id) (pargs : list (block_id * exp dtyp))
   : list (block_id * exp dtyp) :=
   match pargs with
   | [] => []
@@ -1038,28 +1056,28 @@ Proof.
 Qed.
 
 (** Phi-edge coalescing [assoc] & [denote_phis] lemmas. *)
-Lemma assoc_coalesce_from_merged (id1 id2 : raw_id)
+Lemma assoc_coalesce_from_merged (id1 id2 : block_id)
   (pargs : list (block_id * exp dtyp))
   (Hneq : raw_id_eqb id1 id2 = false) :
   assoc id1 (coalesce_phi_args id1 id2 pargs) = assoc id2 pargs.
 Proof.
   induction pargs as [| [pred e] rest IH]; [reflexivity |].
   cbn [coalesce_phi_args].
-  rewrite (assoc_raw_id_cons id2 pred e rest).
+  rewrite (assoc_block_id_cons id2 pred e rest).
   destruct (raw_id_eqb pred id1) eqn:Ep1; cbv iota.
   - apply raw_id_eqb_spec in Ep1; subst pred.
     replace (raw_id_eqb id2 id1) with (raw_id_eqb id1 id2) by apply raw_id_eqb_sym.
     rewrite Hneq; exact IH.
   - destruct (raw_id_eqb pred id2) eqn:Ep2; cbv iota.
     + apply raw_id_eqb_spec in Ep2; subst pred.
-      rewrite assoc_raw_id_cons, !raw_id_eqb_refl; reflexivity.
-    + rewrite assoc_raw_id_cons.
+      rewrite assoc_block_id_cons, !raw_id_eqb_refl; reflexivity.
+    + rewrite assoc_block_id_cons.
       replace (raw_id_eqb id1 pred) with (raw_id_eqb pred id1) by apply raw_id_eqb_sym.
       replace (raw_id_eqb id2 pred) with (raw_id_eqb pred id2) by apply raw_id_eqb_sym.
       rewrite Ep1, Ep2; exact IH.
 Qed.
 
-Lemma assoc_coalesce_from_other (id1 id2 from : raw_id)
+Lemma assoc_coalesce_from_other (id1 id2 from : block_id)
   (pargs : list (block_id * exp dtyp))
   (Hf1 : raw_id_eqb from id1 = false)
   (Hf2 : raw_id_eqb from id2 = false) :
@@ -1067,14 +1085,14 @@ Lemma assoc_coalesce_from_other (id1 id2 from : raw_id)
 Proof.
   induction pargs as [| [pred e] rest IH]; [reflexivity |].
   cbn [coalesce_phi_args].
-  rewrite (assoc_raw_id_cons from pred e rest).
+  rewrite (assoc_block_id_cons from pred e rest).
   destruct (raw_id_eqb pred id1) eqn:Ep1; cbv iota.
   - apply raw_id_eqb_spec in Ep1; subst pred.
     rewrite Hf1; exact IH.
   - destruct (raw_id_eqb pred id2) eqn:Ep2; cbv iota.
     + apply raw_id_eqb_spec in Ep2; subst pred.
-      rewrite assoc_raw_id_cons, Hf1, Hf2; exact IH.
-    + rewrite assoc_raw_id_cons.
+      rewrite assoc_block_id_cons, Hf1, Hf2; exact IH.
+    + rewrite assoc_block_id_cons.
       destruct (raw_id_eqb from pred); [reflexivity | exact IH].
 Qed.
 
@@ -1091,7 +1109,7 @@ Proof.
   cbn [List.map coalesce_phi_entry map_monad].
   assert (Hhd : @denote_phi Pa from2 (lid, Phi fm dt (coalesce_phi_args id1 id2 pargs), mds) =
                 @denote_phi Pa from1 (lid, Phi fm dt pargs, mds)).
-  { unfold denote_phi; cbv beta iota.
+  { unfold denote_phi; cbv beta iota zeta.
     destruct Hfrom as [(<- & Hf1 & Hf2) | [-> ->]].
     - apply raw_id_eqb_neq in Hf1; apply raw_id_eqb_neq in Hf2.
       rewrite (assoc_coalesce_from_other id1 id2 from1 pargs Hf1 Hf2); reflexivity.
@@ -1124,10 +1142,10 @@ Proof.
   - intros Hin; destruct (IH Hin) as [p Hp]; exists p; right; exact Hp.
   - destruct (raw_id_eqb pred id2); cbv iota; cbn [In].
     + intros [Heq | Hin].
-      * inversion Heq; subst; exists pred; left; reflexivity.
+      * injection Heq as _ <-; exists pred; left; reflexivity.
       * destruct (IH Hin) as [p Hp]; exists p; right; exact Hp.
     + intros [Heq | Hin].
-      * inversion Heq; subst; exists pred; left; reflexivity.
+      * injection Heq as _ <-; exists pred; left; reflexivity.
       * destruct (IH Hin) as [p Hp]; exists p; right; exact Hp.
 Qed.
 
@@ -1191,7 +1209,7 @@ Qed.
 
 (** Block-level & OCFG-level simulation lemmas for [coalesce_one_cfg]. *)
 Lemma denote_ocfg_coalesce_lhs_euttge {Pa : Params}
-  (va : option (@ptr Pa)) (bks : ocfg dtyp)
+  (va : option (@ptr (@PROV Pa) (@PTR Pa))) (bks : ocfg dtyp)
   (from1 id1 id2 : block_id) (b1 b2 : block dtyp)
   (iid1 : instr_id) (md1 : list (metadata dtyp))
   (Hfind1 : find_block bks id1 = Some b1)
@@ -1208,20 +1226,50 @@ Lemma denote_ocfg_coalesce_lhs_euttge {Pa : Params}
          | inl tgt => Tau (denote_ocfg bks va (id2, tgt))
          end).
 Proof.
-  etransitivity; [apply (denote_ocfg_unfold_in_euttge va bks from1 id1 b1 Hfind1) |].
+  etransitivity; [apply (denote_ocfg_unfold_in_euttge va bks from1 id1 Hfind1) |].
+  assert (Hrhs :
+    ITree.bind
+      (ITree.bind (denote_phis from1 (blk_phis b1))
+         (fun _ => ITree.bind (denote_code (blk_code b1) va)
+                     (fun _ => denote_block b2 id1 va)))
+      (fun vob2 =>
+         match vob2 with
+         | inr v => Ret (inr v)
+         | inl tgt => Tau (denote_ocfg bks va (id2, tgt))
+         end)
+    ≅
+    ITree.bind (denote_phis from1 (blk_phis b1))
+      (fun _ =>
+         ITree.bind (denote_code (blk_code b1) va)
+           (fun _ =>
+              ITree.bind (denote_block b2 id1 va)
+                (fun vob2 =>
+                   match vob2 with
+                   | inr v => Ret (inr v)
+                   | inl tgt => Tau (denote_ocfg bks va (id2, tgt))
+                   end)))).
+  { rewrite Eqit.bind_bind.
+    apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
+    rewrite Eqit.bind_bind; reflexivity. }
+  etransitivity;
+    [| apply (@Eqit.eqit_mon _ _ _ eq eq false false true false
+                (fun H => ltac:(discriminate H))
+                (fun H => H)
+                (fun _ _ H => H));
+       symmetry; exact Hrhs].
   unfold denote_block at 1; rewrite Hterm1.
   cbn [denote_terminator ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
   rewrite !Eqit.bind_bind.
-  eapply eqit_bind; [reflexivity | intros []].
+  eapply (Eqit.eqit_bind' eq); [reflexivity | intros [] [] _].
   rewrite ?Eqit.bind_bind.
-  eapply eqit_bind; [reflexivity | intros []].
+  eapply (Eqit.eqit_bind' eq); [reflexivity | intros [] [] _].
   rewrite Eqit.bind_ret_l; cbv iota.
-  rewrite (denote_ocfg_unfold_in_eq_itree va bks id1 id2 b2 Hfind2).
+  rewrite (denote_ocfg_unfold_in_eq_itree va bks id1 id2 Hfind2).
   reflexivity.
 Qed.
 
 Lemma denote_block_coalesce_merged {Pa : Params}
-  (va : option (@ptr Pa)) (init_id id1 id2 from1 from2 : block_id)
+  (va : option (@ptr (@PROV Pa) (@PTR Pa))) (init_id id1 id2 from1 from2 : block_id)
   (b1 b2 : block dtyp)
   (Hid12 : raw_id_eqb id1 id2 = false)
   (Hentry : id1 = init_id -> blk_phis b1 = [])
@@ -1260,7 +1308,7 @@ Proof.
 Qed.
 
 Lemma denote_block_coalesce_other {Pa : Params}
-  (va : option (@ptr Pa)) (id1 id2 from1 from2 : block_id)
+  (va : option (@ptr (@PROV Pa) (@PTR Pa))) (id1 id2 from1 from2 : block_id)
   (bk : block dtyp)
   (Hid12 : raw_id_eqb id1 id2 = false)
   (Hfrom : (from1 = from2 /\ from1 <> id1 /\ from1 <> id2) \/
@@ -1288,7 +1336,7 @@ Definition coalesce_rel (init_id id1 id2 : block_id)
    (src1 = id1 /\ id1 = init_id /\ from1 = id1 /\ from2 = id1)).
 
 Lemma denote_ocfg_coalesce {Pa : Params}
-  (va : option (@ptr Pa))
+  (va : option (@ptr (@PROV Pa) (@PTR Pa)))
   (init_id : block_id) (bks : ocfg dtyp) (b1 b2 : block dtyp)
   (Hnd : NoDup (List.map blk_id bks))
   (Hin1 : In b1 bks)
@@ -1321,13 +1369,13 @@ Proof.
     rewrite (denote_ocfg_coalesce_lhs_euttge va bks from1 (blk_id b1) (blk_id b2)
                b1 b2 iid1 md1 Hfind1 Hterm1 Hfind2).
     rewrite (denote_ocfg_unfold_in_eq_itree va (coalesce_blocks b1 b2 bks)
-               from2 (blk_id b1) _ Hfind1').
+               from2 (blk_id b1) Hfind1').
     eapply gpaco2_uclo; [| eapply ruttc_clo_bind |]; eauto with paco.
     econstructor.
     + apply (denote_block_coalesce_merged va init_id (blk_id b1) (blk_id b2)
                from1 from2 b1 b2 Hid12_eqb Hentry Hphis2 Hfrom_m).
-    + intros [tgt1 | dv1] [tgt2 | dv2] Hbd;
-        inversion Hbd as [t1 t2 [<- Hout] | v1 v2 <-]; subst; cbv beta iota.
+    + intros bd1 bd2 Hbd;
+        destruct Hbd as [t1 t2 [<- Hout] | v1 v2 <-]; cbv beta iota.
       * assert (Ht_nid2 : t1 <> blk_id b2).
         { intros Heq; subst t1; eapply (Huniq b2 Hin2); [congruence | exact Hout]. }
         assert (Hnext : coalesce_rel init_id (blk_id b1) (blk_id b2)
@@ -1346,15 +1394,15 @@ Proof.
         as Hfind'.
       assert (Hin_bk : In bk bks) by (eapply find_block_In'; exact Efind).
       assert (Hid_bk : blk_id bk = src1) by (symmetry; eapply find_block_has_id; exact Efind).
-      rewrite (denote_ocfg_unfold_in_eq_itree va bks from1 src1 bk Efind).
+      rewrite (denote_ocfg_unfold_in_eq_itree va bks from1 src1 Efind).
       rewrite (denote_ocfg_unfold_in_eq_itree va (coalesce_blocks b1 b2 bks)
-                 from2 src1 _ Hfind').
+                 from2 src1 Hfind').
       eapply gpaco2_uclo; [| eapply ruttc_clo_bind |]; eauto with paco.
       econstructor.
       * apply (denote_block_coalesce_other va (blk_id b1) (blk_id b2)
                  from1 from2 bk Hid12_eqb Hfrom_o).
-      * intros [tgt1 | dv1] [tgt2 | dv2] Hbd;
-          inversion Hbd as [t1 t2 [<- Hout] | v1 v2 <-]; subst; cbv beta iota.
+      * intros bd1 bd2 Hbd;
+          destruct Hbd as [t1 t2 [<- Hout] | v1 v2 <-]; cbv beta iota.
         -- assert (Ht_nid2 : t1 <> blk_id b2).
            { intros Heq; subst t1; eapply (Huniq bk Hin_bk);
                [rewrite Hid_bk; exact Hsrc_nid1 | exact Hout]. }
@@ -1372,7 +1420,7 @@ Proof.
 Qed.
 
 Lemma denote_cfg_coalesce_one {Pa : Params}
-  (c : CFG.cfg dtyp) (va : option (@ptr Pa)) :
+  (c : CFG.cfg dtyp) (va : option (@ptr (@PROV Pa) (@PTR Pa))) :
   refine_cfg Logic.eq (denote_cfg c va) (denote_cfg (coalesce_one_cfg c) va).
 Proof.
   unfold coalesce_one_cfg.
@@ -1389,14 +1437,14 @@ Proof.
                         (init c, init c) (init c, init c)).
   { split; [reflexivity | split; [exact Hinit_nid2 |]].
     destruct (RawIDOrd.eq_dec (init c) (blk_id b1)) as [Heq | Hneq].
-    - right; right; subst; exact (conj eq_refl (conj eq_refl (conj eq_refl eq_refl))).
+    - right; right; rewrite <- Heq; repeat split; reflexivity.
     - left; exact (conj eq_refl (conj Hneq Hinit_nid2)). }
   unfold denote_cfg, denote_cfg_map; cbn [init blks].
   fold (denote_ocfg (blks c)) (denote_ocfg (coalesce_blocks b1 b2 (blks c))).
   eapply ruttc_bind.
   - apply (denote_ocfg_coalesce va (init c) (blks c) b1 b2 End Hin1 Hin2 Hcan
              (init c, init c) (init c, init c) Hinit_rel).
-  - intros [p1 | uv1] [p2 | uv2] Hr; inversion Hr as [x1 x2 _ | v1 v2 <-]; subst; cbv beta iota;
+  - intros r1 r2 Hr; destruct Hr as [p1 p2 _ | uv1 uv2 <-]; cbv beta iota;
       [apply refine_cfg_raise | apply ruttc_ret; reflexivity].
 Qed.
 

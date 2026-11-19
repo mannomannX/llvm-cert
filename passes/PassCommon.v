@@ -2090,12 +2090,12 @@ Section ModelSemantics.
     (U : list N) (t1 : itree ProvBotE R1) (t2 : itree ProvBotE R2) : Prop :=
     paco3 (refine_prov_ RR) bot3 U t1 t2.
 
-  Lemma refine_prov_antitone {R1 R2} (RR : list N -> R1 -> R2 -> Prop)
-    (HRR : forall U U' r1 r2, incl U U' -> RR U r1 r2 -> RR U' r1 r2) :
+  Lemma refine_prov_antitone {R1 R2} (RR1 RR2 : list N -> R1 -> R2 -> Prop)
+    (HRR : forall U U' r1 r2, incl U U' -> RR1 U r1 r2 -> RR2 U' r1 r2) :
     forall U U' t1 t2,
       incl U U' ->
-      refine_prov RR U t1 t2 ->
-      refine_prov RR U' t1 t2.
+      refine_prov RR1 U t1 t2 ->
+      refine_prov RR2 U' t1 t2.
   Proof using.
     pcofix CIH.
     intros U U' t1 t2 Hincl Hrel.
@@ -2433,7 +2433,7 @@ Section ModelSemantics.
         destruct (observe t3) as [r3 | m3 | X3 e3 k3] eqn:Hot3.
         * (* observe t3 = RetF r3 *)
           eapply RP_TauL; [exact Hot1 |].
-          punfold Hm23; clear Hot1.
+          punfold Hm23; clear Hot1 Hot2 H23.
           revert m1 Hstep12 Hot3;
             induction Hm23 as [U m2_ t3_ Hs23 | U m2_ m2' t3_ Hm2_ _ IHm23 | U m2_ t3_ m3' Ht3_ _ _];
             intros m1 Hm12 Hot3.
@@ -2504,7 +2504,7 @@ Section ModelSemantics.
           rewrite (itree_eta t3), Hot3; reflexivity.
         * (* observe t3 = VisF e3 k3 *)
           eapply RP_TauL; [exact Hot1 |].
-          punfold Hm23; clear Hot1.
+          punfold Hm23; clear Hot1 Hot2 H23.
           revert m1 Hstep12 Hot3;
             induction Hm23 as [U m2_ t3_ Hs23 | U m2_ m2' t3_ Hm2_ _ IHm23 | U m2_ t3_ m3' Ht3_ _ _];
             intros m1 Hm12 Hot3.
@@ -2541,7 +2541,7 @@ Section ModelSemantics.
                            intros a1 a3 Ha13.
                            destruct (EqA_bot_trans b1 b2 b3 a1 a3 HE12 HE23 Ha13) as [a2 [Ha12 Ha23]].
                            specialize (HA12 a1 a2 Ha12); specialize (HA23 a2 a3 Ha23); pclearbot.
-                           rewrite (bot_ans_provs_eq b1 b2 a1 a2 HE12 Ha12).
+                           rewrite <- (bot_ans_provs_eq b1 b2 a1 a2 HE12 Ha12) in HA23.
                            right; eapply CIH; [exact HA12 | exact HA23].
              ++ eapply RP_TauL; [exact Hm1_ | apply IHm12; assumption].
           -- apply IHm23; [| exact Hot3].
@@ -2582,7 +2582,7 @@ Section ModelSemantics.
                    intros a1 a3 Ha13.
                    destruct (EqA_bot_trans b1 b2 b3 a1 a3 HE12 HE23 Ha13) as [a2 [Ha12 Ha23]].
                    specialize (HA12 a1 a2 Ha12); specialize (HA23 a2 a3 Ha23); pclearbot.
-                   rewrite (bot_ans_provs_eq b1 b2 a1 a2 HE12 Ha12).
+                   rewrite <- (bot_ans_provs_eq b1 b2 a1 a2 HE12 Ha12) in HA23.
                    right; eapply CIH; [exact HA12 | exact HA23].
           -- eapply RP_TauR; [exact Ht3 | apply IH23; assumption].
     - eapply RP_TauL; [exact Ht1 | apply IH12, H23].
@@ -2676,11 +2676,15 @@ Section ModelSemantics.
     exists w : itree ProvBotE (model_step_state R),
       interp_state interp_vellvm_prov_h t s ≅ ITree.bind w (model_cont R).
   Proof using.
-    rewrite (unfold_interp_state interp_vellvm_prov_h t s).
-    destruct (observe t) as [r | m | X e k]; cbn -[interp_vellvm_prov_h].
-    - exists (Ret (inl (s, r))); rewrite Eqit.bind_ret_l; reflexivity.
-    - exists (Ret (inr (s, m))); rewrite Eqit.bind_ret_l; reflexivity.
+    destruct (observe t) as [r | m | X e k] eqn:Hot.
+    - exists (Ret (inl (s, r))).
+      rewrite (unfold_interp_state interp_vellvm_prov_h t s), Hot; cbn -[interp_vellvm_prov_h].
+      rewrite Eqit.bind_ret_l; reflexivity.
+    - exists (Ret (inr (s, m))).
+      rewrite (unfold_interp_state interp_vellvm_prov_h t s), Hot; cbn -[interp_vellvm_prov_h].
+      rewrite Eqit.bind_ret_l; reflexivity.
     - exists (ITree.bind (interp_vellvm_prov_h e s) (fun '(s', x) => Ret (inr (s', k x)))).
+      rewrite (unfold_interp_state interp_vellvm_prov_h t s), Hot; cbn -[interp_vellvm_prov_h].
       rewrite Eqit.bind_bind.
       apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
       intros [s' x] ? <-; rewrite Eqit.bind_ret_l; reflexivity.
@@ -2774,20 +2778,19 @@ Section ModelSemantics.
     pcofix CIH.
     intros U w1 w2 t1 t2 Et1 Et2 Hw.
     pstep.
-    eapply refine_prov__mon with
-      (r := fun U0 a1 a2 =>
-              exists v1 v2,
-                ITree.bind v1 (model_cont R1) ≅ a1 /\
-                ITree.bind v2 (model_cont R2) ≅ a2 /\
-                refine_prov (model_step_rel RR) U0 v1 v2);
+    set (r_rel := fun U0 a1 a2 =>
+                    exists v1 v2,
+                      ITree.bind v1 (model_cont R1) ≅ a1 /\
+                      ITree.bind v2 (model_cont R2) ≅ a2 /\
+                      refine_prov (model_step_rel RR) U0 v1 v2).
+    assert (Hr_eq : forall U0 a1 a1' a2 a2',
+              a1 ≅ a1' -> a2 ≅ a2' -> r_rel U0 a1 a2 -> r_rel U0 a1' a2').
+    { intros U0 a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv).
+      exists v1, v2; split; [etransitivity; [exact Ev1 | exact Ea1] | split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]]. }
+    eapply refine_prov__mon with (r := r_rel);
       [| intros U0 a1 a2 (v1 & v2 & Ev1 & Ev2 & Hv);
          right; eapply CIH; [exact Ev1 | exact Ev2 | exact Hv]].
-    eapply refine_prov__obs_eq;
-      [intros U0 a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv);
-       exists v1, v2;
-       split; [etransitivity; [exact Ev1 | exact Ea1] |];
-       split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]
-      | exact Et1 | exact Et2 |].
+    eapply refine_prov__obs_eq; [exact Hr_eq | exact Et1 | exact Et2 |].
     punfold Hw; clear t1 t2 Et1 Et2 CIH r.
     induction Hw as [U w1 w2 Hstep | U w1 mw1 w2 Hw1 _ IH | U w1 w2 mw2 Hw2 _ IH].
     - unfold rp_step_body in Hstep.
@@ -2881,10 +2884,8 @@ Section ModelSemantics.
     intros ret_typ entry args U.
     unfold run_mcfg_model, interp_mcfg_model.
     eapply refine_prov_antitone with (U := U);
-      [intros _ _ [s1 r1] [s2 r2] _ [<- <-]; reflexivity | apply incl_refl |].
-    apply refine_mcfg_to_model.
-    apply refine_mcfg_interp_intrinsics.
-    apply Hden.
+      [| apply incl_refl | apply refine_mcfg_to_model, refine_mcfg_interp_intrinsics, Hden].
+    intros _ _ [s1 r1] [s2 r2] _ [<- <-]; reflexivity.
   Qed.
 
   (** ** Modular Per-CFG Lifter ([lift_cfg_pass]) *)
@@ -2898,9 +2899,9 @@ Section ModelSemantics.
             l1 l2) :
     fn_ctx_refines (IntMaps.IP.of_list l1) (IntMaps.IP.of_list l2).
   Proof using.
-    induction Hl as [| [k1 f1] [k2 f2] l1' l2' [<- Hf] _ IH]; intros k.
+    unfold fn_ctx_refines; induction Hl as [| [k1 f1] [k2 f2] l1' l2' [<- Hf] _ IH]; intros k.
     - cbn; constructor.
-    - cbn [IntMaps.IP.of_list fold_right fst snd]; unfold lookup.
+    - cbn [IntMaps.IP.of_list fold_right]; unfold IntMaps.IP.uncurry, lookup; cbn [fst snd].
       destruct (Z.eq_dec k1 k) as [<- | Hne].
       + rewrite !IntMaps.IP.F.add_eq_o by reflexivity.
         constructor; exact Hf.
@@ -2924,31 +2925,18 @@ Section ModelSemantics.
   Proof using.
     induction defs as [| df defs' IH]; cbn [List.map map_monad].
     - apply ruttc_ret; constructor.
-    - eapply ruttc_bind.
+    - eapply ruttc_bind with
+        (RR := fun '(k1, fn1) '(k2, fn2) =>
+                 k1 = k2 /\
+                 forall cc args, refine_cfg Logic.eq (fn1 cc args) (fn2 cc args)).
       + unfold address_one_function; cbn [map_defn_cfg df_prototype].
         eapply ruttc_bind; [apply refine_mcfg_refl | intros fv _ <-].
-        destruct fv as [[p | | | | | | |] | |]; try apply refine_mcfg_refl.
-        * apply ruttc_ret; split; [reflexivity |].
-          apply refine_cfg_denote_function; [reflexivity | reflexivity |].
-          intros va; apply Hbody.
-        * unfold raise, trigger_cast; eapply ruttc_trigger';
-            [cbn; unfold resum, ReSum_id, id_, Id_IFun; exact I | intros [] [] _].
-        * unfold raise, trigger_cast; eapply ruttc_trigger';
-            [cbn; unfold resum, ReSum_id, id_, Id_IFun; exact I | intros [] [] _].
-        * unfold raise, trigger_cast; eapply ruttc_trigger';
-            [cbn; unfold resum, ReSum_id, id_, Id_IFun; exact I | intros [] [] _].
-        * unfold raise, trigger_cast; eapply ruttc_trigger';
-            [cbn; unfold resum, ReSum_id, id_, Id_IFun; exact I | intros [] [] _].
-        * unfold raise, trigger_cast; eapply ruttc_trigger';
-            [cbn; unfold resum, ReSum_id, id_, Id_IFun; exact I | intros [] [] _].
-        * unfold raise, trigger_cast; eapply ruttc_trigger';
-            [cbn; unfold resum, ReSum_id, id_, Id_IFun; exact I | intros [] [] _].
-        * unfold raise, trigger_cast; eapply ruttc_trigger';
-            [cbn; unfold resum, ReSum_id, id_, Id_IFun; exact I | intros [] [] _].
-        * unfold raise, trigger_cast; eapply ruttc_trigger';
-            [cbn; unfold resum, ReSum_id, id_, Id_IFun; exact I | intros [] [] _].
-        * unfold raise, trigger_cast; eapply ruttc_trigger';
-            [cbn; unfold resum, ReSum_id, id_, Id_IFun; exact I | intros [] [] _].
+        destruct fv as [[p | | | | | | |] | |];
+          [| unfold raise, trigger_cast; eapply ruttc_trigger';
+               [cbn; unfold resum, ReSum_id, id_, Id_IFun; exact I | intros [] [] _] ..].
+        apply ruttc_ret; split; [reflexivity |].
+        apply refine_cfg_denote_function; [reflexivity | reflexivity |].
+        intros va; apply Hbody.
       + intros [k1 fn1] [k2 fn2] Hhd.
         eapply ruttc_bind; [exact IH |].
         intros tl1 tl2 Htl; apply ruttc_ret; constructor; assumption.
@@ -3024,19 +3012,20 @@ Section ModelSemantics.
     cbn [memory_bytes_to_dvalue] in Hrd.
     destruct dtb as [sz | | | | fp | | | | | | bsz];
       try discriminate Hsc; cbn [memory_bytes_to_dvalue_base] in Hrd.
-    - unfold absorb_pois in Hrd.
-      destruct (memory_bytes_to_int sz dbs) as [| | | [| z]]; cbn in Hrd; try discriminate Hrd;
-        inversion Hrd; subst dv; [apply DVALUE_Poison_typ_agg | apply DVALUE_Base_typ; cbn; [apply Pos.eqb_refl | reflexivity]].
-    - unfold absorb_pois in Hrd.
-      destruct (memory_bytes_to_pointer dbs) as [| | | [| p]]; cbn in Hrd; try discriminate Hrd;
-        inversion Hrd; subst dv; [apply DVALUE_Poison_typ_agg | apply DVALUE_Base_typ; reflexivity].
-    - destruct fp; try discriminate Hsc; cbn [memory_bytes_to_dvalue_base] in Hrd;
-        unfold absorb_pois in Hrd;
-        destruct (map_monad memory_byte_to_Z dbs) as [| | | l]; cbn in Hrd; try discriminate Hrd.
-      + destruct (sequence_Pois l) as [| zs]; cbn in Hrd; inversion Hrd; subst dv;
-          [apply DVALUE_Poison_typ_agg | apply DVALUE_Base_typ; reflexivity].
-      + destruct (sequence_Pois l) as [| zs]; cbn in Hrd; inversion Hrd; subst dv;
-          [apply DVALUE_Poison_typ_agg | apply DVALUE_Base_typ; reflexivity].
+    - unfold absorb_pois, catch_pois in Hrd.
+      destruct (memory_bytes_to_int sz _) as [| | | [z |]]; cbn in Hrd; try discriminate Hrd;
+        inversion Hrd; subst dv;
+        [apply DVALUE_Base_typ; cbn; [apply Pos.eqb_refl | reflexivity] | apply DVALUE_Poison_typ_agg].
+    - unfold absorb_pois, catch_pois in Hrd.
+      destruct (memory_bytes_to_pointer _) as [| | | [p |]]; cbn in Hrd; try discriminate Hrd;
+        inversion Hrd; subst dv;
+        [apply DVALUE_Base_typ; reflexivity | apply DVALUE_Poison_typ_agg].
+    - destruct fp; try discriminate Hsc;
+        (cbn [memory_bytes_to_dvalue_base] in Hrd;
+         unfold absorb_pois, catch_pois in Hrd;
+         destruct (map_monad memory_byte_to_Z _) as [| | | [zs |]]; cbn in Hrd; try discriminate Hrd;
+         inversion Hrd; subst dv;
+         [apply DVALUE_Base_typ; reflexivity | apply DVALUE_Poison_typ_agg]).
   Qed.
 
   Lemma default_dvalue_scalar_typ (dt : dtyp) (dv : @dvalue (@ParamsV IP IPT))
@@ -3210,12 +3199,13 @@ Section ModelSemantics.
     exists v, Maps.lookup x (init_local_env bs) = Some v.
   Proof using.
     induction bs as [| [k dv] rest IH]; intros Hin; [contradiction |].
-    cbn [List.map fst] in Hin; cbn [init_local_env fold_right].
+    cbn [List.map fst] in Hin; change (init_local_env ((k, dv) :: rest)) with (Maps.add k dv (init_local_env rest)).
     destruct (RawIDOrd.eq_dec k x) as [<- | Hne].
     - exists dv; apply lookup_add_eq.
     - destruct Hin as [Heq | Hin]; [contradiction |].
       destruct (IH Hin) as [v Hv]; exists v.
-      rewrite lookup_add_neq by exact Hne; exact Hv.
+      change (RM.find x (RM.add k dv (init_local_env rest)) = Some v);
+      rewrite RMF.F.add_neq_o by exact Hne; exact Hv.
   Qed.
 
   Lemma combine_lists_varargs_dom {A B} (l1 : list A) (l2 : list B)
@@ -3310,21 +3300,21 @@ Section ModelSemantics.
       cfg_local_sim_ RR r env1 env2 t1 m2 ->
       cfg_local_sim_ RR r env1 env2 t1 t2
   | CLS_ReadL env1 env2 t1 x v k1 t2 :
-      t1 ≅ ITree.bind (ITree.trigger (LocalRead x)) k1 ->
+      t1 ≅ ITree.bind (ITree.trigger (subevent _ (LocalRead x))) k1 ->
       Maps.lookup x env1 = Some v ->
       cfg_local_sim_ RR r env1 env2 (k1 v) t2 ->
       cfg_local_sim_ RR r env1 env2 t1 t2
   | CLS_ReadR env1 env2 t1 t2 x v k2 :
-      t2 ≅ ITree.bind (ITree.trigger (LocalRead x)) k2 ->
+      t2 ≅ ITree.bind (ITree.trigger (subevent _ (LocalRead x))) k2 ->
       Maps.lookup x env2 = Some v ->
       cfg_local_sim_ RR r env1 env2 t1 (k2 v) ->
       cfg_local_sim_ RR r env1 env2 t1 t2
   | CLS_WriteL env1 env2 t1 x v k1 t2 :
-      t1 ≅ ITree.bind (ITree.trigger (LocalWrite x v)) k1 ->
+      t1 ≅ ITree.bind (ITree.trigger (subevent _ (LocalWrite x v))) k1 ->
       cfg_local_sim_ RR r (Maps.add x v env1) env2 (k1 tt) t2 ->
       cfg_local_sim_ RR r env1 env2 t1 t2
   | CLS_WriteR env1 env2 t1 t2 x v k2 :
-      t2 ≅ ITree.bind (ITree.trigger (LocalWrite x v)) k2 ->
+      t2 ≅ ITree.bind (ITree.trigger (subevent _ (LocalWrite x v))) k2 ->
       cfg_local_sim_ RR r env1 (Maps.add x v env2) t1 (k2 tt) ->
       cfg_local_sim_ RR r env1 env2 t1 t2.
 
@@ -3525,7 +3515,8 @@ Section ModelSemantics.
       cfg_local_sim RS env1 env2 t1 t2.
   Proof using.
     intros env1 env2 t1 t2 Hsim.
-    rewrite <- (Eqit.bind_ret_r t1), <- (Eqit.bind_ret_r t2).
+    eapply cfg_local_sim_obs_eq;
+      [apply Eqit.bind_ret_r | apply Eqit.bind_ret_r |].
     eapply cfg_local_sim_bind; [exact Hsim |].
     intros e1 e2 r1 r2 Hr; apply cfg_local_sim_ret, HRR, Hr.
   Qed.
@@ -3574,20 +3565,19 @@ Section ModelSemantics.
       pcofix CIH.
       intros env1 env2 w1 w2 t1 t2 Et1 Et2 Hw.
       pstep.
-      eapply cfg_local_sim__mon with
-        (r := fun e1 e2 a1 a2 =>
-                exists v1 v2,
-                  ITree.bind v1 iter_cont1 ≅ a1 /\
-                  ITree.bind v2 iter_cont2 ≅ a2 /\
-                  cfg_local_sim iter_step_rel e1 e2 v1 v2);
+      set (r_rel := fun e1 e2 a1 a2 =>
+                      exists v1 v2,
+                        ITree.bind v1 iter_cont1 ≅ a1 /\
+                        ITree.bind v2 iter_cont2 ≅ a2 /\
+                        cfg_local_sim iter_step_rel e1 e2 v1 v2).
+      assert (Hr_eq : forall e1 e2 a1 a1' a2 a2',
+                a1 ≅ a1' -> a2 ≅ a2' -> r_rel e1 e2 a1 a2 -> r_rel e1 e2 a1' a2').
+      { intros e1 e2 a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv).
+        exists v1, v2; split; [etransitivity; [exact Ev1 | exact Ea1] | split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]]. }
+      eapply cfg_local_sim__mon with (r := r_rel);
         [| intros e1 e2 a1 a2 (v1 & v2 & Ev1 & Ev2 & Hv);
            right; eapply CIH; [exact Ev1 | exact Ev2 | exact Hv]].
-      eapply cfg_local_sim__obs_eq;
-        [intros e1 e2 a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv);
-         exists v1, v2;
-         split; [etransitivity; [exact Ev1 | exact Ea1] |];
-         split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]
-        | exact Et1 | exact Et2 |].
+      eapply cfg_local_sim__obs_eq; [exact Hr_eq | exact Et1 | exact Et2 |].
       punfold Hw; clear t1 t2 Et1 Et2 CIH r.
       induction Hw as [e1 e2 w1 w2 Hstep
                        | e1 e2 w1 mw1 w2 Hw1 _ IH
@@ -3668,13 +3658,35 @@ Section ModelSemantics.
     destruct_sum1 m; try discriminate; destruct m; reflexivity.
   Qed.
 
+  #[local] Instance Proper_run_exc {A : Type} :
+    Proper (eq_itree Logic.eq ==> eq_itree Logic.eq)
+      (@run_exc (@ParamsV IP IPT) A).
+  Proof using.
+    ginit; gcofix CIH; intros t1 t2 Heq.
+    rewrite (unfold_run_exc_obs t1), (unfold_run_exc_obs t2).
+    punfold Heq; red in Heq.
+    destruct Heq as [r1 r2 <- | m1 m2 Hm | X e k1 k2 Hk | ? ? Hchk _ | ? ? Hchk _];
+      try inversion Hchk; pclearbot.
+    - gstep; constructor; reflexivity.
+    - gstep; constructor; gfinal; left; exact (CIH m1 m2 Hm).
+    - destruct (exc_of_event e) as [x |].
+      + gstep; constructor; reflexivity.
+      + gstep; constructor; intros y; gstep; constructor; gfinal; left; exact (CIH (k1 y) (k2 y) (Hk y)).
+  Qed.
+
+  #[local] Lemma run_exc_vis_eq {A X} (e : @CFGEtop (@ParamsV IP IPT) X) (k : X -> @CFGtop (@ParamsV IP IPT) A) :
+    exc_of_event e = None ->
+    run_exc (Vis e k) ≅ Vis e (fun y => Tau (run_exc (k y))).
+  Proof using.
+    intros Hnone; rewrite unfold_run_exc_obs; cbn - [exc_of_event run_exc]; rewrite Hnone; reflexivity.
+  Qed.
+
   Lemma cfg_local_sim_run_exc_aux {R1 R2}
     (RR : @local_env (@ParamsV IP IPT) -> @local_env (@ParamsV IP IPT) -> R1 -> R2 -> Prop) :
     let Rexc := fun e1 e2 (s1 : exc + R1) (s2 : exc + R2) =>
-                  match s1, s2 with
-                  | inl x1, inl x2 => x1 = x2
-                  | inr r1, inr r2 => RR e1 e2 r1 r2
-                  | _, _ => False
+                  match s1 with
+                  | inl x1 => match s2 with inl x2 => x1 = x2 | inr _ => False end
+                  | inr r1 => match s2 with inl _ => False | inr r2 => RR e1 e2 r1 r2 end
                   end in
     forall env1 env2
       (u1 : @CFGtop (@ParamsV IP IPT) R1)
@@ -3687,28 +3699,26 @@ Section ModelSemantics.
       cfg_local_sim Rexc env1 env2 t1 t2.
   Proof using.
     cbv zeta; set (Rexc := fun e1 e2 (s1 : exc + R1) (s2 : exc + R2) =>
-                             match s1, s2 with
-                             | inl x1, inl x2 => x1 = x2
-                             | inr r1, inr r2 => RR e1 e2 r1 r2
-                             | _, _ => False
+                             match s1 with
+                             | inl x1 => match s2 with inl x2 => x1 = x2 | inr _ => False end
+                             | inr r1 => match s2 with inl _ => False | inr r2 => RR e1 e2 r1 r2 end
                              end).
     pcofix CIH.
     intros env1 env2 u1 u2 t1 t2 Et1 Et2 Hsim.
     pstep.
-    eapply cfg_local_sim__mon with
-      (r := fun e1 e2 a1 a2 =>
-              exists v1 v2,
-                run_exc v1 ≅ a1 /\
-                run_exc v2 ≅ a2 /\
-                cfg_local_sim RR e1 e2 v1 v2);
+    set (r_rel := fun e1 e2 a1 a2 =>
+                    exists v1 v2,
+                      run_exc v1 ≅ a1 /\
+                      run_exc v2 ≅ a2 /\
+                      cfg_local_sim RR e1 e2 v1 v2).
+    assert (Hr_eq : forall e1 e2 a1 a1' a2 a2',
+              a1 ≅ a1' -> a2 ≅ a2' -> r_rel e1 e2 a1 a2 -> r_rel e1 e2 a1' a2').
+    { intros e1 e2 a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv).
+      exists v1, v2; split; [etransitivity; [exact Ev1 | exact Ea1] | split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]]. }
+    eapply cfg_local_sim__mon with (r := r_rel);
       [| intros e1 e2 a1 a2 (v1 & v2 & Ev1 & Ev2 & Hv);
          right; eapply CIH; [exact Ev1 | exact Ev2 | exact Hv]].
-    eapply cfg_local_sim__obs_eq;
-      [intros e1 e2 a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv);
-       exists v1, v2;
-       split; [etransitivity; [exact Ev1 | exact Ea1] |];
-       split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]
-      | exact Et1 | exact Et2 |].
+    eapply cfg_local_sim__obs_eq; [exact Hr_eq | exact Et1 | exact Et2 |].
     punfold Hsim; clear t1 t2 Et1 Et2 CIH r.
     induction Hsim as [e1 e2 u1 u2 Hstep
                        | e1 e2 u1 mu1 u2 Hu1 _ IH
@@ -3718,12 +3728,7 @@ Section ModelSemantics.
                        | e1 e2 u1 x v k1 u2 Hu1 _ IH
                        | e1 e2 u1 u2 x v k2 Hu2 _ IH].
     - eapply cfg_local_sim__obs_eq;
-        [intros e1' e2' a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv);
-         exists v1, v2;
-         split; [etransitivity; [exact Ev1 | exact Ea1] |];
-         split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]
-        | symmetry; apply unfold_run_exc_obs
-        | symmetry; apply unfold_run_exc_obs |].
+        [exact Hr_eq | symmetry; apply unfold_run_exc_obs | symmetry; apply unfold_run_exc_obs |].
       unfold cls_step_body in Hstep.
       destruct (observe u1) as [r1 | m1 | X1 ev1 k1] eqn:Hou1.
       + destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
@@ -3743,12 +3748,11 @@ Section ModelSemantics.
                 split; [exact Hsync | split; [exact HE |]].
                 intros a1 a2 Ha Hp; specialize (HA a1 a2 Ha Hp); pclearbot.
                 exists (Tau (k1 a1)), (Tau (k2 a2)).
-                split; [apply unfold_run_exc_obs |].
-                split; [apply unfold_run_exc_obs |].
+                split; [rewrite unfold_run_exc_obs; reflexivity |].
+                split; [rewrite unfold_run_exc_obs; reflexivity |].
                 pstep; eapply CLS_TauL; [reflexivity |];
                   eapply CLS_TauR; [reflexivity |].
-                punfold HA; eapply cfg_local_sim__mon;
-                  [exact HA | intros ? ? ? ? [Hl | []]; left; eapply paco4_mon; [exact Hl | intros ? ? ? ? []]].
+                punfold HA; exact HA.
           -- destruct_sum1 ev1; try contradiction;
                destruct ev1 as [x1 |]; try contradiction;
                destruct_sum1 ev2; try contradiction;
@@ -3758,45 +3762,30 @@ Section ModelSemantics.
              split; [exact Hx | split; [exact Hlk |]].
              intros v Hv; specialize (Hrd' v Hv); pclearbot.
              exists (Tau (k1 v)), (Tau (k2 v)).
-             split; [apply unfold_run_exc_obs |].
-             split; [apply unfold_run_exc_obs |].
+             split; [rewrite unfold_run_exc_obs; reflexivity |].
+             split; [rewrite unfold_run_exc_obs; reflexivity |].
              pstep; eapply CLS_TauL; [reflexivity |];
                eapply CLS_TauR; [reflexivity |].
-             punfold Hrd'; eapply cfg_local_sim__mon;
-               [exact Hrd' | intros ? ? ? ? [Hl | []]; left; eapply paco4_mon; [exact Hl | intros ? ? ? ? []]].
+             punfold Hrd'; exact Hrd'.
     - eapply cfg_local_sim__obs_eq with (t1 := Tau (run_exc mu1)) (t2 := run_exc u2);
-        [intros e1' e2' a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv);
-         exists v1, v2;
-         split; [etransitivity; [exact Ev1 | exact Ea1] |];
-         split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]
-        | symmetry; rewrite (unfold_run_exc_obs u1), Hu1; reflexivity
-        | reflexivity |].
+        [exact Hr_eq | symmetry; rewrite (unfold_run_exc_obs u1), Hu1; reflexivity | reflexivity |].
       eapply CLS_TauL; [reflexivity | exact IH].
     - eapply cfg_local_sim__obs_eq with (t1 := run_exc u1) (t2 := Tau (run_exc mu2));
-        [intros e1' e2' a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv);
-         exists v1, v2;
-         split; [etransitivity; [exact Ev1 | exact Ea1] |];
-         split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]
-        | reflexivity
-        | symmetry; rewrite (unfold_run_exc_obs u2), Hu2; reflexivity |].
+        [exact Hr_eq | reflexivity | symmetry; rewrite (unfold_run_exc_obs u2), Hu2; reflexivity |].
       eapply CLS_TauR; [reflexivity | exact IH].
-    - eapply CLS_ReadL with (k1 := fun y => Tau (run_exc (k1 y))).
-      + rewrite Hu1, bind_trigger, unfold_run_exc_obs; cbn [observe exc_of_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
-        rewrite bind_trigger; reflexivity.
+    - eapply CLS_ReadL with (x := x) (k1 := fun y => Tau (run_exc (k1 y))).
+      + rewrite Hu1, !bind_trigger, run_exc_vis_eq; [reflexivity | reflexivity].
       + exact Hlk.
       + eapply CLS_TauL; [reflexivity | exact IH].
-    - eapply CLS_ReadR with (k2 := fun y => Tau (run_exc (k2 y))).
-      + rewrite Hu2, bind_trigger, unfold_run_exc_obs; cbn [observe exc_of_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
-        rewrite bind_trigger; reflexivity.
+    - eapply CLS_ReadR with (x := x) (k2 := fun y => Tau (run_exc (k2 y))).
+      + rewrite Hu2, !bind_trigger, run_exc_vis_eq; [reflexivity | reflexivity].
       + exact Hlk.
       + eapply CLS_TauR; [reflexivity | exact IH].
-    - eapply CLS_WriteL with (k1 := fun y => Tau (run_exc (k1 y))).
-      + rewrite Hu1, bind_trigger, unfold_run_exc_obs; cbn [observe exc_of_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
-        rewrite bind_trigger; reflexivity.
+    - eapply CLS_WriteL with (x := x) (v := v) (k1 := fun y => Tau (run_exc (k1 y))).
+      + rewrite Hu1, !bind_trigger, run_exc_vis_eq; [reflexivity | reflexivity].
       + eapply CLS_TauL; [reflexivity | exact IH].
-    - eapply CLS_WriteR with (k2 := fun y => Tau (run_exc (k2 y))).
-      + rewrite Hu2, bind_trigger, unfold_run_exc_obs; cbn [observe exc_of_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
-        rewrite bind_trigger; reflexivity.
+    - eapply CLS_WriteR with (x := x) (v := v) (k2 := fun y => Tau (run_exc (k2 y))).
+      + rewrite Hu2, !bind_trigger, run_exc_vis_eq; [reflexivity | reflexivity].
       + eapply CLS_TauR; [reflexivity | exact IH].
   Qed.
 
@@ -3807,16 +3796,15 @@ Section ModelSemantics.
       (t2 : @CFGtop (@ParamsV IP IPT) R2),
       cfg_local_sim RR env1 env2 t1 t2 ->
       cfg_local_sim
-        (fun e1 e2 s1 s2 =>
-           match s1, s2 with
-           | inl x1, inl x2 => x1 = x2
-           | inr r1, inr r2 => RR e1 e2 r1 r2
-           | _, _ => False
+        (fun e1 e2 (s1 : exc + R1) (s2 : exc + R2) =>
+           match s1 with
+           | inl x1 => match s2 with inl x2 => x1 = x2 | inr _ => False end
+           | inr r1 => match s2 with inl _ => False | inr r2 => RR e1 e2 r1 r2 end
            end)
         env1 env2 (run_exc t1) (run_exc t2).
   Proof using.
     intros env1 env2 t1 t2 Hsim.
-    eapply cfg_local_sim_run_exc_aux; [reflexivity | reflexivity | exact Hsim].
+    eapply (cfg_local_sim_run_exc_aux RR); [reflexivity | reflexivity | exact Hsim].
   Qed.
 
   (** *** Call-Stack Simulation ([cfg_stack_sim] / [mcfg_stack_sim]) & [lift_cfg_local_pass] *)
@@ -3966,21 +3954,21 @@ Section ModelSemantics.
         gen_stack_sim_ RR r stk env1 env2 t1 m2 ->
         gen_stack_sim_ RR r stk env1 env2 t1 t2
     | GSS_ReadL stk env1 env2 t1 x v k1 t2 :
-        t1 ≅ ITree.bind (ITree.trigger (LocalRead x)) k1 ->
+        t1 ≅ ITree.bind (ITree.trigger (subevent _ (LocalRead x))) k1 ->
         Maps.lookup x env1 = Some v ->
         gen_stack_sim_ RR r stk env1 env2 (k1 v) t2 ->
         gen_stack_sim_ RR r stk env1 env2 t1 t2
     | GSS_ReadR stk env1 env2 t1 t2 x v k2 :
-        t2 ≅ ITree.bind (ITree.trigger (LocalRead x)) k2 ->
+        t2 ≅ ITree.bind (ITree.trigger (subevent _ (LocalRead x))) k2 ->
         Maps.lookup x env2 = Some v ->
         gen_stack_sim_ RR r stk env1 env2 t1 (k2 v) ->
         gen_stack_sim_ RR r stk env1 env2 t1 t2
     | GSS_WriteL stk env1 env2 t1 x v k1 t2 :
-        t1 ≅ ITree.bind (ITree.trigger (LocalWrite x v)) k1 ->
+        t1 ≅ ITree.bind (ITree.trigger (subevent _ (LocalWrite x v))) k1 ->
         gen_stack_sim_ RR r stk (Maps.add x v env1) env2 (k1 tt) t2 ->
         gen_stack_sim_ RR r stk env1 env2 t1 t2
     | GSS_WriteR stk env1 env2 t1 t2 x v k2 :
-        t2 ≅ ITree.bind (ITree.trigger (LocalWrite x v)) k2 ->
+        t2 ≅ ITree.bind (ITree.trigger (subevent _ (LocalWrite x v))) k2 ->
         gen_stack_sim_ RR r stk env1 (Maps.add x v env2) t1 (k2 tt) ->
         gen_stack_sim_ RR r stk env1 env2 t1 t2.
 
@@ -4006,14 +3994,14 @@ Section ModelSemantics.
           * left; split; [exact Hsync | split; [exact HE | intros a1 a2 Ha Hp; apply LE, (HA a1 a2 Ha Hp)]].
           * right; left.
             destruct (as_loc X1 e1) as [le1 |], (as_loc X2 e2) as [le2 |]; try contradiction.
-            destruct le1 as [x1 | x1 v1], le2 as [x2 | x2 v2]; try contradiction.
-            -- destruct Hloc as (Hx & Hlk & Hrd); split; [exact Hx | split; [exact Hlk | intros v Hv; apply LE, Hrd, Hv]].
+            destruct le1 as [x1 v1 | x1], le2 as [x2 v2 | x2]; try contradiction.
             -- destruct Hloc as (Hx & Hv & Hr); split; [exact Hx | split; [exact Hv | apply LE, Hr]].
+            -- destruct Hloc as (Hx & Hlk & Hrd); split; [exact Hx | split; [exact Hlk | intros v Hv; apply LE, Hrd, Hv]].
           * right; right.
             destruct (as_stk X1 e1) as [se1 |], (as_stk X2 e2) as [se2 |]; try contradiction.
             destruct se1, se2; try contradiction.
             -- destruct Hstk as [Hbs Hr]; split; [exact Hbs | apply LE, Hr].
-            -- destruct stk as [[p1 p2] rest |]; [apply LE, Hstk | exact I].
+            -- destruct stk as [| [p1 p2] rest]; [exact I | apply LE, Hstk].
       - eapply GSS_TauL; [exact Ht1 | exact IH].
       - eapply GSS_TauR; [exact Ht2 | exact IH].
       - eapply GSS_ReadL; [exact Ht1 | exact Hlk | exact IH].
@@ -4021,6 +4009,8 @@ Section ModelSemantics.
       - eapply GSS_WriteL; [exact Ht1 | exact IH].
       - eapply GSS_WriteR; [exact Ht2 | exact IH].
     Qed.
+
+    #[local] Hint Resolve gen_stack_sim__mon : paco.
 
     Definition gen_stack_sim {R1 R2}
       (RR : env_stack -> @local_env (@ParamsV IP IPT) -> @local_env (@ParamsV IP IPT) -> R1 -> R2 -> Prop)
@@ -4067,15 +4057,15 @@ Section ModelSemantics.
             intros a1 a2 Ha Hp; eapply Hr_eq; [apply Hk1 | apply Hk2 | exact (HA a1 a2 Ha Hp)].
           * right; left.
             destruct (as_loc X1 e1) as [le1 |], (as_loc X2 e2) as [le2 |]; try contradiction.
-            destruct le1 as [x1 | x1 v1], le2 as [x2 | x2 v2]; try contradiction.
+            destruct le1 as [x1 v1 | x1], le2 as [x2 v2 | x2]; try contradiction.
+            -- destruct Hloc as (Hx & Hv & Hr); split; [exact Hx | split; [exact Hv | eapply Hr_eq; [apply Hk1 | apply Hk2 | exact Hr]]].
             -- destruct Hloc as (Hx & Hlk & Hrd); split; [exact Hx | split; [exact Hlk |]].
                intros v Hv; eapply Hr_eq; [apply Hk1 | apply Hk2 | apply Hrd, Hv].
-            -- destruct Hloc as (Hx & Hv & Hr); split; [exact Hx | split; [exact Hv | eapply Hr_eq; [apply Hk1 | apply Hk2 | exact Hr]]].
           * right; right.
             destruct (as_stk X1 e1) as [se1 |], (as_stk X2 e2) as [se2 |]; try contradiction.
             destruct se1, se2; try contradiction.
             -- destruct Hstk as [Hbs Hr]; split; [exact Hbs | eapply Hr_eq; [apply Hk1 | apply Hk2 | exact Hr]].
-            -- destruct stk as [[p1 p2] rest |]; [eapply Hr_eq; [apply Hk1 | apply Hk2 | exact Hstk] | exact I].
+            -- destruct stk as [| [p1 p2] rest]; [exact I | eapply Hr_eq; [apply Hk1 | apply Hk2 | exact Hstk]].
       - punfold E1; red in E1; rewrite Ht1 in E1;
           apply eqitF_inv_Tau_l in E1 as (m1' & E1b & Hm1); pclearbot.
         eapply GSS_TauL; [exact E1b | eapply IH; [exact Hm1 | exact E2]].
@@ -4153,18 +4143,18 @@ Section ModelSemantics.
             right; eapply CIH; [exact HA | exact Hk].
           * right; left.
             destruct (as_loc X1 e1) as [le1 |], (as_loc X2 e2) as [le2 |]; try contradiction.
-            destruct le1 as [x1 | x1 v1], le2 as [x2 | x2 v2]; try contradiction.
+            destruct le1 as [x1 v1 | x1], le2 as [x2 v2 | x2]; try contradiction.
+            -- destruct Hloc as (Hx & Hv & [Hr | Hb]); [| inversion Hb].
+               split; [exact Hx | split; [exact Hv | right; eapply CIH; [exact Hr | exact Hk]]].
             -- destruct Hloc as (Hx & Hlk & Hrd); split; [exact Hx | split; [exact Hlk |]].
                intros v Hv; specialize (Hrd v Hv); destruct Hrd as [Hrd | Hb]; [| inversion Hb].
                right; eapply CIH; [exact Hrd | exact Hk].
-            -- destruct Hloc as (Hx & Hv & [Hr | Hb]); [| inversion Hb].
-               split; [exact Hx | split; [exact Hv | right; eapply CIH; [exact Hr | exact Hk]]].
           * right; right.
             destruct (as_stk X1 e1) as [se1 |], (as_stk X2 e2) as [se2 |]; try contradiction.
             destruct se1, se2; try contradiction.
             -- destruct Hstk as [Hbs [Hr | Hb]]; [| inversion Hb].
                split; [exact Hbs | right; eapply CIH; [exact Hr | exact Hk]].
-            -- destruct stk as [[p1 p2] rest |]; [| exact I].
+            -- destruct stk as [| [p1 p2] rest]; [exact I |].
                destruct Hstk as [Hr | Hb]; [| inversion Hb].
                right; eapply CIH; [exact Hr | exact Hk].
       - specialize (IH Hk); punfold IH; pstep.
@@ -4203,6 +4193,19 @@ Section ModelSemantics.
       right; left; split; [exact Hsync | split; [exact Hrefl |]].
       intros a1 a2 Ha _; apply Heq in Ha; subst a2.
       left; apply gen_stack_sim_ret; repeat split; reflexivity.
+    Qed.
+
+    Lemma gen_stack_sim_trigger_cast_sync {F : Type -> Type} `{F -< E} (e : F void)
+      (Hsync : is_sync void (subevent _ e) = true)
+      (Hrefl : EqE void void (subevent _ e) (subevent _ e))
+      {R1 R2}
+      (RR : env_stack -> @local_env (@ParamsV IP IPT) -> @local_env (@ParamsV IP IPT) -> R1 -> R2 -> Prop)
+      stk env1 env2 :
+      gen_stack_sim RR stk env1 env2 (trigger_cast e) (trigger_cast e).
+    Proof using.
+      unfold trigger_cast, ITree.trigger.
+      pstep; apply GSS_Step; unfold gss_step_body; rewrite !observe_bind; cbn.
+      right; left; split; [exact Hsync | split; [exact Hrefl | intros []]].
     Qed.
   End GenStackSim.
 
@@ -4268,11 +4271,11 @@ Section ModelSemantics.
       stk env1 env2 (EOU_to_itree m) (EOU_to_itree m).
   Proof using.
     destruct m as [s | s | s | x]; cbn [EOU_to_itree].
-    - unfold raiseOOM, trigger_cast; apply gen_stack_sim_trigger_sync;
-        [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq].
-    - unfold raiseUB, trigger_cast; pstep; apply GSS_Step; cbn; left; reflexivity.
-    - unfold raise, trigger_cast; apply gen_stack_sim_trigger_sync;
-        [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq].
+    - unfold raise; apply gen_stack_sim_trigger_cast_sync;
+        [reflexivity | apply EqE_CFG_refl].
+    - unfold raiseOOM; apply gen_stack_sim_trigger_cast_sync;
+        [reflexivity | apply EqE_CFG_refl].
+    - unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply GSS_Step; unfold gss_step_body; rewrite !observe_bind; cbn; left; reflexivity.
     - apply gen_stack_sim_ret; repeat split; reflexivity.
   Qed.
 
@@ -4284,7 +4287,8 @@ Section ModelSemantics.
     unfold apply_attrs.
     eapply gen_stack_sim_bind; [apply cfg_stack_sim_EOU |].
     intros ? ? ? v' _ (-> & -> & -> & <-).
-    eapply gen_stack_sim_bind.
+    eapply gen_stack_sim_bind with
+      (RR := fun stk' e1' e2' (r1 r2 : unit) => stk' = stk /\ e1' = env1 /\ e2' = env2 /\ r1 = r2).
     - unfold assert_attrs_dereferenceable.
       destruct (find_option attr_dereferenceable attrs) as [[on n] |], v' as [[p | | | | | | |] | |];
         try (apply gen_stack_sim_ret; repeat split; reflexivity).
@@ -4337,11 +4341,11 @@ Section ModelSemantics.
       stk env1 env2 (EOU_to_itree m) (EOU_to_itree m).
   Proof using.
     destruct m as [s | s | s | x]; cbn [EOU_to_itree].
-    - unfold raiseOOM, trigger_cast, ITree.trigger; pstep; apply GSS_Step; cbn.
-      right; left; split; [reflexivity | split; [apply EqE_CFG_refl | intros [] [] _]].
-    - unfold raiseUB, trigger_cast; pstep; apply GSS_Step; cbn; left; reflexivity.
-    - unfold raise, trigger_cast, ITree.trigger; pstep; apply GSS_Step; cbn.
-      right; left; split; [reflexivity | split; [apply EqE_CFG_refl | intros [] [] _]].
+    - unfold raise; apply gen_stack_sim_trigger_cast_sync;
+        [reflexivity | apply EqE_CFG_refl].
+    - unfold raiseOOM; apply gen_stack_sim_trigger_cast_sync;
+        [reflexivity | apply EqE_CFG_refl].
+    - unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply GSS_Step; unfold gss_step_body; rewrite !observe_bind; cbn; left; reflexivity.
     - apply gen_stack_sim_ret; repeat split; reflexivity.
   Qed.
 
@@ -4358,58 +4362,77 @@ Section ModelSemantics.
         stk env1 env2 (denote_function df1 cc args) (denote_function df2 cc args).
   Proof using.
     intros stk env1 env2 cc args.
-    unfold denote_function, push_call_frame, pop_call_frame.
-    rewrite Hproto, Hargs.
+    unfold denote_function; cbv zeta; rewrite Hproto.
     destruct (dc_param_attrs (df_prototype df2)) as [ret_attrs args_attrs].
+    cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     eapply gen_stack_sim_bind; [apply cfg_stack_sim_EOU | intros ? ? ? [] _ (-> & -> & -> & <-)].
     eapply gen_stack_sim_bind; [apply cfg_stack_sim_apply_args_attrs | intros ? ? ? args' _ (-> & -> & -> & <-)].
-    eapply gen_stack_sim_obs_eq;
-      [symmetry; rewrite !Eqit.bind_bind; reflexivity | symmetry; rewrite !Eqit.bind_bind; reflexivity |].
-    eapply gen_stack_sim_bind; [apply cfg_stack_sim_EOU_ret | intros ? ? ? [bs vs] _ (-> & -> & -> & <- & Ecomb)].
-    eapply gen_stack_sim_bind; [apply cfg_stack_sim_EOU | intros ? ? ? dts _ (-> & -> & -> & <-)].
-    eapply gen_stack_sim_bind.
-    { unfold mem_push, trigger_cast; apply gen_stack_sim_trigger_sync;
-        [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq]. }
-    intros ? ? ? [] _ (-> & -> & -> & <-).
-    eapply gen_stack_sim_bind.
-    { unfold stack_push, trigger_cast; pstep; apply GSS_Step; unfold gss_step_body, ITree.trigger; cbn.
-      right; right; right; split; [reflexivity |].
-      left; apply gen_stack_sim_ret; repeat split; reflexivity. }
-    intros ? ? ? [] _ (-> & -> & -> & <-).
-    eapply gen_stack_sim_bind.
-    { unfold alloca, trigger_cast; apply gen_stack_sim_trigger_sync;
-        [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq]. }
-    intros ? ? ? varargs _ (-> & -> & -> & <-).
-    eapply gen_stack_sim_bind.
-    { unfold store, trigger_cast; apply gen_stack_sim_trigger_sync;
-        [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq]. }
-    intros ? ? ? [] _ (-> & -> & -> & <-).
-    eapply gen_stack_sim_bind.
-    { destruct varargs as [[p | | | | | | |] | |];
-        try (unfold raise, trigger_cast; apply gen_stack_sim_trigger_sync;
-             [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq]).
-      apply gen_stack_sim_ret; repeat split; reflexivity. }
-    intros ? ? ? varg _ (-> & -> & -> & <-).
-    eapply gen_stack_sim_bind.
+    eapply gen_stack_sim_bind with
+      (RR := fun stk' e1' e2' varg1 varg2 =>
+               stk' = (env1, env2) :: stk /\
+               (exists bs vs,
+                  combine_lists_varargs (df_args df2) args' = raise_ret (bs, vs) /\
+                  e1' = init_local_env bs /\ e2' = init_local_env bs) /\
+               varg1 = varg2).
+    { unfold push_call_frame; rewrite Hargs;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+      eapply gen_stack_sim_bind;
+        [apply cfg_stack_sim_EOU_ret | intros ? ? ? [bs vs] _ (-> & -> & -> & <- & Ecomb)];
+        cbv beta iota zeta.
+      eapply gen_stack_sim_bind; [apply cfg_stack_sim_EOU | intros ? ? ? dts _ (-> & -> & -> & <-)].
+      eapply gen_stack_sim_bind.
+      { unfold mem_push, trigger_cast; apply gen_stack_sim_trigger_sync;
+          [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq]. }
+      intros ? ? ? [] _ (-> & -> & -> & <-).
+      eapply gen_stack_sim_bind with
+        (RR := fun stk' e1' e2' (r1 r2 : unit) =>
+                 stk' = (env1, env2) :: stk /\
+                 e1' = init_local_env bs /\ e2' = init_local_env bs /\ r1 = r2).
+      { unfold stack_push, trigger_cast; pstep; apply GSS_Step; unfold gss_step_body, ITree.trigger; cbn.
+        right; right; right; split; [reflexivity |].
+        left; apply gen_stack_sim_ret; repeat split; reflexivity. }
+      intros ? ? ? [] _ (-> & -> & -> & <-).
+      eapply gen_stack_sim_bind.
+      { unfold alloca, trigger_cast; apply gen_stack_sim_trigger_sync;
+          [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq]. }
+      intros ? ? ? varargs _ (-> & -> & -> & <-).
+      eapply gen_stack_sim_bind.
+      { unfold store, trigger_cast; apply gen_stack_sim_trigger_sync;
+          [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq]. }
+      intros ? ? ? [] _ (-> & -> & -> & <-).
+      destruct varargs as [[p | | | | | | |] | |];
+        try (unfold raise; apply gen_stack_sim_trigger_cast_sync;
+             [reflexivity | apply EqE_CFG_refl]).
+      apply gen_stack_sim_ret;
+        split; [reflexivity | split; [exists bs, vs; repeat split; assumption | reflexivity]]. }
+    intros ? ? ? varg _ (-> & (bs & vs & Ecomb & -> & ->) & <-).
+    eapply gen_stack_sim_bind with
+      (RR := fun stk' _ _ (r1 r2 : exc + @dvalue (@ParamsV IP IPT)) =>
+               stk' = (env1, env2) :: stk /\ r1 = r2).
     { apply cfg_local_to_stack_sim.
-      eapply cfg_local_sim_weaken;
-        [intros e1 e2 s1 s2 Hs; destruct s1, s2; try contradiction; f_equal; exact Hs |].
-      apply cfg_local_sim_run_exc.
+      eapply cfg_local_sim_weaken; [| apply cfg_local_sim_run_exc].
+      { intros e1 e2 s1 s2 Hs; destruct s1, s2; try contradiction; f_equal; exact Hs. }
+      change (denote_cfg_map (ocfg_map (blks (df_instrs df1))) (df_instrs df1) (Some varg))
+        with (denote_cfg (df_instrs df1) (Some varg)).
+      change (denote_cfg_map (ocfg_map (blks (df_instrs df2))) (df_instrs df2) (Some varg))
+        with (denote_cfg (df_instrs df2) (Some varg)).
       apply Hbody.
       intros x Hx; rewrite Hargs in Hx.
       apply init_local_env_in.
       rewrite (combine_lists_varargs_dom _ _ _ _ Ecomb); exact Hx. }
     intros ? final_e1 final_e2 rv _ (-> & <-).
-    eapply gen_stack_sim_obs_eq;
-      [symmetry; rewrite !Eqit.bind_bind; reflexivity | symmetry; rewrite !Eqit.bind_bind; reflexivity |].
-    eapply gen_stack_sim_bind.
-    { unfold stack_pop, trigger_cast; pstep; apply GSS_Step; unfold gss_step_body, ITree.trigger; cbn.
-      right; right; right.
-      left; apply gen_stack_sim_ret; repeat split; reflexivity. }
-    intros ? ? ? [] _ (-> & -> & -> & <-).
-    eapply gen_stack_sim_bind.
-    { unfold mem_pop, trigger_cast; apply gen_stack_sim_trigger_sync;
-        [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq]. }
+    eapply gen_stack_sim_bind with
+      (RR := fun stk' e1' e2' (r1 r2 : unit) =>
+               stk' = stk /\ e1' = env1 /\ e2' = env2 /\ r1 = r2).
+    { unfold pop_call_frame; cbn [ExtLib.Structures.Monad.bind Monad_itree].
+      eapply gen_stack_sim_bind with
+        (RR := fun stk' e1' e2' (r1 r2 : unit) =>
+                 stk' = stk /\ e1' = env1 /\ e2' = env2 /\ r1 = r2).
+      - unfold stack_pop, trigger_cast; pstep; apply GSS_Step; unfold gss_step_body, ITree.trigger; cbn.
+        right; right; right; left; apply gen_stack_sim_ret; repeat split; reflexivity.
+      - intros ? ? ? [] _ (-> & -> & -> & <-).
+        unfold mem_pop, trigger_cast; apply gen_stack_sim_trigger_sync;
+          [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq]. }
     intros ? ? ? [] _ (-> & -> & -> & <-).
     apply cfg_stack_sim_check_call_return.
   Qed.
@@ -4449,13 +4472,14 @@ Section ModelSemantics.
                        (fun stk' e1' e2' r1 r2 => stk' = stk /\ e1' = env1 /\ e2' = env2 /\ r1 = r2)
                        stk env1 env2 (f1 cc args) (f2 cc args))
                 (lookup k ctx1) (lookup k ctx2)) :
-    forall stk env1 env2 X (c1 c2 : @CallE (@ParamsV IP IPT) X),
-      EqE_Call X X c1 c2 ->
+    forall stk env1 env2 dt1 cc1 fv1 fas1,
       cfg_stack_sim
         (fun stk' e1' e2' r1 r2 => stk' = stk /\ e1' = env1 /\ e2' = env2 /\ r1 = r2)
-        stk env1 env2 (mrec_ctx ctx1 X c1) (mrec_ctx ctx2 X c2).
+        stk env1 env2
+        (mrec_ctx ctx1 _ (Call dt1 cc1 fv1 fas1))
+        (mrec_ctx ctx2 _ (Call dt1 cc1 fv1 fas1)).
   Proof using.
-    intros stk env1 env2 X [dt1 cc1 fv1 fas1] [dt2 cc2 fv2 fas2] (<- & <- & <- & <-).
+    intros stk env1 env2 dt1 cc1 fv1 fas1.
     unfold mrec_ctx; cbn [ExtLib.Structures.Monad.bind Monad_itree].
     eapply gen_stack_sim_bind;
       [apply cfg_stack_sim_EOU | intros ? ? ? [] _ (-> & -> & -> & <-)].
@@ -4463,8 +4487,8 @@ Section ModelSemantics.
       cfg_stack_sim
         (fun stk' e1' e2' r1 r2 => stk' = stk /\ e1' = env1 /\ e2' = env2 /\ r1 = r2)
         stk env1 env2
-        (Functor.fmap inr (external_call dt1 fv1 fas1))
-        (Functor.fmap inr (external_call dt1 fv1 fas1))).
+        (Functor.fmap (@inr exc _) (external_call dt1 fv1 fas1))
+        (Functor.fmap (@inr exc _) (external_call dt1 fv1 fas1))).
     { cbn [Functor.fmap Functor_itree ITree.map]; unfold external_call, trigger_cast.
       eapply gen_stack_sim_bind.
       - apply gen_stack_sim_trigger_sync; [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq].
@@ -4474,8 +4498,8 @@ Section ModelSemantics.
     pose proof (Hctx (ptr_to_int p)) as Hlk.
     destruct (lookup (ptr_to_int p) ctx1) as [f1 |],
              (lookup (ptr_to_int p) ctx2) as [f2 |];
-      inversion Hlk as [? ? Hf12 |]; subst.
-    - apply Hf12.
+      inversion Hlk; subst.
+    - match goal with H : forall s _ _ _ _, cfg_stack_sim _ s _ _ _ _ |- _ => apply H end.
     - exact Hext.
   Qed.
 
@@ -4507,20 +4531,19 @@ Section ModelSemantics.
     pcofix CIH.
     intros stk env1 env2 u1 u2 t1 t2 Et1 Et2 Hsim.
     pstep.
-    eapply gen_stack_sim__mon with
-      (r := fun s0 e1 e2 a1 a2 =>
-              exists v1 v2,
-                interp_mrec (mrec_ctx ctx1) v1 ≅ a1 /\
-                interp_mrec (mrec_ctx ctx2) v2 ≅ a2 /\
-                cfg_stack_sim RR s0 e1 e2 v1 v2);
+    set (r_rel := fun s0 e1 e2 a1 a2 =>
+                    exists v1 v2,
+                      interp_mrec (mrec_ctx ctx1) v1 ≅ a1 /\
+                      interp_mrec (mrec_ctx ctx2) v2 ≅ a2 /\
+                      cfg_stack_sim RR s0 e1 e2 v1 v2).
+    assert (Hr_eq : forall s0 e1 e2 a1 a1' a2 a2',
+              a1 ≅ a1' -> a2 ≅ a2' -> r_rel s0 e1 e2 a1 a2 -> r_rel s0 e1 e2 a1' a2').
+    { intros s0 e1 e2 a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv).
+      exists v1, v2; split; [etransitivity; [exact Ev1 | exact Ea1] | split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]]. }
+    eapply gen_stack_sim__mon with (r := r_rel);
       [| intros s0 e1 e2 a1 a2 (v1 & v2 & Ev1 & Ev2 & Hv);
          right; eapply CIH; [exact Ev1 | exact Ev2 | exact Hv]].
-    eapply gen_stack_sim__obs_eq;
-      [intros s0 e1 e2 a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv);
-       exists v1, v2;
-       split; [etransitivity; [exact Ev1 | exact Ea1] |];
-       split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]
-      | exact Et1 | exact Et2 |].
+    eapply gen_stack_sim__obs_eq; [exact Hr_eq | exact Et1 | exact Et2 |].
     punfold Hsim; clear t1 t2 Et1 Et2 CIH r.
     induction Hsim as [stk env1 env2 u1 u2 Hstep
                        | stk env1 env2 u1 mu1 u2 Hu1 _ IH
@@ -4530,12 +4553,8 @@ Section ModelSemantics.
                        | stk env1 env2 u1 x v k1 u2 Hu1 _ IH
                        | stk env1 env2 u1 u2 x v k2 Hu2 _ IH].
     - eapply gen_stack_sim__obs_eq;
-        [intros s0 e1 e2 a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv);
-         exists v1, v2;
-         split; [etransitivity; [exact Ev1 | exact Ea1] |];
-         split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]
-        | symmetry; apply unfold_interp_mrec
-        | symmetry; apply unfold_interp_mrec |].
+        [exact Hr_eq | symmetry; apply unfold_interp_mrec | symmetry; apply unfold_interp_mrec |].
+      unfold CFGtop, CFGEtop, MCFGtop, MCFGEtop in *.
       unfold gss_step_body in Hstep.
       destruct (observe u1) as [r1 | m1 | X1 ev1 k1] eqn:Hou1.
       + destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
@@ -4558,7 +4577,7 @@ Section ModelSemantics.
                        (ITree.bind (mrec_ctx ctx2 _ (Call dt1 cc1 fv1 fas1)) k2).
                 split; [reflexivity | split; [reflexivity |]].
                 eapply gen_stack_sim_bind.
-                ** apply Hcall; repeat split; reflexivity.
+                ** apply Hcall.
                 ** intros ? ? ? rv1 rv2 (-> & -> & -> & <-).
                    specialize (HA rv1 rv1 Logic.eq_refl I); destruct HA as [HA | Hb]; [exact HA | inversion Hb].
              ++ (* Non-Call MCFGEtop sync event *)
@@ -4569,12 +4588,20 @@ Section ModelSemantics.
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 pstep; eapply GSS_TauL; [reflexivity |]; eapply GSS_TauR; [reflexivity |].
-                punfold HA; eapply gen_stack_sim__mon;
-                  [exact HA | intros ? ? ? ? ? [Hl | []]; left; eapply paco5_mon; [exact Hl | intros ? ? ? ? ? []]].
-          -- destruct ev1 as [| me1], ev2 as [| me2]; cbn in Hloc; try contradiction.
+                punfold HA; exact HA.
+          -- destruct ev1 as [| me1], ev2 as [| me2]; cbn in Hloc;
+               try (destruct (as_local_mcfg me1); contradiction); try contradiction.
              destruct (as_local_mcfg me1) as [le1 |] eqn:Ele1,
                       (as_local_mcfg me2) as [le2 |] eqn:Ele2; try contradiction.
-             destruct le1 as [x1 | x1 v1], le2 as [x2 | x2 v2]; try contradiction.
+             destruct le1 as [x1 v1 | x1], le2 as [x2 v2 | x2]; try contradiction.
+             ++ destruct Hloc as (Hx & Hv & [Hr | Hb]); [| inversion Hb].
+                apply GSS_Step; cbn; right; right; left.
+                rewrite Ele1, Ele2; split; [exact Hx | split; [exact Hv |]].
+                exists (Tau (k1 tt)), (Tau (k2 tt)).
+                split; [rewrite unfold_interp_mrec; reflexivity |].
+                split; [rewrite unfold_interp_mrec; reflexivity |].
+                pstep; eapply GSS_TauL; [reflexivity |]; eapply GSS_TauR; [reflexivity |].
+                punfold Hr; exact Hr.
              ++ destruct Hloc as (Hx & Hlk & Hrd).
                 apply GSS_Step; cbn; right; right; left.
                 rewrite Ele1, Ele2; split; [exact Hx | split; [exact Hlk |]].
@@ -4583,18 +4610,9 @@ Section ModelSemantics.
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 pstep; eapply GSS_TauL; [reflexivity |]; eapply GSS_TauR; [reflexivity |].
-                punfold Hrd; eapply gen_stack_sim__mon;
-                  [exact Hrd | intros ? ? ? ? ? [Hl | []]; left; eapply paco5_mon; [exact Hl | intros ? ? ? ? ? []]].
-             ++ destruct Hloc as (Hx & Hv & [Hr | Hb]); [| inversion Hb].
-                apply GSS_Step; cbn; right; right; left.
-                rewrite Ele1, Ele2; split; [exact Hx | split; [exact Hv |]].
-                exists (Tau (k1 tt)), (Tau (k2 tt)).
-                split; [rewrite unfold_interp_mrec; reflexivity |].
-                split; [rewrite unfold_interp_mrec; reflexivity |].
-                pstep; eapply GSS_TauL; [reflexivity |]; eapply GSS_TauR; [reflexivity |].
-                punfold Hr; eapply gen_stack_sim__mon;
-                  [exact Hr | intros ? ? ? ? ? [Hl | []]; left; eapply paco5_mon; [exact Hl | intros ? ? ? ? ? []]].
-          -- destruct ev1 as [| me1], ev2 as [| me2]; cbn in Hstk; try contradiction.
+                punfold Hrd; exact Hrd.
+          -- destruct ev1 as [| me1], ev2 as [| me2]; cbn in Hstk;
+               try (destruct (as_stack_mcfg me1); contradiction); try contradiction.
              destruct (as_stack_mcfg me1) as [se1 |] eqn:Ese1,
                       (as_stack_mcfg me2) as [se2 |] eqn:Ese2; try contradiction.
              destruct se1, se2; try contradiction.
@@ -4605,52 +4623,44 @@ Section ModelSemantics.
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 pstep; eapply GSS_TauL; [reflexivity |]; eapply GSS_TauR; [reflexivity |].
-                punfold Hr; eapply gen_stack_sim__mon;
-                  [exact Hr | intros ? ? ? ? ? [Hl | []]; left; eapply paco5_mon; [exact Hl | intros ? ? ? ? ? []]].
+                punfold Hr; exact Hr.
              ++ apply GSS_Step; cbn; right; right; right; rewrite Ese1, Ese2.
-                destruct stk as [[p1 p2] rest |]; [| exact I].
+                destruct stk as [| [p1 p2] rest]; [exact I |].
                 destruct Hstk as [Hr | Hb]; [| inversion Hb].
                 exists (Tau (k1 tt)), (Tau (k2 tt)).
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 pstep; eapply GSS_TauL; [reflexivity |]; eapply GSS_TauR; [reflexivity |].
-                punfold Hr; eapply gen_stack_sim__mon;
-                  [exact Hr | intros ? ? ? ? ? [Hl | []]; left; eapply paco5_mon; [exact Hl | intros ? ? ? ? ? []]].
+                punfold Hr; exact Hr.
     - eapply gen_stack_sim__obs_eq with (t1 := Tau (interp_mrec (mrec_ctx ctx1) mu1))
                                         (t2 := interp_mrec (mrec_ctx ctx2) u2);
-        [intros s0 e1 e2 a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv);
-         exists v1, v2;
-         split; [etransitivity; [exact Ev1 | exact Ea1] |];
-         split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]
-        | symmetry; rewrite unfold_interp_mrec, Hu1; reflexivity
-        | reflexivity |].
+        [exact Hr_eq | unfold CFGtop, CFGEtop in Hu1; symmetry; rewrite unfold_interp_mrec, Hu1; reflexivity | reflexivity |].
       eapply GSS_TauL; [reflexivity | exact IH].
     - eapply gen_stack_sim__obs_eq with (t1 := interp_mrec (mrec_ctx ctx1) u1)
                                         (t2 := Tau (interp_mrec (mrec_ctx ctx2) mu2));
-        [intros s0 e1 e2 a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv);
-         exists v1, v2;
-         split; [etransitivity; [exact Ev1 | exact Ea1] |];
-         split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]
-        | reflexivity
-        | symmetry; rewrite unfold_interp_mrec, Hu2; reflexivity |].
+        [exact Hr_eq | reflexivity | unfold CFGtop, CFGEtop in Hu2; symmetry; rewrite unfold_interp_mrec, Hu2; reflexivity |].
       eapply GSS_TauR; [reflexivity | exact IH].
-    - eapply GSS_ReadL with (k1 := fun y => Tau (interp_mrec (mrec_ctx ctx1) (k1 y))).
-      + rewrite Hu1, bind_trigger, unfold_interp_mrec; cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
-        rewrite bind_trigger; reflexivity.
+    - eapply GSS_ReadL with (x := x) (k1 := fun y => Tau (interp_mrec (mrec_ctx ctx1) (k1 y))).
+      + unfold CFGtop, CFGEtop in *; rewrite Hu1, !bind_trigger, unfold_interp_mrec;
+          cbn [observe _interp_mrec subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1];
+          reflexivity.
       + exact Hlk.
       + eapply GSS_TauL; [reflexivity | exact IH].
-    - eapply GSS_ReadR with (k2 := fun y => Tau (interp_mrec (mrec_ctx ctx2) (k2 y))).
-      + rewrite Hu2, bind_trigger, unfold_interp_mrec; cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
-        rewrite bind_trigger; reflexivity.
+    - eapply GSS_ReadR with (x := x) (k2 := fun y => Tau (interp_mrec (mrec_ctx ctx2) (k2 y))).
+      + unfold CFGtop, CFGEtop in *; rewrite Hu2, !bind_trigger, unfold_interp_mrec;
+          cbn [observe _interp_mrec subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1];
+          reflexivity.
       + exact Hlk.
       + eapply GSS_TauR; [reflexivity | exact IH].
-    - eapply GSS_WriteL with (k1 := fun y => Tau (interp_mrec (mrec_ctx ctx1) (k1 y))).
-      + rewrite Hu1, bind_trigger, unfold_interp_mrec; cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
-        rewrite bind_trigger; reflexivity.
+    - eapply GSS_WriteL with (x := x) (v := v) (k1 := fun y => Tau (interp_mrec (mrec_ctx ctx1) (k1 y))).
+      + unfold CFGtop, CFGEtop in *; rewrite Hu1, !bind_trigger, unfold_interp_mrec;
+          cbn [observe _interp_mrec subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1];
+          reflexivity.
       + eapply GSS_TauL; [reflexivity | exact IH].
-    - eapply GSS_WriteR with (k2 := fun y => Tau (interp_mrec (mrec_ctx ctx2) (k2 y))).
-      + rewrite Hu2, bind_trigger, unfold_interp_mrec; cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
-        rewrite bind_trigger; reflexivity.
+    - eapply GSS_WriteR with (x := x) (v := v) (k2 := fun y => Tau (interp_mrec (mrec_ctx ctx2) (k2 y))).
+      + unfold CFGtop, CFGEtop in *; rewrite Hu2, !bind_trigger, unfold_interp_mrec;
+          cbn [observe _interp_mrec subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1];
+          reflexivity.
       + eapply GSS_TauR; [reflexivity | exact IH].
   Qed.
 
@@ -4661,15 +4671,15 @@ Section ModelSemantics.
       stk env1 env2 (EOU_to_itree m) (EOU_to_itree m).
   Proof using.
     destruct m as [s | s | s | x]; cbn [EOU_to_itree].
-    - unfold raiseOOM, trigger_cast; apply gen_stack_sim_trigger_sync;
-        [reflexivity | apply EqE_MCFG_refl | apply EqA_MCFG_eq].
-    - unfold raiseUB, trigger_cast; pstep; apply GSS_Step; cbn; left; reflexivity.
-    - unfold raise, trigger_cast; apply gen_stack_sim_trigger_sync;
-        [reflexivity | apply EqE_MCFG_refl | apply EqA_MCFG_eq].
+    - unfold raise; apply gen_stack_sim_trigger_cast_sync;
+        [reflexivity | apply EqE_MCFG_refl].
+    - unfold raiseOOM; apply gen_stack_sim_trigger_cast_sync;
+        [reflexivity | apply EqE_MCFG_refl].
+    - unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply GSS_Step; unfold gss_step_body; rewrite !observe_bind; cbn; left; reflexivity.
     - apply gen_stack_sim_ret; repeat split; reflexivity.
   Qed.
 
-  Definition sem_fn_sync (sem : @semantic_function (@ParamsV IP IPT) (@MCFGEtop (@ParamsV IP IPT)) _ _ _ _) : Prop :=
+  Definition sem_fn_sync (sem : @semantic_function (@ParamsV IP IPT) (@MCFGEtop (@ParamsV IP IPT))) : Prop :=
     forall args va stk env1 env2,
       mcfg_stack_sim
         (fun stk' e1' e2' r1 r2 => stk' = stk /\ e1' = env1 /\ e2' = env2 /\ r1 = r2)
@@ -4687,43 +4697,108 @@ Section ModelSemantics.
     unfold pure_base_to_semantic; apply pure_to_semantic_sync.
   Qed.
 
-  Lemma Forall_map_pure_to_semantic {A} (f : A -> declaration dtyp * _) (l : list A)
+  Lemma Forall_map_pure_to_semantic {A B} (f : A -> B * _) (l : list A)
     (Hf : forall x, sem_fn_sync (snd (f x))) :
     Forall (fun p => sem_fn_sync (snd p)) (List.map f l).
   Proof using.
     induction l as [| x xs IH]; constructor; [apply Hf | exact IH].
   Qed.
 
+  #[local] Lemma mk_int_unop_defs_sync op_name widths op :
+    Forall (fun p => sem_fn_sync (snd p)) (mk_int_unop_defs op_name widths op).
+  Proof using.
+    unfold mk_int_unop_defs; apply Forall_map_pure_to_semantic; intros; apply pure_base_to_semantic_sync.
+  Qed.
+
+  #[local] Lemma mk_int_unop_flag_defs_sync op_name widths op :
+    Forall (fun p => sem_fn_sync (snd p)) (mk_int_unop_flag_defs op_name widths op).
+  Proof using.
+    unfold mk_int_unop_flag_defs; apply Forall_map_pure_to_semantic; intros; apply pure_base_to_semantic_sync.
+  Qed.
+
+  #[local] Lemma mk_int_binop_defs_sync op_name widths op :
+    Forall (fun p => sem_fn_sync (snd p)) (mk_int_binop_defs op_name widths op).
+  Proof using.
+    unfold mk_int_binop_defs; apply Forall_map_pure_to_semantic; intros; apply pure_base_to_semantic_sync.
+  Qed.
+
+  #[local] Lemma mk_expect_int_defs_sync widths :
+    Forall (fun p => sem_fn_sync (snd p)) (mk_expect_int_defs widths).
+  Proof using.
+    unfold mk_expect_int_defs; apply Forall_map_pure_to_semantic; intros; apply pure_base_to_semantic_sync.
+  Qed.
+
+  #[local] Lemma mk_int_ternop_defs_sync op_name widths op :
+    Forall (fun p => sem_fn_sync (snd p)) (mk_int_ternop_defs op_name widths op).
+  Proof using.
+    unfold mk_int_ternop_defs; apply Forall_map_pure_to_semantic; intros; apply pure_base_to_semantic_sync.
+  Qed.
+
+  #[local] Lemma mk_int_ovf_binop_defs_sync op_name widths op :
+    Forall (fun p => sem_fn_sync (snd p)) (mk_int_ovf_binop_defs op_name widths op).
+  Proof using.
+    unfold mk_int_ovf_binop_defs; apply Forall_map_pure_to_semantic; intros; apply pure_to_semantic_sync.
+  Qed.
+
+  #[local] Opaque mk_int_unop_defs mk_int_unop_flag_defs mk_int_binop_defs
+    mk_expect_int_defs mk_int_ternop_defs mk_int_ovf_binop_defs.
+
+  #[local] Lemma extra_fp_intrinsics_sync :
+    Forall (fun p => sem_fn_sync (snd p)) extra_fp_intrinsics.
+  Proof using.
+    unfold extra_fp_intrinsics; repeat constructor; apply pure_base_to_semantic_sync.
+  Qed.
+
+  #[local] Lemma Forall_app_intro {A} (P : A -> Prop) (l1 l2 : list A) :
+    Forall P l1 -> Forall P l2 -> Forall P (l1 ++ l2).
+  Proof using.
+    intros H1 H2; apply Forall_app; split; assumption.
+  Qed.
+
+  #[local] Lemma extra_int_intrinsics_sync :
+    Forall (fun p => sem_fn_sync (snd p)) extra_int_intrinsics.
+  Proof using.
+    unfold extra_int_intrinsics; repeat apply Forall_app_intro;
+      first [ apply mk_int_binop_defs_sync
+            | apply mk_int_unop_flag_defs_sync
+            | apply mk_int_ovf_binop_defs_sync
+            | apply mk_int_unop_defs_sync
+            | apply mk_int_ternop_defs_sync
+            | apply mk_expect_int_defs_sync ].
+  Qed.
+
+  #[local] Opaque extra_fp_intrinsics extra_int_intrinsics.
+
   Lemma defined_intrinsics_sync :
     Forall (fun p => sem_fn_sync (snd p))
-      (@defined_intrinsics (@ParamsV IP IPT) (@MCFGEtop (@ParamsV IP IPT)) _ _ _ _).
+      (defined_intrinsics (E := @MCFGEtop (@ParamsV IP IPT))).
   Proof using.
-    unfold defined_intrinsics, extra_fp_intrinsics, extra_int_intrinsics,
-           mk_int_unop_defs, mk_int_unop_flag_defs, mk_int_binop_defs,
-           mk_expect_int_defs, mk_int_ternop_defs, mk_int_ovf_binop_defs.
-    repeat apply Forall_app;
-      try (apply Forall_map_pure_to_semantic; intros; cbn [snd];
-           first [apply pure_to_semantic_sync | apply pure_base_to_semantic_sync]);
-      try (repeat constructor; cbn [snd]; apply pure_base_to_semantic_sync).
-    repeat constructor; cbn [snd]; try apply pure_base_to_semantic_sync.
+    unfold defined_intrinsics.
+    repeat apply Forall_app_intro;
+      [ repeat constructor; apply pure_base_to_semantic_sync
+      | apply extra_fp_intrinsics_sync
+      | apply extra_int_intrinsics_sync
+      | ].
+    repeat (apply Forall_cons; [try apply pure_base_to_semantic_sync |]); try apply Forall_nil.
     - (* llvm_va_start *)
       intros args va stk env1 env2; unfold llvm_va_start.
       destruct args as [| a [| ? ?]], va as [vp |];
-        try (unfold raise, trigger_cast; apply gen_stack_sim_trigger_sync;
-             [reflexivity | apply EqE_MCFG_refl | apply EqA_MCFG_eq]).
-      destruct a as [[p | | | | | | |] | |];
-        try (eapply gen_stack_sim_bind;
-             [unfold store, trigger_cast; apply gen_stack_sim_trigger_sync;
-              [reflexivity | apply EqE_MCFG_refl | apply EqA_MCFG_eq]
-             | intros ? ? ? [] _ (-> & -> & -> & <-); apply gen_stack_sim_ret; repeat split; reflexivity]).
-      unfold raiseUB, trigger_cast; pstep; apply GSS_Step; cbn; left; reflexivity.
+        try (unfold raise; apply gen_stack_sim_trigger_cast_sync;
+             [reflexivity | apply EqE_MCFG_refl]).
+      destruct a as [[| | | | | | | ] | |];
+        try (unfold raiseUB; apply gen_stack_sim_trigger_cast_sync;
+             [reflexivity | apply EqE_MCFG_refl]);
+        (eapply gen_stack_sim_bind;
+         [unfold store, trigger_cast; apply gen_stack_sim_trigger_sync;
+          [reflexivity | apply EqE_MCFG_refl | apply EqA_MCFG_eq]
+         | intros ? ? ? [] _ (-> & -> & -> & <-); apply gen_stack_sim_ret; repeat split; reflexivity]).
     - (* llvm_va_end *)
       intros args va stk env1 env2; unfold llvm_va_end; apply gen_stack_sim_ret; repeat split; reflexivity.
     - (* llvm_va_copy *)
       intros args va stk env1 env2; unfold llvm_va_copy.
       destruct args as [| dst [| src [| ? ?]]];
-        try (unfold raise, trigger_cast; apply gen_stack_sim_trigger_sync;
-             [reflexivity | apply EqE_MCFG_refl | apply EqA_MCFG_eq]).
+        try (unfold raise; apply gen_stack_sim_trigger_cast_sync;
+             [reflexivity | apply EqE_MCFG_refl]).
       eapply gen_stack_sim_bind.
       + unfold load, trigger_cast; apply gen_stack_sim_trigger_sync;
           [reflexivity | apply EqE_MCFG_refl | apply EqA_MCFG_eq].
@@ -4734,6 +4809,24 @@ Section ModelSemantics.
         * intros ? ? ? [] _ (-> & -> & -> & <-); apply gen_stack_sim_ret; repeat split; reflexivity.
   Qed.
 
+  #[local] Opaque defined_intrinsics.
+
+  #[local] Lemma assoc_defs_sync (fname : string)
+    (defs : list (declaration typ * @semantic_function (@ParamsV IP IPT) (@MCFGEtop (@ParamsV IP IPT))))
+    (Hdefs : Forall (fun p => sem_fn_sync (snd p)) defs)
+    (f : @semantic_function (@ParamsV IP IPT) (@MCFGEtop (@ParamsV IP IPT))) :
+    assoc fname
+      (List.map (fun '(a, b) => match dc_name a with Name s => (s, b) | _ => (""%string, b) end) defs) =
+      Some f ->
+    sem_fn_sync f.
+  Proof using.
+    induction Hdefs as [| [decl sem] rest Hsem _ IH]; cbn [List.map assoc]; [discriminate |].
+    cbn [snd] in Hsem; destruct (dc_name decl); cbn iota zeta;
+      (match goal with |- (if ?b then _ else _) = _ -> _ => destruct b end;
+       [intros H; exact (eq_ind sem sem_fn_sync Hsem f (f_equal (fun o => match o with Some g => g | None => sem end) H))
+       | exact IH]).
+  Qed.
+
   Lemma handle_intrinsics_sync {X} (ie : @IntrinsicE (@ParamsV IP IPT) X) stk env1 env2 :
     mcfg_stack_sim
       (fun stk' e1' e2' r1 r2 => stk' = stk /\ e1' = env1 /\ e2' = env2 /\ r1 = r2)
@@ -4741,17 +4834,11 @@ Section ModelSemantics.
       (handle_intrinsics ie) (handle_intrinsics ie).
   Proof using.
     destruct ie as [dt fname args va]; cbn [handle_intrinsics].
-    pose proof defined_intrinsics_sync as Hdefs.
-    unfold defs_assoc.
-    induction Hdefs as [| [decl sem] rest Hsem _ IH]; cbn [List.map].
-    - cbn; unfold ITree.trigger; apply gen_stack_sim_trigger_sync;
+    destruct (assoc fname defs_assoc) as [f |] eqn:Eassoc; cbn [eq_rect].
+    - unfold defs_assoc in Eassoc;
+        exact (assoc_defs_sync fname _ defined_intrinsics_sync f Eassoc args va stk env1 env2).
+    - apply gen_stack_sim_trigger_sync;
         [reflexivity | apply EqE_MCFG_refl | apply EqA_MCFG_eq].
-    - cbn [snd] in Hsem.
-      set (nm := match dc_name decl with Name s => s | _ => ""%string end).
-      cbn [assoc].
-      destruct (Eqv.eqv_dec_p fname nm) as [_ | _].
-      + apply Hsem.
-      + exact IH.
   Qed.
 
   Definition intr_cont {R : Type} (x : R + @MCFGtop (@ParamsV IP IPT) R)
@@ -4772,7 +4859,7 @@ Section ModelSemantics.
   Lemma decomp_intr_spec {R : Type} (u : @MCFGtop (@ParamsV IP IPT) R) :
     ITree.bind (decomp_intr u) intr_cont ≅ interp_intrinsics u.
   Proof using.
-    unfold interp_intrinsics, decomp_intr; rewrite unfold_interp.
+    unfold interp_intrinsics, decomp_intr, MCFGtop, MCFGEtop in *; rewrite unfold_interp.
     destruct (observe u) as [r | m | X ev k]; cbn -[interp_intrinsics_h].
     - rewrite Eqit.bind_ret_l; reflexivity.
     - rewrite Eqit.bind_ret_l; reflexivity.
@@ -4841,11 +4928,17 @@ Section ModelSemantics.
                apply gen_stack_sim_ret; exact HA.
           * destruct (as_local_mcfg ev1) as [le1 |] eqn:Ele1,
                      (as_local_mcfg ev2) as [le2 |] eqn:Ele2; try contradiction.
-            destruct le1 as [x1 | x1 v1], le2 as [x2 | x2 v2]; try contradiction;
+            destruct le1 as [x1 v1 | x1], le2 as [x2 v2 | x2]; try contradiction;
               destruct_sum1 ev1; try discriminate Ele1;
               destruct_sum1 ev2; try discriminate Ele2;
               inversion Ele1; subst; inversion Ele2; subst;
               cbn [interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ F_trigger]; unfold ITree.trigger.
+            -- destruct Hloc as (<- & <- & [Hr | Hb]); [| inversion Hb].
+               pstep; apply GSS_Step; unfold gss_step_body; rewrite !observe_bind; cbn.
+               right; right; left; split; [reflexivity | split; [reflexivity |]].
+               left; eapply gen_stack_sim_obs_eq;
+                 [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
+               apply gen_stack_sim_ret; exact Hr.
             -- destruct Hloc as (<- & Hlk & Hrd).
                pstep; apply GSS_Step; unfold gss_step_body; rewrite !observe_bind; cbn.
                right; right; left; split; [reflexivity | split; [exact Hlk |]].
@@ -4853,12 +4946,6 @@ Section ModelSemantics.
                left; eapply gen_stack_sim_obs_eq;
                  [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
                apply gen_stack_sim_ret; exact Hrd.
-            -- destruct Hloc as (<- & <- & [Hr | Hb]); [| inversion Hb].
-               pstep; apply GSS_Step; unfold gss_step_body; rewrite !observe_bind; cbn.
-               right; right; left; split; [reflexivity | split; [reflexivity |]].
-               left; eapply gen_stack_sim_obs_eq;
-                 [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-               apply gen_stack_sim_ret; exact Hr.
           * destruct (as_stack_mcfg ev1) as [se1 |] eqn:Ese1,
                      (as_stack_mcfg ev2) as [se2 |] eqn:Ese2; try contradiction.
             destruct se1, se2; try contradiction;
@@ -4874,7 +4961,7 @@ Section ModelSemantics.
                apply gen_stack_sim_ret; exact Hr.
             -- pstep; apply GSS_Step; unfold gss_step_body; rewrite !observe_bind; cbn.
                right; right; right.
-               destruct stk as [[p1 p2] rest |]; [| exact I].
+               destruct stk as [| [p1 p2] rest]; [exact I |].
                destruct Hstk as [Hr | Hb]; [| inversion Hb].
                left; eapply gen_stack_sim_obs_eq;
                  [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
@@ -4934,18 +5021,18 @@ Section ModelSemantics.
             right; exists (kw1 a1), (kw2 a2); split; [reflexivity | split; [reflexivity | exact HA]].
           * right; left.
             destruct (as_local_mcfg ev1) as [le1 |], (as_local_mcfg ev2) as [le2 |]; try contradiction.
-            destruct le1 as [x1 | x1 v1], le2 as [x2 | x2 v2]; try contradiction.
+            destruct le1 as [x1 v1 | x1], le2 as [x2 v2 | x2]; try contradiction.
+            -- destruct Hloc as (Hx & Hv & [Hr | Hb]); [| inversion Hb].
+               split; [exact Hx | split; [exact Hv | right; exists (kw1 tt), (kw2 tt); split; [reflexivity | split; [reflexivity | exact Hr]]]].
             -- destruct Hloc as (Hx & Hlk & Hrd); split; [exact Hx | split; [exact Hlk |]].
                intros v Hv; specialize (Hrd v Hv); destruct Hrd as [Hrd | Hb]; [| inversion Hb].
                right; exists (kw1 v), (kw2 v); split; [reflexivity | split; [reflexivity | exact Hrd]].
-            -- destruct Hloc as (Hx & Hv & [Hr | Hb]); [| inversion Hb].
-               split; [exact Hx | split; [exact Hv | right; exists (kw1 tt), (kw2 tt); split; [reflexivity | split; [reflexivity | exact Hr]]]].
           * right; right.
             destruct (as_stack_mcfg ev1) as [se1 |], (as_stack_mcfg ev2) as [se2 |]; try contradiction.
             destruct se1, se2; try contradiction.
             -- destruct Hstk as [Hbs [Hr | Hb]]; [| inversion Hb].
                split; [exact Hbs | right; exists (kw1 tt), (kw2 tt); split; [reflexivity | split; [reflexivity | exact Hr]]].
-            -- destruct stk as [[p1 p2] rest |]; [| exact I].
+            -- destruct stk as [| [p1 p2] rest]; [exact I |].
                destruct Hstk as [Hr | Hb]; [| inversion Hb].
                right; exists (kw1 tt), (kw2 tt); split; [reflexivity | split; [reflexivity | exact Hr]].
       - eapply GSS_TauL; [rewrite (observe_bind w1 intr_cont), Hw1; reflexivity | exact IH].
@@ -4975,33 +5062,29 @@ Section ModelSemantics.
       - eapply Hbranch_b; [apply decomp_intr_spec | apply decomp_intr_spec | apply Hstep_decomp, Hstep].
       - eapply gen_stack_sim__obs_eq with (t1 := Tau (interp_intrinsics mu1))
                                           (t2 := interp_intrinsics u2);
-          [exact Hr_eq | symmetry; unfold interp_intrinsics; rewrite unfold_interp, Hu1; reflexivity | reflexivity |].
+          [exact Hr_eq | symmetry; rewrite (itree_eta u1), Hu1, interp_intrinsics_Tau; reflexivity | reflexivity |].
         eapply GSS_TauL; [reflexivity | exact IH].
       - eapply gen_stack_sim__obs_eq with (t1 := interp_intrinsics u1)
                                           (t2 := Tau (interp_intrinsics mu2));
-          [exact Hr_eq | reflexivity | symmetry; unfold interp_intrinsics; rewrite unfold_interp, Hu2; reflexivity |].
+          [exact Hr_eq | reflexivity | symmetry; rewrite (itree_eta u2), Hu2, interp_intrinsics_Tau; reflexivity |].
         eapply GSS_TauR; [reflexivity | exact IH].
-      - eapply GSS_ReadL with (k1 := fun y => Tau (interp_intrinsics (k1 y))).
-        + unfold interp_intrinsics; rewrite Hu1, bind_trigger, unfold_interp;
-            cbn [observe interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ F_trigger subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
-          rewrite bind_trigger; reflexivity.
+      - eapply GSS_ReadL with (x := x) (k1 := fun y => Tau (interp_intrinsics (k1 y))).
+        + rewrite Hu1, !bind_trigger, interp_intrinsics_vis_eqit;
+            cbn - [interp_intrinsics ITree.trigger ITree.bind]; unfold F_trigger; cbn - [interp_intrinsics ITree.trigger ITree.bind]; rewrite bind_trigger; reflexivity.
         + exact Hlk.
         + eapply GSS_TauL; [reflexivity | exact IH].
-      - eapply GSS_ReadR with (k2 := fun y => Tau (interp_intrinsics (k2 y))).
-        + unfold interp_intrinsics; rewrite Hu2, bind_trigger, unfold_interp;
-            cbn [observe interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ F_trigger subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
-          rewrite bind_trigger; reflexivity.
+      - eapply GSS_ReadR with (x := x) (k2 := fun y => Tau (interp_intrinsics (k2 y))).
+        + rewrite Hu2, !bind_trigger, interp_intrinsics_vis_eqit;
+            cbn - [interp_intrinsics ITree.trigger ITree.bind]; unfold F_trigger; cbn - [interp_intrinsics ITree.trigger ITree.bind]; rewrite bind_trigger; reflexivity.
         + exact Hlk.
         + eapply GSS_TauR; [reflexivity | exact IH].
-      - eapply GSS_WriteL with (k1 := fun y => Tau (interp_intrinsics (k1 y))).
-        + unfold interp_intrinsics; rewrite Hu1, bind_trigger, unfold_interp;
-            cbn [observe interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ F_trigger subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
-          rewrite bind_trigger; reflexivity.
+      - eapply GSS_WriteL with (x := x) (v := v) (k1 := fun y => Tau (interp_intrinsics (k1 y))).
+        + rewrite Hu1, !bind_trigger, interp_intrinsics_vis_eqit;
+            cbn - [interp_intrinsics ITree.trigger ITree.bind]; unfold F_trigger; cbn - [interp_intrinsics ITree.trigger ITree.bind]; rewrite bind_trigger; reflexivity.
         + eapply GSS_TauL; [reflexivity | exact IH].
-      - eapply GSS_WriteR with (k2 := fun y => Tau (interp_intrinsics (k2 y))).
-        + unfold interp_intrinsics; rewrite Hu2, bind_trigger, unfold_interp;
-            cbn [observe interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ F_trigger subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
-          rewrite bind_trigger; reflexivity.
+      - eapply GSS_WriteR with (x := x) (v := v) (k2 := fun y => Tau (interp_intrinsics (k2 y))).
+        + rewrite Hu2, !bind_trigger, interp_intrinsics_vis_eqit;
+            cbn - [interp_intrinsics ITree.trigger ITree.bind]; unfold F_trigger; cbn - [interp_intrinsics ITree.trigger ITree.bind]; rewrite bind_trigger; reflexivity.
         + eapply GSS_TauR; [reflexivity | exact IH]. }
     assert (Hmain :
       forall stk env1 env2 t1 t2,
@@ -5051,15 +5134,22 @@ Section ModelSemantics.
     unfold lift_bot_prov; rewrite unfold_translate; reflexivity.
   Qed.
 
+  Lemma lift_bot_prov_bind_ret {A B} (x : A) (k : A -> itree MCFGEbot B) :
+    lift_bot_prov (ITree.bind (Ret x) k) ≅ lift_bot_prov (k x).
+  Proof using.
+    unfold lift_bot_prov; rewrite translate_bind, translate_ret, Eqit.bind_ret_l; reflexivity.
+  Qed.
+
   Lemma fused_local_prov_read_some (x : local_id) (v : @dvalue (@ParamsV IP IPT)) (s : FusedS)
     (Hlk : let '(_, ((sf, _), _)) := s in Maps.lookup x sf.(stack_vars) = Some v) :
     fused_local_prov _ (LocalRead x) s ≅ Ret (s, v).
   Proof using.
-    destruct s as [m [[sf fstk] g]].
+    destruct s as [m [[sf fstk] g]]; cbn - [RM.find] in Hlk.
     unfold fused_local_prov, on_ls_prov, handle_local_stack, handle_local_debug,
-           handle_local, update_locals_ref; cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
-    rewrite Hlk, !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l.
-    destruct sf; cbn [upd_local_sf stack_vars stack_exc stack_loc]; reflexivity.
+           handle_local, update_locals_ref; cbn - [RM.find Maps.add lift_bot_prov upd_local_sf].
+    rewrite Hlk.
+    unfold lift_bot_prov; rewrite !Eqit.bind_ret_l, translate_ret, !Eqit.bind_ret_l.
+    destruct sf; unfold upd_local_sf; cbn [fst snd]; reflexivity.
   Qed.
 
   Lemma fused_local_prov_read_none (x : local_id) (s : FusedS)
@@ -5068,14 +5158,14 @@ Section ModelSemantics.
       fused_local_prov _ (LocalRead x) s ≅
         Vis (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (Throw msg))))))) k.
   Proof using.
-    destruct s as [m [[sf fstk] g]].
+    destruct s as [m [[sf fstk] g]]; cbn - [RM.find] in Hlk.
     unfold fused_local_prov, on_ls_prov, handle_local_stack, handle_local_debug,
            handle_local, update_locals_ref, raise, trigger_cast, ITree.trigger;
-      cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
-    rewrite Hlk, !Eqit.bind_vis.
-    unfold lift_bot_prov; rewrite unfold_translate; cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
-    rewrite Eqit.bind_vis.
-    eexists _, _; reflexivity.
+      cbn - [RM.find Maps.add lift_bot_prov].
+    rewrite Hlk.
+    exists tt; eexists; unfold lift_bot_prov; rewrite !Eqit.bind_vis, translate_vis, Eqit.bind_vis;
+      cbn [subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun];
+      reflexivity.
   Qed.
 
   Lemma fused_local_prov_write (x : local_id) (v : @dvalue (@ParamsV IP IPT))
@@ -5084,8 +5174,8 @@ Section ModelSemantics.
       Ret ((m, ((upd_local_sf sf (Maps.add x v sf.(stack_vars)), fstk), g)), tt).
   Proof using.
     unfold fused_local_prov, on_ls_prov, handle_local_stack, handle_local_debug,
-           handle_local, update_locals_ref; cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
-    rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity.
+           handle_local, update_locals_ref; cbn - [Maps.lookup Maps.add lift_bot_prov upd_local_sf].
+    unfold lift_bot_prov; rewrite !Eqit.bind_ret_l, translate_ret, !Eqit.bind_ret_l; reflexivity.
   Qed.
 
   Lemma memM_interp_prov_post {X} (P : X -> Prop)
@@ -5096,11 +5186,11 @@ Section ModelSemantics.
   Proof using.
     induction m as [x | s | s | s | k IH | σ' k IH | c k IH]; intros σ U; cbn in *.
     - pstep; apply RP_Step; cbn; split; [reflexivity | split; [reflexivity | exact Hm]].
-    - unfold raiseOOM, trigger_cast, ITree.trigger; pstep; apply RP_Step; cbn.
-      right; right; split; [exact I | intros [] [] _].
-    - unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply RP_Step; cbn; left; reflexivity.
-    - unfold raise, trigger_cast, ITree.trigger; pstep; apply RP_Step; cbn.
-      right; right; split; [exact I | intros [] [] _].
+    - unfold raiseOOM, trigger_cast, ITree.trigger; pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn;
+        right; right; split; [exact I | intros [] [] _].
+    - unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; left; reflexivity.
+    - unfold raise, trigger_cast, ITree.trigger; pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn;
+        right; right; split; [exact I | intros [] [] _].
     - apply IH, Hm.
     - apply (IH tt Hm).
     - destruct c as [sz align | |]; cbn in *.
@@ -5168,30 +5258,32 @@ Section ModelSemantics.
           | symmetry; rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity |].
         pstep; apply RP_Step; cbn; repeat split; try exact Hv1; try exact Hv2; try exact Hloc; try exact Hsfm; reflexivity.
     - (* MemoryE *)
-      assert (Hme_eq : e1 = e2) by
-        (destruct e1, e2; cbn in HE; try contradiction;
-         repeat match goal with H : _ /\ _ |- _ => destruct H as [? H] end; subst; reflexivity).
-      subst e2.
-      unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_]; unfold fused_memory_prov, on_mem_prov, handle_memory.
-      eapply refine_prov_bind.
-      + apply (memM_interp_prov_post _ (handle_memoryM e1) (handle_memoryM_post e1)).
-      + intros U' [m1' r1] [m2' r2] _ (-> & <- & Hpost).
-        pstep; apply RP_Step; cbn [rp_step_body observe fused_state_match mcfg_event_post].
-        split; [repeat (first [exact Hsf | exact Hsfm | reflexivity | split]) |].
-        split; [destruct e1; cbn; reflexivity | exact Hpost].
+      destruct e1, e2; cbn in HE; try contradiction;
+        repeat match goal with H : _ /\ _ |- _ => destruct H as [? H] end; subst;
+        unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_]; unfold fused_memory_prov, on_mem_prov, handle_memory;
+        (eapply refine_prov_bind;
+         [match goal with
+          | |- context [handle_memoryM ?me] =>
+              apply (memM_interp_prov_post _ _ (handle_memoryM_post me))
+          end
+         | intros U' [m1' r1] [m2' r2] _ (-> & <- & Hpost);
+           pstep; apply RP_Step; cbn [rp_step_body observe fused_state_match mcfg_event_post];
+           split; [repeat (first [exact Hsf | exact Hsfm | reflexivity | split]) |];
+           split; [cbn; reflexivity | exact Hpost]]).
     - (* DrawE *)
       destruct e1 as [dt1], e2 as [dt2]; cbn in HE; subst dt2.
       unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_]; unfold fused_draw_prov, handle_draw.
-      destruct (default_dvalue_of_dtyp dt1) as [s | s | s | dv] eqn:Edef; cbn [EOU_to_itree].
+      destruct (default_dvalue_of_dtyp dt1) as [s | s | s | dv] eqn:Edef;
+        cbn [EOU_to_itree ExtLib.Structures.Monad.ret Monad_itree].
+      + unfold raise, trigger_cast, ITree.trigger, lift_bot_prov.
+        pstep; apply RP_Step; unfold rp_step_body.
+        repeat (rewrite observe_bind || rewrite observe_translate); cbn; right; right; split; [exact I | intros [] [] _].
       + unfold raiseOOM, trigger_cast, ITree.trigger, lift_bot_prov.
         pstep; apply RP_Step; unfold rp_step_body.
         repeat (rewrite observe_bind || rewrite observe_translate); cbn; right; right; split; [exact I | intros [] [] _].
       + unfold raiseUB, trigger_cast, ITree.trigger, lift_bot_prov.
         pstep; apply RP_Step; unfold rp_step_body.
         repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
-      + unfold raise, trigger_cast, ITree.trigger, lift_bot_prov.
-        pstep; apply RP_Step; unfold rp_step_body.
-        repeat (rewrite observe_bind || rewrite observe_translate); cbn; right; right; split; [exact I | intros [] [] _].
       + eapply refine_prov_obs_eq;
           [symmetry; rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity
           | symmetry; rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity |].
@@ -5299,32 +5391,12 @@ Section ModelSemantics.
             pstep; apply RP_Step; cbn; exists stk, env1, env2; split; [exact Hm' | exact HA].
           * destruct (as_local_mcfg ev1) as [le1 |] eqn:Ele1,
                      (as_local_mcfg ev2) as [le2 |] eqn:Ele2; try contradiction.
-            destruct le1 as [x1 | x1 v1], le2 as [x2 | x2 v2]; try contradiction;
+            destruct le1 as [x1 v1 | x1], le2 as [x2 v2 | x2]; try contradiction;
               destruct_sum1 ev1; try discriminate Ele1;
               destruct_sum1 ev2; try discriminate Ele2;
               inversion Ele1; subst; inversion Ele2; subst;
               unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_];
               destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]].
-            -- destruct Hloc as (<- & Hlk_eq & Hrd).
-               pose proof Hmatch as (Hmm & Hgg & (Hvars1 & Hvars2 & Hexc & Hloc) & Hsfm).
-               destruct (Maps.lookup x1 env1) as [v |] eqn:Elkv.
-               ++ assert (Elkv2 : Maps.lookup x1 env2 = Some v) by congruence.
-                  eapply refine_prov_obs_eq.
-                  ** symmetry; rewrite (fused_local_prov_read_some x1 v (mm1, ((sf1, fstk1), gg1))
-                                         (ltac:(rewrite Hvars1; exact Elkv))), Eqit.bind_ret_l; reflexivity.
-                  ** symmetry; rewrite (fused_local_prov_read_some x1 v (mm2, ((sf2, fstk2), gg2))
-                                         (ltac:(rewrite Hvars2; exact Elkv2))), Eqit.bind_ret_l; reflexivity.
-                  ** specialize (Hrd v Elkv); destruct Hrd as [Hrd | Hb]; [| inversion Hb].
-                     pstep; apply RP_Step; cbn; exists stk, env1, env2; split; [exact Hmatch | exact Hrd].
-               ++ assert (Elkv2 : Maps.lookup x1 env2 = None) by congruence.
-                  destruct (fused_local_prov_read_none x1 (mm1, ((sf1, fstk1), gg1))
-                              (ltac:(rewrite Hvars1; exact Elkv))) as (msg1 & kf1 & Ef1).
-                  destruct (fused_local_prov_read_none x1 (mm2, ((sf2, fstk2), gg2))
-                              (ltac:(rewrite Hvars2; exact Elkv2))) as (msg2 & kf2 & Ef2).
-                  eapply refine_prov_obs_eq;
-                    [symmetry; rewrite Ef1, Eqit.bind_vis; reflexivity
-                    | symmetry; rewrite Ef2, Eqit.bind_vis; reflexivity |].
-                  pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
             -- destruct Hloc as (<- & <- & [Hr | Hb]); [| inversion Hb].
                destruct Hmatch as (<- & <- & (Hvars1 & Hvars2 & Hexc & Hloc) & Hsfm).
                eapply refine_prov_obs_eq;
@@ -5333,6 +5405,26 @@ Section ModelSemantics.
                pstep; apply RP_Step; cbn.
                exists stk, (Maps.add x1 v1 env1), (Maps.add x1 v1 env2); split; [| exact Hr].
                rewrite Hvars1, Hvars2; repeat split; try exact Hexc; try exact Hloc; try exact Hsfm; reflexivity.
+            -- destruct Hloc as (<- & Hlk_eq & Hrd).
+               pose proof Hmatch as (Hmm & Hgg & (Hvars1 & Hvars2 & Hexc & Hloc) & Hsfm).
+               destruct (Maps.lookup x1 env1) as [v |] eqn:Elkv.
+               ++ assert (Elkv2 : Maps.lookup x1 env2 = Some v) by congruence.
+                  eapply refine_prov_obs_eq.
+                  ** symmetry; rewrite (fused_local_prov_read_some x1 v (mm1, ((sf1, fstk1), gg1))
+                                         (ltac:(cbn; rewrite Hvars1; exact Elkv))), Eqit.bind_ret_l; reflexivity.
+                  ** symmetry; rewrite (fused_local_prov_read_some x1 v (mm2, ((sf2, fstk2), gg2))
+                                         (ltac:(cbn; rewrite Hvars2; exact Elkv2))), Eqit.bind_ret_l; reflexivity.
+                  ** specialize (Hrd v Logic.eq_refl); destruct Hrd as [Hrd | Hb]; [| inversion Hb].
+                     pstep; apply RP_Step; cbn; exists stk, env1, env2; split; [exact Hmatch | exact Hrd].
+               ++ assert (Elkv2 : Maps.lookup x1 env2 = None) by congruence.
+                  destruct (fused_local_prov_read_none x1 (mm1, ((sf1, fstk1), gg1))
+                              (ltac:(cbn; rewrite Hvars1; exact Elkv))) as (msg1 & kf1 & Ef1).
+                  destruct (fused_local_prov_read_none x1 (mm2, ((sf2, fstk2), gg2))
+                              (ltac:(cbn; rewrite Hvars2; exact Elkv2))) as (msg2 & kf2 & Ef2).
+                  eapply refine_prov_obs_eq;
+                    [symmetry; rewrite Ef1, Eqit.bind_vis; reflexivity
+                    | symmetry; rewrite Ef2, Eqit.bind_vis; reflexivity |].
+                  pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
           * destruct (as_stack_mcfg ev1) as [se1 |] eqn:Ese1,
                      (as_stack_mcfg ev2) as [se2 |] eqn:Ese2; try contradiction.
             destruct se1, se2; try contradiction;
@@ -5343,30 +5435,30 @@ Section ModelSemantics.
               destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]];
               destruct Hmatch as (<- & <- & Hsf & Hsfm).
             -- destruct Hstk as [<- [Hr | Hb]]; [| inversion Hb].
-               unfold fused_stack_prov, on_ls_prov, handle_stack; cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
+               unfold fused_stack_prov, on_ls_prov, handle_stack; cbn - [Maps.lookup Maps.add lift_bot_prov init_local_env].
                eapply refine_prov_obs_eq;
-                 [symmetry; rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity
-                 | symmetry; rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity |].
+                 [symmetry; rewrite lift_bot_prov_bind_ret, lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity
+                 | symmetry; rewrite lift_bot_prov_bind_ret, lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity |].
                pstep; apply RP_Step; cbn.
-               exists ((env1, env2) :: stk), (init_local_env l), (init_local_env l).
+               eexists ((env1, env2) :: stk), _, _.
                split; [| exact Hr].
                repeat split; try reflexivity.
                apply SFM_cons; [exact Hsf | exact Hsfm].
-            -- destruct stk as [[p1 p2] rest |].
-               ++ destruct Hstk as [Hr | Hb]; [| inversion Hb].
-                  inversion Hsfm as [| ? ? sf1' sf2' ? fstk1' fstk2' Hsf' Hsfm']; subst.
-                  unfold fused_stack_prov, on_ls_prov, handle_stack; cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
-                  eapply refine_prov_obs_eq;
-                    [symmetry; rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity
-                    | symmetry; rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity |].
-                  pstep; apply RP_Step; cbn.
-                  exists rest, p1, p2; split; [| exact Hr].
-                  repeat (first [exact Hsf' | exact Hsfm' | reflexivity | split]).
+            -- destruct stk as [| [p1 p2] rest].
                ++ inversion Hsfm; subst.
                   unfold fused_stack_prov, on_ls_prov, handle_stack, raise, trigger_cast, ITree.trigger, lift_bot_prov;
-                    cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
+                    cbn - [Maps.lookup Maps.add lift_bot_prov].
                   pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn.
-                  right; right; split; [exact I | intros [] [] _]. }
+                  right; right; split; [exact I | intros [] [] _].
+               ++ destruct Hstk as [Hr | Hb]; [| inversion Hb].
+                  inversion Hsfm as [| ? ? sf1' sf2' ? fstk1' fstk2' Hsf' Hsfm']; subst.
+                  unfold fused_stack_prov, on_ls_prov, handle_stack; cbn - [Maps.lookup Maps.add lift_bot_prov init_local_env].
+                  eapply refine_prov_obs_eq;
+                    [symmetry; rewrite lift_bot_prov_bind_ret, lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity
+                    | symmetry; rewrite lift_bot_prov_bind_ret, lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity |].
+                  pstep; apply RP_Step; cbn.
+                  exists rest, p1, p2; split; [| exact Hr].
+                  repeat (first [exact Hsf' | exact Hsfm' | reflexivity | split]). }
     set (r_both := fun U0 (a1 : itree ProvBotE (FusedS * R1)) (a2 : itree ProvBotE (FusedS * R2)) =>
                      (exists stk e1 e2 s1 s2 v1 v2,
                         interp_state interp_vellvm_prov_h v1 s1 ≅ a1 /\
@@ -5463,8 +5555,8 @@ Section ModelSemantics.
         eapply refine_prov__obs_eq with (t1 := Tau (interp_state interp_vellvm_prov_h (k1 v) (mm1, ((sf1, fstk1), gg1))))
                                         (t2 := interp_state interp_vellvm_prov_h u2 (mm2, ((sf2, fstk2), gg2))).
         + exact Hr_eq.
-        + symmetry; rewrite Hu1, bind_trigger, interp_state_vis; cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
-          rewrite (fused_local_prov_read_some x v (mm1, ((sf1, fstk1), gg1)) (ltac:(rewrite Hvars1; exact Hlk))),
+        + symmetry; rewrite Hu1, bind_trigger, interp_state_vis; cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+          rewrite (fused_local_prov_read_some x v (mm1, ((sf1, fstk1), gg1)) (ltac:(cbn - [Maps.lookup]; rewrite Hvars1; exact Hlk))),
                   Eqit.bind_ret_l; reflexivity.
         + reflexivity.
         + eapply RP_TauL; [reflexivity | apply IH, Hmatch].
@@ -5474,8 +5566,8 @@ Section ModelSemantics.
                                         (t2 := Tau (interp_state interp_vellvm_prov_h (k2 v) (mm2, ((sf2, fstk2), gg2)))).
         + exact Hr_eq.
         + reflexivity.
-        + symmetry; rewrite Hu2, bind_trigger, interp_state_vis; cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
-          rewrite (fused_local_prov_read_some x v (mm2, ((sf2, fstk2), gg2)) (ltac:(rewrite Hvars2; exact Hlk))),
+        + symmetry; rewrite Hu2, bind_trigger, interp_state_vis; cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+          rewrite (fused_local_prov_read_some x v (mm2, ((sf2, fstk2), gg2)) (ltac:(cbn - [Maps.lookup]; rewrite Hvars2; exact Hlk))),
                   Eqit.bind_ret_l; reflexivity.
         + eapply RP_TauR; [reflexivity | apply IH, Hmatch].
       - destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]].
@@ -5485,7 +5577,8 @@ Section ModelSemantics.
                         (mm1, ((upd_local_sf sf1 (Maps.add x v sf1.(stack_vars)), fstk1), gg1))))
           (t2 := interp_state interp_vellvm_prov_h u2 (mm1, ((sf2, fstk2), gg1))).
         + exact Hr_eq.
-        + symmetry; rewrite Hu1, bind_trigger, interp_state_vis; cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+        + symmetry; rewrite Hu1, bind_trigger, interp_state_vis; cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+          try change (resum IFun unit (LocalWrite x v)) with (LocalWrite x v);
           rewrite fused_local_prov_write, Eqit.bind_ret_l; reflexivity.
         + reflexivity.
         + eapply RP_TauL; [reflexivity | apply IH].
@@ -5498,7 +5591,8 @@ Section ModelSemantics.
                         (mm1, ((upd_local_sf sf2 (Maps.add x v sf2.(stack_vars)), fstk2), gg1)))).
         + exact Hr_eq.
         + reflexivity.
-        + symmetry; rewrite Hu2, bind_trigger, interp_state_vis; cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+        + symmetry; rewrite Hu2, bind_trigger, interp_state_vis; cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+          try change (resum IFun unit (LocalWrite x v)) with (LocalWrite x v);
           rewrite fused_local_prov_write, Eqit.bind_ret_l; reflexivity.
         + eapply RP_TauR; [reflexivity | apply IH].
           rewrite Hvars2; repeat split; try exact Hvars1; try exact Hexc; try exact Hloc; try exact Hsfm; reflexivity. }
@@ -5538,14 +5632,13 @@ Section ModelSemantics.
       + left; split; [exact Esync | split; [apply EqE_MCFG_refl |]].
         intros a1 a2 Ha _; apply EqA_MCFG_eq in Ha; subst a2; right; apply CIH, Hstk.
       + destruct_sum1 ev; try discriminate Esync.
-        * destruct ev as [x | x v]; right; left; cbn.
-          -- split; [reflexivity | split; [reflexivity | intros v _; right; apply CIH, Hstk]].
+        * destruct ev as [x v | x]; right; left; cbn.
           -- split; [reflexivity | split; [reflexivity | right; apply CIH, Hstk]].
+          -- split; [reflexivity | split; [reflexivity | intros v _; right; apply CIH, Hstk]].
         * destruct ev as [bs | | |]; try discriminate Esync; right; right; cbn.
           -- split; [reflexivity | right; apply CIH; constructor; [reflexivity | exact Hstk]].
-          -- destruct stk as [[p1 p2] rest |]; [| exact I].
-             inversion Hstk as [| ? ? Heq Hrest]; subst; cbn in Heq; subst p2.
-             right; apply CIH, Hrest.
+          -- destruct stk as [| [p1 p2] rest]; [exact I |].
+             pose proof (Forall_inv Hstk) as Heq; cbn in Heq; subst p2; right; apply CIH, (Forall_inv_tail Hstk).
   Qed.
 
   Lemma i8_str_index_stack_sync strptr index stk env1 env2 :
@@ -5561,20 +5654,20 @@ Section ModelSemantics.
         [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq]. }
     intros ? ? ? d_byte _ (-> & -> & -> & <-).
     destruct d_byte as [[| sz b | | | | | |] | |];
-      try (unfold raise, trigger_cast; apply gen_stack_sim_trigger_sync;
-           [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq]).
+      try (unfold raise; apply gen_stack_sim_trigger_cast_sync;
+           [reflexivity | apply EqE_CFG_refl]).
     destruct sz as [p | p |];
-      try (unfold raise, trigger_cast; apply gen_stack_sim_trigger_sync;
-           [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq]);
+      try (unfold raise; apply gen_stack_sim_trigger_cast_sync;
+           [reflexivity | apply EqE_CFG_refl]);
       destruct p as [p | p |];
-      try (unfold raise, trigger_cast; apply gen_stack_sim_trigger_sync;
-           [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq]);
+      try (unfold raise; apply gen_stack_sim_trigger_cast_sync;
+           [reflexivity | apply EqE_CFG_refl]);
       destruct p as [p | p |];
-      try (unfold raise, trigger_cast; apply gen_stack_sim_trigger_sync;
-           [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq]);
+      try (unfold raise; apply gen_stack_sim_trigger_cast_sync;
+           [reflexivity | apply EqE_CFG_refl]);
       destruct p as [p | p |];
-      try (unfold raise, trigger_cast; apply gen_stack_sim_trigger_sync;
-           [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq]).
+      try (unfold raise; apply gen_stack_sim_trigger_cast_sync;
+           [reflexivity | apply EqE_CFG_refl]).
     apply gen_stack_sim_ret; repeat split; reflexivity.
   Qed.
 
@@ -5587,21 +5680,22 @@ Section ModelSemantics.
               cfg_local_sim (fun e1' e2' r1 r2 => e1' = e1 /\ e2' = e2 /\ r1 = r2)
                 e1 e2 (EOU_to_itree m) (EOU_to_itree m)).
     { intros A [s | s | s | x] e1 e2; cbn [EOU_to_itree].
-      - unfold raiseOOM, trigger_cast, ITree.trigger; pstep; apply CLS_Step; cbn;
+      - unfold raise, trigger_cast, ITree.trigger; pstep; apply CLS_Step; unfold cls_step_body; rewrite !observe_bind; cbn;
           right; left; split; [reflexivity | split; [apply EqE_CFG_refl | intros [] [] _ _]].
-      - unfold raiseUB, trigger_cast; pstep; apply CLS_Step; cbn; left; reflexivity.
-      - unfold raise, trigger_cast, ITree.trigger; pstep; apply CLS_Step; cbn;
+      - unfold raiseOOM, trigger_cast, ITree.trigger; pstep; apply CLS_Step; unfold cls_step_body; rewrite !observe_bind; cbn;
           right; left; split; [reflexivity | split; [apply EqE_CFG_refl | intros [] [] _ _]].
+      - unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply CLS_Step; unfold cls_step_body; rewrite !observe_bind; cbn; left; reflexivity.
       - apply cfg_local_sim_ret; repeat split; reflexivity. }
     assert (Herr : forall msg A e1 e2,
               cfg_local_sim (fun e1' e2' (r1 r2 : A) => e1' = e1 /\ e2' = e2 /\ r1 = r2)
                 e1 e2 (raise msg) (raise msg)).
-    { intros msg A e1 e2; unfold raise, trigger_cast, ITree.trigger; pstep; apply CLS_Step; cbn;
+    { intros msg A e1 e2; unfold raise, trigger_cast, ITree.trigger; pstep; apply CLS_Step; unfold cls_step_body; rewrite !observe_bind; cbn;
         right; left; split; [reflexivity | split; [apply EqE_CFG_refl | intros [] [] _ _]]. }
     unfold i8_str_index.
     eapply cfg_local_sim_bind; [apply Heou | intros ? ? iptr _ (-> & -> & <-)].
     eapply cfg_local_sim_bind; [apply Heou | intros ? ? addr _ (-> & -> & <-)].
-    eapply cfg_local_sim_bind.
+    eapply cfg_local_sim_bind with
+      (RR := fun e1' e2' r1 r2 => e1' = env1 /\ e2' = env2 /\ r1 = r2).
     { unfold load, trigger_cast, ITree.trigger; pstep; apply CLS_Step; cbn;
         right; left; split; [reflexivity | split; [apply EqE_CFG_refl |]].
       intros a1 a2 Ha _; apply EqA_CFG_eq in Ha; subst a2; left; apply cfg_local_sim_ret; repeat split; reflexivity. }
@@ -5622,14 +5716,16 @@ Section ModelSemantics.
   Proof using.
     intros stk env1 env2 cc args; unfold putchar_denotation.
     destruct args as [| ch [| ? ?]];
-      try (unfold raise, trigger_cast; apply gen_stack_sim_trigger_sync;
-           [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq]).
-    cbn [Functor.fmap Functor_itree ITree.map].
-    eapply gen_stack_sim_bind; [| intros ? ? ? dv _ (-> & -> & -> & <-); apply gen_stack_sim_ret; repeat split; reflexivity].
+      try (unfold raise; apply gen_stack_sim_trigger_cast_sync;
+           [reflexivity | apply EqE_CFG_refl]).
+    cbn [Functor.fmap Functor_itree]; unfold ITree.map.
+    eapply gen_stack_sim_bind with
+      (RR := fun stk' e1' e2' r1 r2 => stk' = stk /\ e1' = env1 /\ e2' = env2 /\ r1 = r2);
+      [| intros ? ? ? dv _ (-> & -> & -> & <-); apply gen_stack_sim_ret; repeat split; reflexivity].
     destruct ch as [[| sz x32 | | | | | |] | |];
-      try (unfold raiseUB, trigger_cast; pstep; apply GSS_Step; cbn; left; reflexivity).
+      try (unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply GSS_Step; unfold gss_step_body; rewrite !observe_bind; cbn; left; reflexivity).
     destruct (Pos.eq_dec 32 sz) as [<- | _];
-      [| unfold raiseUB, trigger_cast; pstep; apply GSS_Step; cbn; left; reflexivity].
+      [| unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply GSS_Step; unfold gss_step_body; rewrite !observe_bind; cbn; left; reflexivity].
     eapply gen_stack_sim_bind.
     - unfold io_stdout, trigger_cast; apply gen_stack_sim_trigger_sync;
         [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq].
@@ -5644,28 +5740,28 @@ Section ModelSemantics.
   Proof using.
     intros stk env1 env2 cc args; unfold puts_denotation.
     destruct args as [| u_strptr [| ? ?]];
-      try (unfold raise, trigger_cast; apply gen_stack_sim_trigger_sync;
-           [reflexivity | apply EqE_CFG_refl | apply EqA_CFG_eq]).
-    cbn [Functor.fmap Functor_itree ITree.map].
-    eapply gen_stack_sim_bind; [| intros ? ? ? dv _ (-> & -> & -> & <-); apply gen_stack_sim_ret; repeat split; reflexivity].
+      try (unfold raise; apply gen_stack_sim_trigger_cast_sync;
+           [reflexivity | apply EqE_CFG_refl]).
+    cbn [Functor.fmap Functor_itree]; unfold ITree.map.
+    eapply gen_stack_sim_bind with
+      (RR := fun stk' e1' e2' r1 r2 => stk' = stk /\ e1' = env1 /\ e2' = env2 /\ r1 = r2);
+      [| intros ? ? ? dv _ (-> & -> & -> & <-); apply gen_stack_sim_ret; repeat split; reflexivity].
     destruct u_strptr as [[strptr | | | | | | |] | |];
-      try (unfold raiseUB, trigger_cast; pstep; apply GSS_Step; cbn; left; reflexivity).
+      try (unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply GSS_Step; unfold gss_step_body; rewrite !observe_bind; cbn; left; reflexivity).
     eapply gen_stack_sim_bind; [apply i8_str_index_stack_sync |].
     intros ? ? ? ch _ (-> & -> & -> & <-).
-    eapply gen_stack_sim_bind.
-    - eapply gen_stack_sim_bind with
-        (RR := fun stk' e1' e2' r1 r2 => stk' = stk /\ (e1' = env1 /\ e2' = env2 /\ r1 = r2)).
-      + apply cfg_local_to_stack_sim.
-        eapply cfg_local_sim_iter with
-          (RI := fun e1' e2' s1 s2 => e1' = env1 /\ e2' = env2 /\ s1 = s2)
-          (RR := fun e1' e2' r1 r2 => e1' = env1 /\ e2' = env2 /\ r1 = r2);
-          [| repeat split; reflexivity].
-        intros e1' e2' [[c bytes] offset] _ (-> & -> & <-).
-        destruct (@Integers.eq 8 c (@Integers.zero 8)).
-        * apply cfg_local_sim_ret; cbn; repeat split; reflexivity.
-        * eapply cfg_local_sim_bind; [apply i8_str_index_local_sync |].
-          intros ? ? next_char _ (-> & -> & <-); apply cfg_local_sim_ret; cbn; repeat split; reflexivity.
-      + intros ? ? ? bytes _ (-> & -> & -> & <-); apply gen_stack_sim_ret; repeat split; reflexivity.
+    eapply gen_stack_sim_bind with
+      (RR := fun stk' e1' e2' r1 r2 => stk' = stk /\ (e1' = env1 /\ e2' = env2 /\ r1 = r2)).
+    - apply cfg_local_to_stack_sim.
+      eapply cfg_local_sim_iter with
+        (RI := fun e1' e2' s1 s2 => e1' = env1 /\ e2' = env2 /\ s1 = s2)
+        (RR := fun e1' e2' r1 r2 => e1' = env1 /\ e2' = env2 /\ r1 = r2);
+        [| repeat split; reflexivity].
+      intros e1' e2' [[c bytes] offset] _ (-> & -> & <-).
+      destruct (@Integers.eq 8 c (@Integers.zero 8)).
+      + apply cfg_local_sim_ret; cbn; repeat split; reflexivity.
+      + eapply cfg_local_sim_bind; [apply i8_str_index_local_sync |].
+        intros ? ? next_char _ (-> & -> & <-); apply cfg_local_sim_ret; cbn; repeat split; reflexivity.
     - intros ? ? ? bytes _ (-> & -> & -> & <-).
       eapply gen_stack_sim_bind.
       + unfold io_stdout, trigger_cast; apply gen_stack_sim_trigger_sync;
@@ -5749,7 +5845,7 @@ Section ModelSemantics.
   Proof using.
     induction Hl as [| [k1 f1] [k2 f2] l1' l2' [<- Hf] _ IH]; intros k.
     - cbn; constructor.
-    - cbn [IntMaps.IP.of_list fold_right fst snd]; unfold lookup.
+    - cbn [IntMaps.IP.of_list fold_right]; unfold IntMaps.IP.uncurry, lookup; cbn [fst snd].
       destruct (Z.eq_dec k1 k) as [<- | Hne].
       + rewrite !IntMaps.IP.F.add_eq_o by reflexivity; constructor; exact Hf.
       + rewrite !IntMaps.IP.F.add_neq_o by exact Hne; apply IH.
@@ -5779,22 +5875,30 @@ Section ModelSemantics.
   Proof using.
     induction defs as [| df defs' IH]; intros stk env1 env2; cbn [List.map map_monad].
     - apply gen_stack_sim_ret; repeat split; constructor.
-    - eapply gen_stack_sim_bind.
+    - eapply gen_stack_sim_bind with
+        (RR := fun stk' e1' e2'
+                 (p1 p2 : Z * @function_denotation (@ParamsV IP IPT)) =>
+                 stk' = stk /\ e1' = env1 /\ e2' = env2 /\
+                 fst p1 = fst p2 /\
+                 forall s0 a1 a2 cc args,
+                   cfg_stack_sim
+                     (fun s0' a1' a2' r1 r2 => s0' = s0 /\ a1' = a1 /\ a2' = a2 /\ r1 = r2)
+                     s0 a1 a2 (snd p1 cc args) (snd p2 cc args)).
       + unfold address_one_function; cbn [map_defn_with_args df_prototype].
         eapply gen_stack_sim_bind.
         * unfold gread, trigger_cast; apply gen_stack_sim_trigger_sync;
             [reflexivity | apply EqE_MCFG_refl | apply EqA_MCFG_eq].
         * intros ? ? ? fv _ (-> & -> & -> & <-).
           destruct fv as [[p | | | | | | |] | |];
-            try (unfold raise, trigger_cast; apply gen_stack_sim_trigger_sync;
-                 [reflexivity | apply EqE_MCFG_refl | apply EqA_MCFG_eq]).
-          apply gen_stack_sim_ret; repeat split; try reflexivity.
+            try (unfold raise; apply gen_stack_sim_trigger_cast_sync;
+                 [reflexivity | apply EqE_MCFG_refl]).
+          apply gen_stack_sim_ret; cbn [fst snd]; repeat split; try reflexivity.
           apply cfg_stack_sim_denote_function; [reflexivity | reflexivity |].
           intros env0 va Henv0; apply Hbody, Henv0.
-      + intros ? ? ? [k1 fn1] [k2 fn2] (-> & -> & -> & Hhd).
+      + intros ? ? ? [k1 fn1] [k2 fn2] (-> & -> & -> & Hk & Hhd); cbn [fst snd] in Hk, Hhd.
         eapply gen_stack_sim_bind; [apply IH |].
         intros ? ? ? tl1 tl2 (-> & -> & -> & Htl).
-        apply gen_stack_sim_ret; repeat split; constructor; assumption.
+        apply gen_stack_sim_ret; repeat split; constructor; [split; assumption | assumption].
   Qed.
 
   Lemma map_monad_address_library_stack_sim
@@ -5824,20 +5928,28 @@ Section ModelSemantics.
   Proof using.
     induction Hlibs as [| [fid den] rest Hden _ IH]; intros stk env1 env2; cbn [map_monad].
     - apply gen_stack_sim_ret; repeat split; constructor.
-    - eapply gen_stack_sim_bind.
+    - eapply gen_stack_sim_bind with
+        (RR := fun stk' e1' e2'
+                 (p1 p2 : Z * @function_denotation (@ParamsV IP IPT)) =>
+                 stk' = stk /\ e1' = env1 /\ e2' = env2 /\
+                 fst p1 = fst p2 /\
+                 forall s0 a1 a2 cc args,
+                   cfg_stack_sim
+                     (fun s0' a1' a2' r1 r2 => s0' = s0 /\ a1' = a1 /\ a2' = a2 /\ r1 = r2)
+                     s0 a1 a2 (snd p1 cc args) (snd p2 cc args)).
       + unfold address_one_library_function.
         eapply gen_stack_sim_bind.
         * unfold gread, trigger_cast; apply gen_stack_sim_trigger_sync;
             [reflexivity | apply EqE_MCFG_refl | apply EqA_MCFG_eq].
         * intros ? ? ? fv _ (-> & -> & -> & <-).
           destruct fv as [[p | | | | | | |] | |];
-            try (unfold raise, trigger_cast; apply gen_stack_sim_trigger_sync;
-                 [reflexivity | apply EqE_MCFG_refl | apply EqA_MCFG_eq]).
-          apply gen_stack_sim_ret; repeat split; exact Hden.
-      + intros ? ? ? [k1 fn1] [k2 fn2] (-> & -> & -> & Hhd).
+            try (unfold raise; apply gen_stack_sim_trigger_cast_sync;
+                 [reflexivity | apply EqE_MCFG_refl]).
+          apply gen_stack_sim_ret; cbn [fst snd]; repeat apply conj; try reflexivity; exact Hden.
+      + intros ? ? ? [k1 fn1] [k2 fn2] (-> & -> & -> & Hk & Hhd); cbn [fst snd] in Hk, Hhd.
         eapply gen_stack_sim_bind; [apply IH |].
         intros ? ? ? tl1 tl2 (-> & -> & -> & Htl).
-        apply gen_stack_sim_ret; repeat split; constructor; assumption.
+        apply gen_stack_sim_ret; repeat split; constructor; [split; assumption | assumption].
   Qed.
 
   Theorem lift_cfg_with_args_local_pass
@@ -5854,8 +5966,10 @@ Section ModelSemantics.
     intros M ret_typ entry args U.
     unfold run_mcfg_model, interp_mcfg_model.
     eapply refine_prov_antitone with (U := U);
-      [intros _ _ [s1 r1] [s2 r2] _ (_ & _ & _ & _ & <-); reflexivity | apply incl_refl |].
-    eapply mcfg_stack_sim_to_model with (stk := []) (env1 := Maps.empty) (env2 := Maps.empty).
+      [| apply incl_refl
+       | eapply mcfg_stack_sim_to_model with
+           (RR := fun _ _ _ r1 r2 => r1 = r2) (stk := []) (env1 := Maps.empty) (env2 := Maps.empty)];
+      [intros _ _ [s1 r1] [s2 r2] _ (_ & _ & _ & _ & <-); reflexivity | ..].
     { unfold init_fused_state, fused_state_match; repeat split; try reflexivity; constructor. }
     apply mcfg_stack_sim_interp_intrinsics.
     unfold denote_vellvm.
@@ -5895,11 +6009,10 @@ Section ModelSemantics.
         (ctx1 := IntMaps.IP.of_list (defns1 ++ libs1))
         (ctx2 := IntMaps.IP.of_list (defns2 ++ libs2));
         [exact Hctx | reflexivity | reflexivity |].
-      apply (cfg_stack_sim_mrec_ctx _ _ Hctx); repeat split; reflexivity.
+      apply (cfg_stack_sim_mrec_ctx _ _ Hctx).
     - intros ? ? ? rv _ (-> & -> & -> & <-).
       destruct rv as [ex | v].
-      + unfold raiseLLVM, trigger_cast; pstep; apply GSS_Step; unfold gss_step_body, ITree.trigger; cbn.
-        right; left; split; [reflexivity | split; [reflexivity | intros [] [] _ _]].
+      + unfold raiseLLVM; apply gen_stack_sim_trigger_cast_sync; [reflexivity | apply EqE_MCFG_refl].
       + apply gen_stack_sim_ret; reflexivity.
   Qed.
 

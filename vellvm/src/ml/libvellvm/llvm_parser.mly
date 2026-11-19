@@ -46,34 +46,6 @@ let metadata_file_info (startpos:Lexing.position) (endpos:Lexing.position) =
       end_line ;
       end_col ;
       }
-      
-
-(* normalize_float_size :
-   - LLVM floating point literals need different interpretations depending
-     on their types.
-
-   - This function converts a string into either a
-     EXP_Double 64-bit literal, or
-     EXP_Float 32-bit literal depending on the type annotation t
- *)
-(*
-SAZ: This should no longer be necessary, since it is handled in Rocq now.
-TODO: Delete
-let normalize_float_literal (t:typ) (d:string) =
-  match t with
-  | TYPE_Double -> EXP_Double (coqfloat_of_string d)
-  | TYPE_Float  ->
-       let v = coqfloat_of_string d in
-         if can_convert_float_to_float32 v
-           then EXP_Float (coqfloat32_of_string d)
-         else
-           let dbg = (match v with
-                   | B754_finite (_, m, e) -> Printf.sprintf "\"%s\" [m=%s, e=%s]" d (string_of_positive m) (string_of_Z e)
-                   | _ -> Printf.sprintf "\"%s\"" d)
-           in
-           failwith ("Illegal 32-bit floating point literal: " ^ dbg)
-  | _ -> failwith "normalize_float_literal called with non-float type"
-*)
 
 let opt_list (m:'a option) : 'a list =
   match m with
@@ -1304,7 +1276,6 @@ capture_group_ret:
 int_pair:
   | LPAREN i1=INTEGER COMMA i2=INTEGER RPAREN { (i1, i2) }
 
- (* TODO: This loses information when metadata is used as an argument *)
 call_arg:
   | t=non_metadata_type ra=list(param_attr) i=exp { ((t, i), ra) }
   | KW_METADATA mv=metadata_value                 { ((TYPE_Metadata, EXP_Metadata mv), []) } 
@@ -1598,7 +1569,6 @@ expr_op:
   | c=conversion LPAREN t1=typ v=exp KW_TO t2=typ RPAREN
     { OP_Conversion (c, t1, v, t2) }
 
-    (* SAZ: TODO - record the inbounds, nuw, nusw flags, also allow inrange(S,E) *) 
   | KW_GETELEMENTPTR fl=gep_flag* gep_inrange? LPAREN t=typ COMMA ptr=texp idx=preceded(COMMA, texp)* RPAREN
     { OP_GetElementPtr (gep_flags_of fl, t, ptr, idx) }
 
@@ -1634,7 +1604,6 @@ instr_path:
       let (idx, md) = im in
       (INSTR_Op (OP_InsertValue (agg, new_val, idx)), f_info::md) }
 
-    (* SAZ: TODO - allow inrange(S,E) *) 
   | KW_GETELEMENTPTR fl=gep_flag* gep_inrange? t=typ COMMA ptr=texp im=comma_path_with_instr_metadata(texp)
     { let f_info = metadata_file_info $startpos $endpos in
       let (idx, md) = im in
@@ -1656,8 +1625,8 @@ expr_val:
   | KW_ZEROINITIALIZER                                { EXP_Zero_initializer }
   | LCURLY l=separated_list(csep, tconst) RCURLY      { EXP_Struct l         }
   | LTLCURLY l=separated_list(csep, tconst) RCURLYGT  { EXP_Packed_struct l  }
-  | LSQUARE l=separated_list(csep, tconst) RSQUARE    { EXP_Array  l     }
-  | LT l=separated_list(csep, tconst) GT              { EXP_Vector l    }
+  | LSQUARE l=separated_list(csep, tconst) RSQUARE    { EXP_Array  l         }
+  | LT l=separated_list(csep, tconst) GT              { EXP_Vector l         }
   | i=ident                                           { EXP_Ident i          }
   | KW_C cstr=STRING                                  { EXP_Cstring (
 								     cstring_bytes_to_LLVM_i8_array

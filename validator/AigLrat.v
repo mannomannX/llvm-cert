@@ -1630,22 +1630,60 @@ Fixpoint pick_branch_var (trail : pos_trie bool) (best : option (nat * positive)
       end
   end.
 
-Fixpoint dpll_unsat (fuel : nat) (trail : pos_trie bool) (f : cnf)
+Fixpoint dpll_worklist (fuel : nat) (stack : list (pos_trie bool * cnf))
   {struct fuel} : bool :=
-  match bcp_loop (S (List.length f)) trail f with
-  | BCP_LoopConflict => true
-  | BCP_LoopOpen trail1 active =>
+  match stack with
+  | [] => true
+  | (trail, f) :: rest =>
       match fuel with
       | O => false
       | S fuel' =>
-          match pick_branch_var trail1 None active with
-          | None => false
-          | Some v =>
-              dpll_unsat fuel' (pt_set v true trail1) active &&
-              dpll_unsat fuel' (pt_set v false trail1) active
+          match bcp_loop (S (List.length f)) trail f with
+          | BCP_LoopConflict => dpll_worklist fuel' rest
+          | BCP_LoopOpen trail1 active =>
+              match pick_branch_var trail1 None active with
+              | None => false
+              | Some v =>
+                  dpll_worklist fuel'
+                    ((pt_set v true trail1, active) ::
+                     (pt_set v false trail1, active) :: rest)
+              end
           end
       end
   end.
+
+Lemma dpll_worklist_sound : forall fuel assign stack,
+  dpll_worklist fuel stack = true ->
+  (exists trail f, In (trail, f) stack /\ trail_sound assign trail /\ eval_cnf assign f = true) ->
+  False.
+Proof.
+  induction fuel as [| fuel' IH]; intros assign stack Hdpll (trail & f & Hin & Htr & Hf).
+  - destruct stack as [| [tr0 f0] rest]; [exact Hin | discriminate Hdpll].
+  - destruct stack as [| [tr0 f0] rest]; [exact Hin |].
+    cbn [dpll_worklist] in Hdpll.
+    destruct Hin as [Heq | Hin_rest].
+    + inversion Heq; subst tr0 f0; clear Heq.
+      pose proof (bcp_loop_sound assign (S (List.length f)) trail f Htr Hf) as Hbl.
+      destruct (bcp_loop (S (List.length f)) trail f) as [| trail1 active]; [exact Hbl |].
+      destruct Hbl as [Htr1 Hact].
+      destruct (pick_branch_var trail1 None active) as [v |]; [| discriminate Hdpll].
+      destruct (assign v) eqn:Hv.
+      * apply (IH assign _ Hdpll).
+        exists (pt_set v true trail1), active.
+        split; [left; reflexivity | split; [exact (trail_sound_set assign trail1 v true Htr1 Hv) | exact Hact]].
+      * apply (IH assign _ Hdpll).
+        exists (pt_set v false trail1), active.
+        split; [right; left; reflexivity | split; [exact (trail_sound_set assign trail1 v false Htr1 Hv) | exact Hact]].
+    + destruct (bcp_loop (S (List.length f0)) tr0 f0) as [| trail1 active].
+      * apply (IH assign rest Hdpll).
+        exists trail, f; exact (conj Hin_rest (conj Htr Hf)).
+      * destruct (pick_branch_var trail1 None active) as [v |]; [| discriminate Hdpll].
+        apply (IH assign _ Hdpll).
+        exists trail, f; split; [right; right; exact Hin_rest | exact (conj Htr Hf)].
+Qed.
+
+Definition dpll_unsat (fuel : nat) (trail : pos_trie bool) (f : cnf) : bool :=
+  dpll_worklist fuel [(trail, f)].
 
 Lemma dpll_unsat_sound : forall fuel assign trail f,
   dpll_unsat fuel trail f = true ->
@@ -1653,19 +1691,9 @@ Lemma dpll_unsat_sound : forall fuel assign trail f,
   eval_cnf assign f = true ->
   False.
 Proof.
-  induction fuel as [| fuel' IH]; intros assign trail f Hdpll Htr Hf; cbn [dpll_unsat] in Hdpll.
-  - pose proof (bcp_loop_sound assign (S (List.length f)) trail f Htr Hf) as Hbl.
-    destruct (bcp_loop (S (List.length f)) trail f); [exact Hbl | discriminate Hdpll].
-  - pose proof (bcp_loop_sound assign (S (List.length f)) trail f Htr Hf) as Hbl.
-    destruct (bcp_loop (S (List.length f)) trail f) as [| trail1 active]; [exact Hbl |].
-    destruct Hbl as [Htr1 Hact].
-    destruct (pick_branch_var trail1 None active) as [v |]; [| discriminate Hdpll].
-    apply andb_true_iff in Hdpll as [Ht Hf_br].
-    destruct (assign v) eqn:Hv.
-    + exact (IH assign (pt_set v true trail1) active Ht
-               (trail_sound_set assign trail1 v true Htr1 Hv) Hact).
-    + exact (IH assign (pt_set v false trail1) active Hf_br
-               (trail_sound_set assign trail1 v false Htr1 Hv) Hact).
+  intros fuel assign trail f Hdpll Htr Hf.
+  apply (dpll_worklist_sound fuel assign [(trail, f)] Hdpll).
+  exists trail, f; split; [left; reflexivity | exact (conj Htr Hf)].
 Qed.
 
 Definition solve_cnf_unsat (fuel : nat) (f : cnf) : bool :=

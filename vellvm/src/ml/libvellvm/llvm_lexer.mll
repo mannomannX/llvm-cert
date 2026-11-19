@@ -581,7 +581,6 @@ rule token = parse
      ([!align], [!dereferenceable]) is not lexed as that keyword.  "!DI..(" is
      matched by the longer rule above. *)
   | '!' (ident_fst ident_nxt* as s) { METADATA_NAME s }
-  (* FIXME: support metadata strings and struct. Parsed as identifier here. *)
   | "!"  { BANG }
   | '#' (digit+ as i) { ATTR_GRP_ID (coq_of_int (int_of_string i)) }
 

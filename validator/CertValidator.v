@@ -64,6 +64,7 @@ From Vellvm Require Import
   Syntax.TypToDtyp
   Syntax.RawIdMaps
   Syntax.ModuleRefs
+  Syntax.Traversal
   Numeric.Integers
   Semantics.Interfaces.Params
   Semantics.EOU
@@ -72,6 +73,7 @@ From Vellvm Require Import
   Semantics.LLVMEvents
   Semantics.Attributes
   Semantics.Denotation
+  Semantics.IntrinsicsDefinitions
   Semantics.MemoryBytes
   Semantics.Operations.Compare
   Semantics.Operations.Conversion
@@ -190,6 +192,72 @@ Section ITreeObsLemmas.
   Qed.
 End ITreeObsLemmas.
 
+Section DValueBaseProjLemmas.
+  Context {Pa : Params}.
+
+  Definition dvalue_to_int_width (v : @dvalue Pa) : option positive :=
+    match v with
+    | DVALUE_Base dv => @dvalue_base_int_width Pa dv
+    | _ => None
+    end.
+
+  Definition dvalue_to_int_unsigned (v : @dvalue Pa) : Z :=
+    match v with
+    | DVALUE_Base dv => @dvalue_base_int_unsigned Pa dv
+    | _ => 0%Z
+    end.
+
+  Definition eou_dvalue_int_width (x : EOU (@dvalue Pa)) : option positive :=
+    match x with
+    | raise_ret v => dvalue_to_int_width v
+    | _ => None
+    end.
+
+  Definition eou_dvalue_int_unsigned (x : EOU (@dvalue Pa)) : Z :=
+    match x with
+    | raise_ret v => dvalue_to_int_unsigned v
+    | _ => 0%Z
+    end.
+
+  Lemma dvalue_base_I_width_eq (sz1 sz2 : positive)
+    (i1 : @Integers.bit_int sz1) (i2 : @Integers.bit_int sz2) :
+    DVALUE_Base (@DVALUE_I Pa sz1 i1) = DVALUE_Base (@DVALUE_I Pa sz2 i2) ->
+    sz1 = sz2.
+  Proof using Type.
+    intros H; pose proof (f_equal dvalue_to_int_width H) as Hw; cbn in Hw.
+    inversion Hw; reflexivity.
+  Qed.
+
+  Lemma dvalue_base_I_same_sz_inj (sz : positive)
+    (i1 i2 : @Integers.bit_int sz) :
+    DVALUE_Base (@DVALUE_I Pa sz i1) = DVALUE_Base (@DVALUE_I Pa sz i2) ->
+    i1 = i2.
+  Proof using Type.
+    intros H; apply alg_bit_int_unsigned_inj.
+    exact (f_equal dvalue_to_int_unsigned H).
+  Qed.
+
+  Lemma eou_dvalue_I_width_eq (sz1 sz2 : positive)
+    (i1 : @Integers.bit_int sz1) (i2 : @Integers.bit_int sz2) :
+    raise_ret (DVALUE_Base (@DVALUE_I Pa sz1 i1)) =
+    raise_ret (DVALUE_Base (@DVALUE_I Pa sz2 i2)) ->
+    sz1 = sz2.
+  Proof using Type.
+    intros H; pose proof (f_equal eou_dvalue_int_width H) as Hw; cbn in Hw.
+    inversion Hw; reflexivity.
+  Qed.
+
+  Lemma eou_dvalue_I_same_sz_inj (sz : positive)
+    (i1 i2 : @Integers.bit_int sz) :
+    raise_ret (DVALUE_Base (@DVALUE_I Pa sz i1)) =
+    raise_ret (DVALUE_Base (@DVALUE_I Pa sz i2)) ->
+    i1 = i2.
+  Proof using Type.
+    intros H; apply alg_bit_int_unsigned_inj.
+    exact (f_equal eou_dvalue_int_unsigned H).
+  Qed.
+End DValueBaseProjLemmas.
+
 Section OpenWorldEvents.
   Context {Pa : Params}.
 
@@ -228,10 +296,10 @@ Section OpenWorldEvents.
     | inr1 (inr1 (inr1 (inr1 (inl1 se)))) =>
         inr (inr1 (inr1 (inr1 (inr1 (inl1 se)))))
     | inr1 (inr1 (inr1 (inr1 (inr1 (inl1 me))))) =>
-        inr (inr1 (inr1 (inr1 (inr1 (inl1 me)))))
+        inr (inr1 (inr1 (inr1 (inr1 (inr1 (inl1 me))))))
     | inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inl1 de)))))) => inl de
     | inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 rest)))))) =>
-        inr (inr1 (inr1 (inr1 (inr1 (inr1 rest)))))
+        inr (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 rest))))))
     end.
 
   CoFixpoint run_cfg_locals {R : Type}
@@ -372,22 +440,22 @@ Section OpenWorldEvents.
     - destruct fp;
         try (split; [apply DVALUE_Base_typ; reflexivity | reflexivity]);
         (exfalso; destruct Hinh as [v [Hty Hwd]];
-         inversion Hty as [dv ? Hb _ Heqv _ | ? Heqv | |]; subst;
+         inversion Hty as [dv t' Hb Hc Heqv1 Heqv2 | t' Heqv | |]; subst;
          [destruct dv; cbn in Hb, Hwd; discriminate | discriminate]).
     - exfalso; destruct Hinh as [v [Hty Hwd]];
-        inversion Hty as [dv ? Hb _ Heqv _ | ? Heqv | |]; subst;
+        inversion Hty as [dv t' Hb Hc Heqv1 Heqv2 | t' Heqv | |]; subst;
         [destruct dv; cbn in Hb, Hwd; discriminate | discriminate].
     - exfalso; destruct Hinh as [v [Hty Hwd]];
-        inversion Hty as [dv ? Hb _ Heqv _ | ? Heqv | |]; subst;
+        inversion Hty as [dv t' Hb Hc Heqv1 Heqv2 | t' Heqv | |]; subst;
         [destruct dv; cbn in Hb, Hwd; discriminate | discriminate].
     - exfalso; destruct Hinh as [v [Hty Hwd]];
-        inversion Hty as [dv ? Hb _ Heqv _ | ? Heqv | |]; subst;
+        inversion Hty as [dv t' Hb Hc Heqv1 Heqv2 | t' Heqv | |]; subst;
         [destruct dv; cbn in Hb, Hwd; discriminate | discriminate].
     - exfalso; destruct Hinh as [v [Hty Hwd]];
-        inversion Hty as [dv ? Hb _ Heqv _ | ? Heqv | |]; subst;
+        inversion Hty as [dv t' Hb Hc Heqv1 Heqv2 | t' Heqv | |]; subst;
         [destruct dv; cbn in Hb, Hwd; discriminate | discriminate].
     - exfalso; destruct Hinh as [v [Hty Hwd]];
-        inversion Hty as [dv ? Hb _ Heqv _ | ? Heqv | |]; subst;
+        inversion Hty as [dv t' Hb Hc Heqv1 Heqv2 | t' Heqv | |]; subst;
         [destruct dv; cbn in Hb, Hwd; discriminate | discriminate].
     - split; [apply DVALUE_Base_typ; [cbn; apply Pos.eqb_refl | reflexivity] | reflexivity].
   Qed.
@@ -405,7 +473,7 @@ Section OpenWorldEvents.
         assert (Hall : Forall (fun u => valid_draw_value u (default_draw_val u)) fields).
         { apply Forall_forall; intros u Hu.
           assert (Hex : exists x, In x vs /\ dvalue_has_dtyp x u).
-          { clear Hwd Hnp IH; revert u Hu.
+          { clear Hwd Hnp IH Hty; revert u Hu.
             induction Hfa2 as [| x f rx rf Hxf _ IHfa]; intros u Hu; [contradiction |].
             destruct Hu as [<- | Hur].
             - exists x; split; [left; reflexivity | exact Hxf].
@@ -441,7 +509,7 @@ Section OpenWorldEvents.
           -- exact Hnv.
           -- cbn; rewrite (well_defined_not_poison _ Hdw); reflexivity.
           -- constructor; [exact Hdt | apply Forall_forall; intros z Hz; apply repeat_spec in Hz; subst; exact Hdt].
-          -- cbn; f_equal; apply repeat_length.
+          -- rewrite repeat_length, Esz; reflexivity.
         * cbn [default_draw_val dvalue_well_defined]; rewrite Esz; cbn; rewrite Hdw; cbn.
           rewrite forallb_forall; intros z Hz; apply repeat_spec in Hz; subst; exact Hdw.
   Qed.
@@ -456,7 +524,7 @@ Section OpenWorldEvents.
 
   Lemma default_draw_strat_wf : wf_draw_strat default_draw_strat.
   Proof using Type.
-    intros _ dt; apply default_draw_val_wf.
+    intros n dt; apply default_draw_val_wf.
   Qed.
 
   Definition shift_draw_strat (sigma : draw_strat) : draw_strat :=
@@ -756,32 +824,92 @@ Section OpenWorldEvents.
     {X1 X2 : Type}
     (e1 : Det_OW_E X1) (k1 : X1 -> itree Det_OW_E R1)
     (e2 : Det_OW_E X2) (k2 : X2 -> itree Det_OW_E R2) : Prop :=
-    match e1, e2 with
-    | inl1 c1, inl1 c2 => sync_call r c1 k1 c2 k2
-    | inr1 (inl1 ec1), inr1 (inl1 ec2) => sync_extcall r ec1 k1 ec2 k2
-    | inr1 (inr1 (inl1 ic1)), inr1 (inr1 (inl1 ic2)) => sync_intrinsic r ic1 k1 ic2 k2
-    | inr1 (inr1 (inr1 (inl1 g1))), inr1 (inr1 (inr1 (inl1 g2))) => sync_global r g1 k1 g2 k2
-    | inr1 (inr1 (inr1 (inr1 (inl1 s1)))), inr1 (inr1 (inr1 (inr1 (inl1 s2)))) =>
-        sync_stack r s1 k1 s2 k2
-    | inr1 (inr1 (inr1 (inr1 (inr1 (inl1 m1))))),
-      inr1 (inr1 (inr1 (inr1 (inr1 (inl1 m2))))) =>
-        sync_memory r m1 k1 m2 k2
-    | inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inl1 o1)))))),
-      inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inl1 o2)))))) =>
-        sync_oom r o1 k1 o2 k2
-    | inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inl1 x1))))))),
-      inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inl1 x2))))))) =>
-        sync_llvmexc r x1 k1 x2 k2
-    | inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inl1 u1)))))))),
-      inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inl1 u2)))))))) =>
-        sync_ub r u1 k1 u2 k2
-    | inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inl1 d1))))))))),
-      inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inl1 d2))))))))) =>
-        sync_debug r d1 k1 d2 k2
-    | inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 f1))))))))),
-      inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (inr1 f2))))))))) =>
-        sync_failure r f1 k1 f2 k2
-    | _, _ => False
+    match e1 with
+    | inl1 c1 =>
+        match e2 with inl1 c2 => sync_call r c1 k1 c2 k2 | inr1 _ => False end
+    | inr1 e1 =>
+        match e2 with
+        | inl1 _ => False
+        | inr1 e2 =>
+            match e1 with
+            | inl1 ec1 =>
+                match e2 with inl1 ec2 => sync_extcall r ec1 k1 ec2 k2 | inr1 _ => False end
+            | inr1 e1 =>
+                match e2 with
+                | inl1 _ => False
+                | inr1 e2 =>
+                    match e1 with
+                    | inl1 ic1 =>
+                        match e2 with inl1 ic2 => sync_intrinsic r ic1 k1 ic2 k2 | inr1 _ => False end
+                    | inr1 e1 =>
+                        match e2 with
+                        | inl1 _ => False
+                        | inr1 e2 =>
+                            match e1 with
+                            | inl1 g1 =>
+                                match e2 with inl1 g2 => sync_global r g1 k1 g2 k2 | inr1 _ => False end
+                            | inr1 e1 =>
+                                match e2 with
+                                | inl1 _ => False
+                                | inr1 e2 =>
+                                    match e1 with
+                                    | inl1 s1 =>
+                                        match e2 with inl1 s2 => sync_stack r s1 k1 s2 k2 | inr1 _ => False end
+                                    | inr1 e1 =>
+                                        match e2 with
+                                        | inl1 _ => False
+                                        | inr1 e2 =>
+                                            match e1 with
+                                            | inl1 m1 =>
+                                                match e2 with inl1 m2 => sync_memory r m1 k1 m2 k2 | inr1 _ => False end
+                                            | inr1 e1 =>
+                                                match e2 with
+                                                | inl1 _ => False
+                                                | inr1 e2 =>
+                                                    match e1 with
+                                                    | inl1 o1 =>
+                                                        match e2 with inl1 o2 => sync_oom r o1 k1 o2 k2 | inr1 _ => False end
+                                                    | inr1 e1 =>
+                                                        match e2 with
+                                                        | inl1 _ => False
+                                                        | inr1 e2 =>
+                                                            match e1 with
+                                                            | inl1 x1 =>
+                                                                match e2 with inl1 x2 => sync_llvmexc r x1 k1 x2 k2 | inr1 _ => False end
+                                                            | inr1 e1 =>
+                                                                match e2 with
+                                                                | inl1 _ => False
+                                                                | inr1 e2 =>
+                                                                    match e1 with
+                                                                    | inl1 u1 =>
+                                                                        match e2 with inl1 u2 => sync_ub r u1 k1 u2 k2 | inr1 _ => False end
+                                                                    | inr1 e1 =>
+                                                                        match e2 with
+                                                                        | inl1 _ => False
+                                                                        | inr1 e2 =>
+                                                                            match e1 with
+                                                                            | inl1 d1 =>
+                                                                                match e2 with inl1 d2 => sync_debug r d1 k1 d2 k2 | inr1 _ => False end
+                                                                            | inr1 f1 =>
+                                                                                match e2 with inl1 _ => False | inr1 f2 => sync_failure r f1 k1 f2 k2 end
+                                                                            end
+                                                                        end
+                                                                    end
+                                                                end
+                                                            end
+                                                        end
+                                                    end
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
     end.
 
   Lemma det_vis_both_mon {R1 R2 : Type}
@@ -804,10 +932,10 @@ Section OpenWorldEvents.
       destruct e1, e2; cbn; intros H; intuition auto.
   Qed.
 
-  Lemma det_vis_both_refl {R : Type}
-    (r : itree Det_OW_E R -> itree Det_OW_E R -> Prop)
+  Lemma det_vis_both_refl {R1 R2 : Type}
+    (r : itree Det_OW_E R1 -> itree Det_OW_E R2 -> Prop)
     {X : Type} (e : Det_OW_E X)
-    (k1 k2 : X -> itree Det_OW_E R)
+    (k1 : X -> itree Det_OW_E R1) (k2 : X -> itree Det_OW_E R2)
     (Hk : forall x, r (k1 x) (k2 x)) :
     det_vis_both r e k1 e k2.
   Proof using Type.
@@ -1077,8 +1205,8 @@ Section OpenWorldEvents.
           * eapply DR_TauL; [exact Hm1_ | exact (IH12 Hom2 Hs23)].
           * congruence.
         + unfold det_step_body in Hs23; rewrite Hom2 in Hs23.
-          destruct (observe t3) eqn:Hot3; try contradiction.
-          exfalso; exact (Hnt3 _ Hot3).
+          destruct (observe t3) as [| m3_ |]; try contradiction.
+          exfalso; exact (Hnt3 m3_ eq_refl).
         + unfold det_step_body in Hs23; rewrite Hom2 in Hs23.
           revert Hom2 Hs23.
           induction Hm12 as [m1_ m2_ Hs12 | m1_ m1' m2_ Hm1_ _ IH12 | m1_ m2_ mm2 Hm2_ _ _];
@@ -1101,11 +1229,11 @@ Section OpenWorldEvents.
     intros t1 t2 t3 H12 H23; pstep.
     destruct (observe t1) as [x1 | m1 | X1 e1 k1] eqn:Hot1.
     - assert (Hnt1 : forall m, observe t1 <> TauF m) by (rewrite Hot1; discriminate).
-      punfold H12; revert t3 H23 Hnt1.
+      clear Hot1; punfold H12; revert t3 H23 Hnt1.
       induction H12 as [t1_ t2_ Hs12 | t1_ m t2_ Ho1 _ _ | t1_ t2_ m2 Ho2 _ IH12];
         intros t3 H23 Hnt1.
       + destruct (observe t1_) as [y1 | m | Y1 ev kv] eqn:Ho1_;
-          [| exfalso; exact (Hnt1 m Ho1_) |].
+          [| exfalso; exact (Hnt1 m eq_refl) |].
         * unfold det_step_body in Hs12; rewrite Ho1_ in Hs12.
           destruct (observe t2_) as [x2 | | ] eqn:Ho2_; try contradiction.
           punfold H23; revert Ho2_ Hs12.
@@ -1144,11 +1272,11 @@ Section OpenWorldEvents.
       + eapply DR_TauL; [exact Hot1 |].
         punfold H23; apply (Hnon_tau_r t2 t3); [rewrite Hot3; discriminate | exact H23 | exact Hm12].
     - assert (Hnt1 : forall m, observe t1 <> TauF m) by (rewrite Hot1; discriminate).
-      punfold H12; revert t3 H23 Hnt1.
+      clear Hot1; punfold H12; revert t3 H23 Hnt1.
       induction H12 as [t1_ t2_ Hs12 | t1_ m t2_ Ho1 _ _ | t1_ t2_ m2 Ho2 _ IH12];
         intros t3 H23 Hnt1.
       + destruct (observe t1_) as [y1 | m | Y1 ev kv] eqn:Ho1_;
-          [| exfalso; exact (Hnt1 m Ho1_) |].
+          [| exfalso; exact (Hnt1 m eq_refl) |].
         * unfold det_step_body in Hs12; rewrite Ho1_ in Hs12.
           destruct (observe t2_) as [x2 | | ] eqn:Ho2_; try contradiction.
           punfold H23; revert Ho2_ Hs12.
@@ -1371,9 +1499,12 @@ Section OpenWorldEvents.
     assert (Ho_tgt :
       observe (run_draws sigma_tgt' (ITree.bind (ow_draw dt) k_tgt)) =
       TauF (run_draws sigma_tgt (ITree.bind (Ret v) k_tgt))).
-    { rewrite observe_run_draws; unfold ow_draw, ITree.trigger;
-        rewrite observe_bind;
-        cbn [observe classify_ow_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    { rewrite observe_run_draws, observe_bind.
+      assert (Ho_draw : observe (ow_draw dt) =
+                        VisF (@subevent DrawE OW_E _ dvalue (Draw dt)) (fun x => Ret x))
+        by reflexivity.
+      rewrite Ho_draw;
+        cbn [classify_ow_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
       unfold sigma_tgt'; cbn [prepend_draws].
       destruct (dtyp_eq_dec dt dt) as [_ | Hneq]; [reflexivity | exfalso; exact (Hneq eq_refl)]. }
     eapply det_ref_obs_eq; [reflexivity | apply observe_run_draws_bind_ret |].
@@ -1430,10 +1561,11 @@ Section OpenWorldEvents.
     assert (Hdet'' : det_ref dvalue_refines
                        (Ret (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w 0))))
                        (Ret v1))
-      by (eapply det_ref_obs_eq; [exact Ho_src | reflexivity | exact Hdet']).
+      by (eapply det_ref_obs_eq; [exact Ho_src | | exact Hdet'];
+          rewrite observe_run_draws; reflexivity).
     pose proof (det_ref_ret_ret_inv dvalue_refines _ _ Hdet'') as Hdv.
     destruct Hdv as [Hpsn | Heq]; [discriminate Hpsn |].
-    unfold v1 in Heq; inversion Heq as [Hi].
+    unfold v1 in Heq; apply dvalue_base_I_same_sz_inj in Heq as Hi.
     assert (Hu0 : @Integers.unsigned w (@Integers.repr w 0) = 0%Z)
       by (apply @Integers.unsigned_repr; unfold Integers.max_unsigned;
           rewrite (@Integers.modulus_two_power_nat w), (@Integers.natwordsize_def w);
@@ -1450,7 +1582,7 @@ Section OpenWorldEvents.
              assert (Hge1 : (1 <= Z.of_nat (Pos.to_nat w))%Z) by lia;
              pose proof (Z.pow_le_mono_r 2 1 (Z.of_nat (Pos.to_nat w)) ltac:(lia) Hge1); lia);
           lia).
-    rewrite Hi in Hu1; lia.
+    rewrite Hi in Hu1; rewrite Hu0 in Hu1; discriminate Hu1.
   Qed.
 
   (** [F-44] Positive Soundness Theorem (width-generic):
@@ -1478,12 +1610,16 @@ Section OpenWorldEvents.
           destruct (dtyp_eq_dec (DTYPE_Base (DTYPE_I sz)) (DTYPE_Base (DTYPE_I sz))) as [_ | Hneq];
             [| exfalso; exact (Hneq eq_refl)].
           pstep; apply DR_Step; unfold det_step_body.
-          rewrite !observe_run_draws, observe_bind; cbn [observe].
+          assert (Ho_tgt_ret :
+            observe (run_draws sigma_tgt (Ret (DVALUE_Base (@DVALUE_I Pa sz (@Integers.mone sz))))) =
+            RetF (DVALUE_Base (@DVALUE_I Pa sz (@Integers.mone sz))))
+            by reflexivity.
+          rewrite observe_run_draws_bind_ret, observe_run_draws, Ho_tgt_ret.
           unfold v0, eval_iop; rewrite eval_iop_integer_base_same_width; cbn.
-          rewrite @Integers.or_commut, @Integers.or_mone; right; reflexivity.
+          rewrite @Integers.or_mone; right; reflexivity.
     - exists sigma_tgt; split; [exact Hwft |].
       pstep; apply DR_Step; unfold det_step_body.
-      rewrite !observe_run_draws, observe_bind; unfold ow_freeze; rewrite observe_freeze_i_defined.
+      rewrite !observe_run_draws, observe_bind; unfold ow_freeze; rewrite observe_freeze_i_defined; cbn iota.
       unfold eval_iop; rewrite eval_iop_integer_base_same_width; cbn.
       rewrite @Integers.or_mone; right; reflexivity.
   Qed.
@@ -1942,6 +2078,7 @@ Section OpenWorldEvents.
   Qed.
 
 End OpenWorldEvents.
+#[export] Hint Resolve det_ref__mon : paco.
 
 (** ** 4. Open-World Per-Function CFG Refinement [validator_cfg_refines] *)
 
@@ -1957,7 +2094,9 @@ Proof.
   intros r xs; induction xs as [| x rx IH]; cbn; [split; [discriminate | contradiction] |].
   destruct (raw_id_eqb r x) eqn:E.
   - apply raw_id_eqb_eq in E; subst; split; [intros _; left; reflexivity | intros _; reflexivity].
-  - rewrite IH; split; [intros H; right; exact H | intros [-> | H]; [rewrite raw_id_eqb_refl in E; discriminate | exact H]].
+  - rewrite IH; split; [intros H; right; exact H | intros [-> | H]; [
+      assert (Hr : raw_id_eqb r r = true) by (apply raw_id_eqb_eq; reflexivity);
+      rewrite Hr in E; discriminate | exact H]].
 Qed.
 
 Fixpoint find_raw_id_index_from (r : raw_id) (xs : list raw_id) (idx : nat)
@@ -2077,8 +2216,9 @@ Definition dtyp_eqb_dec (t1 t2 : dtyp) : bool :=
 
 Lemma dtyp_eqb_dec_eq : forall t1 t2, dtyp_eqb_dec t1 t2 = true <-> t1 = t2.
 Proof.
-  intros t1 t2; unfold dtyp_eqb_dec; destruct (dtyp_eq_dec t1 t2);
-    split; intros H; try reflexivity; try assumption; discriminate.
+  intros t1 t2; unfold dtyp_eqb_dec; destruct (dtyp_eq_dec t1 t2) as [Heq | Hne];
+    [split; [intros _; exact Heq | intros _; reflexivity]
+    | split; [discriminate | intros Heq; contradiction (Hne Heq)]].
 Qed.
 
 Definition param_use_eqb (u1 u2 : nat * dtyp) : bool :=
@@ -2103,7 +2243,7 @@ Proof.
   destruct (param_use_eqb u x) eqn:E.
   - apply param_use_eqb_eq in E; subst; split; [intros _; left; reflexivity | intros _; reflexivity].
   - rewrite IH; split; [intros H; right; exact H | intros [-> | H]; [
-      assert (Hr : param_use_eqb x x = true) by (apply param_use_eqb_eq; reflexivity);
+      assert (Hr : param_use_eqb u u = true) by (apply param_use_eqb_eq; reflexivity);
       rewrite Hr in E; discriminate | exact H]].
 Qed.
 
@@ -2223,7 +2363,7 @@ Lemma ocfg_map_in {T : Set} :
     RM.find bid (ocfg_map bs) = Some b ->
     In b bs.
 Proof.
-  induction bs as [| b0 rest IH]; intros bid b H; cbn in H.
+  induction bs as [| b0 rest IH]; intros bid b H; cbn [ocfg_map fold_right] in H.
   - rewrite RMF.F.empty_o in H; discriminate.
   - destruct (RawIDOrd.eq_dec (blk_id b0) bid) as [Heq | Hneq].
     + rewrite RMF.F.add_eq_o in H by exact Heq; injection H as ->; left; reflexivity.
@@ -2252,7 +2392,7 @@ Lemma chain_draws_wf {Pa : Params} :
     wf_draw_strat (chain_draws draws tail_s).
 Proof.
   intros draws tail_s Hfa Htail.
-  induction Hfa as [| [dt0 v0] rest Hv0 _ IH]; cbn; [exact Htail |].
+  induction Hfa as [| [dt0 v0] rest Hv0 _ IH]; cbn [chain_draws]; [exact Htail |].
   apply prepend_draws_wf; [constructor; [exact Hv0 | constructor] | exact IH].
 Qed.
 
@@ -2427,7 +2567,7 @@ Proof.
   induction params as [| p pr IH]; intros [| v vr] idx r Hnd Hlen Hnth;
     try discriminate Hlen; [destruct idx; discriminate Hnth |].
   inversion Hnd as [| ? ? Hni Hndr]; subst.
-  destruct idx as [| idx']; cbn in Hnth |- *.
+  destruct idx as [| idx']; cbn [nth_error init_cfg_locals] in Hnth |- *.
   - inversion Hnth; subst p.
     exists v; split; [reflexivity | apply RMF.F.add_eq_o; reflexivity].
   - injection Hlen as Hlen'.
@@ -2476,7 +2616,7 @@ Proof.
   destruct (var_pair_eqb u x) eqn:E.
   - apply var_pair_eqb_eq in E; subst; split; [intros _; left; reflexivity | intros _; reflexivity].
   - rewrite IH; split; [intros H; right; exact H | intros [-> | H]; [
-      assert (Hr : var_pair_eqb x x = true) by (apply var_pair_eqb_eq; reflexivity);
+      assert (Hr : var_pair_eqb u u = true) by (apply var_pair_eqb_eq; reflexivity);
       rewrite Hr in E; discriminate | exact H]].
 Qed.
 
@@ -2522,6 +2662,7 @@ Proof.
   destruct Hin_here as [Heq | []]; inversion Heq; subst w' nm'.
   unfold cfg_param_dtyp_compatible in Hcomp; rewrite forallb_forall in Hcomp.
   pose proof (Hcomp (idx, DTYPE_Base (DTYPE_I w)) Hin_use) as Hdt_idx.
+  cbn zeta iota in Hdt_idx.
   destruct (nth_error arg_dtys idx) as [dt_arg |] eqn:Hnth_dt; [| discriminate Hdt_idx].
   apply dtyp_eqb_dec_eq in Hdt_idx; subst dt_arg.
   assert (Hlen_vs : List.length vs = List.length arg_dtys) by (exact (Forall2_length Hvs)).
@@ -2787,7 +2928,7 @@ Proof.
   - (* OP_IBinop *)
     intros iop dt e1 e2 IH1 IH2 uf params src_pnames defs allowed smap seen0 top w ce seen2 Hsmap Hpu Hr.
     cbn [reify_exp] in Hr.
-    destruct dt as [tb | |]; [| discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
+    destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
     destruct (check_opt_int_width top wb) eqn:Hcw; [| discriminate].
     destruct (reify_exp uf params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) e1)
       as [[[w1 ce1] seen1] |] eqn:Hr1; [| discriminate].
@@ -2819,7 +2960,7 @@ Proof.
   - (* OP_ICmp *)
     intros ss cmp dt e1 e2 IH1 IH2 uf params src_pnames defs allowed smap seen0 top w ce seen2 Hsmap Hpu Hr.
     cbn [reify_exp] in Hr.
-    destruct dt as [tb | |]; [| discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
+    destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
     destruct (check_opt_int_width top 1%positive) eqn:Hcw; [| discriminate].
     destruct (reify_exp uf params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) e1)
       as [[[w1 ce1] seen1] |] eqn:Hr1; [| discriminate].
@@ -2849,7 +2990,7 @@ Proof.
   - (* OP_Conversion *)
     intros ct dtf e1 dtt IH1 uf params src_pnames defs allowed smap seen0 top w ce seen1 Hsmap Hpu Hr.
     cbn [reify_exp] in Hr.
-    destruct ct as [pc | |]; try discriminate.
+    destruct ct as [| pc | ic]; try discriminate.
     destruct dtf as [tbf | |]; try discriminate; destruct tbf as [fw | | | | | | | | | |]; try discriminate.
     destruct dtt as [tbt | |]; try discriminate; destruct tbt as [tw | | | | | | | | | |]; try discriminate.
     destruct (check_opt_int_width top tw) eqn:Hcw; [| discriminate].
@@ -2928,13 +3069,13 @@ Proof.
     apply check_opt_int_width_some_inv in Hcw1; subst w1.
     destruct uf.
     + destruct (freeze_key_in (wb, ce1) seen_mid); [discriminate |].
-      inversion Hr; subst wb ce seen1; clear Hr.
+      inversion Hr; subst w ce seen1; clear Hr.
       repeat split; try assumption.
       * cbn; rewrite Hwt1, Hbw1, Pos.eqb_refl; reflexivity.
       * intros x Hx; right; exact (Hinc0m x Hx).
       * intros _; cbn; intros x [<- | Hx];
           [left; reflexivity | right; exact (Hfk1 eq_refl x Hx)].
-    + inversion Hr; subst wb ce seen1; clear Hr.
+    + inversion Hr; subst w ce seen1; clear Hr.
       repeat split; try assumption.
       * cbn; rewrite Hwt1, Hbw1, Pos.eqb_refl; reflexivity.
       * intros Huf; discriminate Huf.
@@ -3027,21 +3168,26 @@ Proof.
     inversion Hr; subst; cbn; apply Pos.eqb_refl.
   - destruct t as [[wb | | | | | | | | | |] | |]; try discriminate.
     destruct (check_opt_int_width top wb) eqn:E; [| discriminate].
-    destruct (reify_exp _ _ _ _ _ _ _ o1) as [[[_ _] _] |]; [| discriminate].
-    destruct (reify_exp _ _ _ _ _ _ _ o2) as [[[_ _] _] |]; [| discriminate].
+    destruct (reify_exp uf params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) o1)
+      as [[[w1 ce1] sn1] |]; [| discriminate].
+    destruct (reify_exp uf params src_pnames defs smap sn1 (Some (DTYPE_Base (DTYPE_I wb))) o2)
+      as [[[w2 ce2] sn2] |]; [| discriminate].
     destruct (ibinop_to_cert iop); inversion Hr; subst; exact E.
   - destruct t as [[wb | | | | | | | | | |] | |]; try discriminate.
     destruct (check_opt_int_width top 1%positive) eqn:E; [| discriminate].
-    destruct (reify_exp _ _ _ _ _ _ _ o1) as [[[_ _] _] |]; [| discriminate].
-    destruct (reify_exp _ _ _ _ _ _ _ o2) as [[[_ _] _] |]; [| discriminate].
+    destruct (reify_exp uf params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) o1)
+      as [[[w1 ce1] sn1] |]; [| discriminate].
+    destruct (reify_exp uf params src_pnames defs smap sn1 (Some (DTYPE_Base (DTYPE_I wb))) o2)
+      as [[[w2 ce2] sn2] |]; [| discriminate].
     inversion Hr; subst; exact E.
-  - destruct conv as [pc | |]; try discriminate.
+  - destruct conv as [| pc | ic]; try discriminate.
     destruct t_from as [[fw | | | | | | | | | |] | |]; try discriminate.
     destruct t_to as [[tw | | | | | | | | | |] | |]; try discriminate.
     destruct (check_opt_int_width top tw) eqn:E; [| discriminate].
     destruct (pure_conv_to_cert pc) as [[ck cfl] |]; [| discriminate].
     destruct (match ck with CCK_ZExt => _ | CCK_SExt => _ | CCK_Trunc => _ end); [| discriminate].
-    destruct (reify_exp _ _ _ _ _ _ _ v) as [[[_ _] _] |]; [| discriminate].
+    destruct (reify_exp uf params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I fw))) o)
+      as [[[w1 ce1] sn1] |]; [| discriminate].
     inversion Hr; subst; exact E.
   - destruct cnd as [dtc ec], v1 as [dt1 e1], v2 as [dt2 e2].
     destruct dtc as [[[| | ] | | | | | | | | | |] | |]; try discriminate.
@@ -3049,14 +3195,18 @@ Proof.
     destruct dt2 as [[w2 | | | | | | | | | |] | |]; try discriminate.
     destruct (Pos.eqb w1 w2 && check_opt_int_width top w1) eqn:E; [| discriminate].
     apply andb_true_iff in E as [_ E].
-    destruct (reify_exp _ _ _ _ _ _ _ ec) as [[[_ _] _] |]; [| discriminate].
-    destruct (reify_exp _ _ _ _ _ _ _ e1) as [[[_ _] _] |]; [| discriminate].
-    destruct (reify_exp _ _ _ _ _ _ _ e2) as [[[_ _] _] |]; [| discriminate].
+    destruct (reify_exp uf params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I 1%positive))) ec)
+      as [[[wc cec] sn1] |]; [| discriminate].
+    destruct (reify_exp uf params src_pnames defs smap sn1 (Some (DTYPE_Base (DTYPE_I w1))) e1)
+      as [[[wa ce1] sn2] |]; [| discriminate].
+    destruct (reify_exp uf params src_pnames defs smap sn2 (Some (DTYPE_Base (DTYPE_I w1))) e2)
+      as [[[wb ce2] sn3] |]; [| discriminate].
     inversion Hr; subst; exact E.
   - destruct v as [dt e1].
     destruct dt as [[wb | | | | | | | | | |] | |]; try discriminate.
     destruct (check_opt_int_width top wb) eqn:E; [| discriminate].
-    destruct (reify_exp _ _ _ _ _ _ _ e1) as [[[_ ce1] seen_m] |]; [| discriminate].
+    destruct (reify_exp uf params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) e1)
+      as [[[w1 ce1] seen_m] |]; [| discriminate].
     destruct uf;
       [destruct (freeze_key_in (wb, ce1) seen_m); [discriminate | inversion Hr; subst; exact E]
       | inversion Hr; subst; exact E].
@@ -3147,11 +3297,27 @@ Proof.
   intros sigma env r; apply MSR_Ret; reflexivity.
 Qed.
 
+Lemma mcfg_steps_raiseUB {Pa : Params} {R : Type} :
+  forall (sigma : @draw_strat Pa) (env : rmap (@dvalue Pa)) (msg : string),
+    mcfg_steps_to_ub sigma env (raiseUB (E := @MCFGEtop Pa) (X := R) msg).
+Proof.
+  intros sigma env msg; eapply MSU_UB;
+    unfold raiseUB, trigger_cast', ITree.trigger; rewrite observe_bind; reflexivity.
+Qed.
+
+Lemma cfg_steps_raiseUB {Pa : Params} {R : Type} :
+  forall (sigma : @draw_strat Pa) (env : rmap (@dvalue Pa)) (msg : string),
+    cfg_steps_to_ub sigma env (raiseUB (E := @CFGEtop Pa) (X := R) msg).
+Proof.
+  intros sigma env msg; eapply CSU_UB;
+    unfold raiseUB, trigger_cast', ITree.trigger; rewrite observe_bind; reflexivity.
+Qed.
+
 Lemma mcfg_steps_eou_ub {Pa : Params} {R : Type} :
   forall (sigma : @draw_strat Pa) (env : rmap (@dvalue Pa)) (msg : string),
     mcfg_steps_to_ub sigma env (EOU_to_itree (E := MCFGEtop) (@raise_ub R msg)).
 Proof.
-  intros sigma env msg; eapply MSU_UB; reflexivity.
+  intros sigma env msg; cbn [EOU_to_itree]; apply mcfg_steps_raiseUB.
 Qed.
 
 Lemma cfg_steps_lwrite {Pa : Params} :
@@ -3210,7 +3376,7 @@ Proof.
     intros iop dt e1 e2 IH1 IH2 params src_pnames defs allowed arg_dtys vs foracle smap env seen0 top w ce seen2
       Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr.
     cbn [reify_exp] in Hr.
-    destruct dt as [tb | |]; [| discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
+    destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
     destruct (check_opt_int_width top wb) eqn:Hcw; [| discriminate].
     destruct (reify_exp false params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) e1)
       as [[[w1 ce1] seen1] |] eqn:Hr1; [| discriminate].
@@ -3265,7 +3431,7 @@ Proof.
     intros ss cmp dt e1 e2 IH1 IH2 params src_pnames defs allowed arg_dtys vs foracle smap env seen0 top w ce seen2
       Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr.
     cbn [reify_exp] in Hr.
-    destruct dt as [tb | |]; [| discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
+    destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
     destruct (check_opt_int_width top 1%positive) eqn:Hcw; [| discriminate].
     destruct (reify_exp false params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) e1)
       as [[[w1 ce1] seen1] |] eqn:Hr1; [| discriminate].
@@ -3311,7 +3477,7 @@ Proof.
     intros ct dtf e1 dtt IH1 params src_pnames defs allowed arg_dtys vs foracle smap env seen0 top w ce seen1
       Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr.
     cbn [reify_exp] in Hr.
-    destruct ct as [pc | |]; try discriminate.
+    destruct ct as [| pc | ic]; try discriminate.
     destruct dtf as [tbf | |]; try discriminate; destruct tbf as [fw | | | | | | | | | |]; try discriminate.
     destruct dtt as [tbt | |]; try discriminate; destruct tbt as [tw | | | | | | | | | |]; try discriminate.
     destruct (check_opt_int_width top tw) eqn:Hcw; [| discriminate].
@@ -3589,7 +3755,7 @@ Proof.
     intros iop dt e1 e2 IH1 IH2 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0 top w ce seen2
       Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hr.
     cbn [reify_exp] in Hr.
-    destruct dt as [tb | |]; [| discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
+    destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
     destruct (check_opt_int_width top wb) eqn:Hcw; [| discriminate].
     destruct (reify_exp true params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) e1)
       as [[[w1 ce1] seen1] |] eqn:Hr1; [| discriminate].
@@ -3660,7 +3826,7 @@ Proof.
     intros ss cmp dt e1 e2 IH1 IH2 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0 top w ce seen2
       Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hr.
     cbn [reify_exp] in Hr.
-    destruct dt as [tb | |]; [| discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
+    destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
     destruct (check_opt_int_width top 1%positive) eqn:Hcw; [| discriminate].
     destruct (reify_exp true params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) e1)
       as [[[w1 ce1] seen1] |] eqn:Hr1; [| discriminate].
@@ -3727,7 +3893,7 @@ Proof.
     intros ct dtf e1 dtt IH1 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0 top w ce seen1
       Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hr.
     cbn [reify_exp] in Hr.
-    destruct ct as [pc | |]; try discriminate.
+    destruct ct as [| pc | ic]; try discriminate.
     destruct dtf as [tbf | |]; try discriminate; destruct tbf as [fw | | | | | | | | | |]; try discriminate.
     destruct dtt as [tbt | |]; try discriminate; destruct tbt as [tw | | | | | | | | | |]; try discriminate.
     destruct (check_opt_int_width top tw) eqn:Hcw; [| discriminate].
@@ -3916,11 +4082,16 @@ Proof.
               pose proof (eval_let_free_prepend_fmap ce1 (build_param_env src_pnames vs)
                             [((w, ce1), z_draw)] (added1 ++ fmap0) seen_mid Hlf1 (Hfk1 eq_refl)
                             (fun k z H => match H with
-                                          | or_introl Heq => eq_ind_r (fun u => ~ In u seen_mid) Hfnin (f_equal fst Heq)
+                                          | or_introl Heq => eq_ind_r (fun u => ~ In u seen_mid) Hfnin (eq_sym (f_equal fst Heq))
                                           | or_intror Hfalse => False_ind _ Hfalse
                                           end)) as Hev1'.
               unfold eval_closed_cert_expr in *; cbn [eval_cert_expr let_val_exprs List.map].
-              rewrite Hev1', Hev1, (expand_lets_let_free ce1 Hlf1); cbn [app oracle_of_fmap].
+              match goal with
+              | |- eou_bind _ ?K = _ =>
+                  transitivity (eou_bind (raise_ret (DVALUE_Base DVALUE_Poison)) K);
+                  [f_equal; exact (eq_trans Hev1' Hev1) |]
+              end.
+              cbn [eou_bind]; rewrite (expand_lets_let_free ce1 Hlf1); cbn [app oracle_of_fmap].
               rewrite freeze_key_eqb_refl; unfold z_draw; rewrite (@Integers.repr_unsigned w idraw); reflexivity.
            ++ cbn [denote_exp]; eapply mcfg_steps_to_ret_bind; [exact Hst1 |].
               eapply MSR_Draw; [reflexivity | intros n d; reflexivity | rewrite Hidraw; apply MSR_Ret; reflexivity].
@@ -4280,11 +4451,13 @@ Proof.
   intros allowed defs seen added fmap penv pevals dvs Hwf Hdisj Hfa2.
   revert dvs Hfa2.
   induction Hwf as [| [[id w] ce] rest (_ & _ & _ & Hlf & _ & Hfk) _ IH];
-    intros dvs Hfa2; inversion Hfa2 as [| ? [id' dv] ? dvs_r [Heq [Hev Hsc]] Hfa2_r]; subst;
-    [constructor |].
-  constructor; [| exact (IH dvs_r Hfa2_r)].
-  split; [reflexivity | split; [| exact Hsc]].
-  exact (eq_trans (eval_let_free_prepend_fmap ce penv added fmap seen Hlf (Hfk eq_refl) Hdisj) Hev).
+    intros dvs Hfa2.
+  - inversion Hfa2; subst; constructor.
+  - inversion Hfa2 as [| ? [id' dv] ? dvs_r Hpair Hfa2_r]; subst.
+    cbn [phi_eval_pair_matches] in Hpair; destruct Hpair as [Heq [Hev Hsc]].
+    constructor; [| exact (IH dvs_r Hfa2_r)].
+    cbn [phi_eval_pair_matches]; split; [exact Heq | split; [| exact Hsc]].
+    exact (eq_trans (eval_let_free_prepend_fmap ce penv added fmap seen Hlf (Hfk eq_refl) Hdisj) Hev).
 Qed.
 
 Lemma apply_phi_env_matches {Pa : Params} :
@@ -4297,10 +4470,12 @@ Proof.
   intros allowed defs seen uf penv foracle smap env pevals dvs Henv Hwf Hfa2.
   revert smap env Henv dvs Hfa2.
   induction Hwf as [| [[id w] ce] rest (Hid & _) _ IH];
-    intros smap env Henv dvs Hfa2;
-    inversion Hfa2 as [| ? [id' dv] ? dvs_r [-> [Hev Hsc]] Hfa2_r]; subst;
-    cbn [apply_phi_smap apply_phi_env]; [exact Henv |].
-  apply IH; [exact (env_matches_smap_add defs penv foracle smap env id w ce dv Henv Hid Hev Hsc) | exact Hfa2_r].
+    intros smap env Henv dvs Hfa2.
+  - inversion Hfa2; subst; exact Henv.
+  - inversion Hfa2 as [| ? [id' dv] ? dvs_r Hpair Hfa2_r]; subst.
+    cbn [phi_eval_pair_matches] in Hpair; destruct Hpair as [-> [Hev Hsc]].
+    cbn [apply_phi_smap apply_phi_env].
+    apply IH; [exact (env_matches_smap_add defs penv foracle smap env id w ce dv Henv Hid Hev Hsc) | exact Hfa2_r].
 Qed.
 
 Lemma apply_phi_env_preserves_nondefs {Pa : Params} :
@@ -4313,11 +4488,13 @@ Proof.
   intros allowed defs seen uf penv foracle env pevals dvs r Hwf Hfa2 Hnin.
   revert env dvs Hfa2.
   induction Hwf as [| [[id w] ce] rest (Hid & _) _ IH];
-    intros env dvs Hfa2;
-    inversion Hfa2 as [| ? [id' dv] ? dvs_r [-> _] Hfa2_r]; subst;
-    cbn [apply_phi_env]; [reflexivity |].
-  rewrite (IH (RM.add id dv env) dvs_r Hfa2_r).
-  apply RMF.F.add_neq_o; intros ->; exact (Hnin Hid).
+    intros env dvs Hfa2.
+  - inversion Hfa2; subst; reflexivity.
+  - inversion Hfa2 as [| ? [id' dv] ? dvs_r Hpair Hfa2_r]; subst.
+    cbn [phi_eval_pair_matches] in Hpair; destruct Hpair as [-> _].
+    cbn [apply_phi_env].
+    rewrite (IH (RM.add id dv env) dvs_r Hfa2_r).
+    apply RMF.F.add_neq_o; intros ->; exact (Hnin Hid).
 Qed.
 
 Fixpoint reify_phi_evals
@@ -4529,7 +4706,7 @@ Proof.
     cbn [reify_phi_evals] in Hr.
   - inversion Hr; subst pevals seen2.
     exists []; split; [intros _ _ [] | right; exists sigma0, []].
-    split; [exact Hwfd0 | split; [constructor | split; [intros _ k _; reflexivity | apply CSR_Ret; reflexivity]]].
+    split; [exact Hwfd0 | split; [constructor | split; [intros fmap_later k _; reflexivity | apply CSR_Ret; reflexivity]]].
   - destruct (raw_id_in_list id defs) eqn:Hid; [| discriminate].
     destruct dt as [tb | |]; try discriminate; destruct tb as [w | | | | | | | | | |]; try discriminate.
     destruct (assoc bid_from pargs) as [op |] eqn:Hassoc; [| discriminate].
@@ -4679,7 +4856,7 @@ Proof.
   induction c as [| [[iid ins] md] rest IH];
     intros uf params src_pnames defs allowed smap0 seen0 cevals smap2 seen2 Hsmap0 Hpu Hr;
     cbn [reify_code] in Hr.
-  - inversion Hr; subst; repeat split; [intros x Hx; exact Hx | exact Hsmap0 | intros k Hk; exact Hk].
+  - inversion Hr; subst; split; [intros x Hx; exact Hx | split; [exact Hsmap0 | intros k Hk; exact Hk]].
   - destruct iid as [id | vid].
     + destruct ins; try discriminate.
       destruct (raw_id_in_list id defs) eqn:Hid; [| discriminate].
@@ -4956,7 +5133,7 @@ Proof.
   - inversion Hr; subst cevals smap2 seen2.
     exists []; split; [intros _ _ [] | right; exists sigma0, env0].
     split; [exact Hwfd0 | split; [exact Hpe | split; [exact Henv0 |
-      split; [intros _ k _; reflexivity | apply CSR_Ret; reflexivity]]]].
+      split; [intros fmap_later k _; reflexivity | apply CSR_Ret; reflexivity]]]].
   - destruct iid as [id | vid].
     + destruct ins; try discriminate.
       destruct (raw_id_in_list id defs) eqn:Hid; [| discriminate].
@@ -5115,16 +5292,15 @@ Proof.
     intros penv foracle dv Hlf Hev x wx Hx;
     cbn [is_let_free_expr collect_free_vars eval_cert_expr lookup_let_val] in Hlf, Hev, Hx;
     try contradiction Hx; try discriminate Hlf.
-  - destruct (starts_with_dollar nm); [contradiction Hx |].
-    destruct Hx as [Heq | []]; inversion Heq; subst x wx.
+  - destruct Hx as [Heq | []]; inversion Heq; subst x wx.
     destruct (penv nm) as [v |] eqn:Ep; [| discriminate Hev].
     exists v; split; [reflexivity |].
     destruct v as [db | |]; try discriminate Hev.
     destruct db as [| sz iv | | | | | |]; try discriminate Hev.
-    + left; reflexivity.
     + cbn [check_scalar_width] in Hev.
       destruct (Pos.eqb sz w) eqn:Esz; [| discriminate Hev].
       apply Pos.eqb_eq in Esz; subst sz; right; exists iv; reflexivity.
+    + left; reflexivity.
   - apply andb_true_iff in Hlf as [Hlfl Hlfr].
     destruct (eval_cert_expr penv [] foracle l) as [| | | vl] eqn:El; try discriminate Hev.
     cbn [eou_bind] in Hev.
@@ -5182,7 +5358,7 @@ Proof.
   inversion Htc; subst b; clear Htc.
   cbn [eval_closed_cert_expr eval_cert_expr] in Heq.
   destruct (eval_closed_cert_expr penv foracle ce) as [| | | dv]; try contradiction Heq.
-  subst dv; exists (@Integers.repr 1 (Z.of_N v)); split; reflexivity.
+  cbn [equiv_eou_dvalue] in Heq; subst dv; exists (@Integers.repr 1 (Z.of_N v)); split; reflexivity.
 Qed.
 
 Definition strip_leading_percent (s : string) : string :=
@@ -5537,6 +5713,7 @@ Proof.
   intros G arg_dtys idx dt Hcomp Hin.
   unfold cfg_param_dtyp_compatible in Hcomp; rewrite forallb_forall in Hcomp.
   pose proof (Hcomp (idx, dt) Hin) as Hidx.
+  cbn zeta iota in Hidx.
   destruct (nth_error arg_dtys idx) as [dt_a |] eqn:Hnth; [| discriminate Hidx].
   apply dtyp_eqb_dec_eq in Hidx; subst dt_a; reflexivity.
 Qed.
@@ -5757,7 +5934,7 @@ Proof.
                  eapply cfg_steps_to_ub_bind_r; [exact (Hst_c (chain_draws draws_br tail_s)) |].
                  cbn [denote_terminator]; unfold denote_exp'.
                  eapply cfg_steps_to_ub_bind_r;
-                   [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ (Hst_br tail_s)) | eapply CSU_UB; reflexivity].
+                   [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ (Hst_br tail_s)) | apply cfg_steps_raiseUB].
               ** destruct (try_const_i1 ce_cond) as [b_tc |] eqn:Etc.
                  --- destruct (try_const_i1_sound ce_cond (build_param_env src_pnames vs)
                                  foracle b_tc Hwt_cond Hlf_cond Hp_cond Etc) as [cbit_tc [Hev_tc _]].
@@ -5776,23 +5953,21 @@ Proof.
               { destruct (try_const_i1 ce_cond) as [[|] |] eqn:Etc.
                 - destruct (try_const_i1_sound ce_cond (build_param_env src_pnames vs)
                               foracle true Hwt_cond Hlf_cond Hp_cond Etc) as [cbit' [Hev_tc Ecbit']].
-                  rewrite Hev_br in Hev_tc; injection Hev_tc as Heq_dv.
-                  pose proof (dvalue_I_same_sz_inj 1 cbit cbit' Heq_dv) as <-.
-                  unfold br_tgt; rewrite Ecbit'.
+                  rewrite Hev_br in Hev_tc.
+                  pose proof (eou_dvalue_I_same_sz_inj 1 cbit cbit' Hev_tc) as <-.
                   destruct (summarize_ocfg_dag fuel' blk_uas false (args G) src_pnames (defined_ids_of_cfg G)
                               (ocfg_map (blks G)) false bid_cur br1 smap_c seen_br) as [d_t |] eqn:Hr_t;
                     [| discriminate Hopt].
-                  inversion Hopt; subst d_term; exists d_t; split; [exact Hr_t |].
+                  inversion Hopt; subst d_term; exists d_t; unfold br_tgt; rewrite Ecbit'; split; [exact Hr_t |].
                   cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
                 - destruct (try_const_i1_sound ce_cond (build_param_env src_pnames vs)
                               foracle false Hwt_cond Hlf_cond Hp_cond Etc) as [cbit' [Hev_tc Ecbit']].
-                  rewrite Hev_br in Hev_tc; injection Hev_tc as Heq_dv.
-                  pose proof (dvalue_I_same_sz_inj 1 cbit cbit' Heq_dv) as <-.
-                  unfold br_tgt; rewrite Ecbit'.
+                  rewrite Hev_br in Hev_tc.
+                  pose proof (eou_dvalue_I_same_sz_inj 1 cbit cbit' Hev_tc) as <-.
                   destruct (summarize_ocfg_dag fuel' blk_uas false (args G) src_pnames (defined_ids_of_cfg G)
                               (ocfg_map (blks G)) false bid_cur br2 smap_c seen_br) as [d_f |] eqn:Hr_f;
                     [| discriminate Hopt].
-                  inversion Hopt; subst d_term; exists d_f; split; [exact Hr_f |].
+                  inversion Hopt; subst d_term; exists d_f; unfold br_tgt; rewrite Ecbit'; split; [exact Hr_f |].
                   cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
                 - destruct (summarize_ocfg_dag fuel' blk_uas false (args G) src_pnames (defined_ids_of_cfg G)
                               (ocfg_map (blks G)) false bid_cur br1 smap_c seen_br) as [d_t |] eqn:Hr_t;
@@ -5803,7 +5978,7 @@ Proof.
                   inversion Hopt; subst d_term.
                   exists (if (@Integers.unsigned 1 cbit =? 1)%Z then d_t else d_f); split.
                   + unfold br_tgt; destruct (@Integers.unsigned 1 cbit =? 1)%Z; [exact Hr_t | exact Hr_f].
-                  + cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity. }
+                  + cbn [eval_cfg_dag]; rewrite Hev_br; destruct (@Integers.unsigned 1 cbit =? 1)%Z; reflexivity. }
               destruct Hnext_br as [d_next [Hr_next Hev_term]].
               destruct (IH blk_uas G src_pnames ext_c arg_dtys vs foracle false bid_cur br_tgt
                           smap_c env_c seen_br d_next
@@ -5826,7 +6001,7 @@ Proof.
                              cbn [denote_terminator]; unfold denote_exp'.
                              eapply cfg_steps_to_ret_bind;
                                [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ (Hst_br (chain_draws draws_n tail_s))) |].
-                             rewrite bit_int_1_equ_one_eq_unsigned; unfold br_tgt.
+                             cbn iota beta; rewrite bit_int_1_equ_one_eq_unsigned; unfold br_tgt.
                              destruct (@Integers.unsigned 1 cbit =? 1)%Z; apply CSR_Ret; reflexivity.
                          *** apply CSR_Ret; reflexivity.
                      +++ eapply CSU_Tau; [reflexivity | exact (Hub_n tail_s)].
@@ -5849,7 +6024,7 @@ Proof.
                              cbn [denote_terminator]; unfold denote_exp'.
                              eapply cfg_steps_to_ret_bind;
                                [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ (Hst_br (chain_draws draws_n tail_s))) |].
-                             rewrite bit_int_1_equ_one_eq_unsigned; unfold br_tgt.
+                             cbn iota beta; rewrite bit_int_1_equ_one_eq_unsigned; unfold br_tgt.
                              destruct (@Integers.unsigned 1 cbit =? 1)%Z; apply CSR_Ret; reflexivity.
                          *** apply CSR_Ret; reflexivity.
                      +++ eapply CSR_Tau; [reflexivity | exact (Hst_n tail_s)].
@@ -5889,7 +6064,7 @@ Proof.
            unfold denote_block; rewrite Htm.
            apply cfg_steps_to_ub_bind_l, cfg_steps_to_ub_bind_l.
            eapply cfg_steps_to_ub_bind_r; [exact (Hphis_step (chain_draws draws_c tail_s)) |].
-           eapply cfg_steps_to_ub_bind_r; [exact (Hst_c tail_s) | eapply CSU_UB; reflexivity].
+           eapply cfg_steps_to_ub_bind_r; [exact (Hst_c tail_s) | apply cfg_steps_raiseUB].
         -- cbn [eval_cfg_dag]; rewrite Hev_kp, Hev_kc; reflexivity.
 Qed.
 
@@ -6215,24 +6390,22 @@ Proof.
                 - destruct (try_const_i1_sound ce_cond (build_param_env src_pnames vs)
                               (oracle_of_fmap (added_br ++ added_c ++ added_p ++ fmap0))
                               true Hwt_cond Hlf_cond Hp_cond Etc) as [cbit' [Hev_tc Ecbit']].
-                  rewrite Hev_br in Hev_tc; injection Hev_tc as Heq_dv.
-                  pose proof (dvalue_I_same_sz_inj 1 cbit cbit' Heq_dv) as <-.
-                  unfold br_tgt; rewrite Ecbit'.
+                  rewrite Hev_br in Hev_tc.
+                  pose proof (eou_dvalue_I_same_sz_inj 1 cbit cbit' Hev_tc) as <-.
                   destruct (summarize_ocfg_dag fuel' blk_uas true (args G) src_pnames (defined_ids_of_cfg G)
                               (ocfg_map (blks G)) false bid_cur br1 smap_c seen_br) as [d_t |] eqn:Hr_t;
                     [| discriminate Hopt].
-                  inversion Hopt; subst d_term; exists d_t; split; [exact Hr_t |].
+                  inversion Hopt; subst d_term; exists d_t; unfold br_tgt; rewrite Ecbit'; split; [exact Hr_t |].
                   intros fo Hfo; cbn [eval_cfg_dag]; rewrite Hfo; reflexivity.
                 - destruct (try_const_i1_sound ce_cond (build_param_env src_pnames vs)
                               (oracle_of_fmap (added_br ++ added_c ++ added_p ++ fmap0))
                               false Hwt_cond Hlf_cond Hp_cond Etc) as [cbit' [Hev_tc Ecbit']].
-                  rewrite Hev_br in Hev_tc; injection Hev_tc as Heq_dv.
-                  pose proof (dvalue_I_same_sz_inj 1 cbit cbit' Heq_dv) as <-.
-                  unfold br_tgt; rewrite Ecbit'.
+                  rewrite Hev_br in Hev_tc.
+                  pose proof (eou_dvalue_I_same_sz_inj 1 cbit cbit' Hev_tc) as <-.
                   destruct (summarize_ocfg_dag fuel' blk_uas true (args G) src_pnames (defined_ids_of_cfg G)
                               (ocfg_map (blks G)) false bid_cur br2 smap_c seen_br) as [d_f |] eqn:Hr_f;
                     [| discriminate Hopt].
-                  inversion Hopt; subst d_term; exists d_f; split; [exact Hr_f |].
+                  inversion Hopt; subst d_term; exists d_f; unfold br_tgt; rewrite Ecbit'; split; [exact Hr_f |].
                   intros fo Hfo; cbn [eval_cfg_dag]; rewrite Hfo; reflexivity.
                 - destruct (summarize_ocfg_dag fuel' blk_uas true (args G) src_pnames (defined_ids_of_cfg G)
                               (ocfg_map (blks G)) false bid_cur br1 smap_c seen_br) as [d_t |] eqn:Hr_t;
@@ -6243,7 +6416,7 @@ Proof.
                   inversion Hopt; subst d_term.
                   exists (if (@Integers.unsigned 1 cbit =? 1)%Z then d_t else d_f); split.
                   + unfold br_tgt; destruct (@Integers.unsigned 1 cbit =? 1)%Z; [exact Hr_t | exact Hr_f].
-                  + intros fo Hfo; cbn [eval_cfg_dag]; rewrite Hfo; reflexivity. }
+                  + intros fo Hfo; cbn [eval_cfg_dag]; rewrite Hfo; destruct (@Integers.unsigned 1 cbit =? 1)%Z; reflexivity. }
               destruct Hnext_br as [d_next [Hr_next Hev_term]].
               destruct (IH blk_uas G src_pnames ext_c arg_dtys vs sigma_br
                           (added_br ++ added_c ++ added_p ++ fmap0)
@@ -6290,7 +6463,7 @@ Proof.
                              cbn [denote_terminator]; unfold denote_exp'.
                              eapply cfg_steps_to_ret_bind;
                                [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ Hst_br) |].
-                             rewrite bit_int_1_equ_one_eq_unsigned; unfold br_tgt.
+                             cbn iota beta; rewrite bit_int_1_equ_one_eq_unsigned; unfold br_tgt.
                              destruct (@Integers.unsigned 1 cbit =? 1)%Z; apply CSR_Ret; reflexivity.
                          *** apply CSR_Ret; reflexivity.
                      +++ eapply CSR_Tau; [reflexivity | exact Hst_n].
@@ -6425,7 +6598,7 @@ Proof.
     destruct (eval_closed_cert_expr penv foracle ret_e) as [| | | dv]; try discriminate Hev.
     exists dv; reflexivity.
   - destruct (eval_closed_cert_expr penv foracle step_e) as [| | | dv0] eqn:Es; try discriminate Hev.
-    destruct Hin as [<- | Hin]; [exists dv0; reflexivity | exact (IH v e Hev Hin)].
+    destruct Hin as [<- | Hin]; [exists dv0; exact Es | exact (IH v e Hev Hin)].
   - exact (IH v e Hev Hin).
   - destruct (eval_closed_cert_expr penv foracle cond) as [| | | dvc] eqn:Ec; try discriminate Hev.
     destruct dvc as [dbc | |]; try discriminate Hev.
@@ -6911,8 +7084,7 @@ Proof.
   pose proof (eval_cert_expr_ret_wf_scalar el _ _ _ _ _ Hwtl El) as Hwfl.
   rewrite Hwl in Hwfl.
   destruct Hwfl as [Hps | [il0 Heq0]]; [discriminate Hps |].
-  injection Heq0 as Heq_dv.
-  pose proof (dvalue_I_width_eq _ _ _ _ Heq_dv) as Hweq; subst w0; clear il0 Heq0 Heq_dv.
+  pose proof (dvalue_base_I_width_eq _ _ _ _ Heq0) as Hweq; subst w0; clear il0 Heq0.
   unfold eval_closed_cert_expr in Hev, El, Er; cbn [eval_cert_expr] in Hev.
   rewrite El, Er in Hev; cbn [eou_bind] in Hev.
   unfold eval_iop in Hev; rewrite eval_iop_integer_base_same_width in Hev.
@@ -7280,9 +7452,9 @@ Proof.
     + exact (ctx_has_sdiv_no_ovf_sound penv foracle ctx el er w il ir Hcsdiv Hctx El Er).
     + destruct (is_safe_sdiv_bv_const_sound penv foracle er Hsafe)
         as (w' & ir' & Eer' & _ & _ & Hnm1).
-      rewrite Er in Eer'; injection Eer' as Heq_dv.
-      pose proof (dvalue_I_width_eq _ _ _ _ Heq_dv) as Hweq; subst w'.
-      pose proof (dvalue_I_same_sz_inj _ _ _ Heq_dv) as <-.
+      rewrite Er in Eer'.
+      pose proof (eou_dvalue_I_width_eq _ _ _ _ Eer') as Hweq; subst w'.
+      pose proof (eou_dvalue_I_same_sz_inj _ _ _ Eer') as <-.
       intros [_ Hm1]; exact (Hnm1 Hm1).
     + apply existsb_exists in Hex_sdiv as [big [Hbin Hsdiv]].
       destruct (expr_has_sdiv_pair_spec el er big Hsdiv) as (op & w0 & fl & Hop & Hsub).
@@ -7441,10 +7613,10 @@ Proof.
       assert (Hpr : wf_param_env_for (collect_free_vars [] r) penv)
         by (intros x wx Hx; apply Hpenv, in_app_iff; right; exact Hx).
       unfold eval_closed_cert_expr in Hev; cbn [eval_cert_expr] in Hev.
-      destruct (eval_cert_expr penv [] foracle l) as [| sl | | vl] eqn:El;
+      destruct (eval_cert_expr penv [] foracle l) as [| | sl | vl] eqn:El;
         cbn [eou_bind] in Hev; try discriminate Hev.
       * inversion Hev; subst sl; exact (IHl ctx src_evals penv foracle msg Hsl Hwtl Hpl Hctx Hsrc El).
-      * destruct (eval_cert_expr penv [] foracle r) as [| sr | | vr] eqn:Er;
+      * destruct (eval_cert_expr penv [] foracle r) as [| | sr | vr] eqn:Er;
           cbn [eou_bind] in Hev; try discriminate Hev.
         -- inversion Hev; subst sr; exact (IHr ctx src_evals penv foracle msg Hsr Hwtr Hpr Hctx Hsrc Er).
         -- pose proof (eval_cert_expr_ret_wf_scalar l _ _ _ _ _ Hwtl El) as Hwfl.
@@ -7463,10 +7635,9 @@ Proof.
                     [exact (is_nonzero_bv_const_sound penv foracle r Hcn)
                     | exact (ctx_has_divisor_nonzero_sound penv foracle ctx r Hdn Hctx)]. }
                 destruct Hex_nz as (w' & ir' & Er' & Hnz').
-                unfold eval_closed_cert_expr in Er'; rewrite Er in Er'; injection Er' as <-.
+                unfold eval_closed_cert_expr in Er'; rewrite Er in Er'; injection Er' as ->.
                 destruct Hwfr as [Hps | [ir0 Heq0]]; [discriminate Hps |].
-                injection Heq0 as Heq_dv.
-                pose proof (dvalue_I_width_eq _ _ _ _ Heq_dv) as Hweq; subst w'.
+                pose proof (dvalue_base_I_width_eq _ _ _ _ Heq0) as Hweq; subst w'.
                 exists ir'; split; [reflexivity | exact Hnz']. }
               destruct op; cbn in Ediv; try discriminate Ediv.
               ** (* CB_UDiv *)
@@ -7481,9 +7652,9 @@ Proof.
                  apply orb_true_iff in Hop_ok as [Hsafe_c | Hguarded].
                  --- destruct (is_safe_sdiv_bv_const_sound penv foracle r Hsafe_c)
                        as (w' & ir' & Er' & _ & Hnsz & Hnsm).
-                     unfold eval_closed_cert_expr in Er'; rewrite Er in Er'; injection Er' as <-.
+                     unfold eval_closed_cert_expr in Er'; rewrite Er in Er'; injection Er' as ->.
                      destruct Hwfr as [Hps | [ir0 Heq0]]; [discriminate Hps |].
-                     injection Heq0 as Heq_dv; pose proof (dvalue_I_width_eq _ _ _ _ Heq_dv) as ->.
+                     pose proof (dvalue_base_I_width_eq _ _ _ _ Heq0) as ->.
                      destruct Hwfl as [-> | [il ->]].
                      +++ cbn in Hev; destruct (Z.eq_dec (@Integers.signed w ir') (-1)%Z) as [Hm1 | _];
                            [exact (Hnsm Hm1) | cbn in Hev; discriminate Hev].
@@ -7494,7 +7665,7 @@ Proof.
                          repeat match type of Hev with context [if ?b then _ else _] => destruct b end;
                            cbn in Hev; discriminate Hev.
                  --- rewrite !andb_true_iff in Hguarded; destruct Hguarded as ([Hnz_or Hdefl] & Hnovf).
-                     destruct (Hextract_nz Hnz_or) as [ir [-> Hnz]]; subst vr.
+                     destruct (Hextract_nz Hnz_or) as [ir [-> Hnz]].
                      assert (Hnsz : (@Integers.signed w ir <> 0)%Z)
                        by (intros Hs; apply Hnz, signed_zero_iff_unsigned_zero; exact Hs).
                      destruct (expr_guaranteed_defined_sound ctx l penv foracle Hdefl Hwtl Hpl Hctx)
@@ -7524,9 +7695,9 @@ Proof.
                  apply orb_true_iff in Hop_ok as [Hsafe_c | Hguarded].
                  --- destruct (is_safe_sdiv_bv_const_sound penv foracle r Hsafe_c)
                        as (w' & ir' & Er' & _ & Hnsz & Hnsm).
-                     unfold eval_closed_cert_expr in Er'; rewrite Er in Er'; injection Er' as <-.
+                     unfold eval_closed_cert_expr in Er'; rewrite Er in Er'; injection Er' as ->.
                      destruct Hwfr as [Hps | [ir0 Heq0]]; [discriminate Hps |].
-                     injection Heq0 as Heq_dv; pose proof (dvalue_I_width_eq _ _ _ _ Heq_dv) as ->.
+                     pose proof (dvalue_base_I_width_eq _ _ _ _ Heq0) as ->.
                      destruct Hwfl as [-> | [il ->]].
                      +++ cbn in Hev; destruct (Z.eq_dec (@Integers.signed w ir') (-1)%Z) as [Hm1 | _];
                            [exact (Hnsm Hm1) | cbn in Hev; discriminate Hev].
@@ -7536,7 +7707,7 @@ Proof.
                          rewrite (proj2 (Z.eqb_neq (@Integers.signed w ir') (-1)%Z) Hnsm), Bool.andb_false_r in Hev.
                          cbn in Hev; discriminate Hev.
                  --- rewrite !andb_true_iff in Hguarded; destruct Hguarded as ([Hnz_or Hdefl] & Hnovf).
-                     destruct (Hextract_nz Hnz_or) as [ir [-> Hnz]]; subst vr.
+                     destruct (Hextract_nz Hnz_or) as [ir [-> Hnz]].
                      assert (Hnsz : (@Integers.signed w ir <> 0)%Z)
                        by (intros Hs; apply Hnz, signed_zero_iff_unsigned_zero; exact Hs).
                      destruct (expr_guaranteed_defined_sound ctx l penv foracle Hdefl Hwtl Hpl Hctx)
@@ -7573,10 +7744,10 @@ Proof.
       assert (Hpr : wf_param_env_for (collect_free_vars [] r) penv)
         by (intros x wx Hx; apply Hpenv, in_app_iff; right; exact Hx).
       unfold eval_closed_cert_expr in Hev; cbn [eval_cert_expr] in Hev.
-      destruct (eval_cert_expr penv [] foracle l) as [| sl | | vl] eqn:El;
+      destruct (eval_cert_expr penv [] foracle l) as [| | sl | vl] eqn:El;
         cbn [eou_bind] in Hev; try discriminate Hev.
       * inversion Hev; subst sl; exact (IHl ctx src_evals penv foracle msg Hsl Hwtl Hpl Hctx Hsrc El).
-      * destruct (eval_cert_expr penv [] foracle r) as [| sr | | vr] eqn:Er;
+      * destruct (eval_cert_expr penv [] foracle r) as [| | sr | vr] eqn:Er;
           cbn [eou_bind] in Hev; try discriminate Hev.
         -- inversion Hev; subst sr; exact (IHr ctx src_evals penv foracle msg Hsr Hwtr Hpr Hctx Hsrc Er).
         -- pose proof (eval_cert_expr_ret_wf_scalar l _ _ _ _ _ Hwtl El) as Hwfl.
@@ -7594,7 +7765,7 @@ Proof.
     + cbn [wt_cert_expr collect_free_vars] in Hwt, Hpenv; rewrite !andb_true_iff in Hwt.
       destruct Hwt as ((Hk & Hwto) & Hwo); apply Pos.eqb_eq in Hwo.
       unfold eval_closed_cert_expr in Hev; cbn [eval_cert_expr] in Hev.
-      destruct (eval_cert_expr penv [] foracle o) as [| so | | vo] eqn:Eo;
+      destruct (eval_cert_expr penv [] foracle o) as [| | so | vo] eqn:Eo;
         cbn [eou_bind] in Hev; try discriminate Hev.
       * inversion Hev; subst so; exact (IHo ctx src_evals penv foracle msg Hso Hwto Hpenv Hctx Hsrc Eo).
       * pose proof (eval_cert_expr_ret_wf_scalar o _ _ _ _ _ Hwto Eo) as Hwfo.
@@ -7619,13 +7790,13 @@ Proof.
       assert (Hpf : wf_param_env_for (collect_free_vars [] f) penv)
         by (intros x wx Hx; apply Hpenv, in_app_iff; right; apply in_app_iff; right; exact Hx).
       unfold eval_closed_cert_expr in Hev; cbn [eval_cert_expr] in Hev.
-      destruct (eval_cert_expr penv [] foracle c) as [| sc | | vc] eqn:Ec;
+      destruct (eval_cert_expr penv [] foracle c) as [| | sc | vc] eqn:Ec;
         cbn [eou_bind] in Hev; try discriminate Hev.
       * inversion Hev; subst sc; exact (IHc ctx src_evals penv foracle msg Hsc Hwtc Hpc Hctx Hsrc Ec).
-      * destruct (eval_cert_expr penv [] foracle t) as [| st | | vt] eqn:Et;
+      * destruct (eval_cert_expr penv [] foracle t) as [| | st | vt] eqn:Et;
           cbn [eou_bind] in Hev; try discriminate Hev.
         -- inversion Hev; subst st; exact (IHt ctx src_evals penv foracle msg Hst Hwtt Hpt Hctx Hsrc Et).
-        -- destruct (eval_cert_expr penv [] foracle f) as [| sf | | vf] eqn:Ef;
+        -- destruct (eval_cert_expr penv [] foracle f) as [| | sf | vf] eqn:Ef;
              cbn [eou_bind] in Hev; try discriminate Hev.
            ++ inversion Hev; subst sf; exact (IHf ctx src_evals penv foracle msg Hsf Hwtf Hpf Hctx Hsrc Ef).
            ++ pose proof (eval_cert_expr_ret_wf_scalar c _ _ _ _ _ Hwtc Ec) as Hwfc.
@@ -7643,7 +7814,7 @@ Proof.
       unfold eval_closed_cert_expr in *; congruence.
     + cbn [wt_cert_expr collect_free_vars] in Hwt, Hpenv; apply andb_true_iff in Hwt as [Hwto _].
       unfold eval_closed_cert_expr in Hev; cbn [eval_cert_expr] in Hev.
-      destruct (eval_cert_expr penv [] foracle o) as [| so | | vo] eqn:Eo;
+      destruct (eval_cert_expr penv [] foracle o) as [| | so | vo] eqn:Eo;
         cbn [eou_bind] in Hev; try discriminate Hev.
       * inversion Hev; subst so; exact (IHo ctx src_evals penv foracle msg Hso Hwto Hpenv Hctx Hsrc Eo).
       * destruct vo as [[| | | | | | |] | |]; discriminate Hev.
@@ -7725,8 +7896,8 @@ Proof.
     destruct (src_dag_to_expr w on_f) as [ef |] eqn:Erf; [| discriminate Hr].
     destruct (ub_free_expr et && ub_free_expr ef); [| discriminate Hr].
     inversion Hr; subst e; clear Hr.
-    destruct (IHt et Hwft Ert) as (Hwtt & Hbwt & Hlft & Hfvt).
-    destruct (IHf ef Hwff Erf) as (Hwtf & Hbwf & Hlff & Hfvf).
+    destruct (IHt et Hwft eq_refl) as (Hwtt & Hbwt & Hlft & Hfvt).
+    destruct (IHf ef Hwff eq_refl) as (Hwtf & Hbwf & Hlff & Hfvf).
     cbn [wt_cert_expr cert_expr_bit_width is_let_free_expr collect_free_vars].
     rewrite Hwtc, Hwtt, Hwtf, Hbwc, Hbwt, Hbwf, !Pos.eqb_refl, Hlfc, Hlft, Hlff.
     repeat split; try reflexivity.
@@ -7778,12 +7949,12 @@ Proof.
         assert (Hpf : wf_param_env_for (collect_free_vars [] ef) penv)
           by (intros x wx Hx; exact (Hpenv x wx (Hfvf (x, wx) Hx))).
         destruct (@Integers.unsigned 1 cbit =? 1)%Z eqn:Ecbit.
-        -- pose proof (IHt et penv foracle dv_src Hwft Hpenv Ert Hevd) as Het.
+        -- pose proof (IHt et penv foracle dv_src Hwft Hpenv eq_refl Hevd) as Het.
            destruct (ub_free_expr_eval_ret ef [] penv [] foracle Hubf Hwtf wf_let_val_env_nil Hpf)
              as [vf [Hef _]].
            unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Ec, Het, Hef; cbn.
            rewrite Ecbit; reflexivity.
-        -- pose proof (IHf ef penv foracle dv_src Hwff Hpenv Erf Hevd) as Hef.
+        -- pose proof (IHf ef penv foracle dv_src Hwff Hpenv eq_refl Hevd) as Hef.
            destruct (ub_free_expr_eval_ret et [] penv [] foracle Hubt Hwtt wf_let_val_env_nil Hpt)
              as [vt [Het _]].
            unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Ec, Het, Hef; cbn.
@@ -7890,8 +8061,8 @@ Proof.
     destruct (tgt_dag_to_expr ctx src_evals src_br_conds w on_f) as [ef |] eqn:Erf; [| discriminate Hr].
     inversion Hr; subst e; clear Hr.
     rewrite !andb_true_iff in Hwf; destruct Hwf as (((((Hwtc & Hbwc) & Hlfc) & Hfvc) & Hwft) & Hwff).
-    destruct (IHt et Hwft Ert) as (Hwtt & Hbwt & Hlft & Hfvt).
-    destruct (IHf ef Hwff Erf) as (Hwtf & Hbwf & Hlff & Hfvf).
+    destruct (IHt et Hwft eq_refl) as (Hwtt & Hbwt & Hlft & Hfvt).
+    destruct (IHf ef Hwff eq_refl) as (Hwtf & Hbwf & Hlff & Hfvf).
     cbn [wt_cert_expr cert_expr_bit_width is_let_free_expr collect_free_vars].
     rewrite Hwtc, Hwtt, Hwtf, Hbwc, Hbwt, Hbwf, !Pos.eqb_refl, Hlfc, Hlft, Hlff.
     repeat split; try reflexivity.
@@ -7949,8 +8120,8 @@ Proof.
     destruct (tgt_cond_guaranteed_defined_sound allowed ctx src_evals src_br_conds cond penv foracle dvc
                 Hcdef Hwtc Hbwc Hpc Hctx Hsrc_wf Hsrc_ret Hbr_ret Ec Hwfc)
       as [cbit ->].
-    destruct (IHt et penv foracle Hwft Hpenv Hctx Hsrc_wf Hsrc_ret Hbr_ret Ert) as [dvt [Het Hevt]].
-    destruct (IHf ef penv foracle Hwff Hpenv Hctx Hsrc_wf Hsrc_ret Hbr_ret Erf) as [dvf [Hef Hevf]].
+    destruct (IHt et penv foracle Hwft Hpenv Hctx Hsrc_wf Hsrc_ret Hbr_ret eq_refl) as [dvt [Het Hevt]].
+    destruct (IHf ef penv foracle Hwff Hpenv Hctx Hsrc_wf Hsrc_ret Hbr_ret eq_refl) as [dvf [Hef Hevf]].
     rewrite Ec; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Ec, Het, Hef; cbn.
     destruct (@Integers.unsigned 1 cbit =? 1)%Z;
       [exists dvt; split; [reflexivity | exact Hevt]
@@ -8108,7 +8279,7 @@ Proof.
     | k fw tw fl o IHo
     | w c IHc t IHt f IHf
     | w o IHo
-    | bs body _ _ ];
+    | bs body _ _ ] using cert_expr_ind_nested;
     intros Hlf; cbn [is_let_free_expr expand_lets_with] in Hlf |- *; try discriminate Hlf;
     try reflexivity.
   - apply andb_true_iff in Hlf as [Hl Hr]; rewrite (IHl Hl), (IHr Hr); reflexivity.
@@ -8182,7 +8353,7 @@ Lemma icmp_eval_cbit_operands {Pa : Params} :
     exists il ir : @Integers.bit_int w,
       eval_closed_cert_expr penv foracle l = raise_ret (DVALUE_Base (@DVALUE_I Pa w il)) /\
       eval_closed_cert_expr penv foracle r = raise_ret (DVALUE_Base (@DVALUE_I Pa w ir)) /\
-      @eval_int_icmp (@Integers.bit_int w) _ ss (cert_to_icmp pr) il ir =
+      @eval_int_icmp Pa (@Integers.bit_int w) _ ss (cert_to_icmp pr) il ir =
         raise_ret (@DVALUE_I Pa 1 cbit).
 Proof.
   intros penv foracle pr ss w l r cbit Hwt Hev.
@@ -8196,10 +8367,10 @@ Proof.
   cbn [eou_bind] in Hev.
   pose proof (eval_cert_expr_ret_wf_scalar l _ _ _ _ _ Hwtl El) as Hwfl; rewrite Hwl in Hwfl.
   pose proof (eval_cert_expr_ret_wf_scalar r _ _ _ _ _ Hwtr Er) as Hwfr; rewrite Hwr in Hwfr.
-  destruct Hwfl as [-> | [il ->]]; [cbn in Hev; discriminate Hev |].
-  destruct Hwfr as [-> | [ir ->]]; [cbn in Hev; discriminate Hev |].
+  destruct Hwfl as [-> | [il ->]]; destruct Hwfr as [-> | [ir ->]];
+    try (cbn in Hev; discriminate Hev).
   unfold eval_icmp in Hev; rewrite eval_icmp_base_same_width in Hev.
-  destruct (@eval_int_icmp (@Integers.bit_int w) _ ss (cert_to_icmp pr) il ir)
+  destruct (@eval_int_icmp Pa (@Integers.bit_int w) _ ss (cert_to_icmp pr) il ir)
     as [| | | db_out] eqn:Eint; cbn in Hev; try discriminate Hev.
   inversion Hev; subst db_out.
   exists il, ir; repeat split; assumption.
@@ -8227,10 +8398,13 @@ Proof.
   destruct on_true.
   - destruct pr; try exact Hbase.
     + (* CIP_Ne on true *)
-      unfold cert_to_icmp, eval_int_icmp in Eint; cbn in Eint.
+      unfold cert_to_icmp, eval_int_icmp, dvp in Eint; cbn - [msamesign Integers.eq Integers.ltu] in Eint.
       destruct (ss && negb (msamesign il ir)); [discriminate Eint |].
       destruct (negb (@Integers.eq w il ir)) eqn:Ene;
-        [| inversion Eint; subst cbit; rewrite bit1_unsigned_zero in Hon; discriminate Hon].
+        [| exfalso;
+           apply (f_equal (fun e => match e with raise_ret v => DVALUE_Base v | _ => DVALUE_Base DVALUE_Poison end)) in Eint;
+           cbn in Eint; apply dvalue_base_I_same_sz_inj in Eint; subst cbit;
+           rewrite bit1_unsigned_zero in Hon; discriminate Hon].
       apply negb_true_iff in Ene; unfold Integers.eq in Ene.
       destruct (Numeric.Rocqlib.zeq (@Integers.unsigned w il) (@Integers.unsigned w ir)) as [Heq | Hneq];
         [discriminate Ene |].
@@ -8238,56 +8412,65 @@ Proof.
       * constructor; [| exact Hbase].
         cbn [ub_assumption_holds]; rewrite (expand_lets_let_free_id l Hlfl).
         destruct (is_zero_bv_const_sound penv foracle r Ezr) as (wr & iz & Er' & Huz).
-        rewrite Er in Er'; injection Er' as Heq_dv.
-        pose proof (dvalue_I_width_eq _ _ _ _ Heq_dv) as ->.
-        pose proof (dvalue_I_same_sz_inj _ _ _ Heq_dv) as <-.
+        rewrite Er in Er'.
+        pose proof (eou_dvalue_I_width_eq _ _ _ _ Er') as <-.
+        pose proof (eou_dvalue_I_same_sz_inj _ _ _ Er') as <-.
         exists w, il; split; [exact El | lia].
       * destruct (is_zero_bv_const l) eqn:Ezl; [| exact Hbase].
         constructor; [| exact Hbase].
         cbn [ub_assumption_holds]; rewrite (expand_lets_let_free_id r Hlfr).
         destruct (is_zero_bv_const_sound penv foracle l Ezl) as (wl & iz & El' & Huz).
-        rewrite El in El'; injection El' as Heq_dv.
-        pose proof (dvalue_I_width_eq _ _ _ _ Heq_dv) as ->.
-        pose proof (dvalue_I_same_sz_inj _ _ _ Heq_dv) as <-.
+        rewrite El in El'.
+        pose proof (eou_dvalue_I_width_eq _ _ _ _ El') as <-.
+        pose proof (eou_dvalue_I_same_sz_inj _ _ _ El') as <-.
         exists w, ir; split; [exact Er | lia].
     + (* CIP_Ult on true *)
       destruct (is_zero_bv_const l) eqn:Ezl; [| exact Hbase].
-      unfold cert_to_icmp, eval_int_icmp in Eint; cbn in Eint.
+      unfold cert_to_icmp, eval_int_icmp, dvp in Eint; cbn - [msamesign Integers.eq Integers.ltu] in Eint.
       destruct (ss && negb (msamesign il ir)); [discriminate Eint |].
       destruct (@Integers.ltu w il ir) eqn:Elt;
-        [| inversion Eint; subst cbit; rewrite bit1_unsigned_zero in Hon; discriminate Hon].
+        [| exfalso;
+           apply (f_equal (fun e => match e with raise_ret v => DVALUE_Base v | _ => DVALUE_Base DVALUE_Poison end)) in Eint;
+           cbn in Eint; apply dvalue_base_I_same_sz_inj in Eint; subst cbit;
+           rewrite bit1_unsigned_zero in Hon; discriminate Hon].
       unfold Integers.ltu in Elt.
       destruct (Numeric.Rocqlib.zlt (@Integers.unsigned w il) (@Integers.unsigned w ir)) as [Hlt | _];
         [| discriminate Elt].
       constructor; [| exact Hbase].
       cbn [ub_assumption_holds]; rewrite (expand_lets_let_free_id r Hlfr).
       destruct (is_zero_bv_const_sound penv foracle l Ezl) as (wl & iz & El' & Huz).
-      rewrite El in El'; injection El' as Heq_dv.
-      pose proof (dvalue_I_width_eq _ _ _ _ Heq_dv) as ->.
-      pose proof (dvalue_I_same_sz_inj _ _ _ Heq_dv) as <-.
+      rewrite El in El'.
+      pose proof (eou_dvalue_I_width_eq _ _ _ _ El') as <-.
+      pose proof (eou_dvalue_I_same_sz_inj _ _ _ El') as <-.
       exists w, ir; split; [exact Er | lia].
     + (* CIP_Ugt on true *)
       destruct (is_zero_bv_const r) eqn:Ezr; [| exact Hbase].
-      unfold cert_to_icmp, eval_int_icmp in Eint; cbn in Eint.
+      unfold cert_to_icmp, eval_int_icmp, dvp in Eint; cbn - [msamesign Integers.eq Integers.ltu] in Eint.
       destruct (ss && negb (msamesign il ir)); [discriminate Eint |].
       destruct (@Integers.ltu w ir il) eqn:Egt;
-        [| inversion Eint; subst cbit; rewrite bit1_unsigned_zero in Hon; discriminate Hon].
+        [| exfalso;
+           apply (f_equal (fun e => match e with raise_ret v => DVALUE_Base v | _ => DVALUE_Base DVALUE_Poison end)) in Eint;
+           cbn in Eint; apply dvalue_base_I_same_sz_inj in Eint; subst cbit;
+           rewrite bit1_unsigned_zero in Hon; discriminate Hon].
       unfold Integers.ltu in Egt.
       destruct (Numeric.Rocqlib.zlt (@Integers.unsigned w ir) (@Integers.unsigned w il)) as [Hgt | _];
         [| discriminate Egt].
       constructor; [| exact Hbase].
       cbn [ub_assumption_holds]; rewrite (expand_lets_let_free_id l Hlfl).
       destruct (is_zero_bv_const_sound penv foracle r Ezr) as (wr & iz & Er' & Huz).
-      rewrite Er in Er'; injection Er' as Heq_dv.
-      pose proof (dvalue_I_width_eq _ _ _ _ Heq_dv) as ->.
-      pose proof (dvalue_I_same_sz_inj _ _ _ Heq_dv) as <-.
+      rewrite Er in Er'.
+      pose proof (eou_dvalue_I_width_eq _ _ _ _ Er') as <-.
+      pose proof (eou_dvalue_I_same_sz_inj _ _ _ Er') as <-.
       exists w, il; split; [exact El | lia].
   - destruct pr; try exact Hbase.
     (* CIP_Eq on false *)
-    unfold cert_to_icmp, eval_int_icmp in Eint; cbn in Eint.
+    unfold cert_to_icmp, eval_int_icmp, dvp in Eint; cbn - [msamesign Integers.eq Integers.ltu] in Eint.
     destruct (ss && negb (msamesign il ir)); [discriminate Eint |].
     destruct (@Integers.eq w il ir) eqn:Eeq;
-      [inversion Eint; subst cbit; rewrite bit1_unsigned_one in Hon; discriminate Hon |].
+      [exfalso;
+       apply (f_equal (fun e => match e with raise_ret v => DVALUE_Base v | _ => DVALUE_Base DVALUE_Poison end)) in Eint;
+       cbn in Eint; apply dvalue_base_I_same_sz_inj in Eint; subst cbit;
+       rewrite bit1_unsigned_one in Hon; discriminate Hon |].
     unfold Integers.eq in Eeq.
     destruct (Numeric.Rocqlib.zeq (@Integers.unsigned w il) (@Integers.unsigned w ir)) as [Heq | Hneq];
       [discriminate Eeq |].
@@ -8295,17 +8478,17 @@ Proof.
     + constructor; [| exact Hbase].
       cbn [ub_assumption_holds]; rewrite (expand_lets_let_free_id l Hlfl).
       destruct (is_zero_bv_const_sound penv foracle r Ezr) as (wr & iz & Er' & Huz).
-      rewrite Er in Er'; injection Er' as Heq_dv.
-      pose proof (dvalue_I_width_eq _ _ _ _ Heq_dv) as ->.
-      pose proof (dvalue_I_same_sz_inj _ _ _ Heq_dv) as <-.
+      rewrite Er in Er'.
+      pose proof (eou_dvalue_I_width_eq _ _ _ _ Er') as <-.
+      pose proof (eou_dvalue_I_same_sz_inj _ _ _ Er') as <-.
       exists w, il; split; [exact El | lia].
     + destruct (is_zero_bv_const l) eqn:Ezl; [| exact Hbase].
       constructor; [| exact Hbase].
       cbn [ub_assumption_holds]; rewrite (expand_lets_let_free_id r Hlfr).
       destruct (is_zero_bv_const_sound penv foracle l Ezl) as (wl & iz & El' & Huz).
-      rewrite El in El'; injection El' as Heq_dv.
-      pose proof (dvalue_I_width_eq _ _ _ _ Heq_dv) as ->.
-      pose proof (dvalue_I_same_sz_inj _ _ _ Heq_dv) as <-.
+      rewrite El in El'.
+      pose proof (eou_dvalue_I_width_eq _ _ _ _ El') as <-.
+      pose proof (eou_dvalue_I_same_sz_inj _ _ _ El') as <-.
       exists w, ir; split; [exact Er | lia].
 Qed.
 
@@ -8326,7 +8509,7 @@ Definition as_block_assume (d : cfg_dag) : option (list ub_assumption * cfg_dag)
 Lemma as_block_assume_some_inv : forall d uas next,
   as_block_assume d = Some (uas, next) -> d = CD_BlockAssume uas next.
 Proof.
-  intros [| | ? ? | ? ? ? | ? ? | ? ? ?] uas next H; cbn in H; try discriminate H.
+  intros [| | ? ? | ? ? ? | uas' nx' | ? ? ?] uas nx H; cbn in H; try discriminate H.
   inversion H; reflexivity.
 Qed.
 
@@ -8385,10 +8568,10 @@ Fixpoint check_dag_refines_cert
                             expr_safe_under_src ctx src_evals te &&
                             check_dag_refines_cert fuel' allowed ctx ro opt_pf
                               src_evals src_br_conds d_src next_t
-                        | CD_Branch ct tt ft =>
+                        | CD_Branch ct tb ft =>
                             check_expr_refines ctx cs ct &&
                             check_dag_refines_cert fuel' allowed ctx_t ro opt_pf
-                              (cs :: src_evals) (cs :: src_br_conds) ts tt &&
+                              (cs :: src_evals) (cs :: src_br_conds) ts tb &&
                             check_dag_refines_cert fuel' allowed ctx_f ro opt_pf
                               (cs :: src_evals) (cs :: src_br_conds) fs ft
                         | CD_RetScalar _ _ | CD_RetVoid =>
@@ -8462,7 +8645,7 @@ Proof.
              penv foracle dv_src Hwfs Hwft Hpenv Hctx' Hsrc_wf Hsrc_ret Hbr_ret Hchk Hevs). }
   destruct (as_block_assume d_tgt) as [[uas_t next_t] |] eqn:Eba_t.
   { pose proof (as_block_assume_some_inv d_tgt uas_t next_t Eba_t) as ->.
-    destruct uas_t as [| _ _]; [| discriminate Hchk].
+    destruct uas_t as [| u ur]; [| discriminate Hchk].
     cbn [wf_cfg_dag eval_cfg_dag] in Hwft |- *.
     exact (IH allowed ctx ro opt_pf src_evals src_br_conds d_src next_t
              penv foracle dv_src Hwfs Hwft Hpenv Hctx Hsrc_wf Hsrc_ret Hbr_ret Hchk Hevs). }
@@ -8480,7 +8663,7 @@ Proof.
       | apply dvalue_refines_refl].
   - (* CD_RetScalar *)
     destruct d_tgt as [| | wt et | wt te next_t | uas_t next_t | ct tt ft]; try discriminate Hchk.
-    + destruct ro as [| w _ _ _]; [discriminate Hchk |].
+    + destruct ro as [| w ? ? ?]; [discriminate Hchk |].
       rewrite !andb_true_iff in Hchk; destruct Hchk as ([_ _] & Href).
       cbn [wf_cfg_dag eval_cfg_dag] in Hwfs, Hwft, Hevs.
       rewrite !andb_true_iff in Hwfs; rewrite !andb_true_iff in Hwft.
@@ -8659,7 +8842,7 @@ Proof.
   - destruct Hsc2 as [-> | [ic2 ->]]; cbn.
     + left; reflexivity.
     + destruct (@Integers.unsigned 1%positive ic2 =? 1)%Z; cbn; left; reflexivity.
-  - destruct Hrc as [Habs | <-]; [discriminate Habs |].
+  - destruct Hrc as [Habs | ->]; [discriminate Habs |].
     cbn; destruct (@Integers.unsigned 1%positive ic1 =? 1)%Z; cbn; assumption.
 Qed.
 
@@ -8712,8 +8895,8 @@ Proof.
   destruct (int_to_ptr (ptr_to_int a + gep_offset steps)%Z (ptr_provenance a))
     as [| | | q] eqn:Hitp; cbn in Hgep; try discriminate Hgep.
   inversion Hgep; subst q; clear Hgep.
-  pose proof (int_to_ptr_provenance _ _ _ Hitp) as Hprov.
-  pose proof (ptr_to_int_int_to_ptr _ _ _ Hitp) as Haddr.
+  assert (Hprov : ptr_provenance p' = ptr_provenance a) by (eapply int_to_ptr_provenance; exact Hitp).
+  assert (Haddr : ptr_to_int p' = (ptr_to_int a + gep_offset steps)%Z) by (eapply ptr_to_int_int_to_ptr; exact Hitp).
   destruct (@gep_inbounds_flags_implies_wrap64_eq Pa flags (ptr_to_int a) steps
               Hptr64 Hbase Hne Hinb Hviol)
     as [Hrng Hwrap].
@@ -8742,10 +8925,10 @@ Proof.
   destruct (int_to_ptr (ptr_to_int p1 + gep_offset steps2)%Z (ptr_provenance p1))
     as [| | | q2] eqn:Hitp2; cbn in Hg2; try discriminate Hg2.
   inversion Hg2; subst q2; clear Hg2.
-  pose proof (int_to_ptr_provenance _ _ _ Hitp1) as Hpr1.
-  pose proof (ptr_to_int_int_to_ptr _ _ _ Hitp1) as Had1.
-  pose proof (int_to_ptr_provenance _ _ _ Hitp2) as Hpr2.
-  pose proof (ptr_to_int_int_to_ptr _ _ _ Hitp2) as Had2.
+  assert (Hpr1 : ptr_provenance p1 = ptr_provenance p0) by (eapply int_to_ptr_provenance; exact Hitp1).
+  assert (Had1 : ptr_to_int p1 = (ptr_to_int p0 + gep_offset steps1)%Z) by (eapply ptr_to_int_int_to_ptr; exact Hitp1).
+  assert (Hpr2 : ptr_provenance p2 = ptr_provenance p1) by (eapply int_to_ptr_provenance; exact Hitp2).
+  assert (Had2 : ptr_to_int p2 = (ptr_to_int p1 + gep_offset steps2)%Z) by (eapply ptr_to_int_int_to_ptr; exact Hitp2).
   rewrite Hpr2, Hpr1, Had2, Had1.
   split; [reflexivity | split].
   - rewrite gep_offset_app; lia.
@@ -8876,7 +9059,7 @@ Lemma dvalue_refines_antisym {Pa : Params} :
   forall (v1 v2 : @dvalue Pa),
     dvalue_refines v1 v2 -> dvalue_refines v2 v1 -> v1 = v2.
 Proof.
-  intros v1 v2 [-> | ->] [-> | ->]; reflexivity.
+  intros v1 v2 [H1 | H1] [H2 | H2]; congruence.
 Qed.
 
 Definition dummy_freeze_oracle : freeze_oracle := fun _ _ => 0%Z.
@@ -8992,7 +9175,7 @@ Proof.
       incl (collect_free_vars [] ce) allowed)).
   - intros iop dt e1 e2 IH1 IH2 allowed lmap top w ce Hlmap Hr.
     cbn [reify_pure_exp] in Hr.
-    destruct dt as [tb | |]; [| discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
+    destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
     destruct (check_opt_int_width top wb) eqn:Hcw; [| discriminate].
     destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I wb))) e1) as [[w1 ce1] |] eqn:Hr1; [| discriminate].
     destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I wb))) e2) as [[w2 ce2] |] eqn:Hr2; [| discriminate].
@@ -9008,7 +9191,7 @@ Proof.
     + cbn; apply incl_app; assumption.
   - intros ss cmp dt e1 e2 IH1 IH2 allowed lmap top w ce Hlmap Hr.
     cbn [reify_pure_exp] in Hr.
-    destruct dt as [tb | |]; [| discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
+    destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
     destruct (check_opt_int_width top 1%positive) eqn:Hcw; [| discriminate].
     destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I wb))) e1) as [[w1 ce1] |] eqn:Hr1; [| discriminate].
     destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I wb))) e2) as [[w2 ce2] |] eqn:Hr2; [| discriminate].
@@ -9022,7 +9205,7 @@ Proof.
     + cbn; apply incl_app; assumption.
   - intros ct dtf e1 dtt IH1 allowed lmap top w ce Hlmap Hr.
     cbn [reify_pure_exp] in Hr.
-    destruct ct as [pc | |]; try discriminate.
+    destruct ct as [| pc | ic]; try discriminate.
     destruct dtf as [tbf | |]; try discriminate; destruct tbf as [fw | | | | | | | | | |]; try discriminate.
     destruct dtt as [tbt | |]; try discriminate; destruct tbt as [tw | | | | | | | | | |]; try discriminate.
     destruct (check_opt_int_width top tw) eqn:Hcw; [| discriminate].
@@ -9125,19 +9308,19 @@ Proof.
       reify_pure_exp lmap top o = Some (w, ce) ->
       check_opt_int_width top w = true)).
   - intros iop dt e1 e2 _ _ lmap top w ce Hr; cbn [reify_pure_exp] in Hr.
-    destruct dt as [tb | |]; [| discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
+    destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
     destruct (check_opt_int_width top wb) eqn:Hcw; [| discriminate].
     destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I wb))) e1) as [[w1 ce1] |]; [| discriminate].
     destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I wb))) e2) as [[w2 ce2] |]; [| discriminate].
     destruct (ibinop_to_cert iop); inversion Hr; subst; exact Hcw.
   - intros ss cmp dt e1 e2 _ _ lmap top w ce Hr; cbn [reify_pure_exp] in Hr.
-    destruct dt as [tb | |]; [| discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
+    destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
     destruct (check_opt_int_width top 1%positive) eqn:Hcw; [| discriminate].
     destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I wb))) e1) as [[w1 ce1] |]; [| discriminate].
     destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I wb))) e2) as [[w2 ce2] |]; [| discriminate].
     inversion Hr; subst; exact Hcw.
   - intros ct dtf e1 dtt _ lmap top w ce Hr; cbn [reify_pure_exp] in Hr.
-    destruct ct as [pc | |]; try discriminate.
+    destruct ct as [| pc | ic]; try discriminate.
     destruct dtf as [tbf | |]; try discriminate; destruct tbf as [fw | | | | | | | | | |]; try discriminate.
     destruct dtt as [tbt | |]; try discriminate; destruct tbt as [tw | | | | | | | | | |]; try discriminate.
     destruct (check_opt_int_width top tw) eqn:Hcw; [| discriminate].
@@ -9386,7 +9569,7 @@ Proof.
          pure_mcfg_steps env (denote_exp top o) env dv))).
   - intros iop dt e1 e2 IH1 IH2 penv lmap env top w ce Henv Hr.
     cbn [reify_pure_exp] in Hr.
-    destruct dt as [tb | |]; [| discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
+    destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
     destruct (check_opt_int_width top wb) eqn:Hcw; [| discriminate].
     destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I wb))) e1) as [[w1 ce1] |] eqn:Hr1; [| discriminate].
     destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I wb))) e2) as [[w2 ce2] |] eqn:Hr2; [| discriminate].
@@ -9425,7 +9608,7 @@ Proof.
               rewrite <- Heq_iop, Hev_op; apply PMS_Ret; reflexivity.
   - intros ss cmp dt e1 e2 IH1 IH2 penv lmap env top w ce Henv Hr.
     cbn [reify_pure_exp] in Hr.
-    destruct dt as [tb | |]; [| discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
+    destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
     destruct (check_opt_int_width top 1%positive) eqn:Hcw; [| discriminate].
     destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I wb))) e1) as [[w1 ce1] |] eqn:Hr1; [| discriminate].
     destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I wb))) e2) as [[w2 ce2] |] eqn:Hr2; [| discriminate].
@@ -9454,7 +9637,7 @@ Proof.
            rewrite <- (icmp_to_cert_roundtrip cmp), Hev_cmp; apply PMS_Ret; reflexivity.
   - intros ct dtf e1 dtt IH1 penv lmap env top w ce Henv Hr.
     cbn [reify_pure_exp] in Hr.
-    destruct ct as [pc | |]; try discriminate.
+    destruct ct as [| pc | ic]; try discriminate.
     destruct dtf as [tbf | |]; try discriminate; destruct tbf as [fw | | | | | | | | | |]; try discriminate.
     destruct dtt as [tbt | |]; try discriminate; destruct tbt as [tw | | | | | | | | | |]; try discriminate.
     destruct (check_opt_int_width top tw) eqn:Hcw; [| discriminate].
@@ -9564,7 +9747,7 @@ Qed.
 Fixpoint reify_pure_phis
   (bid_from : block_id)
   (lmap : rmap (positive * cert_expr))
-  (phis : list (local_id * phi dtyp * list metadata))
+  (phis : list (local_id * phi dtyp * list (metadata dtyp)))
   {struct phis} : option (list (raw_id * positive * cert_expr)) :=
   match phis with
   | [] => Some []
@@ -9744,7 +9927,7 @@ Proof.
     intros varargs penv lmap0 env0 cevals lmap2 Henv0 Hr;
     cbn [reify_pure_code] in Hr.
   - inversion Hr; subst cevals lmap2; right; exists env0.
-    split; [exact Henv0 | split; [constructor | split; [intros _ _; reflexivity | apply PCS_Ret; reflexivity]]].
+    split; [exact Henv0 | split; [apply Forall_nil | split; [intros r _; reflexivity | apply PCS_Ret; reflexivity]]].
   - destruct iid as [id | vid]; destruct ins; try discriminate Hr.
     + destruct (reify_pure_exp lmap0 None op) as [[w ce] |] eqn:Hre; [| discriminate].
       destruct (reify_pure_code (RM.add id (w, ce) lmap0) rest) as [[cevals_r lmap2'] |] eqn:Hrr; [| discriminate].
@@ -9857,8 +10040,7 @@ Proof.
     intros penv1 penv2 foracle Hlf Hag;
     cbn [is_let_free_expr collect_free_vars eval_cert_expr lookup_let_val] in Hlf, Hag |- *;
     try reflexivity; try discriminate Hlf.
-  - destruct (starts_with_dollar nm); [reflexivity |].
-    rewrite (Hag nm w (or_introl eq_refl)); reflexivity.
+  - rewrite (Hag nm w (or_introl eq_refl)); reflexivity.
   - apply andb_true_iff in Hlf as [Hlfl Hlfr].
     rewrite (IHl penv1 penv2 foracle Hlfl (fun n w0 H => Hag n w0 (proj2 (in_app_iff _ _ _) (or_introl H)))).
     rewrite (IHr penv1 penv2 foracle Hlfr (fun n w0 H => Hag n w0 (proj2 (in_app_iff _ _ _) (or_intror H)))).
@@ -9915,11 +10097,13 @@ Proof.
       [reflexivity | cbn [check_scalar_width]; rewrite Pos.eqb_refl; reflexivity]. }
   split; [| exact Hev_t].
   unfold cut_src_expr, eval_closed_cert_expr; cbn [eval_cert_expr lookup_let_val].
-  rewrite Hp; fold (eval_closed_cert_expr penv dummy_freeze_oracle (cut_tgt_expr k w)); rewrite Hev_t.
+  assert (Hcw_t : check_scalar_width w dv_t = raise_ret dv_t)
+    by (destruct Hsc_t as [-> | [it ->]]; [reflexivity | cbn [check_scalar_width]; rewrite Pos.eqb_refl; reflexivity]).
+  rewrite Hp, Hv, Hcw_t.
   destruct Hsc_s as [-> | [is0 ->]].
-  - cbn [cut_p_dvalue check_scalar_width eou_bind eval_select]; rewrite bit1_zero_unsigned; reflexivity.
-  - destruct Href as [Habs | <-]; [discriminate Habs |].
-    cbn [cut_p_dvalue check_scalar_width eou_bind eval_select]; rewrite bit1_one_unsigned; reflexivity.
+  - cbn [cut_p_dvalue check_scalar_width]; rewrite Pos.eqb_refl; cbn [eou_bind eval_select eval_select_base_dvalue]; rewrite bit1_zero_unsigned; reflexivity.
+  - destruct Href as [Habs | ->]; [discriminate Habs |].
+    cbn [cut_p_dvalue check_scalar_width]; rewrite Pos.eqb_refl; cbn [eou_bind eval_select eval_select_base_dvalue]; rewrite bit1_one_unsigned; reflexivity.
 Qed.
 
 Fixpoint cut_names_from (idx : nat) (pspecs : list (raw_id * raw_id * positive))
@@ -10013,19 +10197,17 @@ Proof.
     assert (Hs' : wf_pure_lmap allowed (RM.add id_s (w, cut_src_expr idx w) lmap_s)).
     { apply wf_pure_lmap_add; try assumption.
       - unfold cut_src_expr; cbn [wt_cert_expr cert_expr_bit_width].
-        rewrite cut_p_name_not_dollar, cut_v_name_not_dollar, Hsup, !Pos.eqb_refl; reflexivity.
+        rewrite cut_p_name_not_dollar, cut_v_name_not_dollar, !Pos.eqb_refl; reflexivity.
       - reflexivity.
       - reflexivity.
       - intros u Hu; cbn [cut_src_expr collect_free_vars] in Hu.
-        rewrite cut_p_name_not_dollar, cut_v_name_not_dollar in Hu; cbn in Hu.
         destruct Hu as [<- | [<- | []]]; assumption. }
     assert (Ht' : wf_pure_lmap allowed (RM.add id_t (w, cut_tgt_expr idx w) lmap_t)).
     { apply wf_pure_lmap_add; try assumption.
-      - unfold cut_tgt_expr; cbn [wt_cert_expr]; rewrite cut_v_name_not_dollar, Hsup; reflexivity.
+      - unfold cut_tgt_expr; cbn [wt_cert_expr]; rewrite cut_v_name_not_dollar; reflexivity.
       - reflexivity.
       - reflexivity.
-      - intros u Hu; cbn [cut_tgt_expr collect_free_vars] in Hu.
-        rewrite cut_v_name_not_dollar in Hu; destruct Hu as [<- | []]; exact Hin_v. }
+      - intros u Hu; cbn [cut_tgt_expr collect_free_vars] in Hu; destruct Hu as [<- | []]; exact Hin_v. }
     exact (IH (S idx) allowed _ _ Hfa_r Hinc_r Hs' Ht').
 Qed.
 
@@ -10132,8 +10314,8 @@ Proof.
     destruct (nth_error params idx) as [r |]; [| exact Hrest].
     destruct (nth_error src_pnames idx) as [pnm |] eqn:Hpnm; [| exact Hrest].
     destruct (starts_with_dollar pnm) eqn:Ed; [exact Hrest |].
-    apply wf_pure_lmap_add; [exact Hrest | cbn; rewrite Ed, Hsup; reflexivity | reflexivity | reflexivity |].
-    intros u Hu; cbn [collect_free_vars] in Hu; rewrite Ed in Hu; destruct Hu as [<- | []].
+    apply wf_pure_lmap_add; [exact Hrest | cbn; rewrite Ed; reflexivity | reflexivity | reflexivity |].
+    intros u Hu; cbn [collect_free_vars] in Hu; destruct Hu as [<- | []].
     exact (Hpu idx w pnm (or_introl eq_refl) Hpnm).
 Qed.
 
@@ -10190,7 +10372,7 @@ Proof.
     destruct (RawIDOrd.eq_dec r0 r) as [Heq | Hneq].
     + rewrite RMF.F.add_eq_o in Hf by exact Heq; inversion Hf; subst r wr cer.
       exists dv; split; [exact Hfe | split; [| exact Hty]].
-      unfold eval_closed_cert_expr; cbn [eval_cert_expr lookup_let_val]; rewrite Ed, Hp.
+      unfold eval_closed_cert_expr; cbn [eval_cert_expr lookup_let_val]; rewrite Hp.
       destruct Hty as [-> | [iv ->]];
         [reflexivity | cbn [check_scalar_width]; rewrite Pos.eqb_refl; reflexivity].
     + rewrite RMF.F.add_neq_o in Hf by exact Hneq; exact (Hrest r wr cer Hf).
@@ -10500,14 +10682,14 @@ Lemma eval_eff_loop_cond {Pa : Params} :
 Proof.
   intros penv pol ce cbit Hev; destruct pol; cbn [eff_loop_cond].
   - exists cbit; split; [exact Hev | destruct (@Integers.unsigned 1 cbit =? 1)%Z; reflexivity].
-  - unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev; cbn [eou_bind eval_select].
+  - unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev; cbn [eou_bind eval_select eval_select_base_dvalue].
     destruct (@Integers.unsigned 1 cbit =? 1)%Z.
     + exists (@Integers.repr 1%positive (Z.of_N 0%N)); split; [reflexivity | exact bit1_repr_zero_unsigned].
     + exists (@Integers.repr 1%positive (Z.of_N 1%N)); split; [reflexivity | exact bit1_repr_one_unsigned].
 Qed.
 
 Fixpoint extract_hdr_phi_specs
-  (phis : list (local_id * phi dtyp * list metadata))
+  (phis : list (local_id * phi dtyp * list (metadata dtyp)))
   {struct phis} : option (list (raw_id * positive)) :=
   match phis with
   | [] => Some []
@@ -10591,10 +10773,15 @@ Proof.
     destruct Hchk as ((((((Heqs & Heqt) & Hws) & Hwt) & Hsup) & Href) & Hrest).
     apply raw_id_eqb_eq in Heqs; apply raw_id_eqb_eq in Heqt;
       apply Pos.eqb_eq in Hws; apply Pos.eqb_eq in Hwt; subst id_s' id_t' w_s w_t.
-    inversion Hfas as [| ? ? (_ & _ & (_ & _ & Hfvs)) Hfas_r]; subst.
-    inversion Hfat as [| ? ? (_ & _ & (_ & _ & Hfvt)) Hfat_r]; subst.
-    inversion Hms as [| ? [id_sd dv_s] ? dvs_sr [-> [Hev_s Hsc_s]] Hms_r]; subst.
-    inversion Hmt as [| ? [id_td dv_t] ? dvs_tr [-> [Hev_t Hsc_t]] Hmt_r]; subst.
+    unfold wf_pure_eval_entry in Hfas, Hfat.
+    inversion Hfas as [| ? ? Hhds Hfas_r]; subst.
+    cbn in Hhds; destruct Hhds as (_ & _ & (_ & _ & Hfvs)).
+    inversion Hfat as [| ? ? Hhdt Hfat_r]; subst.
+    cbn in Hhdt; destruct Hhdt as (_ & _ & (_ & _ & Hfvt)).
+    inversion Hms as [| ? [id_sd dv_s] ? dvs_sr Hpms Hms_r]; subst.
+    cbn [phi_eval_pair_matches] in Hpms; destruct Hpms as [-> [Hev_s Hsc_s]].
+    inversion Hmt as [| ? [id_td dv_t] ? dvs_tr Hpmt Hmt_r]; subst.
+    cbn [phi_eval_pair_matches] in Hpmt; destruct Hpmt as [-> [Hev_t Hsc_t]].
     pose proof (fun nm w0 H => Hpenv nm w0 (Hfvs (nm, w0) H)) as Hps.
     pose proof (fun nm w0 H => Hpenv nm w0 (Hfvt (nm, w0) H)) as Hpt.
     pose proof (check_expr_refines_with_lrat_sound ctx ce_s ce_t opt_pf penv dummy_freeze_oracle Href Hps Hpt Hctx) as Hdv.
@@ -10835,7 +11022,7 @@ Definition reify_natural_loop
   end.
 
 Lemma list_empty_b_nil {A : Type} : forall (xs : list A), list_empty_b xs = true -> xs = [].
-Proof. intros [| _ _] H; [reflexivity | discriminate H]. Qed.
+Proof. intros [| x xs] H; [reflexivity | discriminate H]. Qed.
 
 Lemma denote_empty_phis_ret {Pa : Params} :
   forall bid_from (env : rmap (@dvalue Pa)),
@@ -11131,7 +11318,7 @@ Proof.
            cbn [denote_terminator]; unfold denote_exp'.
            eapply cfg_steps_to_ub_bind_r;
              [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ (pure_mcfg_to_mcfg_ret sigma _ _ _ _ Hst_c))
-             | eapply CSU_UB; reflexivity].
+             | apply cfg_steps_raiseUB].
         -- right; exists cbit; split; [exact Hfa_ev_h | split; [exact Hev_c |]].
            set (br_tgt := if (@Integers.unsigned 1 cbit =? 1)%Z then br1 else br2).
            assert (Hhdr_jump :
@@ -11145,7 +11332,7 @@ Proof.
              eapply pure_cfg_steps_bind; [exact Hst_h |].
              cbn [denote_terminator]; unfold denote_exp'.
              eapply pure_cfg_steps_bind; [exact (pure_mcfg_to_pure_cfg _ _ _ _ Hst_c) |].
-             rewrite bit_int_1_equ_one_eq_unsigned; unfold br_tgt.
+             cbn iota beta; rewrite bit_int_1_equ_one_eq_unsigned; unfold br_tgt.
              destruct (@Integers.unsigned 1 cbit =? 1)%Z; apply PCS_Ret; reflexivity. }
            assert (Hpres_hc_dom :
              forall r, In r (args G ++ code_written_ids (blk_code b_entry)) ->
@@ -11421,7 +11608,7 @@ Definition check_loop_cutpoint_cfg
           let cut_allowed := allowed ++ cut_vars_from 0%nat pspecs in
           no_dup_strings (src_pnames ++ cut_names_from 0%nat pspecs) &&
           match fold_ub_assumptions allowed (nls_evals_entry s_s) [] init_ctx
-                  (block_uas_for (init src_cfg) (pc_blocks cert)) with
+                  (block_uas_for (init src_cfg) (pc_blocks cert) (init src_cfg)) with
           | None => false
           | Some ctx_ent =>
               forallb (expr_safe_under_src ctx_ent (nls_evals_entry s_s)) (nls_evals_entry s_t) &&
@@ -11432,7 +11619,7 @@ Definition check_loop_cutpoint_cfg
                 (nls_init_pevals s_s) (nls_init_pevals s_t) &&
               let base_loop_ctx := filter_param_ub_ctx src_pnames ctx_ent in
               match fold_ub_assumptions cut_allowed (nls_evals_hdr s_s) [nls_ce_cond s_s]
-                      base_loop_ctx (block_uas_for (nls_bid_hdr s_s) (pc_blocks cert)) with
+                      base_loop_ctx (block_uas_for (init src_cfg) (pc_blocks cert) (nls_bid_hdr s_s)) with
               | None => false
               | Some ctx_hdr =>
                   let eff_s := eff_loop_cond (nls_latch_on_true s_s) (nls_ce_cond s_s) in
@@ -11444,7 +11631,7 @@ Definition check_loop_cutpoint_cfg
                     extract_branch_cond_assumptions (nls_latch_on_true s_s) (nls_ce_cond s_s) ++ ctx_hdr in
                   let latch_uas :=
                     if raw_id_eqb (nls_bid_latch_entry s_s) (nls_bid_hdr s_s) then []
-                    else block_uas_for (nls_bid_latch_entry s_s) (pc_blocks cert) in
+                    else block_uas_for (init src_cfg) (pc_blocks cert) (nls_bid_latch_entry s_s) in
                   match fold_ub_assumptions cut_allowed
                           (nls_evals_hdr s_s ++ nls_evals_body s_s) [nls_ce_cond s_s]
                           ctx_cont_0 latch_uas with
@@ -11464,7 +11651,7 @@ Definition check_loop_cutpoint_cfg
                           (negb (nls_latch_on_true s_s)) (nls_ce_cond s_s) ++ ctx_hdr in
                       match fold_ub_assumptions cut_allowed
                               (nls_evals_hdr s_s ++ nls_evals_exit s_s) [nls_ce_cond s_s]
-                              ctx_exit_0 (block_uas_for (nls_bid_exit s_s) (pc_blocks cert)) with
+                              ctx_exit_0 (block_uas_for (init src_cfg) (pc_blocks cert) (nls_bid_exit s_s)) with
                       | None => false
                       | Some ctx_exit =>
                           match pc_return_obligation cert with
@@ -11549,7 +11736,6 @@ Proof.
   apply andb_true_iff in Hchk as [Hnd_all Hchk].
   apply no_dup_strings_spec in Hnd_all.
   pose proof (NoDup_app_r _ _ Hnd_all) as Hnd_cut.
-  pose proof (NoDup_app_disj _ _ ) as Hdisj_gen.
   assert (Hdisj_sp_cut : forall x, In x src_pnames -> ~ In x (cut_names_from 0%nat pspecs))
     by (intros x Hx; exact (NoDup_app_disj _ _ x Hnd_all Hx)).
   assert (Hall_not_cut : forall nm w, In (nm, w) allowed -> ~ In nm (cut_names_from 0%nat pspecs)).
@@ -11557,21 +11743,21 @@ Proof.
     pose proof (Hall_in (nm, w) Hin) as Hsin; cbn in Hsin.
     apply string_in_list_spec in Hsin; exact (Hdisj_sp_cut nm Hsin). }
   destruct (fold_ub_assumptions allowed (nls_evals_entry s_s) [] init_ctx
-              (block_uas_for (init src_cfg) (pc_blocks cert))) as [ctx_ent |] eqn:Ef_ent;
+              (block_uas_for (init src_cfg) (pc_blocks cert) (init src_cfg))) as [ctx_ent |] eqn:Ef_ent;
     [| discriminate Hchk].
   rewrite !andb_true_iff in Hchk.
   destruct Hchk as (((Hsafe_ent_t & Hsafe_init_t) & Href_init) & Hchk).
   set (base_loop_ctx := filter_param_ub_ctx src_pnames ctx_ent) in *.
   destruct (fold_ub_assumptions cut_allowed (nls_evals_hdr s_s) [nls_ce_cond s_s]
-              base_loop_ctx (block_uas_for (nls_bid_hdr s_s) (pc_blocks cert)))
+              base_loop_ctx (block_uas_for (init src_cfg) (pc_blocks cert) (nls_bid_hdr s_s)))
     as [ctx_hdr |] eqn:Ef_hdr; [| discriminate Hchk].
   set (eff_s := eff_loop_cond (nls_latch_on_true s_s) (nls_ce_cond s_s)) in *.
   set (eff_t := eff_loop_cond (nls_latch_on_true s_t) (nls_ce_cond s_t)) in *.
   rewrite !andb_true_iff in Hchk.
-  destruct Hchk as (([Hsafe_hdr_t Href_eff] & Hchk)).
+  destruct Hchk as ((Hsafe_hdr_t & Href_eff) & Hchk).
   set (ctx_cont_0 := extract_branch_cond_assumptions (nls_latch_on_true s_s) (nls_ce_cond s_s) ++ ctx_hdr) in *.
   set (latch_uas := if raw_id_eqb (nls_bid_latch_entry s_s) (nls_bid_hdr s_s) then []
-                    else block_uas_for (nls_bid_latch_entry s_s) (pc_blocks cert)) in *.
+                    else block_uas_for (init src_cfg) (pc_blocks cert) (nls_bid_latch_entry s_s)) in *.
   destruct (fold_ub_assumptions cut_allowed (nls_evals_hdr s_s ++ nls_evals_body s_s)
               [nls_ce_cond s_s] ctx_cont_0 latch_uas) as [ctx_cont |] eqn:Ef_cont;
     [| discriminate Hchk].
@@ -11579,9 +11765,9 @@ Proof.
   destruct Hchk as (((Hsafe_body_t & Hsafe_next_t) & Href_next) & Hchk).
   set (ctx_exit_0 := extract_branch_cond_assumptions (negb (nls_latch_on_true s_s)) (nls_ce_cond s_s) ++ ctx_hdr) in *.
   destruct (fold_ub_assumptions cut_allowed (nls_evals_hdr s_s ++ nls_evals_exit s_s)
-              [nls_ce_cond s_s] ctx_exit_0 (block_uas_for (nls_bid_exit s_s) (pc_blocks cert)))
+              [nls_ce_cond s_s] ctx_exit_0 (block_uas_for (init src_cfg) (pc_blocks cert) (nls_bid_exit s_s)))
     as [ctx_exit |] eqn:Ef_exit; [| discriminate Hchk].
-  destruct (pc_return_obligation cert) as [| w_ro _ _ _]; [discriminate Hchk |].
+  destruct (pc_return_obligation cert) as [| w_ro ? ? ?]; [discriminate Hchk |].
   rewrite !andb_true_iff in Hchk.
   destruct Hchk as (((Hws_ro & Hwt_ro) & Hsafe_exit_t) & Href_ret).
   apply Pos.eqb_eq in Hws_ro; apply Pos.eqb_eq in Hwt_ro.
@@ -11631,11 +11817,12 @@ Proof.
   assert (Hls_v : List.length src_pnames = List.length vs) by lia.
   pose proof (init_param_lmap_matches src_uses (args src_cfg) src_pnames arg_dtys vs
                 Hnd_sa Hnd_sp Hlp_s Hls_v Hvs
-                (cfg_param_dtyp_compatible_nth src_cfg arg_dtys Hcomp_s)) as Henv0_s.
+                (fun idx dt => cfg_param_dtyp_compatible_nth src_cfg arg_dtys idx dt Hcomp_s)) as Henv0_s.
   pose proof (init_param_lmap_matches tgt_uses (args tgt_cfg) src_pnames arg_dtys vs
                 Hnd_ta Hnd_sp Hlp_t Hls_v Hvs
-                (cfg_param_dtyp_compatible_nth tgt_cfg arg_dtys Hcomp_t)) as Henv0_t.
+                (fun idx dt => cfg_param_dtyp_compatible_nth tgt_cfg arg_dtys idx dt Hcomp_t)) as Henv0_t.
   fold penv lmap0_s in Henv0_s; fold penv lmap0_t in Henv0_t.
+  unfold eval_cfg_open.
   change (denote_cfg src_cfg None) with (denote_cfg_from bmap_s None (init src_cfg, init src_cfg)).
   change (denote_cfg tgt_cfg None) with (denote_cfg_from bmap_t None (init tgt_cfg, init tgt_cfg)).
   destruct (Hstep_ent_s Pa None penv (init_cfg_locals (args src_cfg) vs) Henv0_s)
@@ -11665,7 +11852,7 @@ Proof.
           eapply denote_cfg_from_block_ub; [exact Hf_hdr_s |].
           unfold denote_block; apply cfg_steps_to_ub_bind_l; exact (Hub_ip_s sigma_tgt). }
         exact (cfg_steps_ub_det_ref dvalue_refines sigma_tgt _ _ _ Hub_from_ent).
-      * pose proof (Forall_app _ (nls_evals_entry s_s) (peval_exprs (nls_init_pevals s_s))) as Hfa_app_ip.
+      * pose proof (Forall_app (wf_pure_eval_entry allowed) (nls_evals_entry s_s) (peval_exprs (nls_init_pevals s_s))) as Hfa_app_ip.
         assert (Hret_ent_ip_s : Forall (fun ce => exists dv, eval_closed_cert_expr penv dummy_freeze_oracle ce = raise_ret dv)
                                   (nls_evals_entry s_s ++ peval_exprs (nls_init_pevals s_s)))
           by (apply Forall_app; split; [exact Hret_ent_s | exact (peval_exprs_ret penv _ _ Hpm0_s)]).
@@ -11781,7 +11968,7 @@ Proof.
                  rewrite Hev_eff_t in Href_eff_ev; cbn [refine_eou_dvalue] in Href_eff_ev.
                  assert (Heb_eq : ebit_s = ebit_t).
                  { destruct Href_eff_ev as [Habs | Heq_dv]; [discriminate Habs |].
-                   injection Heq_dv as Heq_i; exact (dvalue_I_same_sz_inj 1 ebit_s ebit_t Heq_i). }
+                   exact (eq_sym (dvalue_base_I_same_sz_inj 1 ebit_t ebit_s Heq_dv)). }
                  subst ebit_t.
                  assert (Epol_eq :
                    Bool.eqb (@Integers.unsigned 1 cbit_t =? 1)%Z (nls_latch_on_true s_t) =
@@ -11790,7 +11977,9 @@ Proof.
                  destruct Hwf_cond_s as (Hwt_cs & Hlf_cs & _).
                  destruct (Bool.eqb (@Integers.unsigned 1 cbit_s =? 1)%Z (nls_latch_on_true s_s)) eqn:Econt.
                  * (* Loop continues *)
-                   pose proof (bool_eqb_swap_inv _ _ true Econt) as Ecbit_cont; cbn [Bool.eqb] in Ecbit_cont.
+                   pose proof (bool_eqb_swap_inv _ _ true Econt) as Ecbit_cont.
+                   replace (Bool.eqb true (nls_latch_on_true s_s)) with (nls_latch_on_true s_s) in Ecbit_cont
+                     by (destruct (nls_latch_on_true s_s); reflexivity).
                    pose proof (extract_branch_cond_assumptions_sound penv_cut dummy_freeze_oracle
                                  (nls_latch_on_true s_s) (nls_ce_cond s_s) cbit_s ctx_hdr
                                  Hwt_cs Hlf_cs Hev_cond_s Ecbit_cont Hctx_hdr) as Hctx_cont0;
@@ -11958,7 +12147,7 @@ Proof.
   destruct (seed_one_param_ctx pnm dt attrs) as [ev1 ua1] eqn:E1.
   destruct (seed_proto_param_ctx rp rd ra) as [evr uar] eqn:Er.
   cbn [fst] in Hin; apply in_app_iff in Hin as [H1 | Hr].
-  - unfold seed_one_param_ctx in E1; inversion E1; clear E1.
+  - unfold seed_one_param_ctx in E1; inversion E1; subst ev1; clear E1.
     destruct dt as [tb | |]; try contradiction H1.
     destruct tb as [w0 | | | | | | | | | |]; try contradiction H1.
     destruct H1 as [Heq | []]; inversion Heq; subst; left; reflexivity.
@@ -11986,8 +12175,8 @@ Proof.
     pose proof (Hnd eq_refl) as Hwd.
     assert (Hnp : v <> DVALUE_Base DVALUE_Poison)
       by (intros ->; discriminate Hwd).
-    destruct dt as [tb | |]; try constructor.
-    destruct tb as [w0 | | | | | | | | | |]; try constructor.
+    destruct dt as [tb | |]; try apply Forall_nil.
+    destruct tb as [w0 | | | | | | | | | |]; try apply Forall_nil.
     + constructor; [| constructor].
       cbn [ub_assumption_holds]; intros dv Hpm.
       rewrite Hp in Hpm; injection Hpm as <-; exact Hnp.
@@ -12160,7 +12349,7 @@ Proof.
       value_metadata_range_base [(l1, h1)] w = value_metadata_range_base [(l2, h2)] w).
     { intros [db | |]; try reflexivity.
       destruct db; try reflexivity.
-      cbn [value_metadata_range_base in_metadata_ranges]; rewrite El, Eh; reflexivity. }
+      cbn [value_metadata_range_base in_metadata_ranges existsb]; rewrite El, Eh; reflexivity. }
     cbn [option_map value_metadata_range].
     destruct u as [| | vec elts]; try apply Eb.
     destruct vec; [f_equal; apply map_ext; exact Eb | apply Eb]. }
@@ -12232,11 +12421,10 @@ Proof.
     rewrite Hv1.
     destruct v as [[p | | | | | | | ] | |]; try reflexivity; exfalso; exact (Hnp p eq_refl). }
   destruct dt as [tb | packed flds | vec sz et]; cbn [attr_preserves_dtyp_b] in Hpres.
-  - destruct tb as [w | | | | fp | | | | | | sz];
-      try (inversion Hty as [db ? _ _ Heqv _ | ? Heqv | |]; subst;
-           [destruct (Hbase_step _ (ex_intro _ db eq_refl)) as [-> | ->]; [exact Hty | apply DVALUE_Poison_typ_agg]
-           | rewrite value_attrs_poison_poison; apply DVALUE_Poison_typ_agg]);
-      (rewrite Hother; [exact Hty | exact Hpres | intros p ->; inversion Hty as [? ? Hb | | |]; subst; discriminate Hb]).
+  - inversion Hty; subst;
+      [destruct (Hbase_step (DVALUE_Base dv) (ex_intro _ dv eq_refl)) as [-> | ->];
+        [exact Hty | apply DVALUE_Poison_typ_agg]
+      | rewrite value_attrs_poison_poison; apply DVALUE_Poison_typ_agg].
   - rewrite Hother; [exact Hty | exact Hpres | intros p ->; inversion Hty].
   - rewrite Hother; [exact Hty | exact Hpres | intros p ->; inversion Hty].
 Qed.
@@ -12370,8 +12558,10 @@ Proof.
   - eapply det_ref_obs_eq with
       (t1 := run_draws sigma (run_fn_frames env stk exc_slot (ITree.bind (f a) g)))
       (t2 := run_draws sigma (run_fn_frames env stk exc_slot (ITree.bind (f a) g))).
-    + rewrite !observe_run_draws, !observe_run_fn_frames, !observe_bind, Hom; reflexivity.
-    + rewrite !observe_run_draws, !observe_run_fn_frames, !observe_bind, Hom; reflexivity.
+    + rewrite !observe_run_draws, !observe_run_fn_frames, !observe_bind, Hom;
+        cbn iota; repeat rewrite observe_bind; reflexivity.
+    + rewrite !observe_run_draws, !observe_run_fn_frames, !observe_bind, Hom;
+        cbn iota; repeat rewrite observe_bind; reflexivity.
     + eapply paco2_mon; [apply det_ref_refl; intros; reflexivity | intros ? ? []].
   - pstep; apply DR_Step; unfold det_step_body.
     rewrite !observe_run_draws, !observe_run_fn_frames, !observe_bind, Hom; cbn [observe].
@@ -12391,8 +12581,9 @@ Proof.
           | right; exact (CIH sigma cenv stk' exc_slot (k tt))].
       * right; exact (CIH sigma env stk (Some x) (k tt)).
       * right; exact (CIH sigma env stk exc_slot (k exc_slot)).
-    + destruct (classify_ow_event oe) as [[dt] | de].
-      * right; exact (CIH (shift_draw_strat sigma) env stk exc_slot (k (sigma 0%nat dt))).
+    + destruct (classify_ow_event oe) as [d | de].
+      * clear Hom e oe; revert k; destruct d as [dt]; intros k.
+        right; exact (CIH (shift_draw_strat sigma) env stk exc_slot (k (sigma 0%nat dt))).
       * right; apply det_vis_both_refl; intros x; right; exact (CIH sigma env stk exc_slot (k x)).
 Qed.
 
@@ -12409,8 +12600,10 @@ Proof.
   - eapply det_ref_obs_eq with
       (t1 := run_draws sigma (run_fn_frames env stk exc_slot (ITree.bind (f a) g)))
       (t2 := run_draws sigma (run_fn_frames env stk exc_slot (ITree.bind (f a) g))).
-    + rewrite !observe_run_draws, !observe_run_fn_frames, !observe_bind, Hom; reflexivity.
-    + rewrite !observe_run_draws, !observe_run_fn_frames, !observe_bind, Hom; reflexivity.
+    + rewrite !observe_run_draws, !observe_run_fn_frames, !observe_bind, Hom;
+        cbn iota; repeat rewrite observe_bind; reflexivity.
+    + rewrite !observe_run_draws, !observe_run_fn_frames, !observe_bind, Hom;
+        cbn iota; repeat rewrite observe_bind; reflexivity.
     + eapply paco2_mon; [apply det_ref_refl; intros; reflexivity | intros ? ? []].
   - pstep; apply DR_Step; unfold det_step_body.
     rewrite !observe_run_draws, !observe_run_fn_frames, !observe_bind, Hom; cbn [observe].
@@ -12430,8 +12623,9 @@ Proof.
           | right; exact (CIH sigma cenv stk' exc_slot (k tt))].
       * right; exact (CIH sigma env stk (Some x) (k tt)).
       * right; exact (CIH sigma env stk exc_slot (k exc_slot)).
-    + destruct (classify_ow_event oe) as [[dt] | de].
-      * right; exact (CIH (shift_draw_strat sigma) env stk exc_slot (k (sigma 0%nat dt))).
+    + destruct (classify_ow_event oe) as [d | de].
+      * clear Hom e oe; revert k; destruct d as [dt]; intros k.
+        right; exact (CIH (shift_draw_strat sigma) env stk exc_slot (k (sigma 0%nat dt))).
       * right; apply det_vis_both_refl; intros x; right; exact (CIH sigma env stk exc_slot (k x)).
 Qed.
 
@@ -12518,30 +12712,47 @@ Lemma run_draws_ext_no_stack_det {Pa : Params} {R : Type} :
     no_stack_det (run_draws s2 t).
 Proof.
   pcofix CIH; intros s1 s2 t Heq H; punfold H; pstep.
-  rewrite observe_run_draws in H.
   destruct (observe t) as [x | m | X e k] eqn:Hot.
   - apply (NSD_Ret _ _ x); rewrite observe_run_draws, Hot; reflexivity.
-  - inversion H as [| m0 Ho0 Hm0 |]; try discriminate Ho0; subst.
+  - destruct H as [x Ho0 | m0 Ho0 Hm0 | X0 e0 k0 Ho0 _ _];
+      rewrite observe_run_draws, Hot in Ho0; try discriminate Ho0.
     injection Ho0 as <-; pclearbot.
     apply (NSD_Tau _ _ (run_draws s2 m)); [rewrite observe_run_draws, Hot; reflexivity |].
     right; exact (CIH s1 s2 m Heq Hm0).
-  - destruct (classify_ow_event e) as [[dt] | de] eqn:Ecl.
-    + inversion H as [| m0 Ho0 Hm0 |]; try discriminate Ho0; subst.
+  - destruct (classify_ow_event e) as [d | de] eqn:Ecl.
+    + revert e k Hot Ecl; destruct d as [dt]; intros e k Hot Ecl.
+      destruct H as [x Ho0 | m0 Ho0 Hm0 | X0 e0 k0 Ho0 _ _];
+        rewrite observe_run_draws, Hot, Ecl in Ho0; try discriminate Ho0.
       injection Ho0 as <-; pclearbot.
       apply (NSD_Tau _ _ (run_draws (shift_draw_strat s2) (k (s2 0%nat dt)))).
       * rewrite observe_run_draws, Hot, Ecl; reflexivity.
       * right; rewrite <- (Heq 0%nat dt).
         exact (CIH (shift_draw_strat s1) (shift_draw_strat s2) (k (s1 0%nat dt))
                  (fun n d => Heq (S n) d) Hm0).
-    + inversion H as [| | X0 e0 k0 Ho0 Hns0 Hk0]; try discriminate Ho0; subst.
-      assert (He_eq : e0 = de /\ exists Hcast : X0 = X,
-                forall x : X, k0 (eq_rect_r (fun T => T) x Hcast) = run_draws s1 (k x)).
-      { clear -Ho0; inversion Ho0; subst; split; [reflexivity | exists eq_refl; intros; reflexivity]. }
-      destruct He_eq as [-> [-> Hk_eq]].
+    + destruct H as [x Ho0 | m0 Ho0 Hm0 | X0 e0 k0 Ho0 Hns0 Hk0];
+        rewrite observe_run_draws, Hot, Ecl in Ho0; try discriminate Ho0.
+      pose proof (f_equal (fun u : itree' (@Det_OW_E Pa) R =>
+        match u with
+        | @VisF _ _ _ X_ u_e u_k =>
+            existT (fun T : Type => (@Det_OW_E Pa T * (T -> itree (@Det_OW_E Pa) R))%type) X_ (u_e, u_k)
+        | _ =>
+            existT (fun T : Type => (@Det_OW_E Pa T * (T -> itree (@Det_OW_E Pa) R))%type)
+              X (de, fun x : X => run_draws s1 (k x))
+        end) Ho0) as Hs.
+      destruct (match Hs in (_ = z)
+                return exists Hc : X = projT1 z,
+                  eq_rect X (fun T : Type => (@Det_OW_E Pa T * (T -> itree (@Det_OW_E Pa) R))%type)
+                    (de, fun x : X => run_draws s1 (k x)) (projT1 z) Hc = projT2 z
+                with
+                | eq_refl => ex_intro _ eq_refl eq_refl
+                end) as [Hc Hpair].
+      clear Ho0 Hs; cbn [projT1 projT2] in Hc, Hpair;
+        revert e0 k0 Hns0 Hk0 Hpair; destruct Hc; intros e0 k0 Hns0 Hk0 Hpair; cbn in Hpair.
+      injection Hpair as <- Hk_eq.
       apply (NSD_Vis _ _ de (fun x => run_draws s2 (k x))).
       * rewrite observe_run_draws, Hot, Ecl; reflexivity.
       * exact Hns0.
-      * intros x; specialize (Hk0 x); pclearbot; rewrite Hk_eq in Hk0.
+      * intros x; specialize (Hk0 x); pclearbot; rewrite <- Hk_eq in Hk0.
         right; exact (CIH s1 s2 (k x) Heq Hk0).
 Qed.
 
@@ -12636,17 +12847,18 @@ Definition cfg_varargs_irrel (G : CFG.cfg dtyp) : bool :=
   forallb (fun b => forallb (fun '(_, ins, _) => instr_varargs_irrel ins) (blk_code b)) (blks G).
 
 Lemma denote_instr_varargs_eq {Pa : Params} :
-  forall (i : instr_id * instr dtyp * list (metadata dtyp)) (va1 va2 : option (@ptr Pa)),
+  forall (i : instr_id * instr dtyp * list (metadata dtyp)) (va1 va2 : option (@ptr _ (@PTR Pa))),
     instr_varargs_irrel (snd (fst i)) = true ->
     denote_instr i va1 = denote_instr i va2.
 Proof.
   intros [[iid ins] md] va1 va2 Hirr; cbn in Hirr.
   destruct ins; try reflexivity.
-  destruct fn as [dt fn_e]; destruct (intrinsic_exp fn_e); [discriminate Hirr | reflexivity].
+  destruct fn as [dt fn_e]; unfold instr_varargs_irrel in Hirr; unfold denote_instr; cbn zeta iota beta.
+  destruct (intrinsic_exp fn_e); [discriminate Hirr | reflexivity].
 Qed.
 
 Lemma denote_code_varargs_eq {Pa : Params} :
-  forall (c : code dtyp) (va1 va2 : option (@ptr Pa)),
+  forall (c : code dtyp) (va1 va2 : option (@ptr _ (@PTR Pa))),
     forallb (fun '(_, ins, _) => instr_varargs_irrel ins) c = true ->
     denote_code c va1 = denote_code c va2.
 Proof.
@@ -12657,7 +12869,7 @@ Proof.
 Qed.
 
 Lemma denote_block_varargs_eq {Pa : Params} :
-  forall (G : CFG.cfg dtyp) b bid_from (va1 va2 : option (@ptr Pa)),
+  forall (G : CFG.cfg dtyp) b bid_from (va1 va2 : option (@ptr _ (@PTR Pa))),
     cfg_varargs_irrel G = true ->
     In b (blks G) ->
     denote_block b bid_from va1 = denote_block b bid_from va2.
@@ -12704,8 +12916,9 @@ Proof.
       * destruct (RM.find id env) as [dv |].
         -- right; apply CIH; exists (k dv); split; reflexivity.
         -- right; apply det_vis_both_refl; intros [].
-    + destruct (classify_ow_event oe) as [[dt] | de].
-      * right; apply CIH; exists (k (sigma 0%nat dt)); split; reflexivity.
+    + destruct (classify_ow_event oe) as [d | de].
+      * revert k; destruct d as [dt]; intros k.
+        right; apply CIH; exists (k (sigma 0%nat dt)); split; reflexivity.
       * right; apply det_vis_both_refl; intros x; right; apply CIH; exists (k x); split; reflexivity.
 Qed.
 
@@ -12744,7 +12957,8 @@ Proof.
   - rewrite !andb_true_iff in Hchk.
     destruct Hchk as ((((((Heqs & _) & Hws) & _) & Hsup) & _) & Hrest).
     apply raw_id_eqb_eq in Heqs; apply Pos.eqb_eq in Hws; subst id_s' w_s.
-    inversion Hms as [| ? [id_sd dv_s] ? dvs_sr [-> [_ Hsc_s]] Hms_r]; subst.
+    inversion Hms as [| ? [id_sd dv_s] ? dvs_sr Hpms Hms_r]; subst.
+    cbn [phi_eval_pair_matches] in Hpms; destruct Hpms as [-> [_ Hsc_s]].
     destruct (IH rs rt dvs_sr ctx opt_pf penv Hms_r Hrest) as [dvs_tr Hrel_r].
     exists ((id_t, dv_s) :: dvs_tr).
     exact (CPR_Cons id_s id_t w dv_s dv_s rp dvs_sr dvs_tr Hsup Hsc_s Hsc_s (or_intror eq_refl) Hrel_r).
@@ -12752,7 +12966,7 @@ Qed.
 
 Lemma check_loop_cutpoint_cfg_no_stack_det {Pa : Params} :
   forall allowed init_ctx (src_cfg tgt_cfg : CFG.cfg dtyp)
-         (cert : proof_certificate) (lci : loop_cutpoint_info)
+         (cert : proof_certificate) (lci : loop_cutpoint_invariant)
          (opt_pf : option (list lrat_step))
          arg_dtys (vs : list (@dvalue Pa)),
     let src_pnames := List.map cert_reg_name (args src_cfg) in
@@ -12792,16 +13006,16 @@ Proof.
     pose proof (Hall_in (nm, w) Hin) as Hsin; cbn in Hsin.
     apply string_in_list_spec in Hsin; exact (NoDup_app_disj _ _ nm Hnd_all Hsin). }
   destruct (fold_ub_assumptions allowed (nls_evals_entry s_s) [] init_ctx
-              (block_uas_for (init src_cfg) (pc_blocks cert))) as [ctx_ent |]; [| discriminate Hchk].
+              (block_uas_for (init src_cfg) (pc_blocks cert) (init src_cfg))) as [ctx_ent |]; [| discriminate Hchk].
   rewrite !andb_true_iff in Hchk.
   destruct Hchk as (((_ & _) & Href_init) & Hchk).
   destruct (fold_ub_assumptions cut_allowed (nls_evals_hdr s_s) [nls_ce_cond s_s]
               (filter_param_ub_ctx src_pnames ctx_ent)
-              (block_uas_for (nls_bid_hdr s_s) (pc_blocks cert)))
+              (block_uas_for (init src_cfg) (pc_blocks cert) (nls_bid_hdr s_s)))
     as [ctx_hdr |]; [| discriminate Hchk].
   rewrite !andb_true_iff in Hchk; destruct Hchk as (_ & Hchk).
   set (latch_uas := if raw_id_eqb (nls_bid_latch_entry s_s) (nls_bid_hdr s_s) then []
-                    else block_uas_for (nls_bid_latch_entry s_s) (pc_blocks cert)) in *.
+                    else block_uas_for (init src_cfg) (pc_blocks cert) (nls_bid_latch_entry s_s)) in *.
   destruct (fold_ub_assumptions cut_allowed (nls_evals_hdr s_s ++ nls_evals_body s_s)
               [nls_ce_cond s_s]
               (extract_branch_cond_assumptions (nls_latch_on_true s_s) (nls_ce_cond s_s) ++ ctx_hdr)
@@ -12834,7 +13048,7 @@ Proof.
   assert (Hls_v : List.length src_pnames = List.length vs) by lia.
   pose proof (init_param_lmap_matches src_uses (args src_cfg) src_pnames arg_dtys vs
                 Hnd_sa Hnd_sp Hlp_s Hls_v Hvs
-                (cfg_param_dtyp_compatible_nth src_cfg arg_dtys Hcomp_s)) as Henv0_s.
+                (fun idx dt => cfg_param_dtyp_compatible_nth src_cfg arg_dtys idx dt Hcomp_s)) as Henv0_s.
   fold penv lmap0_s in Henv0_s.
   unfold eval_cfg_open.
   change (denote_cfg src_cfg None) with (denote_cfg_from bmap_s None (init src_cfg, init src_cfg)).
@@ -12953,10 +13167,23 @@ Lemma no_stack_det_inv_vis {Pa : Params} {R X : Type} :
 Proof.
   intros t e k Ho H; punfold H.
   destruct H as [? Ho' | ? Ho' _ | X0 e0 k0 Ho' Hns Hk]; rewrite Ho in Ho'; try discriminate Ho'.
-  assert (Heq : e0 = e /\ exists Hc : X0 = X, forall x : X, k0 (eq_rect_r (fun T => T) x Hc) = k x).
-  { clear -Ho'; inversion Ho'; subst; split; [reflexivity | exists eq_refl; intros; reflexivity]. }
-  destruct Heq as [-> [-> Hk_eq]].
-  split; [exact Hns | intros x; specialize (Hk x); pclearbot; rewrite Hk_eq in Hk; exact Hk].
+  pose proof (f_equal (fun u : itree' (@Det_OW_E Pa) R =>
+    match u with
+    | @VisF _ _ _ X_ u_e u_k =>
+        existT (fun T : Type => (@Det_OW_E Pa T * (T -> itree (@Det_OW_E Pa) R))%type) X_ (u_e, u_k)
+    | _ =>
+        existT (fun T : Type => (@Det_OW_E Pa T * (T -> itree (@Det_OW_E Pa) R))%type) X (e, k)
+    end) Ho') as Hs.
+  destruct (match Hs in (_ = z)
+            return exists Hc : X = projT1 z,
+              eq_rect X (fun T : Type => (@Det_OW_E Pa T * (T -> itree (@Det_OW_E Pa) R))%type) (e, k) (projT1 z) Hc = projT2 z
+            with
+            | eq_refl => ex_intro _ eq_refl eq_refl
+            end) as [Hc Hpair].
+  clear Ho' Hs; cbn [projT1 projT2] in Hc, Hpair;
+    revert e0 k0 Hns Hk Hpair; destruct Hc; intros e0 k0 Hns Hk Hpair; cbn in Hpair.
+  injection Hpair as <- <-.
+  split; [exact Hns | intros x; specialize (Hk x); pclearbot; exact Hk].
 Qed.
 
 Lemma iter_bind_pointwise_cfg_det_ref {Pa : Params} {I R S : Type}
@@ -12985,7 +13212,7 @@ Proof.
   - eapply det_ref_obs_eq with
       (t1 := run_draws sigma (run_cfg_locals env u2))
       (t2 := run_draws sigma (run_cfg_locals env u2)).
-    + exact (obs_eq_cfg_locals_draws sigma env u1 u2 Ho).
+    + symmetry; exact (obs_eq_cfg_locals_draws sigma env u1 u2 Ho).
     + reflexivity.
     + eapply paco2_mon; [apply det_ref_refl; intros; reflexivity | intros ? ? []].
   - destruct (observe m) as [[l | rv] | m' | X e k] eqn:Hom.
@@ -12999,7 +13226,7 @@ Proof.
       eapply det_ref_obs_eq with
         (t1 := run_draws sigma (run_cfg_locals env u2))
         (t2 := run_draws sigma (run_cfg_locals env u2)).
-      * exact (obs_eq_cfg_locals_draws sigma env u1 u2 Ho_eq).
+      * symmetry; exact (obs_eq_cfg_locals_draws sigma env u1 u2 Ho_eq).
       * reflexivity.
       * eapply paco2_mon; [apply det_ref_refl; intros; reflexivity | intros ? ? []].
     + pstep; apply DR_Step; unfold det_step_body.
@@ -13013,8 +13240,9 @@ Proof.
         -- destruct (RM.find id env) as [dv |].
            ++ right; apply CIH; right; exists (k dv); split; reflexivity.
            ++ right; apply det_vis_both_refl; intros [].
-      * destruct (classify_ow_event oe) as [[dt] | de].
-        -- right; apply CIH; right; exists (k (sigma 0%nat dt)); split; reflexivity.
+      * destruct (classify_ow_event oe) as [d | de].
+        -- clear Hom e oe; revert k; destruct d as [dt]; intros k.
+           right; apply CIH; right; exists (k (sigma 0%nat dt)); split; reflexivity.
         -- right; apply det_vis_both_refl; intros x; right; apply CIH; right; exists (k x); split; reflexivity.
 Qed.
 
@@ -13091,8 +13319,9 @@ Proof.
                              observe (run_draws sigma (run_cfg_locals env u1)))
                 by (rewrite !observe_run_draws, !observe_run_cfg_locals, Ho1, Ho2, !observe_bind, Hom; cbn [observe]; rewrite Ece, Ef; reflexivity).
               eapply paco1_mon; [exact (no_stack_det_obs_eq _ _ Ho_v Hns2) | intros ? []].
-      * destruct (classify_ow_event oe) as [[dt] | de] eqn:Eoe.
-        -- assert (Ho_t2 : observe (run_draws sigma (run_cfg_locals env u2)) =
+      * destruct (classify_ow_event oe) as [d | de] eqn:Eoe.
+        -- revert e k Hom oe Ece Eoe; destruct d as [dt]; intros e k Hom oe Ece Eoe.
+           assert (Ho_t2 : observe (run_draws sigma (run_cfg_locals env u2)) =
                            TauF (run_draws (shift_draw_strat sigma) (run_cfg_locals env
                              (ITree.bind (ITree.bind (k (sigma 0%nat dt)) (fun lr => match lr with inl l => Tau (ITree.iter f2 l) | inr r0 => Ret r0 end)) g))))
              by (rewrite observe_run_draws, observe_run_cfg_locals, Ho2, !observe_bind, Hom; cbn [observe]; rewrite Ece, Eoe; reflexivity).
@@ -13112,7 +13341,7 @@ Proof.
 Qed.
 
 Lemma ocfg_step_varargs_eq {Pa : Params} :
-  forall (bmap : rmap (block dtyp)) (va1 va2 : option (@ptr Pa)),
+  forall (bmap : rmap (block dtyp)) (va1 va2 : option (@ptr _ (@PTR Pa))),
     bmap_varargs_irrel bmap = true ->
     forall (p : block_id * block_id),
       (let '(bid_from, bid_src) := p in
@@ -13144,44 +13373,79 @@ Proof.
   unfold denote_block; rewrite (denote_code_varargs_eq (blk_code b) va1 va2 Hbc); reflexivity.
 Qed.
 
+Lemma ocfg_step_varargs_bind_obs {Pa : Params} {S : Type}
+  (f1 f2 : block_id * block_id -> @CFGtop Pa ((block_id * block_id) + ((block_id * block_id) + @dvalue Pa)))
+  (g : (block_id * block_id) + @dvalue Pa -> @CFGtop Pa S)
+  (p : block_id * block_id) :
+  (forall q, f1 q = f2 q) ->
+  observe (ITree.bind (ITree.iter f2 p) g) =
+  observe (ITree.bind (ITree.bind (f1 p) (fun lr =>
+    match lr with inl l => Tau (ITree.iter f2 l) | inr r => Ret r end)) g).
+Proof.
+  intros Hfeq.
+  rewrite (observe_bind (ITree.iter f2 p)), observe_iter, <- (Hfeq p).
+  symmetry; rewrite observe_bind at 1; reflexivity.
+Qed.
+
 Lemma denote_cfg_varargs_det_ref {Pa : Params} :
-  forall (G : CFG.cfg dtyp) (va1 va2 : option (@ptr Pa)) (sigma : @draw_strat Pa) env,
+  forall (G : CFG.cfg dtyp) (va1 va2 : option (@ptr _ (@PTR Pa))) (sigma : @draw_strat Pa) env,
     bmap_varargs_irrel (ocfg_map (blks G)) = true ->
     det_ref eq
       (run_draws sigma (run_cfg_locals env (denote_cfg_map (ocfg_map (blks G)) G va1)))
       (run_draws sigma (run_cfg_locals env (denote_cfg_map (ocfg_map (blks G)) G va2))).
 Proof.
   intros G va1 va2 sigma env Hbm.
-  unfold denote_cfg_map, denote_ocfg_map.
+  unfold denote_cfg_map; cbn [ExtLib.Structures.Monad.bind Monad_itree]; unfold denote_ocfg_map.
   eapply iter_bind_pointwise_cfg_det_ref;
     [exact (ocfg_step_varargs_eq (ocfg_map (blks G)) va1 va2 Hbm) |].
-  right; eexists; split;
-    (rewrite observe_bind, observe_iter; symmetry; rewrite observe_bind; reflexivity).
+  right; eexists; split.
+  - exact (ocfg_step_varargs_bind_obs _ _ _ (init G, init G) (fun _ => eq_refl)).
+  - exact (ocfg_step_varargs_bind_obs _ _ _ (init G, init G)
+             (ocfg_step_varargs_eq (ocfg_map (blks G)) va1 va2 Hbm)).
 Qed.
 
 Lemma denote_cfg_varargs_no_stack_det {Pa : Params} :
-  forall (G : CFG.cfg dtyp) (va1 va2 : option (@ptr Pa)) (sigma : @draw_strat Pa) env,
+  forall (G : CFG.cfg dtyp) (va1 va2 : option (@ptr _ (@PTR Pa))) (sigma : @draw_strat Pa) env,
     bmap_varargs_irrel (ocfg_map (blks G)) = true ->
     no_stack_det (run_draws sigma (run_cfg_locals env (denote_cfg_map (ocfg_map (blks G)) G va2))) ->
     no_stack_det (run_draws sigma (run_cfg_locals env (denote_cfg_map (ocfg_map (blks G)) G va1))).
 Proof.
   intros G va1 va2 sigma env Hbm Hns.
-  unfold denote_cfg_map, denote_ocfg_map in *.
+  unfold denote_cfg_map in *; cbn [ExtLib.Structures.Monad.bind Monad_itree] in *; unfold denote_ocfg_map in *.
   eapply iter_bind_pointwise_no_stack_det;
     [exact (ocfg_step_varargs_eq (ocfg_map (blks G)) va1 va2 Hbm) | | exact Hns].
-  right; eexists; split;
-    (rewrite observe_bind, observe_iter; symmetry; rewrite observe_bind; reflexivity).
+  right; eexists; split.
+  - exact (ocfg_step_varargs_bind_obs _ _ _ (init G, init G) (fun _ => eq_refl)).
+  - exact (ocfg_step_varargs_bind_obs _ _ _ (init G, init G)
+             (ocfg_step_varargs_eq (ocfg_map (blks G)) va1 va2 Hbm)).
 Qed.
 
 Lemma visf_eq_inv {E : Type -> Type} {R X1 X2 : Type}
   (e1 : E X1) (k1 : X1 -> itree E R)
   (e2 : E X2) (k2 : X2 -> itree E R) :
-  VisF e1 k1 = VisF e2 k2 ->
+  (VisF e1 k1 : itree' E R) = VisF e2 k2 ->
   exists Hc : X1 = X2,
     eq_rect X1 E e1 X2 Hc = e2 /\
     (forall x : X1, k1 x = k2 (eq_rect X1 (fun T => T) x X2 Hc)).
 Proof.
-  intros H; inversion H; subst; exists eq_refl; split; reflexivity.
+  intros H.
+  pose proof (f_equal (fun u : itree' E R =>
+    match u with
+    | @VisF _ _ _ X_ u_e u_k =>
+        existT (fun T : Type => (E T * (T -> itree E R))%type) X_ (u_e, u_k)
+    | _ =>
+        existT (fun T : Type => (E T * (T -> itree E R))%type) X1 (e1, k1)
+    end) H) as Hs.
+  destruct (match Hs in (_ = z)
+            return exists Hc : X1 = projT1 z,
+              eq_rect X1 (fun T : Type => (E T * (T -> itree E R))%type) (e1, k1) (projT1 z) Hc = projT2 z
+            with
+            | eq_refl => ex_intro _ eq_refl eq_refl
+            end) as [Hc Hpair].
+  clear H Hs; cbn [projT1 projT2] in Hc, Hpair;
+    revert e2 k2 Hpair; destruct Hc; intros e2 k2 Hpair; cbn in Hpair.
+  injection Hpair as <- <-.
+  exists eq_refl; split; reflexivity.
 Qed.
 
 Lemma obs_eq_fn_frames_draws {Pa : Params} {R : Type} :
@@ -13419,6 +13683,24 @@ Proof.
   intros _; destruct e as [[]]; exists eq_refl; reflexivity.
 Qed.
 
+Lemma det_vis_both_failure {Pa : Params} {R1 R2 : Type}
+  (r : itree (@Det_OW_E Pa) R1 -> itree (@Det_OW_E Pa) R2 -> Prop)
+  {X1 X2 : Type}
+  (e1 : @Det_OW_E Pa X1) (k1 : X1 -> itree (@Det_OW_E Pa) R1)
+  (e2 : @Det_OW_E Pa X2) (k2 : X2 -> itree (@Det_OW_E Pa) R2) :
+  is_failure_det_event e1 = true ->
+  is_failure_det_event e2 = true ->
+  det_vis_both r e1 k1 e2 k2.
+Proof.
+  unfold Det_OW_E in e1, e2.
+  repeat match type of e1 with
+         | (_ +' _) _ =>
+             destruct e1 as [? | e1]; [cbn; intros H; discriminate H |];
+             destruct e2 as [? | e2]; [cbn; intros _ H; discriminate H |]
+         end.
+  intros _ _; destruct e1 as [u1], e2 as [u2]; destruct u1, u2; cbn; split; [reflexivity | intros []].
+Qed.
+
 Lemma det_vis_both_fmap {Pa : Params} {A1 A2 R1 R2 S1 S2 : Type}
   (r : itree (@Det_OW_E Pa) R1 -> itree (@Det_OW_E Pa) R2 -> Prop)
   (s : itree (@Det_OW_E Pa) S1 -> itree (@Det_OW_E Pa) S2 -> Prop)
@@ -13488,44 +13770,44 @@ Proof.
   rewrite observe_run_draws, observe_run_cfg_locals in Ho.
   destruct (observe u) as [a | u' | Y e ku] eqn:Hou; try discriminate Ho.
   destruct e as [c | [ec | [ic | [ge | [[le | se] | [me | [de_dr | [oe | [xe | [ue | [dbe | fe]]]]]]]]]]].
-  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [<- [<- Hk]]; cbn in Hk.
-    apply (CLVC_Other s env u _ kd ku eq_refl (fun x => eq_sym (Hk x))).
+  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde Hk]]; destruct Hc; cbn in Hde, Hk; subst de.
+    apply CLVC_Other with (ku := ku); [reflexivity | intros x; exact (eq_sym (Hk x)) |].
     intros B stk exc_slot kf; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
-  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [<- [<- Hk]]; cbn in Hk.
-    apply (CLVC_Other s env u _ kd ku eq_refl (fun x => eq_sym (Hk x))).
+  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde Hk]]; destruct Hc; cbn in Hde, Hk; subst de.
+    apply CLVC_Other with (ku := ku); [reflexivity | intros x; exact (eq_sym (Hk x)) |].
     intros B stk exc_slot kf; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
-  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [<- [<- Hk]]; cbn in Hk.
-    apply (CLVC_Other s env u _ kd ku eq_refl (fun x => eq_sym (Hk x))).
+  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde Hk]]; destruct Hc; cbn in Hde, Hk; subst de.
+    apply CLVC_Other with (ku := ku); [reflexivity | intros x; exact (eq_sym (Hk x)) |].
     intros B stk exc_slot kf; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
-  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [<- [<- Hk]]; cbn in Hk.
-    apply (CLVC_Other s env u _ kd ku eq_refl (fun x => eq_sym (Hk x))).
+  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde Hk]]; destruct Hc; cbn in Hde, Hk; subst de.
+    apply CLVC_Other with (ku := ku); [reflexivity | intros x; exact (eq_sym (Hk x)) |].
     intros B stk exc_slot kf; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
   - destruct le as [id dv | id]; cbn in Ho; [discriminate Ho |].
     destruct (RM.find id env) as [dv |] eqn:Ef; [discriminate Ho |].
-    destruct (visf_eq_inv _ _ _ _ Ho) as [<- [<- _]].
+    destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde _]]; destruct Hc; cbn in Hde; subst de.
     apply CLVC_ReadFail; [reflexivity | reflexivity | reflexivity |].
-    intros B stk exc_slot kf; exists void_elim.
-    rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; cbn; rewrite Ef; reflexivity.
-  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [<- [<- _]].
+    intros B stk exc_slot kf; eexists.
+    rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; cbn; rewrite Ef; cbn; reflexivity.
+  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde _]]; destruct Hc; cbn in Hde; subst de.
     apply CLVC_Stack; reflexivity.
-  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [<- [<- Hk]]; cbn in Hk.
-    apply (CLVC_Other s env u _ kd ku eq_refl (fun x => eq_sym (Hk x))).
+  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde Hk]]; destruct Hc; cbn in Hde, Hk; subst de.
+    apply CLVC_Other with (ku := ku); [reflexivity | intros x; exact (eq_sym (Hk x)) |].
     intros B stk exc_slot kf; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
   - destruct de_dr; cbn in Ho; discriminate Ho.
-  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [<- [<- Hk]]; cbn in Hk.
-    apply (CLVC_Other s env u _ kd ku eq_refl (fun x => eq_sym (Hk x))).
+  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde Hk]]; destruct Hc; cbn in Hde, Hk; subst de.
+    apply CLVC_Other with (ku := ku); [reflexivity | intros x; exact (eq_sym (Hk x)) |].
     intros B stk exc_slot kf; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
-  - destruct xe as [ex]; cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [<- [<- _]].
+  - destruct xe as [ex]; cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde _]]; destruct Hc; cbn in Hde; subst de.
     apply (CLVC_Exc s env u _ kd ex); [reflexivity | reflexivity | reflexivity |].
     rewrite observe_run_exc, Hou; reflexivity.
-  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [<- [<- Hk]]; cbn in Hk.
-    apply (CLVC_Other s env u _ kd ku eq_refl (fun x => eq_sym (Hk x))).
+  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde Hk]]; destruct Hc; cbn in Hde, Hk; subst de.
+    apply CLVC_Other with (ku := ku); [reflexivity | intros x; exact (eq_sym (Hk x)) |].
     intros B stk exc_slot kf; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
-  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [<- [<- Hk]]; cbn in Hk.
-    apply (CLVC_Other s env u _ kd ku eq_refl (fun x => eq_sym (Hk x))).
+  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde Hk]]; destruct Hc; cbn in Hde, Hk; subst de.
+    apply CLVC_Other with (ku := ku); [reflexivity | intros x; exact (eq_sym (Hk x)) |].
     intros B stk exc_slot kf; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
-  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [<- [<- Hk]]; cbn in Hk.
-    apply (CLVC_Other s env u _ kd ku eq_refl (fun x => eq_sym (Hk x))).
+  - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde Hk]]; destruct Hc; cbn in Hde, Hk; subst de.
+    apply CLVC_Other with (ku := ku); [reflexivity | intros x; exact (eq_sym (Hk x)) |].
     intros B stk exc_slot kf; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
 Qed.
 
@@ -13630,15 +13912,14 @@ Proof.
                 apply DR_Step; unfold det_step_body; rewrite Ho_fn1, Ho_fn2; right; apply det_vis_both_refl; intros [].
              ++ rewrite Hst2 in Hst_eq; discriminate Hst_eq.
              ++ rewrite Hfl2_f in Hfl_eq; discriminate Hfl_eq.
-             ++ destruct (failure_det_event_inv de2 Hfl_eq) as [<- ->]; cbn in Hofn2.
-                apply DR_Step; unfold det_step_body; rewrite Ho_fn1, (Hofn2 R2 stk exc_slot kf2).
-                right; apply det_vis_both_refl; intros [].
+             ++ apply DR_Step; unfold det_step_body; rewrite Ho_fn1, (Hofn2 R2 stk exc_slot kf2).
+                right; apply det_vis_both_failure; [reflexivity | exact Hfl_eq].
           -- rewrite Hst1 in Hns_de1; discriminate Hns_de1.
           -- rewrite Hex1 in Hexc_eq; symmetry in Hexc_eq.
              destruct Hvc2 as [_ _ Hne2 _ | Hst2 _ | ex2 Hex2 _ _ Hou2_exc | ku2 Hne2 _ _];
                try (rewrite Hne2 in Hexc_eq; discriminate Hexc_eq);
                try (rewrite Hst2 in Hst_eq; discriminate Hst_eq).
-             rewrite Hex2 in Hexc_eq; injection Hexc_eq as <-.
+             rewrite Hex2 in Hexc_eq; injection Hexc_eq as ->.
              pose proof (Hkf s1_ s2_ env1_ env2_ (inl ex1) (inl ex1) eq_refl) as Hk_ref.
              punfold Hk_ref.
              eapply det_ref__obs_eq with
@@ -13651,9 +13932,8 @@ Proof.
              destruct Hvc2 as [Hfl2 _ _ Hof2 | Hst2 _ | ex2 Hex2 _ _ _ | ku2 _ Hkd2 Hofn2].
              ++ rewrite Hfl2 in Hfl_eq.
                 destruct (Hof2 R2 stk exc_slot kf2) as [kv2 Ho_fn2].
-                destruct (failure_det_event_inv de1 Hfl_eq) as [<- ->]; cbn in Hofn1.
                 apply DR_Step; unfold det_step_body; rewrite (Hofn1 R1 stk exc_slot kf1), Ho_fn2.
-                right; apply det_vis_both_refl; intros [].
+                right; apply det_vis_both_failure; [exact Hfl_eq | reflexivity].
              ++ rewrite Hst2 in Hst_eq; discriminate Hst_eq.
              ++ rewrite Hex2 in Hexc_eq; discriminate Hexc_eq.
              ++ apply DR_Step; unfold det_step_body.
@@ -13734,7 +14014,7 @@ Lemma fn_frames_trigger_mem_step {Pa : Params} {R1 R2 Y : Type}
 Proof.
   intros Ho1 Ho2 Hk1 Hk2 Hk.
   pstep; apply DR_Step; unfold det_step_body.
-  rewrite !observe_run_draws, !observe_run_fn_frames, Ho1, Ho2; cbn.
+  rewrite !observe_run_draws, !observe_run_fn_frames, Ho1, Ho2; cbn - [det_vis_both].
   right; apply det_vis_both_refl; intros y; left.
   eapply det_ref_obs_eq with
     (t1 := run_draws s1 (run_fn_frames env1 stk1 exc1 (k1 y)))
@@ -13782,11 +14062,11 @@ Proof.
     + eapply fn_frames_trigger_mem_step with
         (me := Load (DTYPE_Array false (Z.to_N (denote_int_syntax n1)) (DTYPE_B 8)) (DVALUE_Base (DVALUE_Pointer p)))
         (k1 := fun _ => k1 tt) (k2 := fun _ => k2 tt);
-        [unfold load, trigger; rewrite !observe_bind; reflexivity
-        | unfold load, trigger; rewrite !observe_bind; reflexivity
-        | intros _; rewrite !observe_bind; reflexivity
-        | intros _; rewrite !observe_bind; reflexivity
-        | intros _; exact Hk].
+        [unfold load, trigger; cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; rewrite !observe_bind; reflexivity
+        | unfold load, trigger; cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; rewrite !observe_bind; reflexivity
+        | intros dv; rewrite ?observe_bind; reflexivity
+        | intros dv; rewrite ?observe_bind; reflexivity
+        | intros dv; exact Hk].
   - eapply det_ref_obs_eq;
       [apply obs_eq_fn_frames_draws; symmetry; rewrite observe_bind; reflexivity
       | apply obs_eq_fn_frames_draws; symmetry; rewrite observe_bind; reflexivity
@@ -13833,30 +14113,36 @@ Proof.
   unfold value_attrs_poison_match_b in Hcon; rewrite !andb_true_iff in Hcon.
   destruct Hcon as (((((Hnu_imp & _) & _) & _) & _) & _).
   set (v' := value_attrs_poison s_attrs v) in *.
-  unfold apply_attrs, apply_value_attrs; fold v'; rewrite <- Heqv.
+  unfold apply_attrs, apply_value_attrs; cbn zeta; fold v'; rewrite <- Heqv.
   destruct (existsb attr_is_noundef s_attrs && negb (dvalue_well_defined v')) eqn:Eub_s.
-  - eapply det_ref_obs_eq with
-      (t1 := run_draws s1 (run_fn_frames env1 stk1 exc1
-               (ITree.bind (raiseUB msg_s) (fun x => ITree.bind (assert_attrs_dereferenceable s_attrs x msg_s ;; ret x) k1))))
-      (t2 := run_draws s2 (run_fn_frames env2 stk2 exc2 (ITree.bind (apply_attrs t_attrs msg_t v) k2))).
-    + apply obs_eq_fn_frames_draws; symmetry; rewrite !observe_bind; reflexivity.
-    + unfold apply_attrs, apply_value_attrs; fold v'; rewrite <- Heqv; reflexivity.
-    + apply fn_frames_raiseUB_bind.
+  - pstep; apply DR_Step; unfold det_step_body.
+    rewrite observe_run_draws, observe_run_fn_frames;
+      cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+      rewrite !observe_bind; cbn; left; reflexivity.
   - assert (Eub_t : existsb attr_is_noundef t_attrs && negb (dvalue_well_defined v') = false).
     { destruct (existsb attr_is_noundef t_attrs) eqn:Et; [| reflexivity].
       cbn in Hnu_imp; rewrite Hnu_imp in Eub_s; exact Eub_s. }
     rewrite Eub_t.
     eapply det_ref_obs_eq with
       (t1 := run_draws s1 (run_fn_frames env1 stk1 exc1
-               (ITree.bind (assert_attrs_dereferenceable s_attrs v' msg_s) (fun _ => ITree.bind (ret v') k1))))
+               (ITree.bind (ITree.bind (assert_attrs_dereferenceable s_attrs v' msg_s) (fun _ => ret v')) k1)))
       (t2 := run_draws s2 (run_fn_frames env2 stk2 exc2
-               (ITree.bind (assert_attrs_dereferenceable t_attrs v' msg_t) (fun _ => ITree.bind (ret v') k2)))).
-    + apply obs_eq_fn_frames_draws; rewrite !observe_bind; reflexivity.
-    + apply obs_eq_fn_frames_draws; rewrite !observe_bind; reflexivity.
-    + eapply step_assert_deref_eq; [exact Hsame |].
+               (ITree.bind (ITree.bind (assert_attrs_dereferenceable t_attrs v' msg_t) (fun _ => ret v')) k2))).
+    + apply obs_eq_fn_frames_draws;
+        cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+        rewrite !observe_bind; cbn - [assert_attrs_dereferenceable ITree.bind];
+        repeat rewrite observe_bind; reflexivity.
+    + apply obs_eq_fn_frames_draws;
+        cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+        rewrite !observe_bind; cbn - [assert_attrs_dereferenceable ITree.bind];
+        repeat rewrite observe_bind; reflexivity.
+    + eapply fn_frames_bind_assoc_both.
+      eapply step_assert_deref_eq; [exact Hsame |].
       eapply det_ref_obs_eq;
-        [apply obs_eq_fn_frames_draws; symmetry; rewrite observe_bind; reflexivity
-        | apply obs_eq_fn_frames_draws; symmetry; rewrite observe_bind; reflexivity
+        [apply obs_eq_fn_frames_draws; symmetry;
+         cbn [ExtLib.Structures.Monad.ret Monad_itree]; rewrite observe_bind; reflexivity
+        | apply obs_eq_fn_frames_draws; symmetry;
+          cbn [ExtLib.Structures.Monad.ret Monad_itree]; rewrite observe_bind; reflexivity
         | exact (Hk eq_refl)].
 Qed.
 
@@ -13957,16 +14243,30 @@ Proof.
       | rewrite Eub1 in Hk; cbn [orb] in Hk; exact (Hk Eubr)].
 Qed.
 
+Lemma step_fn_frames_raise_both {Pa : Params} {X R1 R2 : Type}
+  (RR : R1 -> R2 -> Prop) :
+  forall (s1 s2 : @draw_strat Pa) e1 cstk1 exc1 e2 cstk2 exc2
+         msg (k1 : X -> @CFGtop Pa R1) (k2 : X -> @CFGtop Pa R2),
+    det_ref RR
+      (run_draws s1 (run_fn_frames e1 cstk1 exc1 (ITree.bind (raise msg) k1)))
+      (run_draws s2 (run_fn_frames e2 cstk2 exc2 (ITree.bind (raise msg) k2))).
+Proof.
+  intros s1 s2 e1 cstk1 exc1 e2 cstk2 exc2 msg k1 k2.
+  pstep; apply DR_Step; unfold det_step_body.
+  rewrite !observe_run_draws, !observe_run_fn_frames, !observe_bind; cbn.
+  right; split; [reflexivity | intros []].
+Qed.
+
 Lemma step_push_call_frame {Pa : Params} {R1 R2 : Type}
   (RR : R1 -> R2 -> Prop) :
   forall (src_df tgt_df : definition dtyp (CFG.cfg dtyp))
          (vs' : list (@dvalue Pa))
          (s1 s2 : @draw_strat Pa) cenv cstk exc_slot
-         (k1 : @ptr Pa -> @CFGtop Pa R1)
-         (k2 : @ptr Pa -> @CFGtop Pa R2),
+         (k1 : @ptr _ (@PTR Pa) -> @CFGtop Pa R1)
+         (k2 : @ptr _ (@PTR Pa) -> @CFGtop Pa R2),
     List.length (df_args src_df) = List.length vs' ->
     List.length (df_args tgt_df) = List.length vs' ->
-    (forall varg : @ptr Pa,
+    (forall varg : @ptr _ (@PTR Pa),
        det_ref RR
          (run_draws s1 (run_fn_frames (init_cfg_locals (df_args src_df) vs') (cenv :: cstk) exc_slot (k1 varg)))
          (run_draws s2 (run_fn_frames (init_cfg_locals (df_args tgt_df) vs') (cenv :: cstk) exc_slot (k2 varg)))) ->
@@ -13996,8 +14296,20 @@ Proof.
                           | DVALUE_Base (DVALUE_Pointer varg) => ret varg
                           | _ => raise "Non-address returned from alloca of varargs"
                           end) k2))).
-  - apply obs_eq_fn_frames_draws; symmetry; rewrite !observe_bind; reflexivity.
-  - apply obs_eq_fn_frames_draws; symmetry; rewrite !observe_bind; reflexivity.
+  - apply obs_eq_fn_frames_draws; symmetry;
+      cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+      rewrite observe_bind; rewrite observe_bind at 1;
+      cbn [observe EOU_to_itree map_monad EOU_monad ExtLib.Structures.Monad.ret];
+      cbn iota beta;
+      rewrite observe_bind at 1;
+      cbn [observe]; cbn iota beta; reflexivity.
+  - apply obs_eq_fn_frames_draws; symmetry;
+      cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+      rewrite observe_bind; rewrite observe_bind at 1;
+      cbn [observe EOU_to_itree map_monad EOU_monad ExtLib.Structures.Monad.ret];
+      cbn iota beta;
+      rewrite observe_bind at 1;
+      cbn [observe]; cbn iota beta; reflexivity.
   - apply fn_frames_bind_assoc_both.
     eapply fn_frames_trigger_mem_step with (me := MemPush)
       (k1 := fun _ => ITree.bind (stack_push bs_s ;; varargs <- alloca dt0 1 None ;;
@@ -14014,9 +14326,9 @@ Proof.
                         end) k2);
       [unfold mem_push, trigger; rewrite !observe_bind; reflexivity
       | unfold mem_push, trigger; rewrite !observe_bind; reflexivity
-      | intros _; rewrite !observe_bind; reflexivity
-      | intros _; rewrite !observe_bind; reflexivity
-      | intros _].
+      | intros []; rewrite !observe_bind; reflexivity
+      | intros []; rewrite !observe_bind; reflexivity
+      | intros []].
     apply fn_frames_bind_assoc_both.
     pstep; apply DR_Step; unfold det_step_body.
     unfold stack_push, trigger; rewrite !observe_run_draws, !observe_run_fn_frames, !observe_bind; cbn.
@@ -14036,9 +14348,11 @@ Proof.
                             | DVALUE_Base (DVALUE_Pointer varg) => ret varg
                             | _ => raise "Non-address returned from alloca of varargs"
                             end) k2))).
-    + unfold bs_s; rewrite (push_frame_bindings_eq_init (df_args src_df) vs' Hlens).
+    + replace (push_frame_bindings bs_s) with (init_cfg_locals (df_args src_df) vs')
+        by (unfold bs_s; symmetry; exact (push_frame_bindings_eq_init (df_args src_df) vs' Hlens)).
       apply obs_eq_fn_frames_draws; symmetry; rewrite !observe_bind; reflexivity.
-    + unfold bs_t; rewrite (push_frame_bindings_eq_init (df_args tgt_df) vs' Hlent).
+    + replace (push_frame_bindings bs_t) with (init_cfg_locals (df_args tgt_df) vs')
+        by (unfold bs_t; symmetry; exact (push_frame_bindings_eq_init (df_args tgt_df) vs' Hlent)).
       apply obs_eq_fn_frames_draws; symmetry; rewrite !observe_bind; reflexivity.
     + apply fn_frames_bind_assoc_both.
       eapply fn_frames_trigger_mem_step with (me := Alloca dt0 1 None)
@@ -14069,16 +14383,18 @@ Proof.
                           end) k2);
         [unfold store, trigger; rewrite !observe_bind; reflexivity
         | unfold store, trigger; rewrite !observe_bind; reflexivity
-        | intros _; rewrite !observe_bind; reflexivity
-        | intros _; rewrite !observe_bind; reflexivity
-        | intros _].
+        | intros []; rewrite !observe_bind; reflexivity
+        | intros []; rewrite !observe_bind; reflexivity
+        | intros []].
       destruct va as [[varg | | | | | | | ] | | ];
-        try (pstep; apply DR_Step; unfold det_step_body;
-             rewrite !observe_run_draws, !observe_run_fn_frames, !observe_bind; cbn;
-             right; apply det_vis_both_refl; intros []).
+        [| apply step_fn_frames_raise_both ..].
       eapply det_ref_obs_eq;
-        [apply obs_eq_fn_frames_draws; symmetry; rewrite observe_bind; reflexivity
-        | apply obs_eq_fn_frames_draws; symmetry; rewrite observe_bind; reflexivity
+        [apply obs_eq_fn_frames_draws; symmetry;
+         cbn [ExtLib.Structures.Monad.ret Monad_itree];
+         rewrite observe_bind; cbn [observe]; cbn iota beta; reflexivity
+        | apply obs_eq_fn_frames_draws; symmetry;
+          cbn [ExtLib.Structures.Monad.ret Monad_itree];
+          rewrite observe_bind; cbn [observe]; cbn iota beta; reflexivity
         | exact (Hk varg)].
 Qed.
 
@@ -14143,16 +14459,18 @@ Proof.
     + apply fn_frames_raiseUB_bind.
     + assert (Enuw_t : existsb fn_attr_is_nounwind fattrs_t = false).
       { destruct (existsb fn_attr_is_nounwind fattrs_t) eqn:Et; [| reflexivity].
-        rewrite (Hnuw_imp Et) in Enuw_s; discriminate Enuw_s. }
+        discriminate (Hnuw_imp eq_refl). }
       rewrite Enuw_t.
       pstep; apply DR_Step; unfold det_step_body.
-      rewrite !observe_run_draws, !observe_run_fn_frames, !observe_bind; cbn; reflexivity.
+      rewrite !observe_run_draws, !observe_run_fn_frames;
+        cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree EOU_monad];
+        rewrite !observe_bind; cbn; reflexivity.
   - unfold check_call_return, check_call_result.
     destruct (existsb fn_attr_is_noreturn fattrs_s) eqn:Enr_s.
     + apply fn_frames_raiseUB_bind.
     + assert (Enr_t : existsb fn_attr_is_noreturn fattrs_t = false).
       { destruct (existsb fn_attr_is_noreturn fattrs_t) eqn:Et; [| reflexivity].
-        rewrite (Hnr_imp Et) in Enr_s; discriminate Enr_s. }
+        discriminate (Hnr_imp eq_refl). }
       rewrite Enr_t.
       destruct (existsb fn_attr_is_nocreateundeforpoison fattrs_s &&
                 forallb dvalue_well_defined vs' &&
@@ -14163,7 +14481,7 @@ Proof.
                   forallb dvalue_well_defined vs' &&
                   negb (dvalue_well_defined dv2) = false).
         { destruct (existsb fn_attr_is_nocreateundeforpoison fattrs_t) eqn:Eft; [| reflexivity].
-          rewrite (Hnc_imp Eft) in Enc_s.
+          rewrite (Hnc_imp eq_refl) in Enc_s.
           destruct (forallb dvalue_well_defined vs'); cbn in Enc_s |- *; [| reflexivity].
           destruct (dvalue_well_defined dv1) eqn:Ewd1; [| discriminate Enc_s].
           destruct (dvalue_refines_well_defined dv1 dv2 Hrv Ewd1) as [_ ->]; reflexivity. }
@@ -14175,8 +14493,12 @@ Proof.
           (t2 := run_draws s2 (run_fn_frames cenv cstk exc_slot
                    (ITree.bind (apply_attrs t_ret (fname_t ++ " return value violates noundef.")%string dv2)
                      (fun v' => ret (inr v'))))).
-        -- apply obs_eq_fn_frames_draws; symmetry; rewrite observe_bind; reflexivity.
-        -- apply obs_eq_fn_frames_draws; symmetry; rewrite observe_bind; reflexivity.
+        -- apply obs_eq_fn_frames_draws; symmetry;
+             cbn [EOU_to_itree value_metadata_range ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree EOU_monad];
+             rewrite !observe_bind; cbn [observe]; cbn iota beta; reflexivity.
+        -- apply obs_eq_fn_frames_draws; symmetry;
+             cbn [EOU_to_itree value_metadata_range ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree EOU_monad];
+             rewrite !observe_bind; cbn [observe]; cbn iota beta; reflexivity.
         -- destruct Hrv as [Hps1 | <-].
            ++ assert (Edv1 : dv1 = DVALUE_Base DVALUE_Poison)
                 by (destruct dv1 as [[| | | | | | | ] | | ]; try discriminate Hps1; reflexivity).
@@ -14184,32 +14506,27 @@ Proof.
               destruct (existsb attr_is_noundef s_ret) eqn:Enu_sr.
               ** unfold apply_attrs, apply_value_attrs.
                  rewrite value_attrs_poison_poison, Enu_sr; cbn [dvalue_well_defined negb andb].
-                 eapply det_ref_obs_eq with
-                   (t1 := run_draws s1 (run_fn_frames cenv cstk exc_slot
-                            (ITree.bind (raiseUB (fname_s ++ " return value violates noundef.")%string)
-                              (fun x => ITree.bind (assert_attrs_dereferenceable s_ret x (fname_s ++ " return value violates noundef.")%string ;; ret x)
-                                (fun v' => ret (inr v'))))))
-                   (t2 := run_draws s2 (run_fn_frames cenv cstk exc_slot
-                            (ITree.bind (apply_attrs t_ret (fname_t ++ " return value violates noundef.")%string dv2)
-                              (fun v' => ret (inr v')))));
-                   [apply obs_eq_fn_frames_draws; symmetry; rewrite !observe_bind; reflexivity
-                   | reflexivity
-                   | apply fn_frames_raiseUB_bind].
+                 pstep; apply DR_Step; unfold det_step_body.
+                 rewrite observe_run_draws, observe_run_fn_frames;
+                   cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+                   rewrite !observe_bind; cbn; left; reflexivity.
               ** assert (Enu_tr : existsb attr_is_noundef t_ret = false).
                  { destruct (existsb attr_is_noundef t_ret) eqn:Et; [| reflexivity].
-                   cbn in Hnu_ret_imp; rewrite Enu_sr in Hnu_ret_imp; discriminate Hnu_ret_imp. }
+                   rewrite ?Et, ?Enu_sr in Hnu_ret_imp; cbn in Hnu_ret_imp; discriminate Hnu_ret_imp. }
                  assert (Edr_t : find_option attr_dereferenceable t_ret = None).
                  { destruct (find_option attr_dereferenceable t_ret); [| reflexivity].
-                   cbn in Htd_imp; rewrite Enu_sr in Htd_imp; discriminate Htd_imp. }
+                   rewrite ?Enu_sr in Htd_imp; cbn in Htd_imp; discriminate Htd_imp. }
                  assert (Edr_s : find_option attr_dereferenceable s_ret = None).
-                 { rewrite Edr_t in Hderef; destruct (find_option attr_dereferenceable s_ret);
-                     [discriminate Hderef | reflexivity]. }
+                 { rewrite Edr_t in Hderef; destruct (find_option attr_dereferenceable s_ret) as [[b_dr n_dr] |];
+                     [cbn [opt_deref_same_b] in Hderef; discriminate Hderef | reflexivity]. }
                  unfold apply_attrs, apply_value_attrs, assert_attrs_dereferenceable.
                  rewrite value_attrs_poison_poison, Enu_sr, Enu_tr, Edr_s, Edr_t; cbn [andb].
                  pstep; apply DR_Step; unfold det_step_body.
-                 rewrite !observe_run_draws, !observe_run_fn_frames, !observe_bind; cbn.
-                 left; reflexivity.
-           ++ eapply step_apply_attrs_eq; [exact Hpm_ret | exact Hderef | intros _].
+                 rewrite !observe_run_draws, !observe_run_fn_frames;
+                   cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+                   repeat (rewrite observe_bind; cbn [observe]; cbn iota beta);
+                   left; reflexivity.
+           ++ eapply step_apply_attrs_eq; [exact Hpm_ret | exact Hderef | intros _Eub].
               pstep; apply DR_Step; unfold det_step_body.
               rewrite !observe_run_draws, !observe_run_fn_frames; cbn.
               right; reflexivity.
@@ -14240,6 +14557,49 @@ Definition defn_arg_dtys
   | TYPE_Function _ arg_tys _ => List.map (typ_to_dtyp tenv) arg_tys
   | _ => []
   end.
+
+Lemma dc_name_tfmap (f : typ -> dtyp) (d : declaration typ) :
+  dc_name (tfmap f d) = dc_name d.
+Proof.
+  cbn [dc_name tfmap TFunctor_declaration endo Endo_id]; reflexivity.
+Qed.
+
+Lemma dc_param_attrs_tfmap (f : typ -> dtyp) (d : declaration typ) :
+  dc_param_attrs (tfmap f d) = dc_param_attrs d.
+Proof.
+  destruct d as [nm ty [r ps] ats ans].
+  cbn [dc_param_attrs tfmap TFunctor_declaration endo Endo_prod Endo_list Endo_id].
+  f_equal.
+  - unfold endo, Endo_list, Endo_id.
+    induction r as [| a ra IH]; [reflexivity | cbn [List.map]; cbn beta; f_equal; exact IH].
+  - unfold endo, Endo_list, Endo_id.
+    induction ps as [| p rp IH]; [reflexivity | cbn [List.map]; cbn beta; f_equal; [| exact IH]].
+    induction p as [| x rx IHx]; [reflexivity | cbn [endo Endo_list Endo_id List.map]; cbn beta; f_equal; exact IHx].
+Qed.
+
+Lemma dc_attrs_tfmap (f : typ -> dtyp) (d : declaration typ) :
+  dc_attrs (tfmap f d) = dc_attrs d.
+Proof.
+  destruct d as [nm ty pa ats ans].
+  cbn [dc_attrs tfmap TFunctor_declaration endo Endo_list Endo_id].
+  unfold endo, Endo_list, Endo_id.
+  induction ats as [| a ra IH]; [reflexivity | cbn [List.map]; cbn beta; f_equal; exact IH].
+Qed.
+
+Lemma dc_annotations_tfmap (f : typ -> dtyp) (d : declaration typ) :
+  dc_annotations (tfmap f d) = tfmap f (dc_annotations d).
+Proof.
+  cbn [dc_annotations tfmap TFunctor_declaration]; reflexivity.
+Qed.
+
+Lemma df_args_tfmap (f : typ -> dtyp) (d : definition typ (CFG.cfg typ)) :
+  df_args (tfmap f d) = df_args d.
+Proof.
+  destruct d as [proto args body].
+  cbn [df_args tfmap TFunctor_definition endo Endo_list Endo_id].
+  unfold endo, Endo_list, Endo_id.
+  induction args as [| a ra IH]; [reflexivity | cbn [List.map]; cbn beta; f_equal; exact IH].
+Qed.
 
 Lemma proto_cfg_to_defn_refines {Pa : Params} :
   forall (src_tenv tgt_tenv : list (ident * typ))
@@ -14294,17 +14654,17 @@ Proof.
   assert (Eproto_t : df_prototype tgt_df = tfmap (typ_to_dtyp tgt_tenv) (df_prototype tgt_defn))
     by reflexivity.
   unfold eval_defn_open, denote_function.
-  rewrite Eproto_s, Eproto_t; cbn [dc_param_attrs dc_name dc_attrs dc_annotations].
-  unfold endo, Endo_id; rewrite Edcpa_s, Edcpa_t.
+  rewrite Eproto_s, Eproto_t.
+  rewrite !dc_param_attrs_tfmap, !dc_name_tfmap, !dc_attrs_tfmap, !dc_annotations_tfmap.
+  rewrite Edcpa_s, Edcpa_t.
   rewrite !anns_cconv_tfmap.
   change (df_instrs src_df) with src_cfg.
   change (df_instrs tgt_df) with tgt_cfg.
-  change (df_args src_df) with (df_args src_defn).
-  change (df_args tgt_df) with (df_args tgt_defn).
+  cbn [fst snd].
   set (fcc_s := anns_cconv (dc_annotations (df_prototype src_defn))) in *.
   set (fcc_t := anns_cconv (dc_annotations (df_prototype tgt_defn))) in *.
-  set (fname_s := show_raw_id (dc_name (df_prototype src_defn))).
-  set (fname_t := show_raw_id (dc_name (df_prototype tgt_defn))).
+  set (fname_s := ShowAST.show_raw_id (dc_name (df_prototype src_defn))).
+  set (fname_t := ShowAST.show_raw_id (dc_name (df_prototype tgt_defn))).
   destruct (cconv_eqb cc fcc_s) eqn:Ecc_s.
   - assert (Ecc_t : cconv_eqb cc fcc_t = true)
       by (rewrite <- (cconv_eqb_same_caller fcc_s fcc_t cc Hcc); exact Ecc_s).
@@ -14312,10 +14672,15 @@ Proof.
     + exists sigma_tgt; split; [exact Hwfsig_t |].
       unfold check_cconv; rewrite Ecc_s, Ecc_t.
       eapply det_ref_obs_eq;
-        [apply obs_eq_fn_frames_draws; symmetry; rewrite observe_bind; reflexivity
-        | apply obs_eq_fn_frames_draws; symmetry; rewrite observe_bind; reflexivity |].
+        [apply obs_eq_fn_frames_draws; symmetry;
+         cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree EOU_monad];
+         rewrite observe_bind; cbn [observe]; cbn iota beta; reflexivity
+        | apply obs_eq_fn_frames_draws; symmetry;
+          cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree EOU_monad];
+          rewrite observe_bind; cbn [observe]; cbn iota beta; reflexivity
+        |].
       eapply step_apply_args_attrs; [exact Hlen_sp_vs | exact Hpa_ref | exact Hderef_args |].
-      intros Habs; discriminate Habs.
+      intros Habs; rewrite Eargs_ub in Habs; discriminate Habs.
     + destruct (eval_args_attrs_poison_wf (List.map (typ_to_dtyp src_tenv) arg_tys) s_pattrs0 vs
                   Hvs Hpres Eargs_ub)
         as (Hlen_vs' & Hty_vs' & Hnu_vs').
@@ -14325,19 +14690,27 @@ Proof.
       exists sigma_src; split; [exact Hwfsig_s |].
       unfold check_cconv; rewrite Ecc_s, Ecc_t.
       eapply det_ref_obs_eq;
-        [apply obs_eq_fn_frames_draws; symmetry; rewrite observe_bind; reflexivity
-        | apply obs_eq_fn_frames_draws; symmetry; rewrite observe_bind; reflexivity |].
+        [apply obs_eq_fn_frames_draws; symmetry;
+         cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree EOU_monad];
+         rewrite observe_bind; cbn [observe]; cbn iota beta; reflexivity
+        | apply obs_eq_fn_frames_draws; symmetry;
+          cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree EOU_monad];
+          rewrite observe_bind; cbn [observe]; cbn iota beta; reflexivity
+        |].
       eapply step_apply_args_attrs; [exact Hlen_sp_vs | exact Hpa_ref | exact Hderef_args |].
-      intros _; fold vs'.
-      assert (Hlen_dfa_s : List.length (df_args src_defn) = List.length vs')
-        by (rewrite Hdfa_s; lia).
-      assert (Hlen_dfa_t : List.length (df_args tgt_defn) = List.length vs')
-        by (rewrite Hdfa_t; lia).
+      intros _Eub; fold vs'.
+      assert (Hlen_dfa_s : List.length (df_args src_df) = List.length vs')
+        by (unfold src_df; rewrite df_args_tfmap, Hdfa_s;
+            exact (eq_trans (eq_sym Hlen_ad)
+                     (eq_trans (eq_sym Hlen_vs) (eq_sym Hlen_vs')))).
+      assert (Hlen_dfa_t : List.length (df_args tgt_df) = List.length vs')
+        by (unfold tgt_df; rewrite df_args_tfmap, Hdfa_t;
+            exact (eq_trans (eq_sym Hlen_st)
+                     (eq_trans (eq_sym Hlen_ad)
+                        (eq_trans (eq_sym Hlen_vs) (eq_sym Hlen_vs'))))).
       eapply step_push_call_frame with (src_df := src_df) (tgt_df := tgt_df);
         [exact Hlen_dfa_s | exact Hlen_dfa_t | intros varg].
-      change (df_args src_df) with (df_args src_defn).
-      change (df_args tgt_df) with (df_args tgt_defn).
-      rewrite Hdfa_s, Hdfa_t.
+      unfold src_df, tgt_df; rewrite !df_args_tfmap, Hdfa_s, Hdfa_t.
       eapply det_ref_cfg_to_fn_body.
       * intros s1 s2 env1 env2 rv1 rv2 Hrv.
         eapply step_pop_call_frame.
@@ -14356,8 +14729,9 @@ Proof.
       * exact (denote_cfg_varargs_no_stack_det src_cfg (Some varg) None sigma_src
                  (init_cfg_locals (args src_cfg) vs') Hbm_s Hns_cfg).
   - exists sigma_tgt; split; [exact Hwfsig_t |].
-    unfold check_cconv; rewrite Ecc_s.
-    apply fn_frames_raiseUB_bind.
+    unfold check_cconv; rewrite Ecc_s;
+      cbn [EOU_to_itree ExtLib.Structures.Monad.bind Monad_itree];
+      apply fn_frames_raiseUB_bind.
 Qed.
 
 
@@ -14410,7 +14784,7 @@ Definition check_cert_cfg_with_proto_lrat
   let src_slots := cfg_alloca_slot_names src_cfg in
   let tgt_slots := cfg_alloca_slot_names tgt_cfg in
   let known_src_slots := src_slots ++ cert_promoted_slot_names cert in
-  let blk_uas := fun bid => block_uas_for bid (pc_blocks cert) in
+  let blk_uas := fun bid => block_uas_for (init src_cfg) (pc_blocks cert) bid in
   wf_proof_certificate cert &&
   check_validator_syntax_gates src_cfg tgt_cfg &&
   list_empty_b src_slots &&
@@ -14535,7 +14909,7 @@ Proof.
   set (init_ctx := snd proto_seed) in *.
   set (src_uses := param_idx_uses_cfg src_cfg) in *.
   set (tgt_uses := param_idx_uses_cfg tgt_cfg) in *.
-  set (blk_uas := fun bid => block_uas_for bid (pc_blocks cert)) in *.
+  set (blk_uas := fun bid => block_uas_for (init src_cfg) (pc_blocks cert) bid) in *.
   apply andb_true_iff in Hchk as [Hchk Hbody].
   apply andb_true_iff in Hchk as [Hchk Huses_sub].
   apply andb_true_iff in Hchk as [Hchk Hnd_sp].
@@ -14584,7 +14958,7 @@ Proof.
   assert (Hseed_wf :
     wf_param_env_for (fst proto_seed) penv /\
     (forall fo : freeze_oracle, ub_ctx_holds penv fo init_ctx)).
-  { unfold proto_seed, init_ctx; clear proto_seed init_ctx allowed Hbody.
+  { unfold init_ctx, proto_seed.
     destruct opt_proto as [[p_dtys s_pattrs] |].
     - destruct Hproto_vs as [-> Hnu].
       split.
@@ -14634,6 +15008,7 @@ Proof.
                   (fun c H => spine_branch_conds_ret penv foracle d_src dv_src c Hev_ds H)
                   Hrest Hev_ds)
         as [dv_tgt [Hev_dt Href_dv]].
+      unfold penv in Hev_dt.
       destruct Htgt_out as [Hev_dt_ub | (sigma_tgt' & env_out_t & dv_tgt' & Hev_dt' & Hst_ret_t)].
       * rewrite Hev_dt in Hev_dt_ub; discriminate Hev_dt_ub.
       * rewrite Hev_dt in Hev_dt'; injection Hev_dt' as <-.
@@ -14788,6 +15163,9 @@ Definition validate_mcfg_with_cert_lrat
           else if negb (check_prototype_contract (df_prototype src_defn)
                           (df_prototype tgt_defn)) then
             inl "prototype contract check failed"
+          else if negb (mcfg_identified_typs_defined src_m &&
+                        mcfg_identified_typs_defined tgt_m) then
+            inl "undefined identified type in module"
           else if negb (check_validator_syntax_gates
                           (convert_typ (m_type_defs src_m) (df_instrs src_defn))
                           (convert_typ (m_type_defs tgt_m) (df_instrs tgt_defn))) then
@@ -14846,6 +15224,8 @@ Proof.
                     (dc_name (df_prototype src_defn)))); [discriminate Hval |].
   destruct (negb (check_prototype_contract (df_prototype src_defn)
                     (df_prototype tgt_defn))); [discriminate Hval |].
+  destruct (negb (mcfg_identified_typs_defined src_m &&
+                  mcfg_identified_typs_defined tgt_m)); [discriminate Hval |].
   destruct (negb (check_validator_syntax_gates
                     (convert_typ (m_type_defs src_m) (df_instrs src_defn))
                     (convert_typ (m_type_defs tgt_m) (df_instrs tgt_defn)))); [discriminate Hval |].

@@ -3405,3 +3405,196 @@ Proof.
   split; [exact Hnm |].
   exists sret, sargs; cbn [fst snd]; repeat split; assumption.
 Qed.
+
+(** *** 6.5 Fail-Closed Check for Undefined [TYPE_Identified] References *)
+
+Definition ident_defined_in_env (env : list (ident * typ)) (id : ident) : bool :=
+  existsb (fun '(id', _) => ident_eqb id id') env.
+
+Fixpoint typ_identified_defined (env : list (ident * typ)) (t : typ) {struct t} : bool :=
+  let fix list_typ_def (xs : list typ) {struct xs} : bool :=
+      match xs with
+      | [] => true
+      | x :: rx => typ_identified_defined env x && list_typ_def rx
+      end in
+  match t with
+  | TYPE_I _ | TYPE_B _ | TYPE_Iptr | TYPE_Pointer None
+  | TYPE_Void | TYPE_FP _ | TYPE_Label | TYPE_Token
+  | TYPE_Metadata | TYPE_X86_mmx | TYPE_Opaque => true
+  | TYPE_Pointer (Some u) | TYPE_Array _ u | TYPE_Vector _ u =>
+      typ_identified_defined env u
+  | TYPE_Function ret args _ =>
+      typ_identified_defined env ret && list_typ_def args
+  | TYPE_Struct fs | TYPE_Packed_struct fs => list_typ_def fs
+  | TYPE_Identified id => ident_defined_in_env env id
+  end.
+
+Lemma typ_identified_defined_id_inv :
+  forall env id,
+    typ_identified_defined env (TYPE_Identified id) = true ->
+    exists body, In (id, body) env.
+Proof.
+  intros env id H; cbn in H; unfold ident_defined_in_env in H.
+  apply existsb_exists in H as [[id' body] [Hin Heq]].
+  apply ident_eqb_eq in Heq; subst id'.
+  exists body; exact Hin.
+Qed.
+
+Fixpoint exp_identified_defined (env : list (ident * typ)) (e : exp typ) {struct e} : bool :=
+  let fix list_texp_def (xs : list (typ * exp typ)) {struct xs} : bool :=
+      match xs with
+      | [] => true
+      | (t, u) :: rx =>
+          typ_identified_defined env t && exp_identified_defined env u && list_texp_def rx
+      end in
+  match e with
+  | EXP_Ident _ | EXP_Integer _ | EXP_Float _ | EXP_Bool _
+  | EXP_Null | EXP_Zero_initializer | EXP_Undef | EXP_Poison
+  | EXP_Asm _ _ _ _ _ _ | EXP_BlockAddress _ _ => true
+  | EXP_Cstring xs | EXP_Struct xs | EXP_Packed_struct xs
+  | EXP_Array xs | EXP_Vector xs => list_texp_def xs
+  | OP_IBinop _ t v1 v2 | OP_ICmp _ _ t v1 v2
+  | OP_FBinop _ _ t v1 v2 | OP_FCmp _ _ t v1 v2 =>
+      typ_identified_defined env t &&
+      exp_identified_defined env v1 && exp_identified_defined env v2
+  | OP_Fneg _ (t, v1) | OP_Freeze (t, v1) | EXP_Splat (t, v1)
+  | OP_ExtractValue (t, v1) _ =>
+      typ_identified_defined env t && exp_identified_defined env v1
+  | OP_Conversion _ tf v1 tto =>
+      typ_identified_defined env tf && exp_identified_defined env v1 &&
+      typ_identified_defined env tto
+  | OP_GetElementPtr _ t (tp, ep) idxs =>
+      typ_identified_defined env t && typ_identified_defined env tp &&
+      exp_identified_defined env ep && list_texp_def idxs
+  | OP_ExtractElement (t1, v1) (t2, v2) | OP_InsertValue (t1, v1) (t2, v2) _ =>
+      typ_identified_defined env t1 && exp_identified_defined env v1 &&
+      typ_identified_defined env t2 && exp_identified_defined env v2
+  | OP_InsertElement (t1, v1) (t2, v2) (t3, v3)
+  | OP_ShuffleVector (t1, v1) (t2, v2) (t3, v3)
+  | OP_Select _ (t1, v1) (t2, v2) (t3, v3) =>
+      typ_identified_defined env t1 && exp_identified_defined env v1 &&
+      typ_identified_defined env t2 && exp_identified_defined env v2 &&
+      typ_identified_defined env t3 && exp_identified_defined env v3
+  | EXP_Metadata m => metadata_identified_defined env m
+  end
+with metadata_identified_defined (env : list (ident * typ)) (m : metadata typ) {struct m} : bool :=
+  let fix list_md_def (ms : list (metadata typ)) {struct ms} : bool :=
+      match ms with
+      | [] => true
+      | m1 :: rm => metadata_identified_defined env m1 && list_md_def rm
+      end in
+  match m with
+  | METADATA_Null | METADATA_Id _ | METADATA_Debug _ _ | METADATA_File_info _ => true
+  | METADATA_Const (t, u) => typ_identified_defined env t && exp_identified_defined env u
+  | METADATA_Node ms => list_md_def ms
+  | METADATA_Pair m1 m2 =>
+      metadata_identified_defined env m1 && metadata_identified_defined env m2
+  end.
+
+Definition texp_identified_defined (env : list (ident * typ)) (te : texp typ) : bool :=
+  let '(t, e) := te in typ_identified_defined env t && exp_identified_defined env e.
+
+Definition param_attr_identified_defined (env : list (ident * typ)) (pa : param_attr) : bool :=
+  match pa with
+  | PARAMATTR_Byval t | PARAMATTR_Byref t | PARAMATTR_Preallocated t
+  | PARAMATTR_Inalloca t | PARAMATTR_Sret t | PARAMATTR_Elementtype t
+  | PARAMATTR_Range t _ _ => typ_identified_defined env t
+  | _ => true
+  end.
+
+Definition ann_identified_defined (env : list (ident * typ)) (a : annotation typ) : bool :=
+  match a with
+  | ANN_metadata ms => forallb (metadata_identified_defined env) ms
+  | ANN_prefix te | ANN_prologue te | ANN_personality te | ANN_num_elements te =>
+      texp_identified_defined env te
+  | ANN_ret_attribute pa => param_attr_identified_defined env pa
+  | _ => true
+  end.
+
+Definition operand_bundle_identified_defined (env : list (ident * typ)) (ob : @operand_bundle typ) : bool :=
+  forallb (fun op =>
+    match op with
+    | SSA_value te => texp_identified_defined env te
+    | Metadata_string md => metadata_identified_defined env md
+    end) (ob_ops ob).
+
+Definition instr_identified_defined (env : list (ident * typ)) (ins : instr typ) : bool :=
+  match ins with
+  | INSTR_Comment _ | INSTR_Fence _ _ => true
+  | INSTR_Op e => exp_identified_defined env e
+  | INSTR_Call fn args anns obs =>
+      texp_identified_defined env fn &&
+      forallb (fun '(te, pas) =>
+        texp_identified_defined env te && forallb (param_attr_identified_defined env) pas) args &&
+      forallb (ann_identified_defined env) anns &&
+      forallb (operand_bundle_identified_defined env) obs
+  | INSTR_Alloca t anns =>
+      typ_identified_defined env t && forallb (ann_identified_defined env) anns
+  | INSTR_Load t ptr anns =>
+      typ_identified_defined env t && texp_identified_defined env ptr &&
+      forallb (ann_identified_defined env) anns
+  | INSTR_Store val ptr anns =>
+      texp_identified_defined env val && texp_identified_defined env ptr &&
+      forallb (ann_identified_defined env) anns
+  | INSTR_AtomicCmpXchg c =>
+      texp_identified_defined env (c_ptr c) &&
+      texp_identified_defined env (c_cmp c) &&
+      texp_identified_defined env (c_new c)
+  | INSTR_AtomicRMW a =>
+      texp_identified_defined env (a_ptr a) &&
+      texp_identified_defined env (a_val a)
+  | INSTR_VAArg va t =>
+      texp_identified_defined env va && typ_identified_defined env t
+  | INSTR_LandingPad rty _ cs =>
+      typ_identified_defined env rty &&
+      forallb (fun cl => match cl with CATCH te | FILTER te => texp_identified_defined env te end) cs
+  end.
+
+Definition term_identified_defined (env : list (ident * typ)) (tm : terminator typ) : bool :=
+  match tm with
+  | TERM_Ret_void | TERM_Br_1 _ | TERM_Unreachable => true
+  | TERM_Ret te | TERM_Br te _ _ | TERM_Switch te _ _
+  | TERM_IndirectBr te _ _ | TERM_Resume te => texp_identified_defined env te
+  | TERM_Invoke fn args _ _ anns obs =>
+      texp_identified_defined env fn &&
+      forallb (fun '(te, pas) =>
+        texp_identified_defined env te && forallb (param_attr_identified_defined env) pas) args &&
+      forallb (ann_identified_defined env) anns &&
+      forallb (operand_bundle_identified_defined env) obs
+  end.
+
+Definition block_identified_defined (env : list (ident * typ)) (b : block typ) : bool :=
+  forallb (fun '(_, Phi _ t args, mds) =>
+    typ_identified_defined env t &&
+    forallb (fun '(_, e) => exp_identified_defined env e) args &&
+    forallb (metadata_identified_defined env) mds) (blk_phis b) &&
+  forallb (fun '(_, ins, mds) =>
+    instr_identified_defined env ins && forallb (metadata_identified_defined env) mds) (blk_code b) &&
+  let '(_, tm, mds) := blk_term b in
+  term_identified_defined env tm && forallb (metadata_identified_defined env) mds.
+
+Definition cfg_identified_defined (env : list (ident * typ)) (G : CFG.cfg typ) : bool :=
+  forallb (block_identified_defined env) (blks G).
+
+Definition decl_identified_defined (env : list (ident * typ)) (dc : declaration typ) : bool :=
+  typ_identified_defined env (dc_type dc) &&
+  forallb (param_attr_identified_defined env) (fst (dc_param_attrs dc)) &&
+  forallb (forallb (param_attr_identified_defined env)) (snd (dc_param_attrs dc)) &&
+  forallb (ann_identified_defined env) (dc_annotations dc).
+
+Definition global_identified_defined (env : list (ident * typ)) (g : global typ) : bool :=
+  typ_identified_defined env (g_typ g) &&
+  match g_exp g with Some e => exp_identified_defined env e | None => true end &&
+  forallb (ann_identified_defined env) (g_annotations g).
+
+Definition defn_identified_defined
+  (env : list (ident * typ)) (df : definition typ (CFG.cfg typ)) : bool :=
+  decl_identified_defined env (df_prototype df) &&
+  cfg_identified_defined env (df_instrs df).
+
+Definition mcfg_identified_typs_defined (M : CFG.mcfg typ) : bool :=
+  let env := m_type_defs M in
+  forallb (fun '(_, t) => typ_identified_defined env t) env &&
+  forallb (global_identified_defined env) (m_globals M) &&
+  forallb (decl_identified_defined env) (m_declarations M) &&
+  forallb (defn_identified_defined env) (m_definitions M).

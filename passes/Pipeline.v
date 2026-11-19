@@ -21,11 +21,13 @@ From Vellvm Require Import
   Syntax.LLVMAst
   Syntax.CFG
   Syntax.DynamicTypes
+  Syntax.TypToDtyp
   Semantics.Interfaces.IPtr
   Semantics.Implementations.IPtrInfinite
   Semantics.Implementations.IPtrFinite
   Semantics.Implementations.Memory
   Semantics.Interfaces.Memory
+  Semantics.DynamicValues
   Semantics.Handlers
   Semantics.InterpretationStack
   Semantics.TopLevel

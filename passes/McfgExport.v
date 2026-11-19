@@ -175,7 +175,7 @@ Qed.
 
 Lemma place_entry_first_cfg_refines_params {Pa : Params}
   (c c' : CFG.cfg dtyp) (H : place_entry_first_cfg c = inr c')
-  (va : option (@ptr Pa)) :
+  (va : option (@ptr (@PROV Pa) (@PTR Pa))) :
   @refine_cfg Pa _ _ Logic.eq (denote_cfg c va) (denote_cfg c' va).
 Proof.
   unfold denote_cfg, denote_cfg_map, refine_cfg.
@@ -282,7 +282,7 @@ Definition z_tag (z : Z) : string :=
 Lemma z_tag_inj (z1 z2 : Z) :
   z_tag z1 = z_tag z2 -> z1 = z2.
 Proof.
-  intros [| p1 | p1] [| p2 | p2] H; cbn in H; try discriminate H.
+  destruct z1 as [| p1 | p1], z2 as [| p2 | p2]; intros H; cbn in H; try discriminate H.
   - reflexivity.
   - injection H as H; f_equal; exact (pos_tag_inj p1 p2 H).
   - injection H as H; f_equal; exact (pos_tag_inj p1 p2 H).
@@ -308,6 +308,8 @@ Lemma str_starts_with_append (pfx rest : string) :
   str_starts_with pfx (String.append pfx rest) = true.
 Proof.
   induction pfx as [| c pfx' IH]; cbn; [reflexivity |].
+  change (String.append (String c pfx') rest)
+    with (String c (String.append pfx' rest)); cbn.
   rewrite ascii_eqb_refl_local; exact IH.
 Qed.
 
@@ -1585,7 +1587,7 @@ Definition choose_anon_prefix (names : list string) : string :=
   if negb (List.existsb (str_starts_with "_llv_"%string) names) then
     "_llv_"%string
   else
-    let max_len := List.fold_left (fun acc s => Nat.max acc (String.length s)) names 0 in
+    let max_len := List.fold_left (fun acc s => Nat.max acc (String.length s)) names 0%nat in
     String.append "_llv"%string (String.append (repeat_underscore max_len) "_"%string).
 
 Section RenameLocal.

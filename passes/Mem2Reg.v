@@ -120,7 +120,7 @@ Lemma m2r_count_id_zero (x : raw_id) (xs : list raw_id) :
 Proof using.
   induction xs as [| y ys IH]; cbn.
   - split; [intros _ [] | intros _; reflexivity].
-  - destruct (raw_id_eqb_spec x y) as [-> | Hne]; cbn.
+  - destruct (raw_id_eqb x y) eqn:Exy; cbn; [apply raw_id_eqb_spec in Exy; subst y | apply raw_id_eqb_neq in Exy; rename Exy into Hne].
     + split; [lia | intros H; exfalso; apply H; left; reflexivity].
     + rewrite IH; split; intros H.
       * intros [Heq | Hin]; [exact (Hne ( eq_sym Heq)) | exact (H Hin)].
@@ -809,6 +809,12 @@ Section ModelCombinators.
 
   #[local] Existing Instance MemoryModelStateV.
   #[local] Existing Instance MemoryModelPrimitivesV.
+  #[local] Existing Instance PointerV.
+  #[local] Existing Instance PIV.
+  #[local] Existing Instance PITheoryV.
+  #[local] Hint Resolve refine_prov__mon : paco.
+  Arguments memM_interp_prov {_ _} [T] _ _.
+  Arguments interp_vellvm_prov_h {_ _} [T] _ _.
 
   (** ** Strong Bisimulation Equations for [interp_mrec], [interp_mcfg_model], [interp_cfg_model] *)
 
@@ -831,9 +837,9 @@ Section ModelCombinators.
       interp_mrec ctx t1 ≅ interp_mrec ctx t2.
   Proof using.
     ginit; gcofix CIH; intros t1 t2 Heq.
-    rewrite (unfold_interp_mrec ctx t1), (unfold_interp_mrec ctx t2).
+    rewrite (unfold_interp_mrec ctx _ t1), (unfold_interp_mrec ctx _ t2).
     punfold Heq; red in Heq.
-    destruct Heq as [r1 r2 <- | m1 m2 Hm | X [d | e] k1 k2 Hk]; pclearbot.
+    destruct Heq as [r1 r2 <- | m1 m2 Hm | X [d | e] k1 k2 Hk | ? ? Hchk _ | ? ? Hchk _]; try inversion Hchk; pclearbot.
     - gstep; constructor; reflexivity.
     - gstep; constructor; gfinal; left; apply CIH, Hm.
     - gstep; constructor; gfinal; left; apply CIH.
@@ -848,21 +854,21 @@ Section ModelCombinators.
       ITree.bind (interp_mrec ctx t) (fun x => interp_mrec ctx (k x)).
   Proof using.
     ginit; gcofix CIH; intros t k.
-    rewrite (unfold_interp_mrec ctx t).
+    rewrite (unfold_interp_mrec ctx _ t).
     destruct (observe t) as [rv | m | X [d | e] h] eqn:Hot; cbn [_interp_mrec].
     - assert (Htk : ITree.bind t k ≅ k rv).
       { rewrite (itree_eta t), Hot, Eqit.bind_ret_l; reflexivity. }
       rewrite (interp_mrec_proper_eq ctx _ _ Htk), Eqit.bind_ret_l.
-      gfinal; right; eapply paco2_mon; [reflexivity | intros ? ? []].
-    - rewrite (unfold_interp_mrec ctx (ITree.bind t k)), observe_bind, Hot; cbn [_interp_mrec].
+      gfinal; right; apply pacobot2; match goal with |- _ ?lhs ?rhs => change (eq_itree eq lhs rhs); reflexivity end.
+    - rewrite (unfold_interp_mrec ctx _ (ITree.bind t k)), observe_bind, Hot; cbn [_interp_mrec].
       rewrite Eqit.bind_tau.
       gstep; constructor; gfinal; left; apply CIH.
-    - rewrite (unfold_interp_mrec ctx (ITree.bind t k)), observe_bind, Hot; cbn [_interp_mrec].
+    - rewrite (unfold_interp_mrec ctx _ (ITree.bind t k)), observe_bind, Hot; cbn [_interp_mrec].
       rewrite Eqit.bind_tau.
       gstep; constructor.
-      rewrite (interp_mrec_proper_eq ctx _ _ (Eqit.bind_bind (ctx X d) h k)).
+      rewrite <- (interp_mrec_proper_eq ctx _ _ (Eqit.bind_bind (ctx X d) h k)).
       gfinal; left; apply CIH.
-    - rewrite (unfold_interp_mrec ctx (ITree.bind t k)), observe_bind, Hot; cbn [_interp_mrec].
+    - rewrite (unfold_interp_mrec ctx _ (ITree.bind t k)), observe_bind, Hot; cbn [_interp_mrec].
       rewrite Eqit.bind_vis.
       gstep; constructor; intros x.
       rewrite Eqit.bind_tau.
@@ -890,7 +896,7 @@ Section ModelCombinators.
     ITree.bind (interp_mcfg_model t s) (fun '(s', x) => interp_mcfg_model (k x) s').
   Proof using.
     unfold interp_mcfg_model, interp_intrinsics.
-    rewrite interp_bind, interp_state_bind; reflexivity.
+    rewrite interp_bind, interp_state_bind; eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [s' x] ? <-; cbn [fst snd]; reflexivity].
   Qed.
 
   Lemma interp_mcfg_model_obs_eq {R}
@@ -1031,9 +1037,9 @@ Section ModelCombinators.
   Proof using.
     intros U0; pcofix CIH.
     intros U t1 t2 Hincl Hrel; pstep; punfold Hrel.
-    revert U0 Hincl;
+    revert Hincl;
       induction Hrel as [U t1 t2 Hstep | U t1 m1 t2 Ht1 _ IH | U t1 t2 m2 Ht2 _ IH];
-      intros U0 Hincl.
+      intros Hincl.
     - apply RP_Step; unfold rp_step_body in *.
       destruct (observe t1) as [x1 | m1 | X1 e1 k1].
       + destruct (observe t2); try contradiction; split; assumption.
@@ -1146,21 +1152,21 @@ Section ModelCombinators.
           * apply RP_Step; unfold rp_step_body; rewrite !observe_bind, Hou1, Hou2; cbn; exact Hlr.
         + destruct (observe u2) as [lr2 | m2 | X2 e2 h2] eqn:Hou2; try contradiction.
           pclearbot; apply RP_Step; unfold rp_step_body; rewrite !observe_bind, Hou1, Hou2.
-          exists m1, m2; repeat split; try reflexivity; exact Hstep.
+          exists m1, m2; split; [reflexivity | split; [reflexivity | exact Hstep]].
         + apply RP_Step; unfold rp_step_body; rewrite (observe_bind u1 k1), Hou1.
           destruct Hstep as [Hub | [Hleft | Hboth]].
           * left; exact Hub.
           * right; left; destruct e1 as [p1 | b1']; [| contradiction]; destruct p1.
             intros p Hp; specialize (Hleft p Hp); pclearbot.
-            exists (h1 p), u2; repeat split; try reflexivity; exact Hleft.
+            exists (h1 p), u2; split; [reflexivity | split; [reflexivity | exact Hleft]].
           * right; right; destruct (observe u2) as [lr2 | m2 | X2 e2 h2] eqn:Hou2; try contradiction.
             rewrite (observe_bind u2 k2), Hou2.
             destruct e1 as [p1 | b1'], e2 as [p2 | b2']; cbn in *; try contradiction.
             -- destruct p1, p2; intros p Hp; specialize (Hboth p Hp); pclearbot.
-               exists (h1 p), (h2 p); repeat split; try reflexivity; exact Hboth.
+               exists (h1 p), (h2 p); split; [reflexivity | split; [reflexivity | exact Hboth]].
             -- destruct Hboth as [HE HA]; split; [exact HE |].
                intros a1 a2 Ha; specialize (HA a1 a2 Ha); pclearbot.
-               exists (h1 a1), (h2 a2); repeat split; try reflexivity; exact HA.
+               exists (h1 a1), (h2 a2); split; [reflexivity | split; [reflexivity | exact HA]].
       - eapply RP_TauL; [rewrite (observe_bind u1 k1), Hu1; reflexivity | exact IH].
       - eapply RP_TauR; [rewrite (observe_bind u2 k2), Hu2; reflexivity | exact IH]. }
     intros i1 i2 Hinit; apply Hcore.
@@ -1282,12 +1288,16 @@ Section ModelCombinators.
     interp_cfg_model ctx (call dt cc fv vs) s ≅
     Tau (interp_cfg_model ctx (mrec_ctx ctx _ (Call dt cc fv vs)) s).
   Proof using.
-    unfold call, trigger, ITree.trigger, interp_cfg_model.
-    rewrite (interp_mcfg_model_obs_eq _ _ s (unfold_interp_mrec (mrec_ctx ctx) _)).
-    cbn [_interp_mrec subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1 observe].
-    rewrite interp_mcfg_model_tau.
-    rewrite (interp_mcfg_model_obs_eq _ _ s
-               (interp_mrec_proper_eq (mrec_ctx ctx) _ _ (Eqit.bind_ret_r _))).
+    assert (Hm : interp_mrec (mrec_ctx ctx) (call dt cc fv vs) ≅
+                 Tau (interp_mrec (mrec_ctx ctx) (mrec_ctx ctx _ (Call dt cc fv vs)))).
+    { unfold call, trigger, ITree.trigger.
+      cbn [subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1].
+      rewrite unfold_interp_mrec.
+      transitivity (Tau (interp_mrec (mrec_ctx ctx) (ITree.bind (mrec_ctx ctx _ (Call dt cc fv vs)) (fun x => Ret x)))).
+      - reflexivity.
+      - apply eqit_Tau, interp_mrec_proper_eq, Eqit.bind_ret_r. }
+    unfold interp_cfg_model.
+    rewrite (interp_mcfg_model_obs_eq _ _ s Hm), interp_mcfg_model_tau.
     reflexivity.
   Qed.
 
@@ -1299,11 +1309,11 @@ Section ModelCombinators.
       (fun '(s', x) => Tau (Tau (Ret (s', x)))).
   Proof using.
     unfold interp_mcfg_model, interp_intrinsics, ITree.trigger.
-    rewrite unfold_interp; cbn [_interp observe]; rewrite Hni.
+    rewrite interp_vis, Hni.
     unfold ITree.trigger; rewrite Eqit.bind_vis, interp_state_vis.
     eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
     intros [s' x] _ <-.
-    rewrite Eqit.bind_ret_l, interp_tau, interp_ret, interp_state_tau, interp_state_ret.
+    rewrite Eqit.bind_ret_l, interp_state_tau, interp_ret, interp_state_ret.
     reflexivity.
   Qed.
 
@@ -1315,19 +1325,18 @@ Section ModelCombinators.
     ITree.bind (interp_vellvm_prov_h me s)
       (fun '(s', x) => Tau (Tau (Tau (Ret (s', x))))).
   Proof using.
-    unfold interp_cfg_model, ITree.trigger.
-    rewrite (interp_mcfg_model_obs_eq _ _ s (unfold_interp_mrec (mrec_ctx ctx) _)).
-    cbn [_interp_mrec observe].
+    assert (Hm : interp_mrec (mrec_ctx ctx) (ITree.trigger (inr1 me)) ≅
+                 Vis me (fun x => Tau (interp_mrec (mrec_ctx ctx) (Ret x)))).
+    { unfold ITree.trigger; rewrite unfold_interp_mrec; reflexivity. }
+    unfold interp_cfg_model.
+    rewrite (interp_mcfg_model_obs_eq _ _ s Hm).
     unfold interp_mcfg_model, interp_intrinsics.
-    rewrite unfold_interp; cbn [_interp observe]; rewrite Hni.
+    rewrite interp_vis, Hni.
     unfold ITree.trigger; rewrite Eqit.bind_vis, interp_state_vis.
     eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
     intros [s' x] _ <-.
-    rewrite Eqit.bind_ret_l, interp_tau, interp_state_tau.
-    change (interp_state interp_vellvm_prov_h
-              (interp interp_intrinsics_h (interp_mrec (mrec_ctx ctx) (Ret x))) s')
-      with (interp_cfg_model ctx (Ret x) s').
-    rewrite interp_cfg_model_ret; reflexivity.
+    rewrite Eqit.bind_ret_l, !interp_tau, !interp_state_tau, interp_mrec_ret, interp_ret, interp_state_ret.
+    reflexivity.
   Qed.
 
   Lemma tau_star_mcfg_det {X}
@@ -1361,8 +1370,14 @@ Section ModelCombinators.
     unfold raiseUB, trigger_cast.
     eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_bind | reflexivity |].
     eapply refine_prov_obs_eq;
-      [symmetry; rewrite (interp_mcfg_model_non_intr _ s1 Logic.eq_refl); reflexivity | reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      [symmetry;
+       match goal with
+       | |- ITree.bind _ ?k ≅ _ =>
+           eapply eq_itree_clo_bind with (UU := Logic.eq) (k2 := k);
+           [apply interp_mcfg_model_non_intr; reflexivity | intros ? ? <-; reflexivity]
+       end
+      | reflexivity |].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity | reflexivity |].
@@ -1377,8 +1392,14 @@ Section ModelCombinators.
     unfold raiseOOM, trigger_cast.
     eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_bind | reflexivity |].
     eapply refine_prov_obs_eq;
-      [symmetry; rewrite (interp_mcfg_model_non_intr _ s1 Logic.eq_refl); reflexivity | reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      [symmetry;
+       match goal with
+       | |- ITree.bind _ ?k ≅ _ =>
+           eapply eq_itree_clo_bind with (UU := Logic.eq) (k2 := k);
+           [apply interp_mcfg_model_non_intr; reflexivity | intros ? ? <-; reflexivity]
+       end
+      | reflexivity |].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity | reflexivity |].
@@ -1396,9 +1417,19 @@ Section ModelCombinators.
     eapply refine_prov_obs_eq;
       [symmetry; apply interp_mcfg_model_bind | symmetry; apply interp_mcfg_model_bind |].
     eapply refine_prov_obs_eq;
-      [symmetry; rewrite (interp_mcfg_model_non_intr _ s1 Logic.eq_refl); reflexivity
-      | symmetry; rewrite (interp_mcfg_model_non_intr _ s2 Logic.eq_refl); reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      [symmetry;
+       match goal with
+       | |- ITree.bind _ ?k ≅ _ =>
+           eapply eq_itree_clo_bind with (UU := Logic.eq) (k2 := k);
+           [apply interp_mcfg_model_non_intr; reflexivity | intros ? ? <-; reflexivity]
+       end
+      | symmetry;
+        match goal with
+        | |- ITree.bind _ ?k ≅ _ =>
+            eapply eq_itree_clo_bind with (UU := Logic.eq) (k2 := k);
+            [apply interp_mcfg_model_non_intr; reflexivity | intros ? ? <-; reflexivity]
+        end |].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
@@ -1415,8 +1446,14 @@ Section ModelCombinators.
     unfold raiseUB, trigger_cast.
     eapply refine_prov_obs_eq; [symmetry; apply interp_cfg_model_bind | reflexivity |].
     eapply refine_prov_obs_eq;
-      [symmetry; rewrite (interp_cfg_model_non_intr ctx1 _ s1 Logic.eq_refl); reflexivity | reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      [symmetry;
+       match goal with
+       | |- ITree.bind _ ?k ≅ _ =>
+           eapply eq_itree_clo_bind with (UU := Logic.eq) (k2 := k);
+           [apply interp_cfg_model_non_intr; reflexivity | intros ? ? <-; reflexivity]
+       end
+      | reflexivity |].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity | reflexivity |].
@@ -1432,8 +1469,14 @@ Section ModelCombinators.
     unfold raiseOOM, trigger_cast.
     eapply refine_prov_obs_eq; [symmetry; apply interp_cfg_model_bind | reflexivity |].
     eapply refine_prov_obs_eq;
-      [symmetry; rewrite (interp_cfg_model_non_intr ctx1 _ s1 Logic.eq_refl); reflexivity | reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      [symmetry;
+       match goal with
+       | |- ITree.bind _ ?k ≅ _ =>
+           eapply eq_itree_clo_bind with (UU := Logic.eq) (k2 := k);
+           [apply interp_cfg_model_non_intr; reflexivity | intros ? ? <-; reflexivity]
+       end
+      | reflexivity |].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity | reflexivity |].
@@ -1452,9 +1495,19 @@ Section ModelCombinators.
     eapply refine_prov_obs_eq;
       [symmetry; apply interp_cfg_model_bind | symmetry; apply interp_cfg_model_bind |].
     eapply refine_prov_obs_eq;
-      [symmetry; rewrite (interp_cfg_model_non_intr ctx1 _ s1 Logic.eq_refl); reflexivity
-      | symmetry; rewrite (interp_cfg_model_non_intr ctx2 _ s2 Logic.eq_refl); reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      [symmetry;
+       match goal with
+       | |- ITree.bind _ ?k ≅ _ =>
+           eapply eq_itree_clo_bind with (UU := Logic.eq) (k2 := k);
+           [apply interp_cfg_model_non_intr; reflexivity | intros ? ? <-; reflexivity]
+       end
+      | symmetry;
+        match goal with
+        | |- ITree.bind _ ?k ≅ _ =>
+            eapply eq_itree_clo_bind with (UU := Logic.eq) (k2 := k);
+            [apply interp_cfg_model_non_intr; reflexivity | intros ? ? <-; reflexivity]
+        end |].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
@@ -1521,7 +1574,7 @@ Section ModelCombinators.
     eapply refine_prov_obs_eq;
       [symmetry; apply interp_mcfg_model_non_intr; reflexivity
       | symmetry; apply interp_mcfg_model_non_intr; reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_memory_prov, on_mem_prov, handle_memory.
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_bind | symmetry; apply Eqit.bind_bind |].
@@ -1552,7 +1605,7 @@ Section ModelCombinators.
     eapply refine_prov_obs_eq;
       [symmetry; apply interp_cfg_model_non_intr; reflexivity
       | symmetry; apply interp_cfg_model_non_intr; reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_memory_prov, on_mem_prov, handle_memory.
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_bind | symmetry; apply Eqit.bind_bind |].
@@ -1582,8 +1635,8 @@ Section ModelCombinators.
   Proof using.
     intros Hmem.
     eapply refine_prov_obs_eq;
-      [symmetry; apply interp_cfg_model_non_intr; reflexivity | symmetry; apply Eqit.bind_ret_r |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      [symmetry; apply interp_cfg_model_non_intr; reflexivity | apply Eqit.bind_ret_r |].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_memory_prov, on_mem_prov, handle_memory.
     eapply refine_prov_obs_eq; [symmetry; apply Eqit.bind_bind | reflexivity |].
     eapply refine_prov_bind; [exact Hmem |].
@@ -1614,7 +1667,7 @@ Section ModelCombinators.
     ginit; gcofix CIH; intros t1 t2 Heq.
     rewrite (unfold_run_exc_obs t1), (unfold_run_exc_obs t2).
     punfold Heq; red in Heq.
-    destruct Heq as [r1 r2 <- | m1 m2 Hm | X e k1 k2 Hk]; pclearbot.
+    destruct Heq as [r1 r2 <- | m1 m2 Hm | X e k1 k2 Hk | ? ? Hchk _ | ? ? Hchk _]; try inversion Hchk; pclearbot.
     - gstep; constructor; reflexivity.
     - gstep; constructor; gfinal; left; apply CIH, Hm.
     - destruct (exc_of_event e) as [x |].
@@ -1639,7 +1692,7 @@ Section ModelCombinators.
     - assert (Htk : ITree.bind t k ≅ k a).
       { rewrite (itree_eta t), Hot, Eqit.bind_ret_l; reflexivity. }
       rewrite (run_exc_proper_eq _ _ Htk), Eqit.bind_ret_l.
-      gfinal; right; eapply paco2_mon; [reflexivity | intros ? ? []].
+      gfinal; right; apply pacobot2; match goal with |- _ ?lhs ?rhs => change (eq_itree eq lhs rhs); reflexivity end.
     - rewrite (unfold_run_exc_obs (ITree.bind t k)), observe_bind, Hot, Eqit.bind_tau.
       gstep; constructor; gfinal; left; apply CIH.
     - rewrite (unfold_run_exc_obs (ITree.bind t k)), observe_bind, Hot.
@@ -1654,7 +1707,7 @@ Section ModelCombinators.
   Proof using.
     unfold raiseLLVM, trigger_cast, ITree.trigger.
     rewrite unfold_run_exc_obs, observe_bind.
-    cbn [observe exc_of_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1 inr1 inl1].
+    cbn [observe exc_of_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1].
     reflexivity.
   Qed.
 
@@ -1665,8 +1718,8 @@ Section ModelCombinators.
     ITree.bind (ITree.trigger e) (fun y => Tau (Ret (inr y))).
   Proof using.
     unfold ITree.trigger.
-    rewrite unfold_run_exc_obs; cbn [observe]; rewrite Hne, Eqit.bind_vis.
-    apply eqit_Vis; intros y; rewrite run_exc_ret_eq; reflexivity.
+    rewrite unfold_run_exc_obs; cbn - [exc_of_event run_exc]; rewrite Hne, Eqit.bind_vis.
+    apply eqit_Vis; intros y; rewrite run_exc_ret_eq, Eqit.bind_ret_l; reflexivity.
   Qed.
 
   Definition interp_cfg_exc {R}
@@ -1859,44 +1912,37 @@ Section ModelCombinators.
         eapply refine_prov_obs_eq;
           [symmetry; apply interp_cfg_model_non_intr; reflexivity
           | symmetry; apply interp_cfg_model_non_intr; reflexivity |].
-        cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+        cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
         unfold fused_trigger_prov, ITree.trigger.
         eapply refine_prov_obs_eq;
-          [symmetry; apply Eqit.bind_vis | symmetry; apply Eqit.bind_vis |].
+          [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+          | symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
         pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
       + intros _ _ [] _ _ _ _.
     - unfold raiseOOM, trigger_cast, interp_cfg_exc.
+      assert (Hoom : run_exc (A := A1)
+                       (ITree.bind (ITree.trigger (subevent _ (ThrowOOM (print_msg msg1))))
+                          void_elim)
+                     ≅ ITree.bind (ITree.trigger (subevent _ (ThrowOOM (print_msg msg1))))
+                         void_elim).
+      { rewrite run_exc_bind_eq, run_exc_trigger_non_exc;
+          [rewrite Eqit.bind_bind; apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _]
+          | reflexivity]. }
       eapply refine_prov_obs_eq;
-        [symmetry; rewrite (interp_cfg_model_obs_eq ctx1 _ _ s1 (run_exc_bind_eq _ _)),
-                           (interp_cfg_model_obs_eq ctx1 _ _ s1
-                              (eq_itree_clo_bind _ _ _ _ Logic.eq
-                                 (run_exc_trigger_non_exc _ Logic.eq_refl)
-                                 (fun _ _ _ => Logic.eq_refl))),
-                           !Eqit.bind_bind, !interp_cfg_model_bind; reflexivity
-        | reflexivity |].
-      eapply refine_prov_obs_eq;
-        [symmetry; rewrite (interp_cfg_model_non_intr ctx1 _ s1 Logic.eq_refl); reflexivity | reflexivity |].
-      cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
-      unfold fused_trigger_prov, ITree.trigger.
-      eapply refine_prov_obs_eq;
-        [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity | reflexivity |].
-      apply refine_prov_ub_vis_l; reflexivity.
+        [symmetry; apply (interp_cfg_model_obs_eq ctx1 _ _ s1 Hoom) | reflexivity |].
+      apply (refine_cfg_raiseOOM_l ctx1 _ U msg1 s1).
     - unfold raiseUB, trigger_cast, interp_cfg_exc.
+      assert (Hub : run_exc (A := A1)
+                      (ITree.bind (ITree.trigger (subevent _ (ThrowUB (print_msg msg1))))
+                         void_elim)
+                    ≅ ITree.bind (ITree.trigger (subevent _ (ThrowUB (print_msg msg1))))
+                        void_elim).
+      { rewrite run_exc_bind_eq, run_exc_trigger_non_exc;
+          [rewrite Eqit.bind_bind; apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _]
+          | reflexivity]. }
       eapply refine_prov_obs_eq;
-        [symmetry; rewrite (interp_cfg_model_obs_eq ctx1 _ _ s1 (run_exc_bind_eq _ _)),
-                           (interp_cfg_model_obs_eq ctx1 _ _ s1
-                              (eq_itree_clo_bind _ _ _ _ Logic.eq
-                                 (run_exc_trigger_non_exc _ Logic.eq_refl)
-                                 (fun _ _ _ => Logic.eq_refl))),
-                           !Eqit.bind_bind, !interp_cfg_model_bind; reflexivity
-        | reflexivity |].
-      eapply refine_prov_obs_eq;
-        [symmetry; rewrite (interp_cfg_model_non_intr ctx1 _ s1 Logic.eq_refl); reflexivity | reflexivity |].
-      cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
-      unfold fused_trigger_prov, ITree.trigger.
-      eapply refine_prov_obs_eq;
-        [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity | reflexivity |].
-      apply refine_prov_ub_vis_l; reflexivity.
+        [symmetry; apply (interp_cfg_model_obs_eq ctx1 _ _ s1 Hub) | reflexivity |].
+      apply (refine_cfg_raiseUB_l ctx1 _ U msg1 s1).
   Qed.
 
   Lemma refine_cfg_exc_raiseUB_l {A1 R2}
@@ -1906,12 +1952,14 @@ Section ModelCombinators.
     refine_prov RR U (interp_cfg_exc ctx1 (raiseUB msg) s1) t2.
   Proof using.
     unfold raiseUB, trigger_cast, interp_cfg_exc.
-    assert (Hub : run_exc (ITree.bind (ITree.trigger (subevent _ (ThrowUB (print_msg msg))))
-                             (fun v : void => match v with end))
+    assert (Hub : run_exc (A := A1)
+                    (ITree.bind (ITree.trigger (subevent _ (ThrowUB (print_msg msg))))
+                       (fun v : void => match v with end))
                   ≅ ITree.bind (ITree.trigger (subevent _ (ThrowUB (print_msg msg))))
                       (fun v : void => match v with end)).
-    { rewrite run_exc_bind_eq, (run_exc_trigger_non_exc _ Logic.eq_refl), Eqit.bind_bind.
-      apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _]. }
+    { rewrite run_exc_bind_eq, run_exc_trigger_non_exc;
+        [rewrite Eqit.bind_bind; apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _]
+        | reflexivity]. }
     eapply refine_prov_obs_eq;
       [symmetry; apply (interp_cfg_model_obs_eq ctx1 _ _ s1 Hub) | reflexivity |].
     apply (refine_cfg_raiseUB_l ctx1 RR U msg s1 t2).
@@ -2011,32 +2059,65 @@ Section ModelCombinators.
         + destruct (observe u2) as [[s2' res2] | m2 | X2 e2 h2] eqn:Hou2; try contradiction.
           destruct Hstep as [Hincl Hres].
           destruct res1 as [x1 | [j1 | r1]], res2 as [x2 | [j2 | r2]]; cbn in Hres; try contradiction.
-          * apply RP_Step; unfold rp_step_body; rewrite !observe_bind, Hou1, Hou2; cbn; exact Hres.
-          * apply RP_Step; unfold rp_step_body; rewrite !observe_bind, Hou1, Hou2; cbn.
+          * eapply refine_prov__obs_eq;
+              [exact Hr_eq
+              | symmetry; rewrite (itree_eta u1), Hou1, Eqit.bind_ret_l; reflexivity
+              | symmetry; rewrite (itree_eta u2), Hou2, Eqit.bind_ret_l; reflexivity
+              | apply RP_Step; unfold rp_step_body; cbn; exact Hres].
+          * eapply refine_prov__obs_eq;
+              [exact Hr_eq
+              | symmetry; rewrite (itree_eta u1), Hou1, Eqit.bind_ret_l; reflexivity
+              | symmetry; rewrite (itree_eta u2), Hou2, Eqit.bind_ret_l; reflexivity
+              | apply RP_Step; unfold rp_step_body; cbn].
             exists (interp_cfg_exc ctx1 (b1 j1) s1'), (interp_cfg_exc ctx2 (b2 j2) s2').
             split; [symmetry; apply Hunf1 |].
             split; [symmetry; apply Hunf2 |].
             apply refine_prov_incl; [exact Hincl | eapply Hbody; eassumption].
-          * apply RP_Step; unfold rp_step_body; rewrite !observe_bind, Hou1, Hou2; cbn; exact Hres.
+          * eapply refine_prov__obs_eq;
+              [exact Hr_eq
+              | symmetry; rewrite (itree_eta u1), Hou1, Eqit.bind_ret_l; reflexivity
+              | symmetry; rewrite (itree_eta u2), Hou2, Eqit.bind_ret_l; reflexivity
+              | apply RP_Step; unfold rp_step_body; cbn; exact Hres].
         + destruct (observe u2) as [? | m2 | ? ? ?] eqn:Hou2; try contradiction.
-          pclearbot; apply RP_Step; unfold rp_step_body; rewrite !observe_bind, Hou1, Hou2.
-          exists m1, m2; repeat split; try reflexivity; exact Hstep.
-        + apply RP_Step; unfold rp_step_body; rewrite (observe_bind u1 k1), Hou1.
+          pclearbot.
+          eapply refine_prov__obs_eq;
+            [exact Hr_eq
+            | symmetry; rewrite (itree_eta u1), Hou1, Eqit.bind_tau; reflexivity
+            | symmetry; rewrite (itree_eta u2), Hou2, Eqit.bind_tau; reflexivity
+            | apply RP_Step; unfold rp_step_body; cbn].
+          exists m1, m2; split; [reflexivity | split; [reflexivity | exact Hstep]].
+        + eapply refine_prov__obs_eq;
+            [exact Hr_eq
+            | symmetry; rewrite (itree_eta u1), Hou1, Eqit.bind_vis; reflexivity
+            | reflexivity |].
           destruct Hstep as [Hub | [Hleft | Hboth]].
-          * left; exact Hub.
-          * right; left; destruct e1 as [p1 | b1']; [| contradiction]; destruct p1.
+          * apply RP_Step; unfold rp_step_body; cbn; left; exact Hub.
+          * apply RP_Step; unfold rp_step_body; cbn; right; left.
+            destruct e1 as [p1 | b1']; [| contradiction]; destruct p1.
             intros p Hp; specialize (Hleft p Hp); pclearbot.
-            exists (h1 p), u2; repeat split; try reflexivity; exact Hleft.
-          * right; right; destruct (observe u2) as [? | ? | X2 e2 h2] eqn:Hou2; try contradiction.
-            rewrite (observe_bind u2 k2), Hou2.
+            exists (h1 p), u2; split; [reflexivity | split; [reflexivity | exact Hleft]].
+          * destruct (observe u2) as [? | ? | X2 e2 h2] eqn:Hou2; try contradiction.
+            eapply refine_prov__obs_eq;
+              [exact Hr_eq
+              | reflexivity
+              | symmetry; rewrite (itree_eta u2), Hou2, Eqit.bind_vis; reflexivity |].
+            apply RP_Step; unfold rp_step_body; cbn; right; right.
             destruct e1 as [p1 | b1'], e2 as [p2 | b2']; cbn in *; try contradiction.
             -- destruct p1, p2; intros p Hp; specialize (Hboth p Hp); pclearbot.
-               exists (h1 p), (h2 p); repeat split; try reflexivity; exact Hboth.
+               exists (h1 p), (h2 p); split; [reflexivity | split; [reflexivity | exact Hboth]].
             -- destruct Hboth as [HE HA]; split; [exact HE |].
                intros a1 a2 Ha; specialize (HA a1 a2 Ha); pclearbot.
-               exists (h1 a1), (h2 a2); repeat split; try reflexivity; exact HA.
-      - eapply RP_TauL; [rewrite (observe_bind u1 k1), Hu1; reflexivity | exact IH].
-      - eapply RP_TauR; [rewrite (observe_bind u2 k2), Hu2; reflexivity | exact IH]. }
+               exists (h1 a1), (h2 a2); split; [reflexivity | split; [reflexivity | exact HA]].
+      - eapply refine_prov__obs_eq;
+          [exact Hr_eq
+          | symmetry; rewrite (itree_eta u1), Hu1, Eqit.bind_tau; reflexivity
+          | reflexivity
+          | eapply RP_TauL; [reflexivity | exact IH]].
+      - eapply refine_prov__obs_eq;
+          [exact Hr_eq
+          | reflexivity
+          | symmetry; rewrite (itree_eta u2), Hu2, Eqit.bind_tau; reflexivity
+          | eapply RP_TauR; [reflexivity | exact IH]]. }
     intros s1 s2 i1 i2 Hinit; apply Hcore.
     exists (interp_cfg_exc ctx1 (b1 i1) s1), (interp_cfg_exc ctx2 (b2 i2) s2).
     split; [symmetry; apply Hunf1 |].
@@ -2054,6 +2135,12 @@ Section MemoryAndSerialization.
 
   #[local] Existing Instance MemoryModelStateV.
   #[local] Existing Instance MemoryModelPrimitivesV.
+  #[local] Existing Instance PointerV.
+  #[local] Existing Instance PIV.
+  #[local] Existing Instance PITheoryV.
+  #[local] Hint Resolve refine_prov__mon : paco.
+  Arguments memM_interp_prov {_ _} [T] _ _.
+  Arguments interp_vellvm_prov_h {_ _} [T] _ _.
 
   (** ** 3A. [memM_interp_prov] Monadic Laws & [mem_stack_equal] Synchronization *)
 
@@ -2105,7 +2192,7 @@ Section MemoryAndSerialization.
               memM_interp_prov (go acc xs) σ0 ≅
               memM_interp_prov (ExtLib.Structures.Monad.bind (map_monad f xs) (fun bs => ExtLib.Structures.Monad.ret (rev_append acc bs))) σ0).
     { induction xs as [| a xs' IH]; intros acc σ0; cbn [go map_monad].
-      - rewrite memM_interp_prov_bind, memM_interp_prov_ret, Eqit.bind_ret_l; reflexivity.
+      - rewrite memM_interp_prov_bind, !memM_interp_prov_ret, Eqit.bind_ret_l; reflexivity.
       - rewrite !memM_interp_prov_bind, !Eqit.bind_bind.
         eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
         intros [σ1 b] _ <-.
@@ -2148,8 +2235,8 @@ Section MemoryAndSerialization.
     (RR : list N -> (state * A1) -> (state * A2) -> Prop)
     (U : list N) (msg1 msg2 : string) (σ1 σ2 : state) :
     refine_prov RR U
-      (memM_interp_prov (@Merr state (@ptr ProvenanceV (@PointerV IP)) provenance A1 msg1) σ1)
-      (memM_interp_prov (@Merr state (@ptr ProvenanceV (@PointerV IP)) provenance A2 msg2) σ2).
+      (memM_interp_prov (@Merr _ _ _ A1 msg1) σ1)
+      (memM_interp_prov (@Merr _ _ _ A2 msg2) σ2).
   Proof using.
     cbn [memM_interp_prov]; unfold raise, trigger_cast, ITree.trigger.
     eapply refine_prov_obs_eq;
@@ -2329,8 +2416,9 @@ Section MemoryAndSerialization.
       as [[b aid] |].
     - eapply refine_prov_obs_eq;
         [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-      destruct (access_allowed (ptr_provenance p) aid).
-      + apply refine_prov_ret; repeat split; [apply incl_refl | exact Hmem | exact Hfs | exact Hh].
+      cbv iota.
+      match goal with |- context [if ?c then _ else _] => destruct c end.
+      + cbn [memM_interp_prov]; apply refine_prov_ret; repeat split; [apply incl_refl | exact Hmem | exact Hfs | exact Hh].
       + apply memM_interp_prov_raiseUB_l.
     - cbn [memM_interp_prov]; eapply refine_prov_obs_eq;
         [symmetry; unfold raiseUB, trigger_cast, ITree.trigger; rewrite Eqit.bind_bind, Eqit.bind_vis; reflexivity
@@ -2360,7 +2448,8 @@ Section MemoryAndSerialization.
       as [[b0 aid] |].
     - eapply refine_prov_obs_eq;
         [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-      destruct (access_allowed (ptr_provenance p) aid).
+      cbv iota.
+      match goal with |- context [if ?c then _ else _] => destruct c end.
       + unfold set_byte_raw, get_mem, upd_mem, app_mem, set_byte_raw_mem, get, put;
           cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
         apply refine_prov_ret; repeat split; cbn;
@@ -2408,7 +2497,7 @@ Section MemoryAndSerialization.
     unfold read_bytes.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    eapply refine_prov_bind.
+    eapply refine_prov_bind with (RR := eq_sync_post U).
     - eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |].
       intros ptrs _ <-; exact (conj (incl_refl U) (conj Heq Logic.eq_refl)).
     - intros U1 [σ1' ptrs1] [σ2' ptrs2] (Hinc1 & Heq1 & <-).
@@ -2450,7 +2539,7 @@ Section MemoryAndSerialization.
     unfold write_bytes.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    eapply refine_prov_bind.
+    eapply refine_prov_bind with (RR := eq_sync_post U).
     - eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |].
       intros ptrs _ <-; exact (conj (incl_refl U) (conj Heq Logic.eq_refl)).
     - intros U1 [σ1' ptrs1] [σ2' ptrs2] (Hinc1 & Heq1 & <-).
@@ -2486,7 +2575,7 @@ Section MemoryAndSerialization.
     unfold write_dvalue.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    eapply refine_prov_bind.
+    eapply refine_prov_bind with (RR := eq_sync_post U).
     - eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |].
       intros bs _ <-; exact (conj (incl_refl U) (conj Heq Logic.eq_refl)).
     - intros U1 [σ1' bs1] [σ2' bs2] (Hinc1 & Heq1 & <-).
@@ -2506,17 +2595,22 @@ Section MemoryAndSerialization.
       cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
     rewrite (Equal_next_key_with_alignment _ _ align Hmem).
     set (addr := next_key_with_alignment (Memory_stack_memory (state_memory_stack σ2)) align).
-    destruct (int_to_ptr addr (allocation_id_to_prov (provenance_to_allocation_id pr)))
-      as [s | s | s | pt];
+    match goal with
+    | |- context [int_to_ptr ?a ?p] =>
+        destruct (int_to_ptr a p) as [s | s | s | pt]
+    end;
       cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret].
+    - apply memM_interp_prov_raise_both.
     - apply memM_interp_prov_raiseOOM_l.
     - apply memM_interp_prov_raiseUB_l.
-    - apply memM_interp_prov_raise_both.
-    - destruct (get_consecutive_ptrs pt sz) as [s | s | s | ptrs];
+    - match goal with
+      | |- context [get_consecutive_ptrs ?p ?sz] =>
+          destruct (get_consecutive_ptrs p sz) as [s | s | s | ptrs]
+      end;
         cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret].
+      + apply memM_interp_prov_raise_both.
       + apply memM_interp_prov_raiseOOM_l.
       + apply memM_interp_prov_raiseUB_l.
-      + apply memM_interp_prov_raise_both.
       + apply refine_prov_ret; exact (conj (incl_refl U) (conj (conj Hmem (conj Hfs Hh)) Logic.eq_refl)).
   Qed.
 
@@ -2704,14 +2798,14 @@ Section MemoryAndSerialization.
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
     cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     rewrite Hfs.
-    destruct (Memory_stack_frame_stack (state_memory_stack σ2)) as [f | s f].
-    - eapply refine_prov_obs_eq;
-        [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-      cbn [pop_frame_stack Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind].
+    destruct (Memory_stack_frame_stack (state_memory_stack σ2)) as [f | s f] eqn:Efs;
+      (cbn [memM_interp_prov];
+       eapply refine_prov_obs_eq;
+         [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |];
+       rewrite Hfs, Efs).
+    - cbn [pop_frame_stack Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind].
       apply memM_interp_prov_raise_both.
-    - eapply refine_prov_obs_eq;
-        [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-      cbn [pop_frame_stack Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
+    - cbn [pop_frame_stack Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
       apply refine_prov_ret; repeat split; cbn;
         [apply incl_refl | apply Equal_free_frame_memory, Hmem | exact Hh].
   Qed.
@@ -2731,10 +2825,13 @@ Section MemoryAndSerialization.
     rewrite Hh.
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-    destruct (IntMaps.lookup (ptr_to_int p) (Memory_stack_heap (state_memory_stack σ2))) as [blk |].
+    match goal with
+    | |- context [match ?x with Some _ => _ | None => _ end] =>
+        destruct x as [blk |]
+    end.
     - cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
       apply refine_prov_ret; repeat split; cbn;
-        [apply incl_refl | apply Equal_free_frame_memory, Hmem | exact Hfs].
+        [apply incl_refl | unfold free_block_memory; apply Equal_free_frame_memory, Hmem | exact Hfs].
     - apply memM_interp_prov_raiseUB_l.
   Qed.
 
@@ -2752,15 +2849,15 @@ Section MemoryAndSerialization.
         destruct t2; try apply memM_interp_prov_raiseUB_l;
         cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret];
         (destruct dv;
-         eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |];
+         (eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |]);
          intros r _ <-; exact (conj (incl_refl U) (conj Heq Logic.eq_refl))).
     - destruct dv; try apply memM_interp_prov_raiseUB_l;
         destruct t2; try apply memM_interp_prov_raiseUB_l;
-        (eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |];
+        ((eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |]);
          intros r _ <-; exact (conj (incl_refl U) (conj Heq Logic.eq_refl))).
     - destruct dv; try apply memM_interp_prov_raiseUB_l;
         destruct t2; try apply memM_interp_prov_raiseUB_l;
-        (eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |];
+        ((eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |]);
          intros r _ <-; exact (conj (incl_refl U) (conj Heq Logic.eq_refl))).
     - apply memM_interp_prov_raise_both.
   Qed.
@@ -2810,7 +2907,7 @@ Section MemoryAndSerialization.
         [| apply memM_interp_prov_raise_both].
       eapply refine_prov_obs_eq;
         [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-      eapply refine_prov_bind.
+      eapply refine_prov_bind with (RR := eq_sync_post U).
       + eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |].
         intros elts' _ <-; exact (conj (incl_refl U) (conj Heq Logic.eq_refl)).
       + intros U1 [σ1' elts1'] [σ2' elts2'] (Hinc1 & Heq1 & <-).
@@ -2837,11 +2934,19 @@ Section MemoryAndSerialization.
       eapply refine_prov_bind; [apply allocate_dtyp_equal_sync, Heq |].
       intros U1 [σ1' pt1] [σ2' pt2] (Hinc1 & Heq1 & <-).
       apply refine_prov_ret; exact (conj Hinc1 (conj Heq1 Logic.eq_refl)).
-    - destruct a as [[pt | | | | | | |] | |];
-        try apply memM_interp_prov_raiseUB_l.
+    - destruct a as [[pt | | | | | | |] | |]; cbv beta iota;
+        lazymatch goal with
+        | |- refine_prov _ _ (memM_interp_prov (Mub _) _) _ => apply memM_interp_prov_raiseUB_l
+        | |- refine_prov _ _ (memM_interp_prov (mub _) _) _ => apply memM_interp_prov_raiseUB_l
+        | _ => idtac
+        end.
       apply read_dvalue_equal_sync, Heq.
-    - destruct a as [[pt | | | | | | |] | |];
-        try apply memM_interp_prov_raiseUB_l.
+    - destruct a as [[pt | | | | | | |] | |]; cbv beta iota;
+        lazymatch goal with
+        | |- refine_prov _ _ (memM_interp_prov (Mub _) _) _ => apply memM_interp_prov_raiseUB_l
+        | |- refine_prov _ _ (memM_interp_prov (mub _) _) _ => apply memM_interp_prov_raiseUB_l
+        | _ => idtac
+        end.
       apply write_dvalue_equal_sync, Heq.
     - apply convert_impure_equal_sync, Heq.
   Qed.
@@ -2918,7 +3023,7 @@ Section MemoryAndSerialization.
     destruct ie as [dt name args va]; unfold handle_intrinsicM.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-    eapply refine_prov_bind.
+    eapply refine_prov_bind with (RR := eq_sync_post U).
     - eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |].
       intros args' _ <-; exact (conj (incl_refl U) (conj Heq Logic.eq_refl)).
     - intros U1 [σ1' args1'] [σ2' args2'] (Hinc1 & Heq1 & <-).
@@ -2941,7 +3046,7 @@ Section MemoryAndSerialization.
         * destruct (is_memset_name name).
           -- eapply refine_prov_obs_eq;
                [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-             eapply refine_prov_bind.
+             eapply refine_prov_bind with (RR := eq_sync_post U1).
              ++ unfold handle_memset.
                 destruct args1' as [| dst [| val [| len [| vlt rest]]]];
                   try apply memM_interp_prov_raise_both.
@@ -2951,18 +3056,20 @@ Section MemoryAndSerialization.
                 assert (Hval : refine_prov (eq_sync_post U1) U1
                                  (memM_interp_prov
                                     (match val with
-                                     | DVALUE_I sz v => if Pos.eqb sz 8 then ExtLib.Structures.Monad.ret (BYTE_I (repr (unsigned v) : int8)) else merr "Unsupported arguments to memset."%string
+                                     | DVALUE_I sz v => if Pos.eqb sz 8 then ExtLib.Structures.Monad.ret (BYTE_I (VellvmIntegers.repr (VellvmIntegers.unsigned v) : VellvmIntegers.int8)) else merr "Unsupported arguments to memset."%string
                                      | DVALUE_Poison => ExtLib.Structures.Monad.ret poison_memory_byte
                                      | _ => merr "Unsupported arguments to memset."%string
                                      end) σ1')
                                  (memM_interp_prov
                                     (match val with
-                                     | DVALUE_I sz v => if Pos.eqb sz 8 then ExtLib.Structures.Monad.ret (BYTE_I (repr (unsigned v) : int8)) else merr "Unsupported arguments to memset."%string
+                                     | DVALUE_I sz v => if Pos.eqb sz 8 then ExtLib.Structures.Monad.ret (BYTE_I (VellvmIntegers.repr (VellvmIntegers.unsigned v) : VellvmIntegers.int8)) else merr "Unsupported arguments to memset."%string
                                      | DVALUE_Poison => ExtLib.Structures.Monad.ret poison_memory_byte
                                      | _ => merr "Unsupported arguments to memset."%string
                                      end) σ2')).
                 { destruct val; try apply memM_interp_prov_raise_both.
-                  - destruct (Pos.eqb sz 8);
+                  - match goal with
+                    | |- context [Pos.eqb ?s 8] => destruct (Pos.eqb s 8)
+                    end;
                       [apply refine_prov_ret; exact (conj (incl_refl U1) (conj Heq1 Logic.eq_refl))
                       | apply memM_interp_prov_raise_both].
                   - apply refine_prov_ret; exact (conj (incl_refl U1) (conj Heq1 Logic.eq_refl)). }
@@ -2987,7 +3094,7 @@ Section MemoryAndSerialization.
                     try apply memM_interp_prov_raise_both;
                     try apply memM_interp_prov_raiseUB_l;
                     apply refine_prov_ret; exact (conj (incl_refl U2) (conj Heq2 Logic.eq_refl)). }
-                eapply refine_prov_bind.
+                eapply refine_prov_bind with (RR := eq_sync_post U1).
                 ** eapply refine_prov_weaken; [exact Hsz |].
                    intros U3 [sa ra] [sb rb] (Hinc3 & Heq3 & Hr); split; [eapply incl_tran; eassumption | exact (conj Heq3 Hr)].
                 ** intros U3 [sa sz1] [sb sz2] (Hinc3 & Heq3 & <-).
@@ -3002,7 +3109,7 @@ Section MemoryAndSerialization.
           -- destruct (Rocqlib.proj_sumbool (string_dec name "malloc"%string)).
              ++ eapply refine_prov_obs_eq;
                   [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-                eapply refine_prov_bind.
+                eapply refine_prov_bind with (RR := eq_sync_post U1).
                 ** unfold handle_malloc.
                    destruct args1' as [| a0 rest]; [apply memM_interp_prov_raise_both |].
                    destruct a0, rest; try apply memM_interp_prov_raise_both;
@@ -3012,7 +3119,7 @@ Section MemoryAndSerialization.
              ++ destruct (Rocqlib.proj_sumbool (string_dec name "free"%string)).
                 ** eapply refine_prov_obs_eq;
                      [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-                   eapply refine_prov_bind.
+                   eapply refine_prov_bind with (RR := eq_sync_post U1).
                    --- unfold handle_free.
                        destruct args1' as [| a0 rest]; [apply memM_interp_prov_raise_both |].
                        destruct a0, rest; try apply memM_interp_prov_raise_both.
@@ -3064,6 +3171,7 @@ Section MemoryAndSerialization.
     intros Hsc; apply is_scalar_dtyp_inv in Hsc as (dtb & -> & Hdtb).
     destruct Hdtb as [[sz ->] | [-> | [-> | ->]]];
       cbn [store_size_dtyp SizeofV Store_size_dtyp Sizeof_dtyp_base ptr_size byte_sizeof_floating_point_variant];
+      unfold ptr_size; cbn [N.of_nat];
       try lia.
     rewrite round_up_to_eight_div by lia.
     apply N.div_le_lower_bound; lia.
@@ -3108,7 +3216,7 @@ Section MemoryAndSerialization.
            acc_memory_bytes_of_dvalue_base, accumulate_padding.
     eexists; split; [reflexivity |].
     rewrite rev_append_rev, app_nil_r, length_rev, rev_loop_acc_length.
-    cbn [List.length]; lia.
+    cbn [Datatypes.length]; rewrite Nat.add_0_r; reflexivity.
   Qed.
 
   Lemma dvalue_to_memory_bytes_base_err
@@ -3163,14 +3271,15 @@ Section MemoryAndSerialization.
     exists dv : @dvalue (@ParamsV IP IPT),
       memory_bytes_to_dvalue dbs (DTYPE_Base (DTYPE_B 8)) = raise_ret dv.
   Proof using.
-    cbn [memory_bytes_to_dvalue memory_bytes_to_dvalue_base].
-    set (td := take (@store_size_dtyp SizeofV (DTYPE_Base (DTYPE_B 8))) dbs).
+    cbn [memory_bytes_to_dvalue memory_bytes_to_dvalue_base liftM Functor.fmap Functor_Monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad Monad_either].
+    match goal with |- context [all_poison_bytes ?x] => set (td := x) end.
     destruct (all_poison_bytes td); [eexists; reflexivity |].
     assert (Hbv : exists bv, memory_bytes_to_byte_value 8 td = raise_ret bv).
     { unfold memory_bytes_to_byte_value.
       destruct (memory_bytes_to_pointer_slice td) as [[p k] |];
         [destruct (pointer_chunk_aligned 8 k); eexists; reflexivity | eexists; reflexivity]. }
-    destruct Hbv as [bv Hbv]; rewrite Hbv; cbn.
+    destruct Hbv as [bv Hbv]; rewrite Hbv;
+      cbn [liftM Functor.fmap Functor_Monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad Monad_either].
     destruct (dvalue_bv_all_poison bv); eexists; reflexivity.
   Qed.
 
@@ -3182,36 +3291,26 @@ Section MemoryAndSerialization.
     cbn [memory_bytes_to_dvalue].
     destruct (poison_split dbs) as [np rest].
     destruct rest as [| b0 rest']; [eexists; reflexivity |].
-    set (stride := @alloc_size_dtyp SizeofV (DTYPE_Base (DTYPE_B 8))).
-    set (ssz := @store_size_dtyp SizeofV (DTYPE_Base (DTYPE_B 8))).
-    set (go := fix loop (cnt : nat) (off : N) (bs : list (@memory_byte (@ParamsV IP IPT)))
-                 : EOU (list (@dvalue (@ParamsV IP IPT))) :=
-                 match cnt with
-                 | O => ExtLib.Structures.Monad.ret []
-                 | S cnt' =>
-                     ExtLib.Structures.Monad.bind
-                       (if N.leb (off + ssz) np
-                        then ExtLib.Structures.Monad.ret (DVALUE_Base DVALUE_Poison)
-                        else memory_bytes_to_dvalue (take ssz bs) (DTYPE_Base (DTYPE_B 8)))
-                       (fun e =>
-                          ExtLib.Structures.Monad.bind (loop cnt' (off + stride)%N (drop stride bs))
-                            (fun es => ExtLib.Structures.Monad.ret (e :: es)))
-                 end).
+    match goal with
+    | |- exists dv, ExtLib.Structures.Monad.bind (?g (N.to_nat n) 0%N dbs) _ = _ =>
+        set (go := g)
+    end.
     assert (Hgo : forall cnt off bs, exists elts, go cnt off bs = raise_ret elts).
     { induction cnt as [| cnt' IH]; intros off bs; cbn [go]; [eexists; reflexivity |].
-      assert (He : exists e,
-                 (if N.leb (off + ssz) np
-                  then ExtLib.Structures.Monad.ret (DVALUE_Base DVALUE_Poison)
-                  else memory_bytes_to_dvalue (take ssz bs) (DTYPE_Base (DTYPE_B 8))) = raise_ret e).
-      { destruct (N.leb (off + ssz) np); [eexists; reflexivity | apply memory_bytes_to_dvalue_b8_total]. }
-      destruct He as [e ->]; cbn.
-      destruct (IH (off + stride)%N (drop stride bs)) as [elts ->]; cbn.
+      match goal with
+      | |- context [if ?c then ?a else ?b] =>
+          assert (He : exists e, (if c then a else b) = raise_ret e);
+          [destruct c; [eexists; reflexivity | apply memory_bytes_to_dvalue_b8_total] |]
+      end.
+      destruct He as [e ->];
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad Monad_either].
+      match goal with
+      | |- context [go cnt' ?off' ?bs'] =>
+          destruct (IH off' bs') as [elts Hel]; rewrite Hel
+      end;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad Monad_either].
       eexists; reflexivity. }
-    destruct (Hgo (N.to_nat n) 0%N (b0 :: rest')) as [elts Helts].
-    change (ExtLib.Structures.Monad.bind (go (N.to_nat n) 0%N (b0 :: rest'))
-              (fun es => ExtLib.Structures.Monad.ret (canonicalize_agg (DVALUE_Array false) es)))
-      with (elts0 <- go (N.to_nat n) 0%N (b0 :: rest');;
-            ExtLib.Structures.Monad.ret (canonicalize_agg (DVALUE_Array false) elts0)).
+    destruct (Hgo (N.to_nat n) 0%N dbs) as [elts Helts].
     rewrite Helts; cbn; eexists; reflexivity.
   Qed.
 
@@ -3268,14 +3367,19 @@ Section MemoryAndSerialization.
     ptr_to_int q = (ptr_to_int p + to_Z ix)%Z /\
     ptr_provenance q = ptr_provenance p.
   Proof using.
+    destruct p as [p_i p_pr].
     unfold ptr_byte_offset.
-    change (@alloc_size_dtyp (@ParamsV IP IPT) (DTYPE_Base (DTYPE_B 8))) with 1%N.
-    cbn [int_to_ptr PIV ptr_to_int ptr_provenance PointerV fst snd].
-    destruct (from_Z (to_Z (fst p) + 1 * to_Z ix)%Z) as [| | | ip] eqn:Efz;
+    replace (@alloc_size_dtyp _ (DTYPE_Base (DTYPE_B 8))) with 1%N by reflexivity.
+    cbn [int_to_ptr PIV P2I ptr_to_int ptr_provenance PointerV PTR ParamsV fst snd ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad].
+    match goal with
+    | |- context [from_Z ?z] =>
+        destruct (from_Z z) as [| | | ip] eqn:Efz
+    end;
       cbn; try discriminate.
     intros Hq; inversion Hq; subst q; cbn.
     apply from_Z_to_Z in Efz.
-    split; [lia | reflexivity].
+    change (Z.of_N 1) with 1%Z in Efz.
+    split; [rewrite Efz, Z.mul_1_l; reflexivity | reflexivity].
   Qed.
 
   Lemma get_consecutive_ptrs_seq_spec
@@ -3381,26 +3485,40 @@ Section MemoryAndSerialization.
     (exists ptrs, get_consecutive_ptrs p size = raise_ret ptrs) \/
     (exists msg, get_consecutive_ptrs p size = raise_oom msg).
   Proof using.
-    unfold get_consecutive_ptrs, intptr_seq.
+    unfold get_consecutive_ptrs, intptr_seq; cbn [IPTR ParamsV].
     rewrite N_to_nat_safe_eq, seq_map_monad_acc_eq.
-    assert (Hix : forall n start,
-              (exists ixs, map_monad (fun k : N => from_Z (Z.of_N k)) (Nseq start n) = raise_ret ixs) \/
-              (exists msg, map_monad (fun k : N => from_Z (Z.of_N k)) (Nseq start n) = raise_oom msg)).
+    lazymatch goal with
+    | |- context [map_monad ?f (Nseq _ _)] =>
+        assert (Hix : forall n start,
+                  (exists ixs, map_monad f (Nseq start n) = raise_ret ixs) \/
+                  (exists msg, map_monad f (Nseq start n) = raise_oom msg))
+    end.
     { induction n as [| n' IH]; intros start; cbn [Nseq map_monad]; [left; exists []; reflexivity |].
-      destruct (from_Z_ret_or_oom (Z.of_N start)) as [[ix ->] | [msg ->]]; cbn; [| right; exists msg; reflexivity].
-      destruct (IH (N.succ start)) as [[ixs ->] | [msg ->]]; cbn;
-        [left; exists (ix :: ixs); reflexivity | right; exists msg; reflexivity]. }
+      unfold Basics.compose; unfold Basics.compose in IH; cbn beta; cbn beta in IH.
+      destruct (@from_Z_ret_or_oom IP IPWB (Z.of_N start)) as [[ix Hfx] | [msg Hfx]]; rewrite Hfx; cbn;
+        [| right; exists msg; reflexivity].
+      destruct (IH (N.succ start)) as [[ixs Hixs] | [msg Hmsg]].
+      - rewrite Hixs; cbn; left; exists (ix :: ixs); reflexivity.
+      - rewrite Hmsg; cbn; right; exists msg; reflexivity. }
     destruct (Hix (N.to_nat size) 0%N) as [[ixs Hixs] | [msg Hmsg]].
-    - change (Basics.compose from_Z Z.of_N) with (fun k : N => from_Z (Z.of_N k)).
-      rewrite Hixs; cbn; rewrite map_monad_acc_EOU_eq.
-      induction ixs as [| ix ixs' IH]; cbn [map_monad]; [left; exists []; reflexivity |].
-      unfold ptr_byte_offset, int_to_ptr, PIV; cbn [ExtLib.Structures.Monad.bind Monad_either].
-      destruct (from_Z_ret_or_oom (ptr_to_int p + Z.of_N (alloc_size_dtyp (DTYPE_Base (DTYPE_B 8))) * to_Z ix)%Z)
-        as [[i ->] | [msg ->]]; cbn; [| right; exists msg; reflexivity].
-      destruct IH as [[ptrs ->] | [msg ->]]; cbn;
-        [left; exists ((i, ptr_provenance p) :: ptrs); reflexivity | right; exists msg; reflexivity].
-    - change (Basics.compose from_Z Z.of_N) with (fun k : N => from_Z (Z.of_N k)).
-      rewrite Hmsg; right; exists msg; reflexivity.
+    - rewrite Hixs; cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad].
+      rewrite map_monad_acc_EOU_eq.
+      clear Hixs; induction ixs as [| ix ixs' IH]; cbn [map_monad]; [left; exists []; reflexivity |].
+      destruct IH as [[ptrs Hptrs] | [msg Hmsg]]; [rewrite Hptrs | rewrite Hmsg];
+        unfold ptr_byte_offset; cbn [P2I IPTR ParamsV];
+        unfold int_to_ptr, PIV;
+        cbn [IPTR ParamsV ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad Monad_either];
+        match goal with
+        | |- context [from_Z ?z] =>
+            pose proof (@from_Z_ret_or_oom IP IPWB z) as Hfz
+        end;
+        destruct Hfz as [[i Hfi] | [msg' Hfi]]; rewrite Hfi;
+        cbn [ExtLib.Structures.Monad.bind EOU_monad Monad_either ExtLib.Structures.Monad.ret];
+        [left; exists ((i, ptr_provenance p) :: ptrs); reflexivity
+        | right; exists msg'; reflexivity
+        | right; exists msg; reflexivity
+        | right; exists msg'; reflexivity].
+    - rewrite Hmsg; right; exists msg; reflexivity.
   Qed.
 
   Lemma lookup_add_all_index_in {A} (vs : list A) (base : Z) (m : IntMap A)
@@ -3457,8 +3575,9 @@ Section MemoryAndSerialization.
     add_all_to_frame ks (mkMemoryStack mem (Singleton f) h) =
     mkMemoryStack mem (Singleton (rev ks ++ f)) h.
   Proof using.
+    unfold add_all_to_frame.
     revert f; induction ks as [| k ks' IH]; intros f;
-      cbn [add_all_to_frame fold_left add_to_frame rev app]; [reflexivity |].
+      cbn [fold_left add_to_frame rev app]; [reflexivity |].
     rewrite IH, <- app_assoc; reflexivity.
   Qed.
 
@@ -3471,8 +3590,9 @@ Section MemoryAndSerialization.
     add_all_to_frame ks (mkMemoryStack mem (Snoc s f) h) =
     mkMemoryStack mem (Snoc s (rev ks ++ f)) h.
   Proof using.
+    unfold add_all_to_frame.
     revert f; induction ks as [| k ks' IH]; intros f;
-      cbn [add_all_to_frame fold_left add_to_frame rev app]; [reflexivity |].
+      cbn [fold_left add_to_frame rev app]; [reflexivity |].
     rewrite IH, <- app_assoc; reflexivity.
   Qed.
 
@@ -3489,8 +3609,9 @@ Section MemoryAndSerialization.
     ~ In z (List.map ptr_to_int f) ->
     IntMaps.lookup z (free_frame_memory f m) = IntMaps.lookup z m.
   Proof using.
+    unfold free_frame_memory.
     revert m; induction f as [| k0 f' IH]; intros m Hnin;
-      cbn [free_frame_memory fold_left List.map] in *; [reflexivity |].
+      cbn [fold_left List.map] in *; [reflexivity |].
     rewrite IH by (intros Hx; apply Hnin; right; exact Hx).
     unfold free_byte; apply lookup_delete_neq.
     intros ->; apply Hnin; left; reflexivity.
@@ -3504,6 +3625,8 @@ Section MemoryAndSerialization.
   Proof using.
     revert m; induction f as [| k0 f' IH]; intros m Hin;
       cbn [free_frame_memory fold_left List.map] in *; [contradiction |].
+    change (fold_left (fun m0 key => free_byte (ptr_to_int key) m0) f' (free_byte (ptr_to_int k0) m))
+      with (free_frame_memory f' (free_byte (ptr_to_int k0) m)).
     destruct (in_dec Z.eq_dec z (List.map ptr_to_int f')) as [Hin' | Hnin'].
     - apply IH, Hin'.
     - destruct Hin as [<- | Hin]; [| contradiction].
@@ -3564,7 +3687,7 @@ Section MemoryAndSerialization.
     is_safe_ptr_dvalue (pr :: P_unprom) (DVALUE_Base (DVALUE_Pointer pt)).
   Proof using.
     intros Hpr pt' Hpt'; inversion Hpt'; subst pt'.
-    unfold safe_prov; rewrite Hpr; intros z [<- | []]; left; reflexivity.
+    unfold safe_prov; cbn in Hpr |- *; rewrite Hpr; intros z [<- | []]; left; reflexivity.
   Qed.
 
   Lemma safe_prov_access_disjoint (P_unprom : list N) (pr : @prov ProvenanceV) (pr_prom : N) :
@@ -3592,12 +3715,13 @@ Section MemoryAndSerialization.
     unfold eval_gep in Hgep.
     destruct dv as [[pt | | | | | | |] | |]; try discriminate Hgep.
     - unfold catch_pois, Functor.fmap, Functor_Monad in Hgep.
-      destruct (handle_gep_ptr flags dt pt vs) as [| | | [| pt']] eqn:Eh;
-        cbn in Hgep; try discriminate Hgep; inversion Hgep; subst res.
-      + apply poison_safe_ptr_dvalue.
+      destruct (handle_gep_ptr flags dt pt vs) as [| | | [pt' |]] eqn:Eh;
+        cbn [catch_pois liftM Functor.fmap Functor_Monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOUP_Monad EOU_monad Monad_either] in Hgep;
+        try discriminate Hgep; inversion Hgep; subst res.
       + intros pt0 Hpt0; inversion Hpt0; subst pt0.
-        pose proof (handle_gep_ptr_preserves_provenance flags dt vs pt pt' Eh) as Hpr.
+        pose proof (@handle_gep_ptr_preserves_provenance (@ParamsV IP IPT) flags dt vs pt pt' Eh) as Hpr.
         rewrite <- Hpr; apply (Hdv pt Logic.eq_refl).
+      + apply poison_safe_ptr_dvalue.
     - inversion Hgep; subst res; apply poison_safe_ptr_dvalue.
   Qed.
 
@@ -3612,7 +3736,7 @@ Section MemoryAndSerialization.
     intros Hv1 Hv2 Hsel; unfold eval_select in Hsel.
     destruct cnd as [cb | | vec conds]; try discriminate Hsel.
     - unfold eval_select_base_dvalue in Hsel.
-      destruct cb; try discriminate Hsel.
+      destruct cb as [| sz i | | | | | |]; try discriminate Hsel.
       + destruct sz; try discriminate Hsel.
         destruct (@Integers.unsigned 1 i =? 1)%Z; inversion Hsel; subst res; assumption.
       + inversion Hsel; subst res; apply poison_safe_ptr_dvalue.
@@ -3625,11 +3749,11 @@ Section MemoryAndSerialization.
                v2 as [[| | | | | | |] | | [|] elts2];
         cbn in Hsel; try discriminate Hsel;
         try (inversion Hsel; subst res; apply poison_safe_ptr_dvalue);
-        unfold Functor.fmap, Functor_Monad in Hsel;
-        destruct (vec_loop _ _) as [| | | out]; cbn in Hsel; try discriminate Hsel;
-        inversion Hsel; subst res; unfold canonicalize_vector in *;
-        destruct (forallb dvalue_is_poison out);
-        [apply poison_safe_ptr_dvalue | intros pt Hpt; discriminate Hpt].
+        (unfold Functor.fmap, Functor_Monad in Hsel;
+         destruct (vec_loop _ _) as [| | | out]; cbn in Hsel; try discriminate Hsel;
+         inversion Hsel; subst res; unfold canonicalize_vector in *;
+         destruct (forallb dvalue_is_poison out);
+         [apply poison_safe_ptr_dvalue | intros pt Hpt; discriminate Hpt]).
   Qed.
 
   (** ** 3D. Stage 1 Ghost-Slot Memory Invariant & Primitive Simulation *)
@@ -3808,7 +3932,7 @@ Section MemoryAndSerialization.
       [| exfalso; apply Hsome; [exact Hk | reflexivity]].
     destruct (Hgs gs k mb Hin Enth) as [Hlk1 Hlk2].
     replace z with (gs_addr gs + Z.of_nat k)%Z by lia.
-    exists mb; repeat split; [exact Enth | exact Hlk1 | exact Hlk2].
+    exists mb; split; [reflexivity | split; [exact Hlk1 | exact Hlk2]].
   Qed.
 
   Lemma stage1_mem_member_iff (U P_unprom : list N) (G : list ghost_slot)
@@ -3859,8 +3983,8 @@ Section MemoryAndSerialization.
     (pt : @ptr ProvenanceV (@PointerV IP)) :
     int_to_ptr addr pr_opt = raise_ret pt ->
     ptr_to_int pt = addr /\ ptr_provenance pt = pr_opt.
-  Proof using.
-    cbn [int_to_ptr PIV ptr_to_int ptr_provenance PointerV fst snd].
+  Proof using IP IPT.
+    cbn [int_to_ptr PIV P2I ptr_to_int ptr_provenance PointerV PTR ParamsV fst snd ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad].
     destruct (from_Z addr) as [| | | ip] eqn:Efz; cbn; try discriminate.
     intros H; inversion H; subst pt; cbn.
     apply from_Z_to_Z in Efz; split; [exact Efz | reflexivity].
@@ -3886,15 +4010,15 @@ Section MemoryAndSerialization.
         destruct t2; try apply memM_interp_prov_raiseUB_l;
         cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret];
         (destruct dv;
-         eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |];
+         (eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |]);
          intros r _ <-; repeat split; reflexivity).
     - destruct dv; try apply memM_interp_prov_raiseUB_l;
         destruct t2; try apply memM_interp_prov_raiseUB_l;
-        (eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |];
+        ((eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |]);
          intros r _ <-; repeat split; reflexivity).
     - destruct dv; try apply memM_interp_prov_raiseUB_l;
         destruct t2; try apply memM_interp_prov_raiseUB_l;
-        (eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |];
+        ((eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |]);
          intros r _ <-; repeat split; reflexivity).
     - apply memM_interp_prov_raise_both.
   Qed.
@@ -3942,7 +4066,8 @@ Section MemoryAndSerialization.
         [| apply memM_interp_prov_raise_both].
       eapply refine_prov_obs_eq;
         [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
-      eapply refine_prov_bind.
+      eapply refine_prov_bind with
+        (RR := fun U' '(σ1', r1) '(σ2', r2) => U' = U /\ σ1' = σ1 /\ σ2' = σ2 /\ r1 = r2).
       + eapply memM_interp_prov_lift_EOU; [apply refine_EOU_refl |].
         intros elts' _ <-; repeat split; reflexivity.
       + intros U1 [σ1' elts1'] [σ2' elts2'] (-> & -> & -> & <-).
@@ -3989,7 +4114,7 @@ Section MemoryAndSerialization.
     (exists g', In g' (update_ghost_slot G pr db' bs') /\ gs_in_range g' z) <->
     (exists g, In g G /\ gs_in_range g z).
   Proof using.
-    induction G as [| gs G' IH]; cbn [update_ghost_slot In]; [firstorder |].
+    induction G as [| gs G' IH]; cbn [update_ghost_slot In]; [split; intros [? [[] _]] |].
     destruct (N.eqb (gs_pr gs) pr); cbn [In].
     - split.
       + intros [g' [[<- | Hin] Hr]].
@@ -4195,8 +4320,8 @@ Section MemoryAndSerialization.
     (forall z, In z (List.map ptr_to_int ptrs) -> forall gs, In gs G -> ~ gs_in_range gs z) ->
     top_frame_unprom_from fs0 G (add_all_to_frame ptrs ms).
   Proof using.
-    destruct ms as [mem fs h]; cbn [Memory_stack_frame_stack].
-    intros (f & -> & Hout) Hdisj.
+    destruct ms as [mem fs h].
+    intros (f & Hfs & Hout) Hdisj; cbn [Memory_stack_frame_stack] in Hfs; subst fs.
     rewrite add_all_to_frame_Snoc; cbn [Memory_stack_frame_stack].
     exists (rev ptrs ++ f); split; [reflexivity |].
     intros z Hz gs Hgs; apply in_map_rev_app_iff in Hz as [Hz | Hz].
@@ -4212,8 +4337,8 @@ Section MemoryAndSerialization.
     (forall z, In z (List.map ptr_to_int ptrs) -> forall gs0, In gs0 (gs :: G) -> ~ gs_in_range gs0 z) ->
     top_frame_prom_from fs0 gs G (add_all_to_frame ptrs ms).
   Proof using.
-    destruct ms as [mem fs h]; cbn [Memory_stack_frame_stack].
-    intros (f & -> & Hin & Hout) Hdisj.
+    destruct ms as [mem fs h].
+    intros (f & Hfs & Hin & Hout) Hdisj; cbn [Memory_stack_frame_stack] in Hfs; subst fs.
     rewrite add_all_to_frame_Snoc; cbn [Memory_stack_frame_stack].
     exists (rev ptrs ++ f); split; [reflexivity | split].
     - intros z Hr; apply in_map_rev_app_iff; right; apply Hin, Hr.
@@ -4237,16 +4362,19 @@ Section MemoryAndSerialization.
     cbn [handle_memoryM mempush MemoryModelPrimitivesV].
     unfold Mempush, app_frame_stack, get, put, push_frame_stack, initial_frame;
       cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
-    apply refine_prov_ret; repeat split; cbn.
-    - exact Hpu.
-    - exact Hnd.
-    - exact Hall.
-    - exact Hdisj.
-    - apply FGW_Snoc_Unprom; [exact Hfgw | intros z []].
-    - congruence.
-    - exact Hh.
-    - exact Hout.
-    - exact Hgs.
+    apply refine_prov_ret.
+    split; [reflexivity |].
+    split; [reflexivity |].
+    split; [reflexivity |].
+    split.
+    - split; [exact Hpu |].
+      split; [exact Hnd |].
+      split; [exact Hall |].
+      split; [exact Hdisj |].
+      split; [cbn; apply FGW_Snoc_Unprom; [exact Hfgw | intros z []] |].
+      split; [cbn; congruence |].
+      split; [cbn; exact Hh |].
+      split; [cbn; exact Hout | cbn; exact Hgs].
     - exists []; split; [reflexivity | intros z []].
   Qed.
 
@@ -4277,7 +4405,7 @@ Section MemoryAndSerialization.
     destruct (dtyp_eqb dt DTYPE_Void).
     { eapply refine_prov_obs_eq;
         [symmetry; unfold mub; cbn [MemoryModelStateV]; reflexivity | reflexivity |].
-      unfold Mub; cbn [memM_interp_prov].
+      cbn [memM_interp_prov].
       eapply refine_prov_obs_eq;
         [symmetry; unfold raiseUB, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
         | reflexivity |].
@@ -4296,17 +4424,28 @@ Section MemoryAndSerialization.
     unfold Allocate_bytes_with_pr, get_free_block, next_key, Mnext_key.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !memM_interp_prov_bind;
-       cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov];
-       rewrite !Eqit.bind_bind; reflexivity
+       cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_memory_stack];
+       rewrite !Eqit.bind_bind, !Eqit.bind_ret_l; reflexivity
       | symmetry; rewrite !memM_interp_prov_bind;
-        cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov];
-        rewrite !Eqit.bind_bind; reflexivity |].
+        cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_memory_stack];
+        rewrite !Eqit.bind_bind, !Eqit.bind_ret_l; reflexivity |].
     rewrite (stage1_mem_next_key_eq U P_unprom G σ1 σ2 al Hinv).
     set (addr := next_key_with_alignment (Memory_stack_memory (state_memory_stack σ2)) al).
     set (sz := ListUtil.N.length bs).
-    destruct (int_to_ptr addr (allocation_id_to_prov (provenance_to_allocation_id pr)))
-      as [s | s | s | pt] eqn:Ept;
+    match goal with
+    | |- context [allocation_id_to_prov ?aid] =>
+        let T := type of (allocation_id_to_prov aid) in
+        change (allocation_id_to_prov aid) with (Some [pr] : T)
+    end.
+    match goal with
+    | |- context [@int_to_ptr ?P ?A ?PI ?a ?p] =>
+        destruct (@int_to_ptr P A PI a p) as [s | s | s | pt] eqn:Ept
+    end;
       cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
+    - eapply refine_prov_obs_eq;
+        [symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+        | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
+      pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
     - eapply refine_prov_obs_eq;
         [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
         | reflexivity |].
@@ -4315,12 +4454,15 @@ Section MemoryAndSerialization.
         [symmetry; unfold raiseUB, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
         | reflexivity |].
       apply refine_prov_ub_vis_l; reflexivity.
-    - eapply refine_prov_obs_eq;
-        [symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
-        | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
-      pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
-    - destruct (get_consecutive_ptrs pt sz) as [s | s | s | ptrs] eqn:Eptrs;
+    - match goal with
+      | |- context [get_consecutive_ptrs ?p ?sz] =>
+          destruct (get_consecutive_ptrs p sz) as [s | s | s | ptrs] eqn:Eptrs
+      end;
         cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
+      + eapply refine_prov_obs_eq;
+          [symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+          | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
+        pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
       + eapply refine_prov_obs_eq;
           [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
           | reflexivity |].
@@ -4329,10 +4471,6 @@ Section MemoryAndSerialization.
           [symmetry; unfold raiseUB, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
           | reflexivity |].
         apply refine_prov_ub_vis_l; reflexivity.
-      + eapply refine_prov_obs_eq;
-          [symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
-          | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
-        pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
       + unfold add_block_to_stack, add_block, add_ptrs_to_frame, get_mem, upd_mem, app_mem, app_mem_stack, get, put.
         eapply refine_prov_obs_eq;
           [symmetry; rewrite !Eqit.bind_ret_l;
@@ -4358,7 +4496,10 @@ Section MemoryAndSerialization.
         split; [reflexivity |].
         split; [reflexivity |].
         split; [apply fresh_ptr_safe_dvalue, Hpt_pr |].
-        set (mbs := memory_bytes_to_bytes (provenance_to_allocation_id pr) bs).
+        lazymatch goal with
+        | |- context [@memory_bytes_to_bytes ?Pa ?aid bs] =>
+            set (mbs := @memory_bytes_to_bytes Pa aid bs)
+        end.
         assert (Hmbs_len : List.length mbs = List.length bs).
         { unfold mbs; rewrite memory_bytes_to_bytes_eq, length_map; reflexivity. }
         split.
@@ -4373,12 +4514,8 @@ Section MemoryAndSerialization.
           split; [exact Hdisj |].
           split.
           { cbn [state_memory_stack].
-            set (ms2_mid := {| Memory_stack_memory := IntMaps.add_all_index_acc mbs (ptr_to_int pt)
-                                                        (Memory_stack_memory (state_memory_stack σ2));
-                               Memory_stack_frame_stack := Memory_stack_frame_stack (state_memory_stack σ2);
-                               Memory_stack_heap := Memory_stack_heap (state_memory_stack σ2) |}).
-            apply (framestack_ghost_wf_add_ptrs G ptrs ms2_mid);
-              [cbn; exact Hfgw | exact Hptrs_disj]. }
+            apply framestack_ghost_wf_add_ptrs;
+              [cbn [Memory_stack_frame_stack]; exact Hfgw | exact Hptrs_disj]. }
           split.
           { cbn [state_memory_stack]; apply add_all_to_frame_fs_eq; cbn; exact Hfs. }
           split.
@@ -4394,14 +4531,21 @@ Section MemoryAndSerialization.
             destruct fss; apply IH. }
           split.
           { intros z Hz_out; cbn [state_memory_stack]; rewrite !Hmem_frame; cbn [Memory_stack_memory].
-            destruct (Z_le_gt_dec (ptr_to_int pt) z) as [Hlo | Hgt].
-            - destruct (Z_lt_ge_dec z (ptr_to_int pt + Z.of_nat (List.length mbs))) as [Hhi | Hge].
-              + set (k := Z.to_nat (z - ptr_to_int pt)).
+            repeat match goal with
+                   | |- context [@ptr_to_int ?Pr ?Pt ?Pi ?q] =>
+                       progress change (@ptr_to_int Pr Pt Pi q) with (@to_Z IP (fst q))
+                   end.
+            assert (Hpt_z : @to_Z IP (fst pt) = addr) by exact Hpt_int.
+            rewrite ?Hpt_z.
+            destruct (Z_le_gt_dec addr z) as [Hlo | Hgt].
+            - destruct (Z_lt_ge_dec z (addr + Z.of_nat (List.length mbs))) as [Hhi | Hge].
+              + set (k := Z.to_nat (z - addr)).
                 assert (Hk : (k < List.length mbs)%nat) by lia.
                 destruct (nth_error_Some mbs k) as [_ Hsome].
                 destruct (nth_error mbs k) as [v |] eqn:Enth;
                   [| exfalso; apply Hsome; [exact Hk | reflexivity]].
-                erewrite !lookup_add_all_index_acc_in; try exact Enth; try lia; reflexivity.
+                erewrite !lookup_add_all_index_acc_in; try exact Enth;
+                  [reflexivity | unfold k; lia | unfold k; lia].
               + rewrite !lookup_add_all_index_acc_out by lia; apply Hout, Hz_out.
             - rewrite !lookup_add_all_index_acc_out by lia; apply Hout, Hz_out. }
           { intros gs k mb Hin_gs Enth; cbn [state_memory_stack]; rewrite !Hmem_frame; cbn [Memory_stack_memory].
@@ -4413,10 +4557,16 @@ Section MemoryAndSerialization.
             { apply Hsome; rewrite Enth; discriminate. }
             assert (Hr_z : gs_in_range gs (gs_addr gs + Z.of_nat k)%Z).
             { unfold gs_in_range; lia. }
-            assert (Hlt_addr : (gs_addr gs + Z.of_nat k < ptr_to_int pt)%Z).
-            { destruct (Z_lt_ge_dec (gs_addr gs + Z.of_nat k) (ptr_to_int pt)) as [Hlt | Hge]; [exact Hlt |].
-              exfalso; eapply (stage1_gs_fresh_above_next_key U P_unprom G σ1 σ2 al _ Hinv);
+            assert (Hlt_addr : (gs_addr gs + Z.of_nat k < addr)%Z).
+            { destruct (Z_lt_ge_dec (gs_addr gs + Z.of_nat k) addr) as [Hlt | Hge]; [exact Hlt |].
+              exfalso; eapply (stage1_gs_fresh_above_next_key U P_unprom G σ1 σ2 al (gs_addr gs + Z.of_nat k)%Z Hinv);
                 [rewrite Hnk_eq; fold addr; lia | exact Hin_gs | exact Hr_z]. }
+            repeat match goal with
+                   | |- context [@ptr_to_int ?Pr ?Pt ?Pi ?q] =>
+                       progress change (@ptr_to_int Pr Pt Pi q) with (@to_Z IP (fst q))
+                   end.
+            assert (Hpt_z : @to_Z IP (fst pt) = addr) by exact Hpt_int.
+            rewrite ?Hpt_z.
             rewrite !lookup_add_all_index_acc_out by lia.
             apply (Hgs gs k mb Hin_gs Enth). }
         * split; [exact Hptrs_disj |].
@@ -4465,17 +4615,28 @@ Section MemoryAndSerialization.
     unfold Allocate_bytes_with_pr, get_free_block, next_key, Mnext_key.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !memM_interp_prov_bind;
-       cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov];
-       rewrite !Eqit.bind_bind; reflexivity
+       cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_memory_stack];
+       rewrite !Eqit.bind_bind, !Eqit.bind_ret_l; reflexivity
       | symmetry; rewrite !memM_interp_prov_bind;
-        cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov];
-        rewrite !Eqit.bind_bind; reflexivity |].
+        cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_memory_stack];
+        rewrite !Eqit.bind_bind, !Eqit.bind_ret_l; reflexivity |].
     rewrite (stage1_mem_next_key_eq U P_unprom G σ1 σ2 al Hinv).
     set (addr := next_key_with_alignment (Memory_stack_memory (state_memory_stack σ2)) al).
     set (sz := ListUtil.N.length bs).
-    destruct (int_to_ptr addr (allocation_id_to_prov (provenance_to_allocation_id pr)))
-      as [s | s | s | pt] eqn:Ept;
+    match goal with
+    | |- context [allocation_id_to_prov ?aid] =>
+        let T := type of (allocation_id_to_prov aid) in
+        change (allocation_id_to_prov aid) with (Some [pr] : T)
+    end.
+    match goal with
+    | |- context [@int_to_ptr ?P ?A ?PI ?a ?p] =>
+        destruct (@int_to_ptr P A PI a p) as [s | s | s | pt] eqn:Ept
+    end;
       cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
+    - eapply refine_prov_obs_eq;
+        [symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+        | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
+      pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
     - eapply refine_prov_obs_eq;
         [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
         | reflexivity |].
@@ -4484,12 +4645,15 @@ Section MemoryAndSerialization.
         [symmetry; unfold raiseUB, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
         | reflexivity |].
       apply refine_prov_ub_vis_l; reflexivity.
-    - eapply refine_prov_obs_eq;
-        [symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
-        | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
-      pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
-    - destruct (get_consecutive_ptrs pt sz) as [s | s | s | ptrs] eqn:Eptrs;
+    - match goal with
+      | |- context [get_consecutive_ptrs ?p ?sz] =>
+          destruct (get_consecutive_ptrs p sz) as [s | s | s | ptrs] eqn:Eptrs
+      end;
         cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
+      + eapply refine_prov_obs_eq;
+          [symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+          | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
+        pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
       + eapply refine_prov_obs_eq;
           [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
           | reflexivity |].
@@ -4498,10 +4662,6 @@ Section MemoryAndSerialization.
           [symmetry; unfold raiseUB, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
           | reflexivity |].
         apply refine_prov_ub_vis_l; reflexivity.
-      + eapply refine_prov_obs_eq;
-          [symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
-          | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
-        pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
       + unfold add_block_to_stack, add_block, add_ptrs_to_frame, get_mem, upd_mem, app_mem, app_mem_stack, get, put.
         eapply refine_prov_obs_eq;
           [symmetry; rewrite !Eqit.bind_ret_l;
@@ -4520,7 +4680,7 @@ Section MemoryAndSerialization.
         { rewrite Hbs_eq, repeat_length; reflexivity. }
         assert (Hsz_eq : sz = @store_size_dtyp SizeofV dt).
         { unfold sz; rewrite N_length_eq, Hbs_len, N2Nat.id; reflexivity. }
-        destruct (is_scalar_dtyp_inv dt Hsc) as [dtb Hdt_eq].
+        destruct (is_scalar_dtyp_inv dt Hsc) as (dtb & Hdt_eq & _).
         set (gs0 := {| gs_pt := pt;
                        gs_ptrs := ptrs;
                        gs_pr := pr;
@@ -4528,7 +4688,7 @@ Section MemoryAndSerialization.
                        gs_db := DVALUE_Poison;
                        gs_bytes := bs |}).
         assert (Hwf0 : gs_wf gs0).
-        { repeat split; cbn [gs_pt gs_ptrs gs_pr gs_dt gs_db gs_bytes].
+        { unfold gs0; repeat split; cbn [gs_pt gs_ptrs gs_pr gs_dt gs_db gs_bytes].
           - exact Hsc.
           - exact Hpt_pr.
           - rewrite <- Hsz_eq; exact Eptrs.
@@ -4539,18 +4699,21 @@ Section MemoryAndSerialization.
         destruct Htop as (f & Hfs_top & Hout_f).
         assert (Hfgw_fs0 : framestack_ghost_wf G fs0).
         { eapply (framestack_ghost_wf_unprom_inv G fs0 f);
-            [eapply Forall_impl; [intros g [Hw _]; exact Hw | exact Hall]
+            [eapply Forall_impl; [| exact Hall]; intros g [Hw _]; exact Hw
             | rewrite <- Hfs_top; exact Hfgw
             | exact Hout_f]. }
         assert (Hptrs_in : forall z, In z (List.map ptr_to_int ptrs) <-> gs_in_range gs0 z).
         { intros z; rewrite (get_consecutive_ptrs_in_addrs pt sz ptrs z Eptrs).
-          unfold gs_in_range, gs_addr, gs_len; cbn [gs_pt gs_dt]; rewrite Hsz_eq; reflexivity. }
+          unfold gs_in_range, gs_addr, gs_len, gs0; cbn [gs_pt gs_dt]; rewrite Hsz_eq; reflexivity. }
         assert (Hgs0_disj : forall gs', In gs' G -> gs_disjoint gs0 gs').
         { intros gs' Hgs' z Hr0.
-          unfold gs_in_range, gs_addr in Hr0; cbn [gs_pt] in Hr0.
+          unfold gs_in_range, gs_addr, gs0 in Hr0; cbn [gs_pt] in Hr0; rewrite Hpt_int in Hr0.
           eapply (stage1_gs_fresh_above_next_key U P_unprom G σ1 σ2 al z Hinv); [| exact Hgs'].
           rewrite Hnk_eq; fold addr; lia. }
-        set (mbs := memory_bytes_to_bytes (provenance_to_allocation_id pr) bs).
+        lazymatch goal with
+        | |- context [@memory_bytes_to_bytes ?Pa ?aid bs] =>
+            set (mbs := @memory_bytes_to_bytes Pa aid bs)
+        end.
         assert (Hmbs_len : List.length mbs = List.length bs).
         { unfold mbs; rewrite memory_bytes_to_bytes_eq, length_map; reflexivity. }
         assert (Hmem_frame : forall ks (ms : @Memory_stack (@ParamsV IP IPT)),
@@ -4597,16 +4760,26 @@ Section MemoryAndSerialization.
           split.
           { intros z Hz_out; cbn [state_memory_stack]; rewrite !Hmem_frame; cbn [Memory_stack_memory].
             assert (Hout0 : ~ gs_in_range gs0 z) by (apply Hz_out; left; reflexivity).
-            unfold gs_in_range, gs_addr, gs_len in Hout0; cbn [gs_pt gs_dt] in Hout0.
-            rewrite !lookup_add_all_index_acc_out by lia.
-            apply Hout; intros gs' Hgs'; apply Hz_out; right; exact Hgs'. }
+            unfold gs_in_range, gs_addr, gs_len, gs0 in Hout0; cbn [gs_pt gs_dt] in Hout0.
+            repeat match goal with
+                   | |- context [@ptr_to_int ?Pr ?Pt ?Pi ?q] =>
+                       progress change (@ptr_to_int Pr Pt Pi q) with (@to_Z IP (fst q))
+                   end.
+            repeat match type of Hout0 with
+                   | context [@ptr_to_int ?Pr ?Pt ?Pi ?q] =>
+                       progress change (@ptr_to_int Pr Pt Pi q) with (@to_Z IP (fst q)) in Hout0
+                   end.
+            rewrite !lookup_add_all_index_acc_out;
+              [apply Hout; intros gs' Hgs'; apply Hz_out; right; exact Hgs'
+              | rewrite Hmbs_len, Hbs_len; lia
+              | rewrite Hmbs_len, Hbs_len; lia]. }
           { intros gs' k mb [<- | Hin_gs'] Enth;
               cbn [state_memory_stack]; rewrite !Hmem_frame; cbn [Memory_stack_memory].
-            - cbn [gs_bytes] in Enth.
+            - unfold gs0 in Enth; cbn [gs_bytes] in Enth.
               pose proof (nth_error_In bs k Enth) as Hin_bs.
               rewrite Hbs_eq in Hin_bs; apply repeat_spec in Hin_bs; subst mb.
               assert (Enth_mbs : nth_error mbs k = Some (poison_memory_byte, Some pr)).
-              { unfold mbs; rewrite memory_bytes_to_bytes_eq, nth_error_map, Enth; reflexivity. }
+              { unfold mbs; cbn [PROV ParamsV ProvenanceV]; rewrite memory_bytes_to_bytes_eq, nth_error_map, Enth; reflexivity. }
               split; eapply lookup_add_all_index_acc_in; try exact Enth_mbs; reflexivity.
             - pose proof Hall as Hall'; rewrite Forall_forall in Hall'.
               destruct (Hall' gs' Hin_gs') as [(_ & _ & _ & _ & Hlen_gs' & _) _].
@@ -4615,9 +4788,20 @@ Section MemoryAndSerialization.
               assert (Hr_gs' : gs_in_range gs' (gs_addr gs' + Z.of_nat k)%Z) by (unfold gs_in_range; lia).
               assert (Hn0 : ~ gs_in_range gs0 (gs_addr gs' + Z.of_nat k)%Z).
               { intros Hr0; exact (Hgs0_disj gs' Hin_gs' _ Hr0 Hr_gs'). }
-              unfold gs_in_range, gs_addr, gs_len in Hn0; cbn [gs_pt gs_dt] in Hn0.
-              rewrite !lookup_add_all_index_acc_out by lia.
-              apply (Hgs gs' k mb Hin_gs' Enth). }
+              unfold gs_in_range, gs_addr, gs_len, gs0 in Hn0; cbn [gs_pt gs_dt] in Hn0.
+              unfold gs_addr.
+              repeat match goal with
+                     | |- context [@ptr_to_int ?Pr ?Pt ?Pi ?q] =>
+                         progress change (@ptr_to_int Pr Pt Pi q) with (@to_Z IP (fst q))
+                     end.
+              repeat match type of Hn0 with
+                     | context [@ptr_to_int ?Pr ?Pt ?Pi ?q] =>
+                         progress change (@ptr_to_int Pr Pt Pi q) with (@to_Z IP (fst q)) in Hn0
+                     end.
+              rewrite !lookup_add_all_index_acc_out;
+                [apply (Hgs gs' k mb Hin_gs' Enth)
+                | rewrite Hmbs_len, Hbs_len; lia
+                | rewrite Hmbs_len, Hbs_len; lia]. }
         * cbn [state_memory_stack]; rewrite Hfs_top, add_all_to_frame_Snoc; cbn [Memory_stack_frame_stack].
           exists (rev ptrs ++ f); split; [reflexivity | split].
           -- intros z Hr; apply in_map_rev_app_iff; left; apply Hptrs_in, Hr.
@@ -4637,7 +4821,7 @@ Section MemoryAndSerialization.
     cbn [get ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     change (IM.find (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ)))
       with (IntMaps.lookup (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ))).
-    rewrite Hlk, Eqit.bind_ret_l, Hpr.
+    cbn [PROV PTR ParamsV]; rewrite Hlk; cbn [memM_interp_prov]; rewrite Eqit.bind_ret_l, Hpr.
     cbn [access_allowed ProvenanceV existsb]; rewrite N.eqb_refl; cbn; reflexivity.
   Qed.
 
@@ -4690,7 +4874,7 @@ Section MemoryAndSerialization.
     cbn [handle_memoryM]; unfold read_dvalue, read_bytes.
     eapply refine_prov_obs_eq.
     - symmetry.
-      rewrite memM_interp_prov_bind, memM_interp_prov_bind, Eptrs.
+      rewrite memM_interp_prov_bind, memM_interp_prov_bind; cbn [SIZE ParamsV]; rewrite Eptrs.
       cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov read_byte MemoryModelPrimitivesV].
       rewrite Eqit.bind_ret_l, memM_interp_prov_map_monad_acc.
       rewrite (map_monad_Read_gs_bytes_eq (gs_ptrs gs) (gs_bytes gs) (gs_addr gs) 0%nat (gs_pr gs) σ1).
@@ -4721,7 +4905,7 @@ Section MemoryAndSerialization.
     cbn [get ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
     change (IM.find (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ)))
       with (IntMaps.lookup (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ))).
-    rewrite Hlk, Eqit.bind_ret_l, Hpr.
+    cbn [PROV PTR ParamsV]; rewrite Hlk; cbn [memM_interp_prov]; rewrite Eqit.bind_ret_l, Hpr.
     cbn [access_allowed ProvenanceV existsb]; rewrite N.eqb_refl; cbn [orb].
     unfold set_byte_raw, get_mem, upd_mem, app_mem, set_byte_raw_mem, get, put;
       cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
@@ -4760,7 +4944,7 @@ Section MemoryAndSerialization.
       induction ptrs as [| q ptrs' IH];
       intros [| mb bs'] j σ Hlen Hptrs Hmem;
       cbn [List.length List.combine loop_monad] in *; try lia.
-    - exists σ; repeat split; try reflexivity.
+    - exists σ; repeat (match goal with |- _ /\ _ => split end); try reflexivity.
       intros [| i] mb Hnth; discriminate Hnth.
     - destruct (Hptrs 0%nat q Logic.eq_refl) as [Hq_int Hq_pr].
       destruct (Hmem 0%nat ltac:(lia)) as [mb0 Hlk0].
@@ -4826,7 +5010,7 @@ Section MemoryAndSerialization.
     pose proof Hinv as (Hpu & Hnd & Hall & Hdisj & Hfgw & Hfs & Hh & Hout & Hgs).
     inversion Hall as [| ? ? (Hwf & HinU & HninP) Hall_tl]; subst.
     destruct Hwf as (Hsc & Hpr & Eptrs & _ & Hlen_old & Hpos_addr).
-    destruct (is_scalar_dtyp_inv (gs_dt gs) Hsc) as [dtb Hdt_eq].
+    destruct (is_scalar_dtyp_inv (gs_dt gs) Hsc) as (dtb & Hdt_eq & _).
     destruct (dvalue_to_memory_bytes_base_ok dtb db') as (bs' & Hser & Hlen_bs').
     rewrite <- Hdt_eq in Hser, Hlen_bs'.
     destruct (get_consecutive_ptrs_spec (gs_pt gs) (@store_size_dtyp SizeofV (gs_dt gs)) (gs_ptrs gs) Eptrs)
@@ -4845,13 +5029,15 @@ Section MemoryAndSerialization.
         [| exfalso; apply Hsome; [exact Hi_old | reflexivity]].
       destruct (Hgs gs i mb0 (or_introl Logic.eq_refl) Enth0) as [Hlk1 _].
       exists mb0; exact Hlk1. }
+    assert (Hptrs_gs : forall i q,
+               nth_error (gs_ptrs gs) i = Some q ->
+               ptr_to_int q = (gs_addr gs + Z.of_nat (0 + i))%Z /\
+               ptr_provenance q = Some [gs_pr gs]).
+    { intros i q Hnth; destruct (Hinv_ptrs i q Hnth) as (_ & Hqi & Hqp).
+      unfold gs_addr; cbn [P2I ptr_to_int ptr_provenance PointerV PTR ParamsV PROV] in Hqi, Hqp, Hpr |- *.
+      split; [rewrite Hqi; lia | rewrite Hqp, Hpr; reflexivity]. }
     destruct (loop_Write_gs_bytes_spec (gs_ptrs gs) bs' (gs_addr gs) 0%nat (gs_pr gs) σ1
-                ltac:(lia)
-                (fun i q Hnth =>
-                   match Hinv_ptrs i q Hnth with
-                   | conj _ (conj Hqi Hqp) => conj ltac:(unfold gs_addr; lia) ltac:(congruence)
-                   end)
-                Hmem_pre)
+                ltac:(lia) Hptrs_gs Hmem_pre)
       as (σ1' & Hloop_eq & Hfs' & Hh' & Hin' & Hout').
     cbn [handle_memoryM]; unfold write_dvalue, write_bytes.
     eapply refine_prov_obs_eq.
@@ -4875,9 +5061,9 @@ Section MemoryAndSerialization.
         * exact Hall_tl.
       + split; [exact (conj Hdisj_hd Hdisj_tl) |].
         split.
-        * inversion Hfgw as [| G0 fs1 f1 Hsub Hout_f HeqG HeqS | gs1 G0 fs1 f1 Hsub Hin_f Hout_f HeqG HeqS]; subst.
-          -- apply FGW_Snoc_Unprom; [exact Hsub | exact Hout_f].
-          -- apply FGW_Snoc_Prom; [exact Hsub | exact Hin_f | exact Hout_f].
+        * pose proof (framestack_ghost_wf_update (gs :: G) (gs_pr gs) db' bs' _ Hfgw) as Hfgw'.
+          cbn [update_ghost_slot] in Hfgw'; rewrite N.eqb_refl in Hfgw'.
+          cbn [update_ghost_slot]; try rewrite N.eqb_refl; exact Hfgw'.
         * split; [congruence | split; [congruence | split]].
           -- intros z Hz_out.
              assert (Hn0 : ~ gs_in_range gs z).
@@ -4920,7 +5106,7 @@ Section MemoryAndSerialization.
       (memM_interp_prov (Merr msg2) σ2).
   Proof using.
     intros Hsc Hnot_base.
-    destruct (is_scalar_dtyp_inv (gs_dt gs) Hsc) as [dtb Hdt_eq].
+    destruct (is_scalar_dtyp_inv (gs_dt gs) Hsc) as (dtb & Hdt_eq & _).
     destruct (dvalue_to_memory_bytes_base_err dtb v Hnot_base) as [msg1 Hser].
     cbn [handle_memoryM]; unfold write_dvalue.
     rewrite Hdt_eq, Hser; cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind].
@@ -4954,6 +5140,7 @@ Section MemoryAndSerialization.
       destruct (Hall gs Hin) as (_ & _ & HninP).
       rewrite Hlk1.
       eapply refine_prov_obs_eq; [symmetry; apply Eqit.bind_ret_l | reflexivity |].
+      cbn [PROV PTR ParamsV];
       rewrite (safe_prov_access_disjoint P_unprom (ptr_provenance q) (gs_pr gs) Hsafe HninP).
       apply memM_interp_prov_raiseUB_l.
     - pose proof Hinv as (_ & _ & _ & _ & _ & _ & _ & Hout & _).
@@ -4962,8 +5149,9 @@ Section MemoryAndSerialization.
         as [[b aid] |].
       + eapply refine_prov_obs_eq;
           [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-        destruct (access_allowed (ptr_provenance q) aid).
-        * apply refine_prov_ret; repeat split; reflexivity.
+        cbv iota.
+        match goal with |- context [if ?c then _ else _] => destruct c end.
+        * cbn [memM_interp_prov]; apply refine_prov_ret; repeat split; reflexivity.
         * apply memM_interp_prov_raiseUB_l.
       + cbn [memM_interp_prov]; eapply refine_prov_obs_eq;
           [symmetry; unfold raiseUB, trigger_cast, ITree.trigger; rewrite Eqit.bind_bind, Eqit.bind_vis; reflexivity
@@ -5006,16 +5194,27 @@ Section MemoryAndSerialization.
       (memM_interp_prov (handle_memoryM (Load dt a)) σ2).
   Proof using.
     intros Hinv Ha; cbn [handle_memoryM].
-    destruct a as [[pt | | | | | | |] | |];
-      try apply memM_interp_prov_raiseUB_l.
+    destruct a as [[pt | | | | | | |] | |]; cbv beta iota;
+      lazymatch goal with
+      | |- refine_prov _ _ (memM_interp_prov (Mub _) _) _ => apply memM_interp_prov_raiseUB_l
+      | |- refine_prov _ _ (memM_interp_prov (mub _) _) _ => apply memM_interp_prov_raiseUB_l
+      | _ => idtac
+      end.
     pose proof (Ha pt Logic.eq_refl) as Hsafe.
     unfold read_dvalue, read_bytes.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !memM_interp_prov_bind; reflexivity
       | symmetry; rewrite !memM_interp_prov_bind; reflexivity |].
-    destruct (get_consecutive_ptrs pt (@store_size_dtyp SizeofV dt))
-      as [s | s | s | ptrs] eqn:Eptrs;
+    cbn [SIZE ParamsV].
+    match goal with
+    | |- context [get_consecutive_ptrs ?p ?s] =>
+        destruct (get_consecutive_ptrs p s) as [s0 | s0 | s0 | ptrs] eqn:Eptrs
+    end;
       cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov].
+    - eapply refine_prov_obs_eq;
+        [symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+        | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
+      pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
     - eapply refine_prov_obs_eq;
         [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
         | reflexivity |].
@@ -5025,10 +5224,6 @@ Section MemoryAndSerialization.
         | reflexivity |].
       apply refine_prov_ub_vis_l; reflexivity.
     - eapply refine_prov_obs_eq;
-        [symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
-        | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
-      pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
-    - eapply refine_prov_obs_eq;
         [symmetry; rewrite Eqit.bind_ret_l; cbn [read_byte MemoryModelPrimitivesV];
          rewrite memM_interp_prov_map_monad_acc; reflexivity
         | symmetry; rewrite Eqit.bind_ret_l; cbn [read_byte MemoryModelPrimitivesV];
@@ -5037,7 +5232,9 @@ Section MemoryAndSerialization.
       { destruct (get_consecutive_ptrs_spec pt (@store_size_dtyp SizeofV dt) ptrs Eptrs) as (_ & Hinv_p & _).
         rewrite Forall_forall; intros q Hin_q.
         apply In_nth_error in Hin_q as [k Hnth].
-        destruct (Hinv_p k q Hnth) as (_ & _ & Hpr_q); rewrite Hpr_q; exact Hsafe. }
+        destruct (Hinv_p k q Hnth) as (_ & _ & Hpr_q);
+          cbn [PROV PTR ParamsV ptr_provenance PointerV] in Hpr_q, Hsafe |- *;
+          rewrite Hpr_q; exact Hsafe. }
       eapply refine_prov_bind;
         [apply (stage1_map_monad_Read_byte_unprom ptrs U P_unprom G σ1 σ2 Hinv Hall_safe) |].
       intros U1 [σ1' bs1] [σ2' bs2] (-> & -> & -> & <-).
@@ -5077,6 +5274,7 @@ Section MemoryAndSerialization.
       destruct (Hall gs Hin) as (_ & _ & HninP).
       rewrite Hlk1.
       eapply refine_prov_obs_eq; [symmetry; apply Eqit.bind_ret_l | reflexivity |].
+      cbn [PROV PTR ParamsV];
       rewrite (safe_prov_access_disjoint P_unprom (ptr_provenance q) (gs_pr gs) Hsafe HninP).
       apply memM_interp_prov_raiseUB_l.
     - pose proof Hinv as (Hpu & Hnd & Hall & Hdisj & Hfgw & Hfs & Hh & Hout & Hgs).
@@ -5085,14 +5283,17 @@ Section MemoryAndSerialization.
         as [[b0 aid] |].
       + eapply refine_prov_obs_eq;
           [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-        destruct (access_allowed (ptr_provenance q) aid).
+        cbv iota.
+        match goal with |- context [if ?c then _ else _] => destruct c end.
         * unfold set_byte_raw, get_mem, upd_mem, app_mem, set_byte_raw_mem, get, put;
             cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
-          apply refine_prov_ret; repeat split; cbn;
+          apply refine_prov_ret; unfold stage1_mem_inv; repeat match goal with |- _ /\ _ => split end;
+            cbn - [IntMaps.lookup IntMaps.add ptr_to_int];
+            try reflexivity;
             try exact Hpu; try exact Hnd; try exact Hall; try exact Hdisj;
             try exact Hfgw; try exact Hfs; try exact Hh.
           -- intros z Hz.
-             destruct (Z.eq_dec (ptr_to_int q) z) as [<- | Hne].
+             destruct (Z.eq_dec z (ptr_to_int q)) as [-> | Hne].
              ++ rewrite !IntMaps.lookup_add_eq; reflexivity.
              ++ rewrite !IntMaps.lookup_add_ineq by exact Hne; apply Hout, Hz.
           -- intros gs k mb1 Hin_gs Enth.
@@ -5101,8 +5302,8 @@ Section MemoryAndSerialization.
              pose proof (nth_error_Some (gs_bytes gs) k) as [Hsome _].
              assert (Hk : (k < List.length (gs_bytes gs))%nat) by (apply Hsome; rewrite Enth; discriminate).
              assert (Hr_gs : gs_in_range gs (gs_addr gs + Z.of_nat k)%Z) by (unfold gs_in_range; lia).
-             assert (Hne : ptr_to_int q <> (gs_addr gs + Z.of_nat k)%Z).
-             { intros Heq; rewrite Heq in Hout_z; exact (Hout_z gs Hin_gs Hr_gs). }
+             assert (Hne : (gs_addr gs + Z.of_nat k)%Z <> ptr_to_int q).
+             { intros Heq; rewrite Heq in Hr_gs; exact (Hout_z gs Hin_gs Hr_gs). }
              rewrite !IntMaps.lookup_add_ineq by exact Hne.
              apply (Hgs gs k mb1 Hin_gs Enth).
         * apply memM_interp_prov_raiseUB_l.
@@ -5154,25 +5355,50 @@ Section MemoryAndSerialization.
       (memM_interp_prov (handle_memoryM (Store dt a v)) σ2).
   Proof using.
     intros Hinv Ha; cbn [handle_memoryM].
-    destruct a as [[pt | | | | | | |] | |];
-      try apply memM_interp_prov_raiseUB_l.
+    destruct a as [[pt | | | | | | |] | |]; cbv beta iota;
+      lazymatch goal with
+      | |- refine_prov _ _ (memM_interp_prov (Mub _) _) _ => apply memM_interp_prov_raiseUB_l
+      | |- refine_prov _ _ (memM_interp_prov (mub _) _) _ => apply memM_interp_prov_raiseUB_l
+      | _ => idtac
+      end.
     pose proof (Ha pt Logic.eq_refl) as Hsafe.
     unfold write_dvalue, write_bytes.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
     destruct (dvalue_to_memory_bytes dt v None) as [s | s | s | bs];
       cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov].
-    - apply memM_interp_prov_raiseOOM_l.
-    - apply memM_interp_prov_raiseUB_l.
-    - apply memM_interp_prov_raise_both.
+    - eapply refine_prov_obs_eq;
+        [symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+        | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |];
+      pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
+    - eapply refine_prov_obs_eq;
+        [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+        | reflexivity |];
+      apply refine_prov_ub_vis_l; reflexivity.
+    - eapply refine_prov_obs_eq;
+        [symmetry; unfold raiseUB, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+        | reflexivity |];
+      apply refine_prov_ub_vis_l; reflexivity.
     - eapply refine_prov_obs_eq;
         [symmetry; rewrite Eqit.bind_ret_l, memM_interp_prov_bind; reflexivity
         | symmetry; rewrite Eqit.bind_ret_l, memM_interp_prov_bind; reflexivity |].
-      destruct (get_consecutive_ptrs pt (ListUtil.N.length bs)) as [s | s | s | ptrs] eqn:Eptrs;
+      match goal with
+      | |- context [get_consecutive_ptrs ?p ?sz] =>
+          destruct (get_consecutive_ptrs p sz) as [s | s | s | ptrs] eqn:Eptrs
+      end;
         cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov].
-      + apply memM_interp_prov_raiseOOM_l.
-      + apply memM_interp_prov_raiseUB_l.
-      + apply memM_interp_prov_raise_both.
+      + eapply refine_prov_obs_eq;
+          [symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+          | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |];
+        pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
+      + eapply refine_prov_obs_eq;
+          [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+          | reflexivity |];
+        apply refine_prov_ub_vis_l; reflexivity.
+      + eapply refine_prov_obs_eq;
+          [symmetry; unfold raiseUB, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+          | reflexivity |];
+        apply refine_prov_ub_vis_l; reflexivity.
       + eapply refine_prov_obs_eq;
           [symmetry; rewrite Eqit.bind_ret_l, zip_combine_eq; reflexivity
           | symmetry; rewrite Eqit.bind_ret_l, zip_combine_eq; reflexivity |].
@@ -5182,7 +5408,9 @@ Section MemoryAndSerialization.
         rewrite Forall_forall; intros [q mb] Hin_c.
         apply in_combine_l in Hin_c.
         apply In_nth_error in Hin_c as [k Hnth].
-        destruct (Hinv_p k q Hnth) as (_ & _ & Hpr_q); rewrite Hpr_q; exact Hsafe.
+        destruct (Hinv_p k q Hnth) as (_ & _ & Hpr_q);
+          cbn [PROV PTR ParamsV ptr_provenance PointerV] in Hpr_q, Hsafe |- *;
+          rewrite Hpr_q; exact Hsafe.
   Qed.
 
   Lemma stage1_Read_byte_any_ptr (q : @ptr ProvenanceV (@PointerV IP))
@@ -5209,17 +5437,20 @@ Section MemoryAndSerialization.
       rewrite Hlk1, Hlk2.
       eapply refine_prov_obs_eq;
         [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-      destruct (access_allowed (ptr_provenance q) (Some (gs_pr gs))).
-      + apply refine_prov_ret; repeat split; reflexivity.
+      cbv iota.
+      match goal with |- context [if ?c then _ else _] => destruct c end.
+      + cbn [memM_interp_prov]; apply refine_prov_ret; repeat split; reflexivity.
       + apply memM_interp_prov_raiseUB_l.
     - pose proof Hinv as (_ & _ & _ & _ & _ & _ & _ & Hout & _).
-      rewrite (Hout (ptr_to_int q) Hout_z).
-      destruct (IntMaps.lookup (ptr_to_int q) (Memory_stack_memory (state_memory_stack σ2)))
-        as [[b aid] |].
+      cbn [PROV PTR ParamsV]; rewrite (Hout (ptr_to_int q) Hout_z).
+      match goal with
+      | |- context [IntMaps.lookup ?k ?m] => destruct (IntMaps.lookup k m) as [[b aid] |]
+      end.
       + eapply refine_prov_obs_eq;
           [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-        destruct (access_allowed (ptr_provenance q) aid).
-        * apply refine_prov_ret; repeat split; reflexivity.
+        cbv iota.
+        match goal with |- context [if ?c then _ else _] => destruct c end.
+        * cbn [memM_interp_prov]; apply refine_prov_ret; repeat split; reflexivity.
         * apply memM_interp_prov_raiseUB_l.
       + cbn [memM_interp_prov]; eapply refine_prov_obs_eq;
           [symmetry; unfold raiseUB, trigger_cast, ITree.trigger; rewrite Eqit.bind_bind, Eqit.bind_vis; reflexivity
@@ -5260,15 +5491,25 @@ Section MemoryAndSerialization.
       (memM_interp_prov (handle_memoryM (Load (DTYPE_Array false n (DTYPE_Base (DTYPE_B 8))) a)) σ2).
   Proof using.
     intros Hinv; cbn [handle_memoryM].
-    destruct a as [[pt | | | | | | |] | |];
-      try apply memM_interp_prov_raiseUB_l.
+    destruct a as [[pt | | | | | | |] | |]; cbv beta iota;
+      lazymatch goal with
+      | |- refine_prov _ _ (memM_interp_prov (Mub _) _) _ => apply memM_interp_prov_raiseUB_l
+      | |- refine_prov _ _ (memM_interp_prov (mub _) _) _ => apply memM_interp_prov_raiseUB_l
+      | _ => idtac
+      end.
     unfold read_dvalue, read_bytes.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !memM_interp_prov_bind; reflexivity
       | symmetry; rewrite !memM_interp_prov_bind; reflexivity |].
-    destruct (get_consecutive_ptrs pt (@store_size_dtyp SizeofV (DTYPE_Array false n (DTYPE_Base (DTYPE_B 8)))))
-      as [s | s | s | ptrs];
+    match goal with
+    | |- context [get_consecutive_ptrs ?p ?s] =>
+        destruct (get_consecutive_ptrs p s) as [msg | msg | msg | ptrs]
+    end;
       cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov].
+    - eapply refine_prov_obs_eq;
+        [symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+        | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
+      pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
     - eapply refine_prov_obs_eq;
         [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
         | reflexivity |].
@@ -5277,10 +5518,6 @@ Section MemoryAndSerialization.
         [symmetry; unfold raiseUB, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
         | reflexivity |].
       apply refine_prov_ub_vis_l; reflexivity.
-    - eapply refine_prov_obs_eq;
-        [symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
-        | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
-      pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
     - eapply refine_prov_obs_eq;
         [symmetry; rewrite Eqit.bind_ret_l; cbn [read_byte MemoryModelPrimitivesV];
          rewrite memM_interp_prov_map_monad_acc; reflexivity
@@ -5312,7 +5549,7 @@ Section MemoryAndSerialization.
     pose proof Hinv as (Hpu & Hnd & Hall & Hdisj & Hfgw & Hfs & Hh & Hout & Hgs).
     assert (Hfgw_fs0 : framestack_ghost_wf G fs0).
     { eapply (framestack_ghost_wf_unprom_inv G fs0 f);
-        [eapply Forall_impl; [intros g [Hw _]; exact Hw | exact Hall]
+        [eapply Forall_impl; [| exact Hall]; intros g [Hw _]; exact Hw
         | rewrite <- Hfs_top; exact Hfgw
         | exact Hout_f]. }
     cbn [handle_memoryM mempop MemoryModelPrimitivesV].
@@ -5324,8 +5561,14 @@ Section MemoryAndSerialization.
     rewrite Hfs, Hfs_top.
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
+    rewrite Hfs, Hfs_top.
     cbn [pop_frame_stack Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
-    apply refine_prov_ret; repeat split; cbn;
+    apply refine_prov_ret; unfold stage1_mem_inv;
+      cbn [state_memory_stack Memory_stack_memory Memory_stack_frame_stack Memory_stack_heap];
+      repeat (match goal with
+              | |- _ /\ _ => split
+              | |- ?x = ?x => reflexivity
+              end);
       try exact Hpu; try exact Hnd; try exact Hall; try exact Hdisj;
       try exact Hfgw_fs0; try exact Hh.
     - intros z Hz_out.
@@ -5374,8 +5617,14 @@ Section MemoryAndSerialization.
     rewrite Hfs, Hfs_top.
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
+    rewrite Hfs, Hfs_top.
     cbn [pop_frame_stack Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
-    apply refine_prov_ret; repeat split; cbn;
+    apply refine_prov_ret; unfold stage1_mem_inv;
+      cbn [state_memory_stack Memory_stack_memory Memory_stack_frame_stack Memory_stack_heap];
+      repeat (match goal with
+              | |- _ /\ _ => split
+              | |- ?x = ?x => reflexivity
+              end);
       try exact Hpu; try exact Hnd_tl; try exact Hall_tl; try exact Hdisj_tl;
       try exact Hfgw_fs0; try exact Hh.
     - intros z Hz_out.
@@ -5489,16 +5738,18 @@ Section MemoryAndSerialization.
     unfold Allocate_bytes_with_pr, get_free_block, next_key, Mnext_key.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !memM_interp_prov_bind;
-       cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov];
-       rewrite !Eqit.bind_bind; reflexivity
+       cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_memory_stack];
+       rewrite !Eqit.bind_bind, !Eqit.bind_ret_l; reflexivity
       | reflexivity |].
     set (addr := next_key_with_alignment (Memory_stack_memory (state_memory_stack σ1)) al).
     set (sz := ListUtil.N.length bs).
-    unfold int_to_ptr, PIV at 1.
-    destruct (from_Z_ret_or_oom addr) as [[ip Hip] | [msg Hoom]].
-    - rewrite Hip; cbn [ExtLib.Structures.Monad.bind Monad_either ExtLib.Structures.Monad.ret Interfaces.Memory.lift memS_mon memS_bind memM_interp_prov].
-      set (pt := (ip, allocation_id_to_prov (provenance_to_allocation_id pr))
-                 : @ptr ProvenanceV (@PointerV IP)).
+    unfold int_to_ptr; cbn [P2I IPTR ParamsV PIV]; cbn beta iota.
+    destruct (@from_Z_ret_or_oom IP IPWB addr) as [[ip Hip] | [msg Hoom]].
+    - rewrite Hip; cbn [ExtLib.Structures.Monad.bind EOU_monad ExtLib.Structures.Monad.ret Interfaces.Memory.lift memS_mon memS_bind memM_interp_prov PROV PTR ParamsV].
+      match goal with
+      | |- context [get_consecutive_ptrs ?p0 sz] =>
+          set (pt := p0 : @ptr ProvenanceV (@PointerV IP))
+      end.
       destruct (get_consecutive_ptrs_well_behaved pt sz) as [[ptrs Eptrs] | [msg Hoom]].
       + rewrite Eptrs; cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
         unfold add_block_to_stack, add_block, add_ptrs_to_frame, get_mem, upd_mem, app_mem, app_mem_stack, get, put.
@@ -5508,7 +5759,7 @@ Section MemoryAndSerialization.
            rewrite !Eqit.bind_ret_l; reflexivity
           | reflexivity |].
         apply refine_prov_ret.
-        pose proof (from_Z_to_Z addr ip Hip) as Hip_Z.
+        assert (Hip_Z : to_Z ip = addr) by (apply from_Z_to_Z; exact Hip).
         assert (Hpt_int : ptr_to_int pt = addr) by (cbn; exact Hip_Z).
         assert (Hbs_eq : bs = List.repeat (@poison_memory_byte (@ParamsV IP IPT))
                                 (N.to_nat (@store_size_dtyp SizeofV dt))).
@@ -5517,7 +5768,10 @@ Section MemoryAndSerialization.
         { rewrite Hbs_eq, repeat_length; reflexivity. }
         assert (Hsz_eq : sz = @store_size_dtyp SizeofV dt).
         { unfold sz; rewrite N_length_eq, Hbs_len, N2Nat.id; reflexivity. }
-        set (mbs := memory_bytes_to_bytes (provenance_to_allocation_id pr) bs).
+        lazymatch goal with
+        | |- context [@memory_bytes_to_bytes ?Pa ?aid bs] =>
+            set (mbs := @memory_bytes_to_bytes Pa aid bs)
+        end.
         assert (Hmbs_len : List.length mbs = List.length bs).
         { unfold mbs; rewrite memory_bytes_to_bytes_eq, length_map; reflexivity. }
         assert (Hmem_frame : forall ks (ms : @Memory_stack (@ParamsV IP IPT)),
@@ -5544,13 +5798,6 @@ Section MemoryAndSerialization.
              unfold stage2_in_range; reflexivity.
           -- cbn [state_memory_stack].
              assert (Hfs1_top : Memory_stack_frame_stack (state_memory_stack σ1) = Snoc fs0 f2) by congruence.
-             change (Memory_stack_frame_stack
-                       (add_all_to_frame ptrs
-                          {| Memory_stack_memory :=
-                               IntMaps.add_all_index_acc mbs addr (Memory_stack_memory (state_memory_stack σ1));
-                             Memory_stack_frame_stack := Memory_stack_frame_stack (state_memory_stack σ1);
-                             Memory_stack_heap := Memory_stack_heap (state_memory_stack σ1) |}) =
-                     Snoc fs0 (rev ptrs ++ f2)).
              rewrite Hfs1_top, add_all_to_frame_Snoc; reflexivity.
         * split.
           -- intros z Hz; unfold stage2_in_range in Hz.
@@ -5563,22 +5810,40 @@ Section MemoryAndSerialization.
              pose proof (nth_error_In bs k Enth_bs) as Hin_bs.
              rewrite Hbs_eq in Hin_bs; apply repeat_spec in Hin_bs; subst mb0.
              assert (Enth_mbs : nth_error mbs k = Some (poison_memory_byte, Some pr)).
-             { unfold mbs; rewrite memory_bytes_to_bytes_eq, nth_error_map, Enth_bs; reflexivity. }
+             { unfold mbs; cbn [PROV ParamsV ProvenanceV]; rewrite memory_bytes_to_bytes_eq, nth_error_map, Enth_bs; reflexivity. }
              split.
-             ++ eapply lookup_add_all_index_acc_in; [exact Enth_mbs | lia].
+             ++ eapply lookup_add_all_index_acc_in;
+                  [exact Enth_mbs
+                  | repeat match goal with
+                           | |- context [@ptr_to_int ?Pr ?Pt ?Pi ?q] =>
+                               progress change (@ptr_to_int Pr Pt Pi q) with (@to_Z IP (fst q))
+                           end;
+                    assert (Hpt_z : @to_Z IP (fst pt) = addr) by exact Hpt_int;
+                    rewrite Hpt_z; lia].
              ++ rewrite <- (Hm_eq z).
                 apply (next_key_with_alignment_fresh (Memory_stack_memory (state_memory_stack σ1)) al z).
                 fold addr; lia.
           -- intros z Hz; unfold stage2_in_range in Hz.
              cbn [state_memory_stack]; rewrite Hmem_frame; cbn [Memory_stack_memory].
-             rewrite lookup_add_all_index_acc_out by lia.
-             apply Hm_eq.
+             repeat match goal with
+                    | |- context [@ptr_to_int ?Pr ?Pt ?Pi ?q] =>
+                        progress change (@ptr_to_int Pr Pt Pi q) with (@to_Z IP (fst q))
+                    end.
+             assert (Hpt_z : @to_Z IP (fst pt) = addr) by exact Hpt_int.
+             rewrite Hpt_z.
+             repeat match type of Hz with
+                    | context [@ptr_to_int ?Pr ?Pt ?Pi ?q] =>
+                        progress change (@ptr_to_int Pr Pt Pi q) with (@to_Z IP (fst q)) in Hz
+                    end.
+             rewrite Hpt_z in Hz.
+             rewrite lookup_add_all_index_acc_out;
+               [apply Hm_eq | rewrite Hmbs_len, Hbs_len; lia].
       + rewrite Hoom; cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind memM_interp_prov].
         eapply refine_prov_obs_eq;
           [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
           | reflexivity |].
         apply refine_prov_ub_vis_l; reflexivity.
-    - rewrite Hoom; cbn [ExtLib.Structures.Monad.bind Monad_either Interfaces.Memory.lift memS_mon memS_bind memM_interp_prov].
+    - rewrite Hoom; cbn [ExtLib.Structures.Monad.bind EOU_monad ExtLib.Structures.Monad.ret Interfaces.Memory.lift memS_mon memS_bind memM_interp_prov].
       eapply refine_prov_obs_eq;
         [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
         | reflexivity |].
@@ -5611,6 +5876,7 @@ Section MemoryAndSerialization.
     - destruct (Hrng (ptr_to_int q) Hr) as [Hlk1 _].
       rewrite Hlk1.
       eapply refine_prov_obs_eq; [symmetry; apply Eqit.bind_ret_l | reflexivity |].
+      cbn [PROV PTR ParamsV];
       rewrite (safe_prov_access_disjoint P_safe (ptr_provenance q) pr_dead Hsafe Hnin).
       apply memM_interp_prov_raiseUB_l.
     - rewrite (Hout (ptr_to_int q) Hnr).
@@ -5618,8 +5884,9 @@ Section MemoryAndSerialization.
         as [[b aid] |].
       + eapply refine_prov_obs_eq;
           [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-        destruct (access_allowed (ptr_provenance q) aid).
-        * apply refine_prov_ret; repeat split; reflexivity.
+        cbv iota.
+        match goal with |- context [if ?c then _ else _] => destruct c end.
+        * cbn [memM_interp_prov]; apply refine_prov_ret; repeat split; reflexivity.
         * apply memM_interp_prov_raiseUB_l.
       + cbn [memM_interp_prov]; eapply refine_prov_obs_eq;
           [symmetry; unfold raiseUB, trigger_cast, ITree.trigger; rewrite Eqit.bind_bind, Eqit.bind_vis; reflexivity
@@ -5669,16 +5936,27 @@ Section MemoryAndSerialization.
       (memM_interp_prov (handle_memoryM (Load dt a)) σ2).
   Proof using.
     intros Hinv Ha; cbn [handle_memoryM].
-    destruct a as [[pt | | | | | | |] | |];
-      try apply memM_interp_prov_raiseUB_l.
+    destruct a as [[pt | | | | | | |] | |]; cbv beta iota;
+      lazymatch goal with
+      | |- refine_prov _ _ (memM_interp_prov (Mub _) _) _ => apply memM_interp_prov_raiseUB_l
+      | |- refine_prov _ _ (memM_interp_prov (mub _) _) _ => apply memM_interp_prov_raiseUB_l
+      | _ => idtac
+      end.
     pose proof (Ha pt Logic.eq_refl) as Hsafe.
     unfold read_dvalue, read_bytes.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !memM_interp_prov_bind; reflexivity
       | symmetry; rewrite !memM_interp_prov_bind; reflexivity |].
-    destruct (get_consecutive_ptrs pt (@store_size_dtyp SizeofV dt))
-      as [s | s | s | ptrs] eqn:Eptrs;
+    cbn [SIZE ParamsV].
+    match goal with
+    | |- context [get_consecutive_ptrs ?p ?s] =>
+        destruct (get_consecutive_ptrs p s) as [s0 | s0 | s0 | ptrs] eqn:Eptrs
+    end;
       cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov].
+    - eapply refine_prov_obs_eq;
+        [symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+        | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
+      pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
     - eapply refine_prov_obs_eq;
         [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
         | reflexivity |].
@@ -5688,10 +5966,6 @@ Section MemoryAndSerialization.
         | reflexivity |].
       apply refine_prov_ub_vis_l; reflexivity.
     - eapply refine_prov_obs_eq;
-        [symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
-        | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
-      pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
-    - eapply refine_prov_obs_eq;
         [symmetry; rewrite Eqit.bind_ret_l; cbn [read_byte MemoryModelPrimitivesV];
          rewrite memM_interp_prov_map_monad_acc; reflexivity
         | symmetry; rewrite Eqit.bind_ret_l; cbn [read_byte MemoryModelPrimitivesV];
@@ -5700,7 +5974,9 @@ Section MemoryAndSerialization.
       { destruct (get_consecutive_ptrs_spec pt (@store_size_dtyp SizeofV dt) ptrs Eptrs) as (_ & Hinv_p & _).
         rewrite Forall_forall; intros q Hin_q.
         apply In_nth_error in Hin_q as [k Hnth].
-        destruct (Hinv_p k q Hnth) as (_ & _ & Hpr_q); rewrite Hpr_q; exact Hsafe. }
+        destruct (Hinv_p k q Hnth) as (_ & _ & Hpr_q);
+          cbn [PROV PTR ParamsV ptr_provenance PointerV] in Hpr_q, Hsafe |- *;
+          rewrite Hpr_q; exact Hsafe. }
       eapply refine_prov_bind;
         [apply (stage2_map_monad_Read_byte_safe ptrs U P_safe fs0 f2 base_dead pr_dead sz_dead σ1 σ2 Hinv Hall_safe) |].
       intros U1 [σ1' bs1] [σ2' bs2] (-> & -> & -> & <-).
@@ -5737,6 +6013,7 @@ Section MemoryAndSerialization.
     - destruct (Hrng (ptr_to_int q) Hr) as [Hlk1 _].
       rewrite Hlk1.
       eapply refine_prov_obs_eq; [symmetry; apply Eqit.bind_ret_l | reflexivity |].
+      cbn [PROV PTR ParamsV];
       rewrite (safe_prov_access_disjoint P_safe (ptr_provenance q) pr_dead Hsafe Hnin).
       apply memM_interp_prov_raiseUB_l.
     - rewrite (Hout (ptr_to_int q) Hnr).
@@ -5744,22 +6021,21 @@ Section MemoryAndSerialization.
         as [[b0 aid] |].
       + eapply refine_prov_obs_eq;
           [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-        destruct (access_allowed (ptr_provenance q) aid).
+        cbv iota.
+        match goal with |- context [if ?c then _ else _] => destruct c end.
         * unfold set_byte_raw, get_mem, upd_mem, app_mem, set_byte_raw_mem, get, put;
             cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov state_get_memory MemoryModelStateV].
-          apply refine_prov_ret; repeat split; cbn;
+          apply refine_prov_ret; unfold stage2_mem_inv; repeat match goal with |- _ /\ _ => split end;
+            cbn - [IntMaps.lookup IntMaps.add ptr_to_int];
+            try reflexivity;
             try exact Hpu; try exact Hin; try exact Hnin;
             try exact Hh; try exact Hfs2; try exact Hfs1.
           -- intros z Hz.
-             assert (Hne : ptr_to_int q <> z) by (intros ->; exact (Hnr Hz)).
+             assert (Hne : z <> ptr_to_int q) by (intros Heq; rewrite Heq in Hz; exact (Hnr Hz)).
              rewrite !IntMaps.lookup_add_ineq by exact Hne.
-             exact (proj1 (Hrng z Hz)).
+             exact (Hrng z Hz).
           -- intros z Hz.
-             assert (Hne : ptr_to_int q <> z) by (intros ->; exact (Hnr Hz)).
-             rewrite !IntMaps.lookup_add_ineq by exact Hne.
-             exact (proj2 (Hrng z Hz)).
-          -- intros z Hz.
-             destruct (Z.eq_dec (ptr_to_int q) z) as [<- | Hne].
+             destruct (Z.eq_dec z (ptr_to_int q)) as [-> | Hne].
              ++ rewrite !IntMaps.lookup_add_eq; reflexivity.
              ++ rewrite !IntMaps.lookup_add_ineq by exact Hne; apply Hout, Hz.
         * apply memM_interp_prov_raiseUB_l.
@@ -5812,25 +6088,50 @@ Section MemoryAndSerialization.
       (memM_interp_prov (handle_memoryM (Store dt a v)) σ2).
   Proof using.
     intros Hinv Ha; cbn [handle_memoryM].
-    destruct a as [[pt | | | | | | |] | |];
-      try apply memM_interp_prov_raiseUB_l.
+    destruct a as [[pt | | | | | | |] | |]; cbv beta iota;
+      lazymatch goal with
+      | |- refine_prov _ _ (memM_interp_prov (Mub _) _) _ => apply memM_interp_prov_raiseUB_l
+      | |- refine_prov _ _ (memM_interp_prov (mub _) _) _ => apply memM_interp_prov_raiseUB_l
+      | _ => idtac
+      end.
     pose proof (Ha pt Logic.eq_refl) as Hsafe.
     unfold write_dvalue, write_bytes.
     eapply refine_prov_obs_eq;
       [symmetry; apply memM_interp_prov_bind | symmetry; apply memM_interp_prov_bind |].
     destruct (dvalue_to_memory_bytes dt v None) as [s | s | s | bs];
       cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov].
-    - apply memM_interp_prov_raiseOOM_l.
-    - apply memM_interp_prov_raiseUB_l.
-    - apply memM_interp_prov_raise_both.
+    - eapply refine_prov_obs_eq;
+        [symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+        | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |];
+      pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
+    - eapply refine_prov_obs_eq;
+        [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+        | reflexivity |];
+      apply refine_prov_ub_vis_l; reflexivity.
+    - eapply refine_prov_obs_eq;
+        [symmetry; unfold raiseUB, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+        | reflexivity |];
+      apply refine_prov_ub_vis_l; reflexivity.
     - eapply refine_prov_obs_eq;
         [symmetry; rewrite Eqit.bind_ret_l, memM_interp_prov_bind; reflexivity
         | symmetry; rewrite Eqit.bind_ret_l, memM_interp_prov_bind; reflexivity |].
-      destruct (get_consecutive_ptrs pt (ListUtil.N.length bs)) as [s | s | s | ptrs] eqn:Eptrs;
+      match goal with
+      | |- context [get_consecutive_ptrs ?p ?sz] =>
+          destruct (get_consecutive_ptrs p sz) as [s | s | s | ptrs] eqn:Eptrs
+      end;
         cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov].
-      + apply memM_interp_prov_raiseOOM_l.
-      + apply memM_interp_prov_raiseUB_l.
-      + apply memM_interp_prov_raise_both.
+      + eapply refine_prov_obs_eq;
+          [symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+          | symmetry; unfold raise, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |];
+        pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
+      + eapply refine_prov_obs_eq;
+          [symmetry; unfold raiseOOM, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+          | reflexivity |];
+        apply refine_prov_ub_vis_l; reflexivity.
+      + eapply refine_prov_obs_eq;
+          [symmetry; unfold raiseUB, trigger_cast, ITree.trigger; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+          | reflexivity |];
+        apply refine_prov_ub_vis_l; reflexivity.
       + eapply refine_prov_obs_eq;
           [symmetry; rewrite Eqit.bind_ret_l, zip_combine_eq; reflexivity
           | symmetry; rewrite Eqit.bind_ret_l, zip_combine_eq; reflexivity |].
@@ -5840,7 +6141,9 @@ Section MemoryAndSerialization.
         rewrite Forall_forall; intros [q mb] Hin_c.
         apply in_combine_l in Hin_c.
         apply In_nth_error in Hin_c as [k Hnth].
-        destruct (Hinv_p k q Hnth) as (_ & _ & Hpr_q); rewrite Hpr_q; exact Hsafe.
+        destruct (Hinv_p k q Hnth) as (_ & _ & Hpr_q);
+          cbn [PROV PTR ParamsV ptr_provenance PointerV] in Hpr_q, Hsafe |- *;
+          rewrite Hpr_q; exact Hsafe.
   Qed.
 
   Lemma stage2_mempop_restore
@@ -5868,6 +6171,7 @@ Section MemoryAndSerialization.
     rewrite Hfs1, Hfs2.
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
+    rewrite Hfs1, Hfs2.
     cbn [pop_frame_stack Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
     apply refine_prov_ret; repeat split; cbn; try exact Hh.
     intros z.
@@ -5905,7 +6209,7 @@ Section MemoryAndSerialization.
   Proof using.
     induction xs as [| y ys IH].
     - right; intros [].
-    - destruct (raw_id_eqb_spec x y) as [-> | Hne].
+    - destruct (raw_id_eqb x y) eqn:Exy; [apply raw_id_eqb_spec in Exy; subst x | apply raw_id_eqb_neq in Exy; rename Exy into Hne].
       + left; left; reflexivity.
       + destruct IH as [Hin | Hnin].
         * left; right; exact Hin.
@@ -5927,7 +6231,7 @@ Section MemoryAndSerialization.
   Proof using.
     induction xs as [| y ys IH]; cbn [In m2r_count_id]; [intros [] |].
     intros [-> | Hin].
-    - destruct (raw_id_eqb_spec x x) as [_ | Hne]; [lia | contradiction (Hne Logic.eq_refl)].
+    - rewrite raw_id_eqb_refl; lia.
     - specialize (IH Hin); destruct (raw_id_eqb x y); lia.
   Qed.
 
@@ -5936,8 +6240,9 @@ Section MemoryAndSerialization.
     In q xs /\ q <> p.
   Proof using.
     rewrite filter_In, negb_true_iff.
-    destruct (raw_id_eqb_spec q p) as [-> | Hne]; split; intros H;
-      try tauto; destruct H as [_ H]; discriminate H.
+    destruct (raw_id_eqb q p) eqn:Eqp; [apply raw_id_eqb_spec in Eqp; subst q | apply raw_id_eqb_neq in Eqp; rename Eqp into Hne].
+    - split; [intros [_ H]; discriminate H | intros [_ H]; contradiction (H Logic.eq_refl)].
+    - split; [intros [Hq _]; split; [exact Hq | exact Hne] | intros [Hq _]; split; [exact Hq | reflexivity]].
   Qed.
 
   Lemma m2r_collect_unique_allocas_inv
@@ -5965,12 +6270,14 @@ Section MemoryAndSerialization.
     m2r_safe_ptr_exp s1 e = true ->
     m2r_safe_ptr_exp s2 e = true.
   Proof using.
-    intros Hsub; induction e; cbn [m2r_safe_ptr_exp]; try (intros H; exact H).
-    - destruct id as [| q]; [intros H; exact H |].
+    intros Hsub; revert e; fix IH 1; intros e.
+    destruct e;
+      repeat match goal with p : dtyp * exp dtyp |- _ => destruct p end;
+      cbn [m2r_safe_ptr_exp]; try exact (fun x => x).
+    - destruct id as [| q]; [exact (fun x => x) |].
       rewrite !m2r_in_raw_ids_true; apply Hsub.
-    - destruct ptrval as [_ base_e]; apply IHe.
-    - destruct cnd as [_ ec], v1 as [_ e1], v2 as [_ e2].
-      rewrite !andb_true_iff; intros [H1 H2]; split; [apply IHe2, H1 | apply IHe3, H2].
+    - apply IH.
+    - rewrite !andb_true_iff; intros [H1 H2]; split; [exact (IH _ H1) | exact (IH _ H2)].
   Qed.
 
   Lemma m2r_nodup_map_inv {A B} (f : A -> B) (xs : list A) :
@@ -5995,11 +6302,11 @@ Section MemoryAndSerialization.
     intros Hnd; induction Hnd as [| x xs' Hnin Hnd' IH]; cbn [In flat_map]; [intros [] |].
     intros [<- | Ha1] [<- | Ha2] Hne Hq1 Hq2; try contradiction.
     - rewrite m2r_count_id_app.
-      pose proof (m2r_count_id_in_pos q (g a1) Hq1).
+      pose proof (m2r_count_id_in_pos q (g x) Hq1).
       assert (Hin2 : In q (flat_map g xs')) by (apply in_flat_map; exists a2; split; assumption).
       pose proof (m2r_count_id_in_pos q (flat_map g xs') Hin2); lia.
     - rewrite m2r_count_id_app.
-      pose proof (m2r_count_id_in_pos q (g a2) Hq2).
+      pose proof (m2r_count_id_in_pos q (g x) Hq2).
       assert (Hin1 : In q (flat_map g xs')) by (apply in_flat_map; exists a1; split; assumption).
       pose proof (m2r_count_id_in_pos q (flat_map g xs') Hin1); lia.
     - rewrite m2r_count_id_app.
@@ -6032,20 +6339,24 @@ Section MemoryAndSerialization.
       x <> q.
   Proof using.
     intros Hnd_ids Hq bk x ph md Hbk Hphi ->.
-    apply m2r_nodup_map_inv in Hnd_ids.
+    pose proof (m2r_nodup_map_inv _ _ Hnd_ids) as Hnd_bks.
     apply m2r_collect_unique_allocas_inv in Hq as (Hcnt & bk0 & dt0 & anns0 & md0 & Hbk0 & Him0).
     rewrite m2r_count_id_app in Hcnt.
     assert (Hin_phi : In q (List.map (fun '(y, _, _) => y) (blk_phis bk))).
     { apply in_map_iff; exists (q, ph, md); split; [reflexivity | exact Hphi]. }
     assert (Hin_al : In q (flat_map (fun '(iid, _, _) => instr_id_defs iid) (blk_code bk0))).
     { apply in_flat_map; exists (IId q, INSTR_Alloca dt0 anns0, md0); split; [exact Him0 | left; reflexivity]. }
-    destruct (raw_id_eqb_spec (blk_id bk) (blk_id bk0)) as [Heq_id | Hne_id].
+    destruct (raw_id_eqb (blk_id bk) (blk_id bk0)) eqn:Eeq_id; [apply raw_id_eqb_spec in Eeq_id; rename Eeq_id into Heq_id | apply raw_id_eqb_neq in Eeq_id; rename Eeq_id into Hne_id].
     - assert (bk = bk0).
-      { clear -Hnd_ids Hbk Hbk0 Heq_id.
-        induction Hnd_ids as [| b bs Hnin Hnd IH]; [contradiction |].
-        destruct Hbk as [<- | Hbk], Hbk0 as [<- | Hbk0]; [reflexivity | | | auto].
+      { clear -Hnd_ids Hbk Hbk0 Heq_id; revert bk bk0 Hbk Hbk0 Heq_id.
+        induction bks as [| b bs IH]; intros bk bk0 Hbk Hbk0 Heq_id;
+          cbn [List.map In] in *; [contradiction |].
+        inversion Hnd_ids as [| ? ? Hnin Hnd']; subst.
+        destruct Hbk as [<- | Hbk], Hbk0 as [<- | Hbk0].
+        - reflexivity.
         - exfalso; apply Hnin; rewrite Heq_id; apply in_map, Hbk0.
-        - exfalso; apply Hnin; rewrite <- Heq_id; apply in_map, Hbk. }
+        - exfalso; apply Hnin; rewrite <- Heq_id; apply in_map, Hbk.
+        - exact (IH Hnd' bk bk0 Hbk Hbk0 Heq_id). }
       subst bk0.
       assert (H2 : (2 <= m2r_count_id q (full_block_defs bk))%nat).
       { unfold full_block_defs; rewrite !m2r_count_id_app.
@@ -6059,7 +6370,7 @@ Section MemoryAndSerialization.
       assert (Hdef1 : In q (full_block_defs bk)) by (unfold full_block_defs; apply in_app_iff; left; exact Hin_phi).
       assert (Hdef2 : In q (full_block_defs bk0))
         by (unfold full_block_defs; apply in_app_iff; right; apply in_app_iff; left; exact Hin_al).
-      pose proof (m2r_count_id_in_two_elems full_block_defs bks bk bk0 q Hnd_ids Hbk Hbk0 Hne_bk Hdef1 Hdef2).
+      pose proof (m2r_count_id_in_two_elems full_block_defs bks bk bk0 q Hnd_bks Hbk Hbk0 Hne_bk Hdef1 Hdef2).
       lia.
   Qed.
 
@@ -6073,37 +6384,55 @@ Section MemoryAndSerialization.
       exists dt0 anns0, ins = INSTR_Alloca dt0 anns0.
   Proof using.
     intros Hnd_ids Hq bk pre ins md post Hbk Hsplit.
-    apply m2r_nodup_map_inv in Hnd_ids.
+    pose proof (m2r_nodup_map_inv _ _ Hnd_ids) as Hnd_bks.
     apply m2r_collect_unique_allocas_inv in Hq as (Hcnt & bk0 & dt0 & anns0 & md0 & Hbk0 & Him0).
     rewrite m2r_count_id_app in Hcnt.
-    destruct (raw_id_eqb_spec (blk_id bk) (blk_id bk0)) as [Heq_id | Hne_id].
+    destruct (raw_id_eqb (blk_id bk) (blk_id bk0)) eqn:Eeq_id; [apply raw_id_eqb_spec in Eeq_id; rename Eeq_id into Heq_id | apply raw_id_eqb_neq in Eeq_id; rename Eeq_id into Hne_id].
     - assert (bk = bk0).
-      { clear -Hnd_ids Hbk Hbk0 Heq_id.
-        induction Hnd_ids as [| b bs Hnin Hnd IH]; [contradiction |].
-        destruct Hbk as [<- | Hbk], Hbk0 as [<- | Hbk0]; [reflexivity | | | auto].
+      { clear -Hnd_ids Hbk Hbk0 Heq_id; revert bk bk0 Hbk Hbk0 Heq_id.
+        induction bks as [| b bs IH]; intros bk bk0 Hbk Hbk0 Heq_id;
+          cbn [List.map In] in *; [contradiction |].
+        inversion Hnd_ids as [| ? ? Hnin Hnd']; subst.
+        destruct Hbk as [<- | Hbk], Hbk0 as [<- | Hbk0].
+        - reflexivity.
         - exfalso; apply Hnin; rewrite Heq_id; apply in_map, Hbk0.
-        - exfalso; apply Hnin; rewrite <- Heq_id; apply in_map, Hbk. }
+        - exfalso; apply Hnin; rewrite <- Heq_id; apply in_map, Hbk.
+        - exact (IH Hnd' bk bk0 Hbk Hbk0 Heq_id). }
       subst bk0.
-      rewrite Hsplit in Him0; apply in_app_iff in Him0 as [Hin_pre | [Heq_im | Hin_post]].
+      rewrite Hsplit in Him0; apply in_app_iff in Him0 as [Hin | [Heq_im | Hin]].
       + exfalso.
         assert (Hge : (m2r_count_id q (full_block_defs bk) <= m2r_count_id q (flat_map full_block_defs bks))%nat).
         { clear -Hbk; induction bks as [| b bs IH]; cbn [In flat_map] in *; [contradiction |].
           rewrite m2r_count_id_app; destruct Hbk as [<- | Hbk]; [lia | specialize (IH Hbk); lia]. }
-        unfold full_block_defs in Hge; rewrite Hsplit, m2r_flat_map_app in Hge; cbn [flat_map instr_id_defs] in Hge.
-        rewrite !m2r_count_id_app in Hge; cbn [m2r_count_id] in Hge; rewrite raw_id_eqb_refl in Hge.
-        assert (Hp1 : In q (flat_map (fun '(iid, _, _) => instr_id_defs iid) pre)).
-        { apply in_flat_map; exists (IId q, INSTR_Alloca dt0 anns0, md0); split; [exact Hin_pre | left; reflexivity]. }
-        pose proof (m2r_count_id_in_pos q _ Hp1); lia.
+        assert (H2 : (2 <= m2r_count_id q (full_block_defs bk))%nat).
+        { unfold full_block_defs; rewrite Hsplit, m2r_flat_map_app.
+          replace (flat_map (fun '(iid, _, _) => instr_id_defs iid) ((IId q, ins, md) :: post))
+            with ([q] ++ flat_map (fun '(iid, _, _) => instr_id_defs iid) post) by reflexivity.
+          rewrite !m2r_count_id_app.
+          replace (m2r_count_id q [q]) with 1%nat
+            by (cbn [m2r_count_id]; rewrite raw_id_eqb_refl; reflexivity).
+          assert (Hp : In q (flat_map (fun '(iid, _, _) => instr_id_defs iid) pre)).
+          { apply in_flat_map; exists (IId q, INSTR_Alloca dt0 anns0, md0);
+              split; [exact Hin | left; reflexivity]. }
+          pose proof (m2r_count_id_in_pos q _ Hp); lia. }
+        lia.
       + inversion Heq_im; exists dt0, anns0; reflexivity.
       + exfalso.
         assert (Hge : (m2r_count_id q (full_block_defs bk) <= m2r_count_id q (flat_map full_block_defs bks))%nat).
         { clear -Hbk; induction bks as [| b bs IH]; cbn [In flat_map] in *; [contradiction |].
           rewrite m2r_count_id_app; destruct Hbk as [<- | Hbk]; [lia | specialize (IH Hbk); lia]. }
-        unfold full_block_defs in Hge; rewrite Hsplit, m2r_flat_map_app in Hge; cbn [flat_map instr_id_defs] in Hge.
-        rewrite !m2r_count_id_app in Hge; cbn [m2r_count_id] in Hge; rewrite raw_id_eqb_refl in Hge.
-        assert (Hp2 : In q (flat_map (fun '(iid, _, _) => instr_id_defs iid) post)).
-        { apply in_flat_map; exists (IId q, INSTR_Alloca dt0 anns0, md0); split; [exact Hin_post | left; reflexivity]. }
-        pose proof (m2r_count_id_in_pos q _ Hp2); lia.
+        assert (H2 : (2 <= m2r_count_id q (full_block_defs bk))%nat).
+        { unfold full_block_defs; rewrite Hsplit, m2r_flat_map_app.
+          replace (flat_map (fun '(iid, _, _) => instr_id_defs iid) ((IId q, ins, md) :: post))
+            with ([q] ++ flat_map (fun '(iid, _, _) => instr_id_defs iid) post) by reflexivity.
+          rewrite !m2r_count_id_app.
+          replace (m2r_count_id q [q]) with 1%nat
+            by (cbn [m2r_count_id]; rewrite raw_id_eqb_refl; reflexivity).
+          assert (Hp : In q (flat_map (fun '(iid, _, _) => instr_id_defs iid) post)).
+          { apply in_flat_map; exists (IId q, INSTR_Alloca dt0 anns0, md0);
+              split; [exact Hin | left; reflexivity]. }
+          pose proof (m2r_count_id_in_pos q _ Hp); lia. }
+        lia.
     - exfalso.
       assert (Hne_bk : bk <> bk0) by (intros ->; exact (Hne_id Logic.eq_refl)).
       assert (Hdef1 : In q (full_block_defs bk)).
@@ -6113,7 +6442,7 @@ Section MemoryAndSerialization.
       assert (Hdef2 : In q (full_block_defs bk0)).
       { unfold full_block_defs; apply in_app_iff; right; apply in_app_iff; left.
         apply in_flat_map; exists (IId q, INSTR_Alloca dt0 anns0, md0); split; [exact Him0 | left; reflexivity]. }
-      pose proof (m2r_count_id_in_two_elems full_block_defs bks bk bk0 q Hnd_ids Hbk Hbk0 Hne_bk Hdef1 Hdef2).
+      pose proof (m2r_count_id_in_two_elems full_block_defs bks bk bk0 q Hnd_bks Hbk Hbk0 Hne_bk Hdef1 Hdef2).
       lia.
   Qed.
 
@@ -6213,6 +6542,7 @@ Section MemoryAndSerialization.
     - apply TE_Vis; intros x; apply LE, Hk.
     - apply TE_TauL, IH.
   Qed.
+  #[local] Hint Resolve tau_expand__mon : paco.
 
   Definition tau_expand {E : Type -> Type} {R : Type}
     (t1 t2 : itree E R) : Prop :=
@@ -6264,6 +6594,14 @@ Section MemoryAndSerialization.
       apply TE_Vis; intros x; specialize (Hh x); pclearbot; right; apply CIH; [exact Hh | exact Hk].
     - eapply TE_Eq; [apply Eqit.bind_tau | reflexivity |].
       apply TE_TauL, IH.
+  Qed.
+
+  Lemma tau_expand_bind_l {E : Type -> Type} {A B : Type} :
+    forall (u1 u2 : itree E A) (k : A -> itree E B),
+      tau_expand u1 u2 ->
+      tau_expand (ITree.bind u1 k) (ITree.bind u2 k).
+  Proof using.
+    intros u1 u2 k Hu; apply tau_expand_bind; [exact Hu | intro a; apply tau_expand_refl].
   Qed.
 
   (** *** Lifting [tau_expand] to [refine_prov] without [Eqdep] *)
@@ -6345,6 +6683,7 @@ Section MemoryAndSerialization.
           -- intros a2 a1 Ha; apply LE, HA2, Ha.
     - eapply PTE_TauL; [exact Ht1 | exact IH].
   Qed.
+  #[local] Hint Resolve prov_te__mon : paco.
 
   Definition prov_te {R : Type} (t1 t2 : itree ProvBotE R) : Prop :=
     paco2 (@prov_te_ R) bot2 t1 t2.
@@ -6435,8 +6774,8 @@ Section MemoryAndSerialization.
     intros Hrp; punfold Hrp.
     induction Hrp as [U t1 t2 Hstep_rp | U t1 m1 t2 Ht1 _ IH_rp | U t1 t2 m2 Ht2 _ IH_rp];
       intros t1' Hte.
-    - punfold Hte.
-      induction Hte as [t1' t1_ Hstep_te | t1' n1' t1_ Hot1' _ IH_te].
+    - punfold Hte; revert Hstep_rp.
+      induction Hte as [t1' t1_ Hstep_te | t1' n1' t1_ Hot1' _ IH_te]; intros Hstep_rp.
       + apply RP_Step; unfold rp_step_body, prov_te_step_body in *.
         destruct (observe t1') as [x1' | m1' | X1' e1' k1'],
                  (observe t1_) as [x1 | m1 | X1 e1 k1]; try contradiction.
@@ -6467,7 +6806,7 @@ Section MemoryAndSerialization.
                 specialize (HA1' a1' a1 Ha1'1); specialize (HA12 a1 a2 Ha12); pclearbot.
                 rewrite (bot_ans_provs_eq b1' b1 a1' a1 HE1' Ha1'1).
                 right; exists (k1 a1); split; assumption.
-      + eapply RP_TauL; [exact Hot1' | exact IH_te].
+      + eapply RP_TauL; [exact Hot1' | exact (IH_te Hstep_rp)].
     - punfold Hte; revert Ht1.
       induction Hte as [t1' t1_ Hstep_te | t1' n1' t1_ Hot1' _ IH_te]; intros Ht1.
       + unfold prov_te_step_body in Hstep_te; rewrite Ht1 in Hstep_te.
@@ -6488,7 +6827,7 @@ Section MemoryAndSerialization.
     assert (Hmain : forall U0 a1' a2, rel_te_l RR U0 a1' a2 -> refine_prov RR U0 a1' a2).
     { pcofix CIH; intros U0 a1' a2 (a1 & Hae & Har); pstep.
       eapply refine_prov__mon; [exact (refine_prov_prov_te_l_step RR U0 a1 a2 Har a1' Hae) |].
-      intros U1 b1' b2 [Hb | Hb]; [left; eapply paco3_mon; [exact Hb | intros ? ? ? []] | right; apply CIH, Hb]. }
+      intros U1 b1' b2 [Hb | Hb]; [left; eapply paco3_mon; [exact Hb | intros ? ? ? Hrel; apply CIH, Hrel] | right; apply CIH, Hb]. }
     apply Hmain; exists t1; split; assumption.
   Qed.
 
@@ -6509,26 +6848,26 @@ Section MemoryAndSerialization.
       intros t2' Hte.
     - unfold rp_step_body in Hstep_rp.
       destruct (observe t1) as [x1 | m1 | X1 e1 k1] eqn:Hot1.
-      + punfold Hte.
-        induction Hte as [t2' t2_ Hstep_te | t2' n2' t2_ Hot2' _ IH_te].
+      + punfold Hte; revert Hstep_rp.
+        induction Hte as [t2' t2_ Hstep_te | t2' n2' t2_ Hot2' _ IH_te]; intros Hstep_rp.
         * apply RP_Step; unfold rp_step_body, prov_te_step_body in *; rewrite Hot1.
           destruct (observe t2') as [x2' | |], (observe t2_) as [x2 | |]; try contradiction.
           subst x2'; exact Hstep_rp.
-        * eapply RP_TauR; [exact Hot2' | exact IH_te].
-      + punfold Hte.
-        induction Hte as [t2' t2_ Hstep_te | t2' n2' t2_ Hot2' _ IH_te].
+        * eapply RP_TauR; [exact Hot2' | exact (IH_te Hstep_rp)].
+      + punfold Hte; revert Hstep_rp.
+        induction Hte as [t2' t2_ Hstep_te | t2' n2' t2_ Hot2' _ IH_te]; intros Hstep_rp.
         * apply RP_Step; unfold rp_step_body, prov_te_step_body in *; rewrite Hot1.
           destruct (observe t2') as [| m2' |], (observe t2_) as [| m2 |]; try contradiction.
           pclearbot; right; exists m2; split; assumption.
-        * eapply RP_TauR; [exact Hot2' | exact IH_te].
+        * eapply RP_TauR; [exact Hot2' | exact (IH_te Hstep_rp)].
       + destruct Hstep_rp as [Hub | [Hleft | Hboth]].
         * apply RP_Step; unfold rp_step_body; rewrite Hot1; left; exact Hub.
         * apply RP_Step; unfold rp_step_body; rewrite Hot1; right; left.
           destruct e1 as [p1 | b1]; [| contradiction]; destruct p1.
           intros p Hp; specialize (Hleft p Hp); pclearbot.
           right; exists t2; split; [exact Hte | exact Hleft].
-        * punfold Hte.
-          induction Hte as [t2' t2_ Hstep_te | t2' n2' t2_ Hot2' _ IH_te].
+        * punfold Hte; revert Hboth.
+          induction Hte as [t2' t2_ Hstep_te | t2' n2' t2_ Hot2' _ IH_te]; intros Hboth.
           -- apply RP_Step; unfold rp_step_body, prov_te_step_body in *; rewrite Hot1.
              right; right.
              destruct (observe t2') as [| | X2' e2' k2'],
@@ -6545,7 +6884,7 @@ Section MemoryAndSerialization.
                 destruct (EqA_bot_trans b1 b2 b2' a1 a2' HE12 HE22' Ha12') as [a2 [Ha12 Ha22']].
                 specialize (HA12 a1 a2 Ha12); specialize (HA22' a2 a2' Ha22'); pclearbot.
                 right; exists (k2 a2); split; assumption.
-          -- eapply RP_TauR; [exact Hot2' | exact IH_te].
+          -- eapply RP_TauR; [exact Hot2' | exact (IH_te Hboth)].
     - eapply RP_TauL; [exact Ht1 | apply (IH_rp t2' Hte)].
     - punfold Hte; revert Ht2.
       induction Hte as [t2' t2_ Hstep_te | t2' n2' t2_ Hot2' _ IH_te]; intros Ht2.
@@ -6566,7 +6905,7 @@ Section MemoryAndSerialization.
     assert (Hmain : forall U0 a1 a2', rel_te_r RR U0 a1 a2' -> refine_prov RR U0 a1 a2').
     { pcofix CIH; intros U0 a1 a2' (a2 & Hae & Har); pstep.
       eapply refine_prov__mon; [exact (refine_prov_prov_te_r_step RR U0 a1 a2 Har a2' Hae) |].
-      intros U1 b1 b2' [Hb | Hb]; [left; eapply paco3_mon; [exact Hb | intros ? ? ? []] | right; apply CIH, Hb]. }
+      intros U1 b1 b2' [Hb | Hb]; [left; eapply paco3_mon; [exact Hb | intros ? ? ? Hrel; apply CIH, Hrel] | right; apply CIH, Hb]. }
     apply Hmain; exists t2; split; assumption.
   Qed.
 
@@ -6806,7 +7145,7 @@ Section MemoryAndSerialization.
     intros Hnd [Heq | Hin].
     - inversion Heq; subst b0 r0; rewrite raw_id_eqb_refl; reflexivity.
     - inversion Hnd as [| ? ? Hnin Hnd']; subst.
-      destruct (raw_id_eqb_spec b0 bid) as [-> | _].
+      destruct (raw_id_eqb b0 bid) eqn:Eb0; [apply raw_id_eqb_spec in Eb0; subst b0 | clear Eb0].
       + exfalso; apply Hnin; apply in_map with (f := fst) in Hin; exact Hin.
       + apply IH; assumption.
   Qed.
@@ -6845,7 +7184,9 @@ Section MemoryAndSerialization.
   Lemma m2r_exp_size_pos {T : Set} (e : exp T) :
     (1 <= m2r_exp_size e)%nat.
   Proof using.
-    destruct e; try (destruct m as [| | [] | | | |]); cbn; lia.
+    destruct e; try (destruct m as [| | [? ?] | | | |]);
+      repeat match goal with p : _ * exp _ |- _ => destruct p end;
+      cbn [m2r_exp_size]; lia.
   Qed.
 
   Fixpoint m2r_dvalue_size (dv : @dvalue (@ParamsV IP IPT)) : nat :=
@@ -6998,7 +7339,7 @@ Section MemoryAndSerialization.
   Proof using.
     unfold convert; destruct ct as [| pct | ict].
     - destruct (dtyp_eqb t_from t_to); [apply tau_expand_cfg_withCall_ret |].
-      destruct (@bit_sizeof_dtyp SizeofV t_from =? @bit_sizeof_dtyp SizeofV t_to)%N.
+      match goal with |- context [(?a =? ?b)%N] => destruct (a =? b)%N end.
       + apply tau_expand_cfg_withCall_EOU.
       + apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _).
     - apply tau_expand_cfg_withCall_EOU.
@@ -7063,7 +7404,9 @@ Section MemoryAndSerialization.
     - destruct dv as [db | p fields | vec elts]; cbn [freeze].
       + apply tau_expand_cfg_withCall_freeze_base.
       + destruct dt as [| p' dts |];
-          try apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _).
+          [apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _)
+          |
+          | apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _)].
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply tau_expand_cfg_withCall_bind; [| intros ? ?; apply tau_expand_cfg_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
@@ -7083,10 +7426,12 @@ Section MemoryAndSerialization.
         * apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _).
         * apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _).
         * eapply tau_expand_cfg_withCall_bind.
-          -- fold (@freeze (@ParamsV IP IPT) _ _ _ _ t v); apply IH; lia.
+          -- fold (@freeze (@ParamsV IP IPT) (@MCFGEtop (@ParamsV IP IPT)) _ _ _ _ t v); apply IH; lia.
           -- intros s1 v'; apply IHf; lia.
       + destruct dt as [| | v' sz_n t];
-          try apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _).
+          [apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _)
+          | apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _)
+          |].
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply tau_expand_cfg_withCall_bind; [| intros ? ?; apply tau_expand_cfg_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
@@ -7104,8 +7449,8 @@ Section MemoryAndSerialization.
           cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         * apply tau_expand_cfg_withCall_ret.
         * eapply tau_expand_cfg_withCall_bind.
-          -- fold (@freeze (@ParamsV IP IPT) _ _ _ _ t v); apply IH; lia.
-          -- intros s1 v'; apply IHe; lia.
+          -- fold (@freeze (@ParamsV IP IPT) (@MCFGEtop (@ParamsV IP IPT)) _ _ _ _ t v); apply IH; lia.
+          -- intros s1 v1; apply IHe; lia.
   Qed.
 
   Lemma tau_expand_cfg_withCall_denote_exp
@@ -7130,7 +7475,7 @@ Section MemoryAndSerialization.
         intros [dt0 ex0] s1 Hin.
         apply IH.
         clear -Hin Helts; induction elts as [| [d1 e1] rest IHr]; [contradiction |].
-        destruct Hin as [Heq | Hin]; [inversion Heq; subst; lia | apply IHr; [exact Hin | lia]]. }
+        destruct Hin as [Heq | Hin]; [inversion Heq; subst; lia | apply IHr; [lia | exact Hin]]. }
       destruct e; cbn [denote_exp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; cbn [m2r_exp_size] in Hle.
       + destruct id as [gid | lid]; cbn [lookup_id];
           unfold gread, lread, Subevent.trigger; try unfold trigger_cast;
@@ -7151,7 +7496,7 @@ Section MemoryAndSerialization.
       + eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]].
       + eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]].
       + eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]].
-      + destruct op as [dt1 op1]; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU].
+      + destruct v as [dt1 op1]; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU].
       + eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]].
       + eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_cfg_withCall_convert].
       + destruct ptrval as [dt2 ptr_e].
@@ -7173,7 +7518,7 @@ Section MemoryAndSerialization.
         eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 vc; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros s2 vv1; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]]].
       + destruct v as [dt1 e1]; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_freeze].
       + apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _).
-      + destruct md as [| | [dt1 ex1] | | | |];
+      + match goal with m0 : metadata _ |- _ => destruct m0 as [| | [dt1 ex1] | | | |] end;
           try apply tau_expand_cfg_withCall_ret.
         apply IH; cbn in Hle; lia.
       + destruct elt as [dt1 e1].
@@ -7213,20 +7558,24 @@ Section MemoryAndSerialization.
       (mcfg_inr_exc (ITree.bind u k) s).
   Proof using.
     intros Hu Hk; unfold mcfg_inr_exc in *.
-    eapply tau_expand_obs_eq.
+    eapply tau_expand_obs_eq with
+      (t2 := ITree.bind
+               (ITree.bind (interp_mcfg_model u s) (fun '(s', a) => Ret (s', inr a)))
+               (fun '(s', res) =>
+                  match res with
+                  | inl ex => Ret (s', @inl (@exc (@ParamsV IP IPT)) B ex)
+                  | inr a =>
+                      ITree.bind (interp_mcfg_model (k a) s') (fun '(s'', r) => Ret (s'', inr r))
+                  end)).
     - symmetry; rewrite (interp_cfg_exc_obs_eq ctx _ _ s (withCall_bind_eq u k)),
         interp_cfg_exc_bind; reflexivity.
-    - symmetry; rewrite interp_mcfg_model_bind, Eqit.bind_bind.
+    - rewrite interp_mcfg_model_bind, !Eqit.bind_bind.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
-      intros [s' a] ? <-; symmetry; rewrite Eqit.bind_ret_l; reflexivity.
-    - rewrite Eqit.bind_bind.
-      eapply tau_expand_obs_eq.
-      + reflexivity.
-      + symmetry; rewrite Eqit.bind_bind; reflexivity.
-      + eapply tau_expand_bind; [exact Hu |].
-        intros [s' [ex | a]].
-        * eapply tau_expand_obs_eq; [reflexivity | symmetry; apply Eqit.bind_ret_l | apply tau_expand_refl].
-        * eapply tau_expand_obs_eq; [reflexivity | symmetry; apply Eqit.bind_ret_l | apply Hk].
+      intros [s' a] ? <-; rewrite Eqit.bind_ret_l; reflexivity.
+    - eapply tau_expand_bind; [exact Hu |].
+      intros [s' [ex | a]].
+      + apply tau_expand_refl.
+      + apply Hk.
   Qed.
 
   Lemma tau_expand_exc_withCall_trigger {X}
@@ -7296,7 +7645,7 @@ Section MemoryAndSerialization.
   Proof using.
     unfold convert; destruct ct as [| pct | ict].
     - destruct (dtyp_eqb t_from t_to); [apply tau_expand_exc_withCall_ret |].
-      destruct (@bit_sizeof_dtyp SizeofV t_from =? @bit_sizeof_dtyp SizeofV t_to)%N.
+      match goal with |- context [(?a =? ?b)%N] => destruct (a =? b)%N end.
       + apply tau_expand_exc_withCall_EOU.
       + apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _).
     - apply tau_expand_exc_withCall_EOU.
@@ -7364,7 +7713,9 @@ Section MemoryAndSerialization.
     - destruct dv as [db | p fields | vec elts]; cbn [freeze].
       + apply tau_expand_exc_withCall_freeze_base.
       + destruct dt as [| p' dts |];
-          try apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _).
+          [apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _)
+          |
+          | apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _)].
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply tau_expand_exc_withCall_bind; [| intros ? ?; apply tau_expand_exc_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
@@ -7384,10 +7735,12 @@ Section MemoryAndSerialization.
         * apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _).
         * apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _).
         * eapply tau_expand_exc_withCall_bind.
-          -- fold (@freeze (@ParamsV IP IPT) _ _ _ _ t v); apply IH; lia.
+          -- fold (@freeze (@ParamsV IP IPT) (@MCFGEtop (@ParamsV IP IPT)) _ _ _ _ t v); apply IH; lia.
           -- intros s1 v'; apply IHf; lia.
       + destruct dt as [| | v' sz_n t];
-          try apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _).
+          [apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _)
+          | apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _)
+          |].
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply tau_expand_exc_withCall_bind; [| intros ? ?; apply tau_expand_exc_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
@@ -7405,8 +7758,8 @@ Section MemoryAndSerialization.
           cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         * apply tau_expand_exc_withCall_ret.
         * eapply tau_expand_exc_withCall_bind.
-          -- fold (@freeze (@ParamsV IP IPT) _ _ _ _ t v); apply IH; lia.
-          -- intros s1 v'; apply IHe; lia.
+          -- fold (@freeze (@ParamsV IP IPT) (@MCFGEtop (@ParamsV IP IPT)) _ _ _ _ t v); apply IH; lia.
+          -- intros s1 v1; apply IHe; lia.
   Qed.
 
   Lemma tau_expand_exc_withCall_denote_exp
@@ -7431,7 +7784,7 @@ Section MemoryAndSerialization.
         intros [dt0 ex0] s1 Hin.
         apply IH.
         clear -Hin Helts; induction elts as [| [d1 e1] rest IHr]; [contradiction |].
-        destruct Hin as [Heq | Hin]; [inversion Heq; subst; lia | apply IHr; [exact Hin | lia]]. }
+        destruct Hin as [Heq | Hin]; [inversion Heq; subst; lia | apply IHr; [lia | exact Hin]]. }
       destruct e; cbn [denote_exp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; cbn [m2r_exp_size] in Hle.
       + destruct id as [gid | lid]; cbn [lookup_id];
           unfold gread, lread, Subevent.trigger; try unfold trigger_cast;
@@ -7452,7 +7805,7 @@ Section MemoryAndSerialization.
       + eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]].
       + eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]].
       + eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]].
-      + destruct op as [dt1 op1]; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_EOU].
+      + destruct v as [dt1 op1]; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_EOU].
       + eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]].
       + eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_exc_withCall_convert].
       + destruct ptrval as [dt2 ptr_e].
@@ -7474,7 +7827,7 @@ Section MemoryAndSerialization.
         eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 vc; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros s2 vv1; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]]].
       + destruct v as [dt1 e1]; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_freeze].
       + apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _).
-      + destruct md as [| | [dt1 ex1] | | | |];
+      + match goal with m0 : metadata _ |- _ => destruct m0 as [| | [dt1 ex1] | | | |] end;
           try apply tau_expand_exc_withCall_ret.
         apply IH; cbn in Hle; lia.
       + destruct elt as [dt1 e1].
@@ -7504,15 +7857,17 @@ Section MemoryAndSerialization.
     cbv zeta; unfold gread, Subevent.trigger; try unfold trigger_cast.
     destruct (Maps.lookup gid g) as [v |] eqn:Elk.
     - assert (H1 : interp_vellvm_prov_h (subevent _ (GlobalRead gid)) (σ1, (ls1, g)) ≅ Ret ((σ1, (ls1, g)), v)).
-      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+        try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
         unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, update_globals_ref;
-          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
-        rewrite Elk, !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity. }
+          cbn - [Maps.lookup Maps.add lift_bot_prov].
+        rewrite Elk, !lift_bot_prov_bind_ret, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity. }
       assert (H2 : interp_vellvm_prov_h (subevent _ (GlobalRead gid)) (σ2, (ls2, g)) ≅ Ret ((σ2, (ls2, g)), v)).
-      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+        try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
         unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, update_globals_ref;
-          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
-        rewrite Elk, !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity. }
+          cbn - [Maps.lookup Maps.add lift_bot_prov].
+        rewrite Elk, !lift_bot_prov_bind_ret, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity. }
       eapply refine_prov_tau_star_l; [eapply tau_star_mcfg_det; [reflexivity | exact H1] |].
       eapply refine_prov_tau_star_r; [eapply tau_star_mcfg_det; [reflexivity | exact H2] |].
       apply refine_prov_ret.
@@ -7520,12 +7875,17 @@ Section MemoryAndSerialization.
     - eapply refine_prov_obs_eq.
       + symmetry; apply interp_mcfg_model_non_intr; reflexivity.
       + symmetry; apply interp_mcfg_model_non_intr; reflexivity.
-      + unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
-        unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, raise, trigger_cast, ITree.trigger, lift_bot_prov;
-          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
+      + unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+        try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
+        unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, update_globals_ref;
+          cbn - [Maps.lookup Maps.add lift_bot_prov].
         rewrite Elk.
+        unfold raise, trigger_cast, ITree.trigger, lift_bot_prov;
+          cbn - [Maps.lookup Maps.add].
         pstep; apply RP_Step; unfold rp_step_body.
-        repeat (rewrite observe_bind || rewrite observe_translate); cbn; right; right; split; [exact I | intros [] [] _].
+        repeat (rewrite observe_bind || rewrite observe_translate);
+          cbn; try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun; cbn;
+          right; right; split; [exact I | intros [] [] _].
   Qed.
 
   Lemma refine_mcfg_lread_same_opt
@@ -7556,13 +7916,16 @@ Section MemoryAndSerialization.
       destruct (fused_local_prov_read_none lid (σ1, ((sf1, fstk1), g1)) Elk1) as (msg1 & k1 & H1).
       destruct (fused_local_prov_read_none lid (σ2, ((sf2, fstk2), g2)) Elk2) as (msg2 & k2 & H2).
       eapply refine_prov_obs_eq.
-      + symmetry; rewrite interp_mcfg_model_non_intr by reflexivity.
-        unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      + symmetry; etransitivity; [apply interp_mcfg_model_non_intr; reflexivity |].
+        unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+        try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
         rewrite H1, Eqit.bind_vis; reflexivity.
-      + symmetry; rewrite interp_mcfg_model_non_intr by reflexivity.
-        unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      + symmetry; etransitivity; [apply interp_mcfg_model_non_intr; reflexivity |].
+        unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+        try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
         rewrite H2, Eqit.bind_vis; reflexivity.
-      + pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
+      + pstep; apply RP_Step; cbn; try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun; cbn;
+          right; right; split; [exact I | intros [] [] _].
   Qed.
 
   Lemma refine_mcfg_draw_sync
@@ -7578,31 +7941,39 @@ Section MemoryAndSerialization.
     - eapply refine_prov_obs_eq;
         [symmetry; apply interp_mcfg_model_non_intr; reflexivity
         | symmetry; apply interp_mcfg_model_non_intr; reflexivity |].
-      unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
-      unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree].
-      unfold raiseOOM, trigger_cast, ITree.trigger, lift_bot_prov.
-      pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
-    - eapply refine_prov_obs_eq;
-        [symmetry; apply interp_mcfg_model_non_intr; reflexivity
-        | symmetry; apply interp_mcfg_model_non_intr; reflexivity |].
-      unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
-      unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree].
-      unfold raiseUB, trigger_cast, ITree.trigger, lift_bot_prov.
-      pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
-    - eapply refine_prov_obs_eq;
-        [symmetry; apply interp_mcfg_model_non_intr; reflexivity
-        | symmetry; apply interp_mcfg_model_non_intr; reflexivity |].
-      unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+      try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
       unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree].
       unfold raise, trigger_cast, ITree.trigger, lift_bot_prov.
-      pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate); cbn;
+      pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate);
+        cbn; try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun; cbn;
         right; right; split; [exact I | intros [] [] _].
+    - eapply refine_prov_obs_eq;
+        [symmetry; apply interp_mcfg_model_non_intr; reflexivity
+        | symmetry; apply interp_mcfg_model_non_intr; reflexivity |].
+      unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+      try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
+      unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree].
+      unfold raiseOOM, trigger_cast, ITree.trigger, lift_bot_prov.
+      pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate);
+        cbn; try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun; cbn; left; reflexivity.
+    - eapply refine_prov_obs_eq;
+        [symmetry; apply interp_mcfg_model_non_intr; reflexivity
+        | symmetry; apply interp_mcfg_model_non_intr; reflexivity |].
+      unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+      try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
+      unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree].
+      unfold raiseUB, trigger_cast, ITree.trigger, lift_bot_prov.
+      pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate);
+        cbn; try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun; cbn; left; reflexivity.
     - assert (Hd1 : interp_vellvm_prov_h (subevent _ (Draw dt)) s1 ≅ Ret (s1, dv)).
-      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+        try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
         unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree ExtLib.Structures.Monad.ret Monad_itree].
         rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity. }
       assert (Hd2 : interp_vellvm_prov_h (subevent _ (Draw dt)) s2 ≅ Ret (s2, dv)).
-      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+        try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
         unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree ExtLib.Structures.Monad.ret Monad_itree].
         rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity. }
       eapply refine_prov_tau_star_l; [eapply tau_star_mcfg_det; [reflexivity | exact Hd1] |].
@@ -7622,7 +7993,7 @@ Section MemoryAndSerialization.
     unfold convert; destruct ct as [| pct | ict].
     - destruct (dtyp_eqb t_from t_to).
       + eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret | apply refine_prov_ret; repeat split].
-      + destruct (@bit_sizeof_dtyp SizeofV t_from =? @bit_sizeof_dtyp SizeofV t_to)%N.
+      + match goal with |- context [(?a =? ?b)%N] => destruct (a =? b)%N end.
         * eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split].
         * apply refine_mcfg_raise_both.
     - eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split].
@@ -7673,9 +8044,11 @@ Section MemoryAndSerialization.
     - pose proof (m2r_dvalue_size_pos dv); lia.
     - destruct dv as [db | p fields | vec elts]; cbn [freeze].
       + apply Hbase.
-      + destruct dt as [| p' dts |]; try apply refine_mcfg_raise_both.
+      + destruct dt as [| p' dts |];
+          [apply refine_mcfg_raise_both | | apply refine_mcfg_raise_both].
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-        eapply refine_mcfg_model_bind; [| intros ? ? ? ? ? _ (-> & -> & -> & ->); apply Hret_sync].
+        eapply refine_mcfg_model_bind with (RA := fun U' '(s1', r1) '(s2', r2) => U' = U /\ s1' = s1 /\ s2' = s2 /\ r1 = r2);
+          [| intros ? ? ? ? ? _ (-> & -> & -> & ->); apply Hret_sync].
         cbn [m2r_dvalue_size] in Hle.
         assert (Hfld : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) fields <= sz)%nat) by lia.
         clear Hle.
@@ -7689,13 +8062,15 @@ Section MemoryAndSerialization.
         end.
         revert dts U s1 s2 Hfld; induction fields as [| v vs IHf]; intros [| t ts] U s1 s2 Hfld acc;
           cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
-          try apply refine_mcfg_raise_both; [apply Hret_sync |].
+          [apply Hret_sync | apply refine_mcfg_raise_both | apply refine_mcfg_raise_both |].
         eapply refine_mcfg_model_bind.
-        * fold (@freeze (@ParamsV IP IPT) _ _ _ _ t v); apply IH; lia.
+        * fold (@freeze (@ParamsV IP IPT) (@MCFGEtop (@ParamsV IP IPT)) _ _ _ _ t v); apply IH; lia.
         * intros ? ? ? ? ? _ (-> & -> & -> & ->); apply IHf; lia.
-      + destruct dt as [| | v' sz_n t]; try apply refine_mcfg_raise_both.
+      + destruct dt as [| | v' sz_n t];
+          [apply refine_mcfg_raise_both | apply refine_mcfg_raise_both |].
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-        eapply refine_mcfg_model_bind; [| intros ? ? ? ? ? _ (-> & -> & -> & ->); apply Hret_sync].
+        eapply refine_mcfg_model_bind with (RA := fun U' '(s1', r1) '(s2', r2) => U' = U /\ s1' = s1 /\ s2' = s2 /\ r1 = r2);
+          [| intros ? ? ? ? ? _ (-> & -> & -> & ->); apply Hret_sync].
         cbn [m2r_dvalue_size] in Hle.
         assert (Helt : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) elts <= sz)%nat) by lia.
         clear Hle.
@@ -7710,7 +8085,7 @@ Section MemoryAndSerialization.
         revert U s1 s2 Helt; induction elts as [| v vs IHe]; intros U s1 s2 Helt acc;
           cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; [apply Hret_sync |].
         eapply refine_mcfg_model_bind.
-        * fold (@freeze (@ParamsV IP IPT) _ _ _ _ t v); apply IH; lia.
+        * fold (@freeze (@ParamsV IP IPT) (@MCFGEtop (@ParamsV IP IPT)) _ _ _ _ t v); apply IH; lia.
         * intros ? ? ? ? ? _ (-> & -> & -> & ->); apply IHe; lia.
   Qed.
 
@@ -7798,8 +8173,9 @@ Section MemoryAndSerialization.
       + eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret |].
         apply refine_prov_ret; repeat split; intros; apply poison_safe_ptr_dvalue.
       + eapply refine_mcfg_model_bind; [apply (Hlist fields Hle Hvars) | intros ? ? ? ? ? _ (-> & -> & -> & <-); eapply refine_prov_obs_eq; try (symmetry; apply interp_mcfg_model_ret); apply refine_prov_ret; repeat split; intros; discriminate].
-      + eapply refine_mcfg_model_bind; [eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros [] ? <-; exact Logic.eq_refl] |].
-        intros ? ? [] ? [] _ <-.
+      + eapply refine_mcfg_model_bind with (RA := fun U' '(s1', r1) '(s2', r2) => U' = U /\ s1' = s1 /\ s2' = s2 /\ r1 = r2);
+          [eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros [] ? <-; repeat split] |].
+        intros ? ? [] ? [] _ (-> & -> & -> & _).
         eapply refine_mcfg_model_bind; [apply (Hlist fields Hle Hvars) | intros ? ? ? ? ? _ (-> & -> & -> & <-); eapply refine_prov_obs_eq; try (symmetry; apply interp_mcfg_model_ret); apply refine_prov_ret; repeat split; intros; discriminate].
       + eapply refine_mcfg_model_bind; [apply (Hlist elts Hle Hvars) | intros ? ? ? ? ? _ (-> & -> & -> & <-); eapply refine_prov_obs_eq; try (symmetry; apply interp_mcfg_model_ret); apply refine_prov_ret; repeat split; intros; discriminate].
       + eapply refine_mcfg_model_bind; [apply (Hlist elts Hle Hvars) | intros ? ? ? ? ? _ (-> & -> & -> & <-); eapply refine_prov_obs_eq; try (symmetry; apply interp_mcfg_model_ret); apply refine_prov_ret; repeat split; intros; discriminate].
@@ -7818,7 +8194,7 @@ Section MemoryAndSerialization.
         eapply refine_mcfg_model_bind; [apply IH; [lia | intros x Hx; apply Hvars, in_app_iff; right; exact Hx] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
         eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split; intros; discriminate].
-      + destruct op as [dt1 op1]; eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | exact Hvars] |].
+      + destruct v as [dt1 op1]; eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | exact Hvars] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
         eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split; intros; discriminate].
       + eapply refine_mcfg_model_bind; [apply IH; [lia | intros x Hx; apply Hvars, in_app_iff; left; exact Hx] |].
@@ -7853,7 +8229,7 @@ Section MemoryAndSerialization.
       + destruct vec as [dt1 e1], elt as [dt2 e2], idx as [dt3 e3].
         eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn [full_exp_uses]; apply in_app_iff; left; exact Hx] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
-        eapply refine_mcfg_model_bind.
+        eapply refine_mcfg_model_bind with (RA := fun U' '(s1', r1) '(s2', r2) => U' = U /\ s1' = s1 /\ s2' = s2 /\ r1 = r2).
         * eapply refine_mcfg_model_bind;
             [apply IH; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn [full_exp_uses]; apply in_app_iff; right; apply in_app_iff; left; exact Hx]
             | intros ? ? ? ? ? _ (-> & -> & -> & <- & _); eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split]].
@@ -7901,13 +8277,16 @@ Section MemoryAndSerialization.
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
         eapply refine_prov_weaken; [apply refine_mcfg_freeze_sync | intros ? [? ?] [? ?] (-> & -> & -> & ->); repeat split; intros; discriminate].
       + apply refine_mcfg_raise_both.
-      + destruct md as [| | [dt1 ex1] | | | |];
+      + match goal with m0 : metadata _ |- _ => destruct m0 as [| | [dt1 ex1] | | | |] end;
           try (eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret | apply refine_prov_ret; repeat split; intros; discriminate]).
         eapply refine_prov_weaken; [apply IH; [cbn in Hle; lia | exact Hvars] |].
         intros ? [? ?] [? ?] (-> & -> & -> & -> & _); repeat split; intros; discriminate.
       + destruct elt as [dt1 e1].
-        eapply refine_mcfg_model_bind; [eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; exact Logic.eq_refl] |].
-        intros ? ? [sz_v t_v] ? ? _ <-.
+        eapply refine_mcfg_model_bind with
+          (RA := fun U' '(s1', r1) '(s2', r2) =>
+                   U' = U /\ s1' = (σ1, ((sf1, fstk1), g)) /\ s2' = (σ2, ((sf2, fstk2), g)) /\ r1 = r2);
+          [eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split] |].
+        intros ? ? [sz_v t_v] ? ? _ (-> & -> & -> & <-).
         eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | exact Hvars] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
         eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret | apply refine_prov_ret; repeat split; intros; discriminate].
@@ -7998,10 +8377,11 @@ Section MemoryAndSerialization.
       eapply refine_prov_obs_eq;
         [symmetry; apply interp_cfg_model_non_intr; reflexivity
         | symmetry; apply interp_cfg_model_non_intr; reflexivity |].
-      cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
       unfold fused_trigger_prov, ITree.trigger.
       eapply refine_prov_obs_eq;
-        [symmetry; apply Eqit.bind_vis | symmetry; apply Eqit.bind_vis |].
+        [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+        | symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
       pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
     - intros _ _ [] _ _ _ _.
   Qed.
@@ -8013,12 +8393,14 @@ Section MemoryAndSerialization.
     refine_prov RR U (interp_cfg_exc ctx1 (raiseOOM msg) s1) t2.
   Proof using.
     unfold raiseOOM, trigger_cast, interp_cfg_exc.
-    assert (Hoom : run_exc (ITree.bind (ITree.trigger (subevent _ (ThrowOOM (print_msg msg))))
-                              (fun v : void => match v with end))
+    assert (Hoom : run_exc (A := A1)
+                     (ITree.bind (ITree.trigger (subevent _ (ThrowOOM (print_msg msg))))
+                        (fun v : void => match v with end))
                     ≅ ITree.bind (ITree.trigger (subevent _ (ThrowOOM (print_msg msg))))
                         (fun v : void => match v with end)).
-    { rewrite run_exc_bind_eq, (run_exc_trigger_non_exc _ Logic.eq_refl), Eqit.bind_bind.
-      apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _]. }
+    { rewrite run_exc_bind_eq, run_exc_trigger_non_exc;
+        [rewrite Eqit.bind_bind; apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _]
+        | reflexivity]. }
     eapply refine_prov_obs_eq;
       [symmetry; apply (interp_cfg_model_obs_eq ctx1 _ _ s1 Hoom) | reflexivity |].
     apply (refine_cfg_raiseOOM_l ctx1 RR U msg s1 t2).
@@ -8081,9 +8463,10 @@ Section MemoryAndSerialization.
   Proof using.
     intros Hmem.
     eapply refine_prov_obs_eq;
-      [symmetry; apply (interp_cfg_exc_trigger_non_exc ctx1 (subevent _ me1) (σ1, rest1) Logic.eq_refl)
-      | symmetry; apply Eqit.bind_ret_r |].
-    eapply refine_prov_bind.
+      [symmetry; apply interp_cfg_exc_trigger_non_exc; reflexivity
+      | apply Eqit.bind_ret_r |].
+    eapply refine_prov_bind with
+      (RR := fun U' '(s1', x1) r2 => RR U' (s1', inr x1) r2).
     - apply refine_cfg_memory_event_l, Hmem.
     - intros U' [s1' x1] r2 HRR.
       apply refine_prov_tau_l, refine_prov_ret, HRR.
@@ -8095,7 +8478,7 @@ Section MemoryAndSerialization.
     ITree.bind (loop_monad f l1) (fun _ => loop_monad f l2).
   Proof using.
     induction l1 as [| a l1' IH]; cbn [List.app loop_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-    - symmetry; apply Eqit.bind_ret_l.
+    - symmetry; rewrite Eqit.bind_ret_l; reflexivity.
     - symmetry; rewrite Eqit.bind_bind.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
       intros [] _ _; symmetry; exact IH.
@@ -8139,7 +8522,11 @@ Section MemoryAndSerialization.
       induction bk_phis as [| [bk0 phi0] rest IH];
       intros avoid pass1_out avoid_out Hpass Hinc Hinit_er Hphis;
       cbn [rewrite_non_entry_blocks_pass1] in Hpass.
-    - inversion Hpass; subst; repeat split; try apply incl_refl; intros ? ? ? ? [].
+    - inversion Hpass; subst.
+      split; [reflexivity |].
+      split; [reflexivity |].
+      split; [apply incl_refl |].
+      intros ? ? ? ? [].
     - assert (Hphi0 : ~ In phi0 avoid0) by (apply Hphis; left; reflexivity).
       assert (Hphis_tl : forall r, In r (List.map snd rest) -> ~ In r avoid0)
         by (intros r Hr; apply Hphis; right; exact Hr).
@@ -8147,7 +8534,7 @@ Section MemoryAndSerialization.
       + destruct (rewrite_non_entry_blocks_pass1 init_bid p dt init_end_reg init_code' avoid rest)
           as [rest_out av'] eqn:Erest.
         inversion Hpass; subst; clear Hpass.
-        destruct (IH avoid rest_out avoid_out Logic.eq_refl Hinc Hinit_er Hphis_tl)
+        destruct (IH avoid rest_out avoid_out Erest Hinc Hinit_er Hphis_tl)
           as (Hbks & Hprs & Hav & Hall).
         cbn [List.map fst snd]; split; [f_equal; exact Hbks |].
         split; [f_equal; exact Hprs |].
@@ -8163,7 +8550,7 @@ Section MemoryAndSerialization.
         destruct (rewrite_non_entry_blocks_pass1 init_bid p dt init_end_reg init_code' av1 rest)
           as [rest_out av2] eqn:Erest.
         inversion Hpass; subst; clear Hpass.
-        destruct (IH av1 rest_out avoid_out Logic.eq_refl Hinc1 Hinit_er Hphis_tl)
+        destruct (IH av1 rest_out avoid_out Erest Hinc1 Hinit_er Hphis_tl)
           as (Hbks & Hprs & Hav2 & Hall).
         cbn [List.map fst snd]; split; [f_equal; exact Hbks |].
         split; [f_equal; exact Hprs |].
@@ -8181,7 +8568,8 @@ Section MemoryAndSerialization.
     List.map blk_id (build_promoted_blocks init_bid dt init_reg all_bks pass1_out) =
     List.map (fun '(bk, _, _, _) => blk_id bk) pass1_out.
   Proof using.
-    unfold build_promoted_blocks.
+    unfold build_promoted_blocks; cbv zeta.
+    set (em := List.map (fun '(bk, _, _, end_r) => (blk_id bk, end_r)) pass1_out); clearbody em.
     induction pass1_out as [| [[[bk phi_r] cd'] end_r] rest IH]; cbn [List.map]; [reflexivity |].
     destruct (raw_id_eqb (blk_id bk) init_bid); cbn [blk_id]; f_equal; exact IH.
   Qed.
@@ -8241,8 +8629,8 @@ Section MemoryAndSerialization.
     intros Hsome; inversion Hsome; subst dst0; clear Hsome.
     rewrite !andb_true_iff, negb_true_iff in Econd.
     destruct Econd as ((((((Hq & Hdst) & Hdt) & Hdu) & Hanns) & _) & Hmd).
-    destruct (raw_id_eqb_spec q p) as [-> | _]; [| discriminate Hq].
-    destruct (raw_id_eqb_spec dst p) as [_ | Hne]; [discriminate Hdst |].
+    apply raw_id_eqb_spec in Hq; subst q.
+    apply raw_id_eqb_neq in Hdst; rename Hdst into Hne.
     apply m2r_dtyp_eqb_eq in Hdt; subst t.
     apply m2r_dtyp_eqb_eq in Hdu; subst du_ld.
     apply m2r_is_empty_spec in Hanns.
@@ -8280,7 +8668,7 @@ Section MemoryAndSerialization.
     intros Hsome; inversion Hsome; subst v_e; clear Hsome.
     rewrite !andb_true_iff, negb_true_iff in Econd.
     destruct Econd as ((((((Hq & Hdt) & Hdu) & Hnin) & Hanns) & _) & Hmd).
-    destruct (raw_id_eqb_spec q p) as [-> | _]; [| discriminate Hq].
+    apply raw_id_eqb_spec in Hq; subst q.
     apply m2r_dtyp_eqb_eq in Hdt; subst dt_st.
     apply m2r_dtyp_eqb_eq in Hdu; subst du_st.
     apply in_raw_ids_false in Hnin.
@@ -8340,11 +8728,11 @@ Section MemoryAndSerialization.
       intros [Hsafe Hderef].
       destruct (load_metadata_dereferenceable md) eqn:Ed; [discriminate Hderef |].
       right; left; exists id0, t, du, ptr_e, anns, md; repeat split; assumption.
-    - intros _; right; right; right; right; exists (IId id0), syncscope, ordering, md; reflexivity.
+    - intros _; right; right; right; right; exists (IId id0), syncscope, o, md; reflexivity.
+    - intros _; right; right; right; left; eexists vid0, _, md; reflexivity.
     - destruct val as [dt val_e], ptr as [du ptr_e]; intros Hsafe.
       right; right; left; exists vid0, dt, val_e, du, ptr_e, anns, md; split; [reflexivity | exact Hsafe].
-    - intros _; right; right; right; left; exists vid0, c, md; reflexivity.
-    - intros _; right; right; right; right; exists (IVoid vid0), syncscope, ordering, md; reflexivity.
+    - intros _; right; right; right; right; exists (IVoid vid0), syncscope, o, md; reflexivity.
   Qed.
 
   (** ** 3H. Fused Environment Steps & Stage 1 Attribute / Call Helpers *)
@@ -8360,7 +8748,7 @@ Section MemoryAndSerialization.
     unfold lwrite, Subevent.trigger; try unfold trigger_cast.
     eapply tau_star_cfg_det; [reflexivity |].
     unfold interp_vellvm_prov_h;
-      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     apply fused_local_prov_write.
   Qed.
 
@@ -8391,7 +8779,7 @@ Section MemoryAndSerialization.
     unfold lread, Subevent.trigger; try unfold trigger_cast.
     eapply tau_star_cfg_det; [reflexivity |].
     unfold interp_vellvm_prov_h;
-      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     exact (fused_local_prov_read_some x v (σ, ((sf, fstk), g)) Hlk).
   Qed.
 
@@ -8424,10 +8812,11 @@ Section MemoryAndSerialization.
     unfold stack_push, Subevent.trigger; try unfold trigger_cast.
     eapply tau_star_cfg_det; [reflexivity |].
     unfold interp_vellvm_prov_h;
-      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
     unfold fused_stack_prov, on_ls_prov, handle_stack;
-      cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
-    rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity.
+      cbn - [Maps.lookup Maps.add lift_bot_prov init_local_env].
+    rewrite ?lift_bot_prov_bind_ret, ?lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity.
   Qed.
 
   Lemma tau_star_cfg_stack_pop
@@ -8441,10 +8830,11 @@ Section MemoryAndSerialization.
     unfold stack_pop, Subevent.trigger; try unfold trigger_cast.
     eapply tau_star_cfg_det; [reflexivity |].
     unfold interp_vellvm_prov_h;
-      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
     unfold fused_stack_prov, on_ls_prov, handle_stack;
-      cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
-    rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity.
+      cbn - [Maps.lookup Maps.add lift_bot_prov init_local_env].
+    rewrite ?lift_bot_prov_bind_ret, ?lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity.
   Qed.
 
   Lemma tau_star_mcfg_gwrite
@@ -8457,10 +8847,11 @@ Section MemoryAndSerialization.
     unfold gwrite, Subevent.trigger; try unfold trigger_cast.
     eapply tau_star_mcfg_det; [reflexivity |].
     unfold interp_vellvm_prov_h;
-      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
     unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, update_globals_ref;
-      cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
-    rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity.
+      cbn - [Maps.lookup Maps.add Maps.empty lift_bot_prov].
+    rewrite ?lift_bot_prov_bind_ret, ?lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity.
   Qed.
 
   Lemma denote_operand_bundles_empty_eq
@@ -8486,17 +8877,24 @@ Section MemoryAndSerialization.
       (interp_cfg_model ctx2 (assert_dereferenceable or_null n v msg2) (σ2, rest2)).
   Proof using.
     unfold assert_dereferenceable.
-    destruct v as [[pt | | | | | | |] | |];
-      try apply refine_cfg_raise_both.
+    destruct v as [[pt | | | | | | |] | |]; cbv beta iota;
+      lazymatch goal with
+      | |- refine_prov _ _ (interp_cfg_model _ (raise _) _) _ => apply refine_cfg_raise_both
+      | _ => idtac
+      end.
     - destruct ((or_null && (ptr_to_int pt =? ptr_to_int null)%Z) || (n =? 0)%N).
       + eapply refine_prov_obs_eq;
           [symmetry; apply interp_cfg_model_ret | symmetry; apply interp_cfg_model_ret |].
         apply refine_prov_ret; repeat split; reflexivity.
-      + eapply refine_cfg_model_bind.
+      + eapply refine_cfg_model_bind with
+          (RA := fun U' '(s1', _) '(s2', _) =>
+                   U' = U /\ s1' = (σ1, rest1) /\ s2' = (σ2, rest2)).
         * unfold load, Subevent.trigger; try unfold trigger_cast.
           apply refine_cfg_memory_event.
-          exact (stage1_load_b8_array_any_ptr n (DVALUE_Base (DVALUE_Pointer pt))
-                   U P_unprom G σ1 σ2 Hinv).
+          eapply refine_prov_weaken.
+          -- exact (stage1_load_b8_array_any_ptr n (DVALUE_Base (DVALUE_Pointer pt))
+                      U P_unprom G σ1 σ2 Hinv).
+          -- intros U' [σ1' _] [σ2' _] (-> & -> & ->); repeat split; reflexivity.
         * intros U' s1' _ s2' _ _ (-> & -> & ->).
           eapply refine_prov_obs_eq;
             [symmetry; apply interp_cfg_model_ret | symmetry; apply interp_cfg_model_ret |].
@@ -8521,15 +8919,22 @@ Section MemoryAndSerialization.
       (interp_cfg_exc ctx2 (assert_dereferenceable or_null n v msg2) (σ2, rest2)).
   Proof using.
     unfold assert_dereferenceable.
-    destruct v as [[pt | | | | | | |] | |];
-      try apply refine_cfg_exc_raise_both.
+    destruct v as [[pt | | | | | | |] | |]; cbv beta iota;
+      lazymatch goal with
+      | |- refine_prov _ _ (interp_cfg_exc _ (raise _) _) _ => apply refine_cfg_exc_raise_both
+      | _ => idtac
+      end.
     - destruct ((or_null && (ptr_to_int pt =? ptr_to_int null)%Z) || (n =? 0)%N).
       + apply refine_cfg_exc_ret; repeat split; reflexivity.
-      + eapply refine_cfg_exc_bind.
+      + eapply refine_cfg_exc_bind with
+          (RA := fun U' s1' s2' _ _ =>
+                   U' = U /\ s1' = (σ1, rest1) /\ s2' = (σ2, rest2)).
         * unfold load, Subevent.trigger; try unfold trigger_cast.
           apply refine_cfg_exc_memory_event.
-          exact (stage1_load_b8_array_any_ptr n (DVALUE_Base (DVALUE_Pointer pt))
-                   U P_unprom G σ1 σ2 Hinv).
+          eapply refine_prov_weaken.
+          -- exact (stage1_load_b8_array_any_ptr n (DVALUE_Base (DVALUE_Pointer pt))
+                      U P_unprom G σ1 σ2 Hinv).
+          -- intros U' [σ1' _] [σ2' _] (-> & -> & ->); repeat split; reflexivity.
         * intros U' s1' _ s2' _ _ (-> & -> & ->).
           apply refine_cfg_exc_ret; repeat split; reflexivity.
     - apply refine_cfg_exc_raiseUB_l.
@@ -8573,11 +8978,15 @@ Section MemoryAndSerialization.
       (interp_cfg_model ctx2 (apply_attrs attrs msg v) (σ2, rest2)).
   Proof using.
     unfold apply_attrs.
-    eapply refine_cfg_model_bind.
+    eapply refine_cfg_model_bind with
+      (RA := fun U' '(s1', r1) '(s2', r2) =>
+               U' = U /\ s1' = (σ1, rest1) /\ s2' = (σ2, rest2) /\ r1 = r2).
     - eapply refine_cfg_EOU; [apply refine_EOU_refl |].
       intros a1 a2 <-; exact (conj (Logic.eq_refl U) (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl))).
     - intros U1 s1' v1 s2' v2 _ (-> & -> & -> & <-).
-      eapply refine_cfg_model_bind.
+      eapply refine_cfg_model_bind with
+        (RA := fun U' '(s1', r1) '(s2', r2) =>
+                 U' = U /\ s1' = (σ1, rest1) /\ s2' = (σ2, rest2) /\ r1 = tt /\ r2 = tt).
       + unfold assert_attrs_dereferenceable.
         destruct (find_option attr_dereferenceable attrs) as [[or_null n] |],
                  v1 as [[pt | | | | | | |] | |];
@@ -8610,11 +9019,15 @@ Section MemoryAndSerialization.
       (interp_cfg_exc ctx2 (apply_attrs attrs msg v) (σ2, rest2)).
   Proof using.
     unfold apply_attrs.
-    eapply refine_cfg_exc_bind.
+    eapply refine_cfg_exc_bind with
+      (RA := fun U' s1' s2' r1 r2 =>
+               U' = U /\ s1' = (σ1, rest1) /\ s2' = (σ2, rest2) /\ r1 = r2).
     - eapply refine_cfg_exc_EOU; [apply refine_EOU_refl |].
       intros a1 a2 <-; repeat split; reflexivity.
     - intros U1 s1' v1 s2' v2 _ (-> & -> & -> & <-).
-      eapply refine_cfg_exc_bind.
+      eapply refine_cfg_exc_bind with
+        (RA := fun U' s1' s2' r1 r2 =>
+                 U' = U /\ s1' = (σ1, rest1) /\ s2' = (σ2, rest2) /\ r1 = tt /\ r2 = tt).
       + unfold assert_attrs_dereferenceable.
         destruct (find_option attr_dereferenceable attrs) as [[or_null n] |],
                  v1 as [[pt | | | | | | |] | |];
@@ -8674,7 +9087,9 @@ Section MemoryAndSerialization.
       (interp_cfg_model ctx2 (check_call_return fattrs ret_attrs ranges loc args rv) (σ2, rest2)).
   Proof using.
     unfold check_call_return.
-    eapply refine_cfg_model_bind.
+    eapply refine_cfg_model_bind with
+      (RA := fun U' '(s1', _) '(s2', _) =>
+               U' = U /\ s1' = (σ1, rest1) /\ s2' = (σ2, rest2)).
     - eapply refine_cfg_EOU; [apply refine_EOU_refl |].
       intros [] [] _; exact (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl)).
     - intros U1 s1' _ s2' _ _ (-> & -> & ->).
@@ -8712,7 +9127,9 @@ Section MemoryAndSerialization.
       (interp_cfg_exc ctx2 (check_call_return fattrs ret_attrs ranges loc args rv) (σ2, rest2)).
   Proof using.
     unfold check_call_return.
-    eapply refine_cfg_exc_bind.
+    eapply refine_cfg_exc_bind with
+      (RA := fun U' s1' s2' _ _ =>
+               U' = U /\ s1' = (σ1, rest1) /\ s2' = (σ2, rest2)).
     - eapply refine_cfg_exc_EOU; [apply refine_EOU_refl |].
       intros [] [] _; exact (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl)).
     - intros U1 s1' _ s2' _ _ (-> & -> & ->).
@@ -8777,26 +9194,30 @@ Section MemoryAndSerialization.
   Proof using.
     unfold putchar_denotation.
     destruct args as [| ch [| ? ?]];
-      try apply refine_cfg_raise_both.
+      [apply refine_cfg_raise_both | | apply refine_cfg_raise_both].
     cbn [Functor.fmap Functor_itree ITree.map].
-    eapply refine_cfg_model_bind.
+    eapply refine_cfg_model_bind with
+      (RA := fun U' '(s1', r1) '(s2', r2) => U' = U /\ s1' = s1 /\ s2' = s2 /\ r1 = r2).
     - destruct ch as [[| sz x32 | | | | | |] | |];
-        try apply refine_cfg_raiseUB_l.
+        [apply refine_cfg_raiseUB_l | | apply refine_cfg_raiseUB_l ..].
       destruct (Pos.eq_dec 32 sz) as [<- | _];
         [| apply refine_cfg_raiseUB_l].
-      eapply refine_cfg_model_bind.
+      eapply refine_cfg_model_bind with
+        (RA := fun U' '(s1', a1) '(s2', a2) => U' = U /\ s1' = s1 /\ s2' = s2 /\ a1 = a2).
       + unfold io_stdout, Subevent.trigger; try unfold trigger_cast.
         eapply refine_prov_obs_eq;
           [symmetry; apply interp_cfg_model_non_intr; reflexivity
           | symmetry; apply interp_cfg_model_non_intr; reflexivity |].
-        cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+        cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
         unfold fused_trigger_prov, ITree.trigger.
         eapply refine_prov_obs_eq;
-          [symmetry; apply Eqit.bind_vis | symmetry; apply Eqit.bind_vis |].
+          [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
+          | symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
         pstep; apply RP_Step; cbn; right; right; split; [reflexivity |].
         intros a1 a2 <-; left.
         eapply refine_prov_obs_eq;
-          [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
+          [symmetry; rewrite !Eqit.bind_ret_l; reflexivity
+          | symmetry; rewrite !Eqit.bind_ret_l; reflexivity |].
         apply refine_prov_tau_both, refine_prov_tau_both, refine_prov_tau_both, refine_prov_ret.
         repeat split; reflexivity.
       + intros U1 s1' _ s2' _ _ (-> & -> & -> & _).
@@ -8840,7 +9261,7 @@ Section MemoryAndSerialization.
     In bk bks /\ blk_id bk = bid.
   Proof using.
     induction bks as [| b0 bs IH]; intros Hfind; [cbn in Hfind; discriminate Hfind |].
-    destruct (raw_id_eqb_spec (blk_id b0) bid) as [Heq | Hne].
+    destruct (raw_id_eqb (blk_id b0) bid) eqn:Ebid; [apply raw_id_eqb_spec in Ebid; rename Ebid into Heq | apply raw_id_eqb_neq in Ebid; rename Ebid into Hne].
     - rewrite find_block_eq in Hfind by exact Heq.
       inversion Hfind; subst b0; split; [left; reflexivity | exact Heq].
     - rewrite find_block_ineq in Hfind by exact Hne.
@@ -8856,7 +9277,7 @@ Section MemoryAndSerialization.
     cbn [List.map] in Hnd; inversion Hnd as [| ? ? Hnin Hnd']; subst.
     destruct Hin as [<- | Hin].
     - apply find_block_eq; reflexivity.
-    - destruct (raw_id_eqb_spec (blk_id b0) (blk_id bk)) as [Heq | Hne].
+    - destruct (raw_id_eqb (blk_id b0) (blk_id bk)) eqn:Ebid; [apply raw_id_eqb_spec in Ebid; rename Ebid into Heq | apply raw_id_eqb_neq in Ebid; rename Ebid into Hne].
       + exfalso; apply Hnin; rewrite Heq; apply in_map, Hin.
       + rewrite find_block_ineq by exact Hne; apply IH; assumption.
   Qed.
@@ -8868,12 +9289,12 @@ Section MemoryAndSerialization.
   Proof using.
     induction bks as [| b0 bs IH]; cbn [List.map]; [reflexivity |].
     pose proof (Hid b0 (or_introl Logic.eq_refl)) as Hid0.
-    destruct (raw_id_eqb_spec (blk_id b0) bid) as [Heq | Hne].
-    - rewrite find_block_eq by exact Heq.
-      rewrite find_block_eq by congruence.
+    destruct (raw_id_eqb (blk_id b0) bid) eqn:Ebid; [apply raw_id_eqb_spec in Ebid; rename Ebid into Heq | apply raw_id_eqb_neq in Ebid; rename Ebid into Hne].
+    - rewrite find_block_eq by congruence.
+      rewrite find_block_eq by exact Heq.
       reflexivity.
-    - rewrite find_block_ineq by exact Hne.
-      rewrite find_block_ineq by congruence.
+    - rewrite find_block_ineq by congruence.
+      rewrite find_block_ineq by exact Hne.
       apply IH; intros bk Hbk; apply Hid; right; exact Hbk.
   Qed.
 
@@ -8905,8 +9326,8 @@ Section MemoryAndSerialization.
     (mk : state -> A -> Res R)
     (U : list N) (σ1 σ2 : state)
     (Hmk : forall a,
-             mem_stack_equal (state_memory_stack (fst (mk σ1 a)))
-                             (state_memory_stack (fst (mk σ2 a))) /\
+             mem_stack_equal (state_memory_stack (fst (fst (mk σ1 a))))
+                             (state_memory_stack (fst (fst (mk σ2 a)))) /\
              snd (fst (mk σ1 a)) = snd (fst (mk σ2 a)) /\
              snd (mk σ1 a) = snd (mk σ2 a)) :
     refine_prov
@@ -9064,17 +9485,17 @@ Section MemoryAndSerialization.
       is_eq_rel U0 U a1' a2'.
     Proof using.
       intros E1 E2 Hst.
-      destruct Hst as [U' t σ1 σ2 rest Et1 Et2 Hinc Heq
-                      | X U' u1 u2 k Eu1 Eu2 Hu].
-      - eapply ISE_Tree;
-          [etransitivity; eassumption
-          | etransitivity; eassumption
-          | exact Hinc
-          | exact Heq].
-      - eapply ISE_Bind;
-          [etransitivity; eassumption
-          | etransitivity; eassumption
-          | exact Hu].
+      destruct Hst as [U' t σ1 σ2 rest a1_0 a2_0 Et1 Et2 Hinc Heq
+                      | X U' u1 u2 k a1_0 a2_0 Eu1 Eu2 Hu].
+      - eapply ISE_Tree with (t := t) (σ1 := σ1) (σ2 := σ2) (rest := rest).
+        + transitivity a1_0; [exact Et1 | exact E1].
+        + transitivity a2_0; [exact Et2 | exact E2].
+        + exact Hinc.
+        + exact Heq.
+      - eapply ISE_Bind with (u1 := u1) (u2 := u2) (k := k).
+        + transitivity a1_0; [exact Eu1 | exact E1].
+        + transitivity a2_0; [exact Eu2 | exact E2].
+        + exact Hu.
     Qed.
 
     Local Lemma step_is_eq_bind {X R : Type} (U0 U : list N)
@@ -9141,8 +9562,8 @@ Section MemoryAndSerialization.
       { pcofix CIH; intros U a1 a2 Hst; pstep.
         eapply refine_prov__mon with (r := @is_eq_rel R U0);
           [| intros U' x1 x2 Hx; right; apply CIH, Hx].
-        destruct Hst as [U t0 s_a s_b rest0 E1 E2 Hinc Heq0
-                        | X U u1 u2 k E1 E2 Hu].
+        destruct Hst as [U t0 s_a s_b rest0 a1_0 a2_0 E1 E2 Hinc Heq0
+                        | X U u1 u2 k a1_0 a2_0 E1 E2 Hu].
         - eapply refine_prov__obs_eq;
             [exact (is_eq_rel_obs_eq U0) | exact E1 | exact E2 |].
           destruct (observe t0) as [rv | mt | X e k] eqn:Hot.
@@ -9211,12 +9632,14 @@ Section MemoryAndSerialization.
       interp_cfg_model ctx (ITree.trigger (inl1 ce)) s ≅
       Tau (interp_cfg_model ctx (mrec_ctx ctx X ce) s).
     Proof using.
-      unfold interp_cfg_model, ITree.trigger.
-      rewrite (interp_mcfg_model_obs_eq _ _ s (unfold_interp_mrec (mrec_ctx ctx) _)).
-      cbn [_interp_mrec observe].
-      rewrite interp_mcfg_model_tau.
-      rewrite (interp_mcfg_model_obs_eq _ _ s
-                 (interp_mrec_proper_eq (mrec_ctx ctx) _ _ (Eqit.bind_ret_r _))).
+      assert (Hm : interp_mrec (mrec_ctx ctx) (ITree.trigger (inl1 ce)) ≅
+                   Tau (interp_mrec (mrec_ctx ctx) (mrec_ctx ctx X ce))).
+      { unfold ITree.trigger; rewrite unfold_interp_mrec.
+        transitivity (Tau (interp_mrec (mrec_ctx ctx) (ITree.bind (mrec_ctx ctx X ce) (fun x => Ret x)))).
+        - reflexivity.
+        - apply eqit_Tau, interp_mrec_proper_eq, Eqit.bind_ret_r. }
+      unfold interp_cfg_model.
+      rewrite (interp_mcfg_model_obs_eq _ _ s Hm), interp_mcfg_model_tau.
       reflexivity.
     Qed.
 
@@ -9227,13 +9650,15 @@ Section MemoryAndSerialization.
       ITree.bind (interp_mcfg_model (ITree.trigger me) s)
         (fun '(s', x) => Tau (Ret (s', x))).
     Proof using.
-      unfold interp_cfg_model, ITree.trigger.
-      rewrite (interp_mcfg_model_obs_eq _ _ s (unfold_interp_mrec (mrec_ctx ctx) _)).
-      cbn [_interp_mrec observe].
+      assert (Hm : interp_mrec (mrec_ctx ctx) (ITree.trigger (inr1 me)) ≅
+                   Vis me (fun x => Tau (interp_mrec (mrec_ctx ctx) (Ret x)))).
+      { unfold ITree.trigger; rewrite unfold_interp_mrec; reflexivity. }
+      unfold interp_cfg_model.
+      rewrite (interp_mcfg_model_obs_eq _ _ s Hm).
       assert (Hvis : Vis me (fun x => Tau (interp_mrec (mrec_ctx ctx) (Ret x))) ≅
                      ITree.bind (Vis me (fun x => Ret x))
                        (fun x => Tau (interp_mrec (mrec_ctx ctx) (Ret x)))).
-      { rewrite Eqit.bind_vis; apply eqit_Vis; intros x; symmetry; apply Eqit.bind_ret_l. }
+      { rewrite Eqit.bind_vis; apply eqit_Vis; intros x; rewrite Eqit.bind_ret_l; reflexivity. }
       rewrite (interp_mcfg_model_obs_eq _ _ s Hvis), interp_mcfg_model_bind.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
       intros [s' x] _ <-.
@@ -9288,15 +9713,22 @@ Section MemoryAndSerialization.
       @ces_rel R ctx1 ctx2 U0 U a1' a2'.
     Proof using.
       intros E1 E2 Hc.
-      destruct Hc as [U' t σ1 σ2 rest Et1 Et2 Hinc Heq
-                     | X U' u1 u2 k Eu1 Eu2 Hu
-                     | X U' u1 u2 k Eu1 Eu2 Hu].
-      - eapply CES_Tree;
-          [etransitivity; eassumption | etransitivity; eassumption | exact Hinc | exact Heq].
-      - eapply CES_BindMcfg;
-          [etransitivity; eassumption | etransitivity; eassumption | exact Hu].
-      - eapply CES_BindCall;
-          [etransitivity; eassumption | etransitivity; eassumption | exact Hu].
+      destruct Hc as [U' t σ1 σ2 rest a1_0 a2_0 Et1 Et2 Hinc Heq
+                     | X U' u1 u2 k a1_0 a2_0 Eu1 Eu2 Hu
+                     | X U' u1 u2 k a1_0 a2_0 Eu1 Eu2 Hu].
+      - eapply CES_Tree with (t := t) (σ1 := σ1) (σ2 := σ2) (rest := rest).
+        + transitivity a1_0; [exact Et1 | exact E1].
+        + transitivity a2_0; [exact Et2 | exact E2].
+        + exact Hinc.
+        + exact Heq.
+      - eapply CES_BindMcfg with (u1 := u1) (u2 := u2) (k := k).
+        + transitivity a1_0; [exact Eu1 | exact E1].
+        + transitivity a2_0; [exact Eu2 | exact E2].
+        + exact Hu.
+      - eapply CES_BindCall with (u1 := u1) (u2 := u2) (k := k).
+        + transitivity a1_0; [exact Eu1 | exact E1].
+        + transitivity a2_0; [exact Eu2 | exact E2].
+        + exact Hu.
     Qed.
 
     Local Lemma step_ces_mcfg_bind {X R : Type}
@@ -9357,14 +9789,11 @@ Section MemoryAndSerialization.
         (interp_cfg_model ctx2 t (σ2, rest)).
     Proof using Hmcfg.
       destruct (observe t) as [rv | mt | X e k] eqn:Hot.
-      - assert (Et1 : Ret ((σ1, rest), rv) ≅ interp_cfg_model ctx1 t (σ1, rest)).
-        { symmetry; rewrite (interp_cfg_model_obs_eq ctx1 t (Ret rv) _
-                               (eq_trans (itree_eta t) (eq_ind_r (fun o => go o ≅ Ret rv) (reflexivity _) Hot))).
-          apply interp_cfg_model_ret. }
+      - assert (Heta : t ≅ Ret rv) by (rewrite (itree_eta t), Hot; reflexivity).
+        assert (Et1 : Ret ((σ1, rest), rv) ≅ interp_cfg_model ctx1 t (σ1, rest)).
+        { symmetry; rewrite (interp_cfg_model_obs_eq ctx1 _ _ _ Heta); apply interp_cfg_model_ret. }
         assert (Et2 : Ret ((σ2, rest), rv) ≅ interp_cfg_model ctx2 t (σ2, rest)).
-        { symmetry; rewrite (interp_cfg_model_obs_eq ctx2 t (Ret rv) _
-                               (eq_trans (itree_eta t) (eq_ind_r (fun o => go o ≅ Ret rv) (reflexivity _) Hot))).
-          apply interp_cfg_model_ret. }
+        { symmetry; rewrite (interp_cfg_model_obs_eq ctx2 _ _ _ Heta); apply interp_cfg_model_ret. }
         eapply refine_prov__obs_eq;
           [exact (ces_rel_obs_eq ctx1 ctx2 U0) | exact Et1 | exact Et2 |].
         apply RP_Step; cbn; exact (conj Hinc (conj Heq (conj Logic.eq_refl Logic.eq_refl))).
@@ -9488,9 +9917,9 @@ Section MemoryAndSerialization.
       { pcofix CIH; intros U a1 a2 Hst; pstep.
         eapply refine_prov__mon with (r := @ces_rel R ctx1 ctx2 U0);
           [| intros U' x1 x2 Hx; right; apply CIH, Hx].
-        destruct Hst as [U t0 s_a s_b rest0 E1 E2 Hinc Heq0
-                        | X U u1 u2 k E1 E2 Hu
-                        | X U u1 u2 k E1 E2 Hu].
+        destruct Hst as [U t0 s_a s_b rest0 a1_0 a2_0 E1 E2 Hinc Heq0
+                        | X U u1 u2 k a1_0 a2_0 E1 E2 Hu
+                        | X U u1 u2 k a1_0 a2_0 E1 E2 Hu].
         - eapply refine_prov__obs_eq;
             [exact (ces_rel_obs_eq ctx1 ctx2 U0) | exact E1 | exact E2 |].
           exact (step_ces_tree ctx1 ctx2 Hctx U0 U t0 s_a s_b rest0 Hinc Heq0).
@@ -9615,7 +10044,7 @@ Section MemoryAndSerialization.
   Lemma genv_safe_empty (P0 : list N) :
     genv_safe P0 Maps.empty.
   Proof using.
-    intros gid v Hlk; rewrite lookup_empty in Hlk; discriminate Hlk.
+    intros gid v Hlk; cbn [Maps.lookup Maps.empty Map_rmap] in Hlk; rewrite RMF.F.empty_o in Hlk; discriminate Hlk.
   Qed.
 
   Lemma genv_safe_add (P0 : list N) (gid : raw_id)
@@ -9626,8 +10055,8 @@ Section MemoryAndSerialization.
   Proof using.
     intros Hg Hv gid' v' Hlk.
     destruct (RawIDOrd.eq_dec gid gid') as [<- | Hne].
-    - rewrite lookup_add_eq in Hlk; inversion Hlk; subst v'; exact Hv.
-    - rewrite lookup_add_neq in Hlk by exact Hne; exact (Hg gid' v' Hlk).
+    - cbn [Maps.lookup Maps.add Map_rmap] in Hlk; rewrite RMF.F.add_eq_o in Hlk by reflexivity; inversion Hlk; subst v'; exact Hv.
+    - cbn [Maps.lookup Maps.add Map_rmap] in Hlk; rewrite RMF.F.add_neq_o in Hlk by exact Hne; exact (Hg gid' v' Hlk).
   Qed.
 
   Definition genv_init_post
@@ -9721,12 +10150,26 @@ Section MemoryAndSerialization.
          (ITree.bind (alloca dt 1%N al) (fun v => gwrite gid v))
          (σ2, (ls, g))).
   Proof using.
-    eapply refine_mcfg_model_bind.
+    eapply refine_mcfg_model_bind with
+      (RA := fun U' '(s1', v1) '(s2', v2) =>
+               exists pr,
+                 ~ In pr U /\
+                 U' = pr :: U /\
+                 v1 = v2 /\
+                 is_safe_ptr_dvalue (pr :: P0) v2 /\
+                 mem_stack_equal (state_memory_stack (fst s1')) (state_memory_stack (fst s2')) /\
+                 snd s1' = (ls, g) /\
+                 snd s2' = (ls, g)).
     - unfold alloca, Subevent.trigger; try unfold trigger_cast.
       apply refine_mcfg_memory_event.
-      exact (alloca_mem_equal_safe dt 1%N al U P0 σ1 σ2 Hpu Heq).
+      eapply refine_prov_weaken;
+        [exact (alloca_mem_equal_safe dt 1%N al U P0 σ1 σ2 Hpu Heq) |].
+      intros U' [σ1' r1] [σ2' r2] (pr & Hpr & -> & Hr & Hsafe & Heq').
+      exists pr; cbn [fst snd];
+        exact (conj Hpr (conj Logic.eq_refl (conj Hr (conj Hsafe (conj Heq' (conj Logic.eq_refl Logic.eq_refl)))))).
     - intros U1 [σ1' rest1'] v1 [σ2' rest2'] v2 _
-        (pr & Hpr & -> & <- & Hsafe & Heq').
+        (pr & Hpr & -> & <- & Hsafe & Heq' & Hrest1 & Hrest2).
+      cbn [fst snd] in Heq', Hrest1, Hrest2; subst rest1' rest2'.
       eapply refine_prov_tau_star_l; [apply tau_star_mcfg_gwrite |].
       eapply refine_prov_tau_star_r; [apply tau_star_mcfg_gwrite |].
       apply refine_prov_ret.
@@ -9811,7 +10254,11 @@ Section MemoryAndSerialization.
     destruct ls as [sf fstk]; unfold initialize_global.
     destruct (g_alias gl).
     - destruct (g_exp gl) as [e |]; [| apply refine_mcfg_raiseUB_l].
-      destruct e; try apply refine_mcfg_raiseUB_l.
+      destruct e;
+        lazymatch goal with
+        | |- refine_prov _ _ (interp_mcfg_model (raiseUB _) _) _ => apply refine_mcfg_raiseUB_l
+        | _ => idtac
+        end.
       destruct id as [g_source | lid]; [| apply refine_mcfg_raiseUB_l].
       eapply refine_mcfg_model_bind; [apply refine_mcfg_gread_same_g |].
       intros U1 s1' p1 s2' p2 _ (-> & -> & -> & -> & Hsafe).
@@ -9825,7 +10272,12 @@ Section MemoryAndSerialization.
                      (conj (genv_safe_add P0 (g_ident gl) p2 g Hg (Hsafe P0 Hg)) Heq))))).
     - eapply refine_mcfg_model_bind; [apply refine_mcfg_gread_same_g |].
       intros U1 s1' a1 s2' a2 _ (-> & -> & -> & -> & _).
-      eapply refine_mcfg_model_bind.
+      eapply refine_mcfg_model_bind with
+        (RA := fun U' '(s1', r1) '(s2', r2) =>
+                 U' = U /\
+                 s1' = (σ1, (sf, fstk, g)) /\
+                 s2' = (σ2, (sf, fstk, g)) /\
+                 r1 = r2).
       + destruct (g_exp gl) as [e |].
         * eapply refine_prov_weaken;
             [exact (denote_exp_mcfg_sim (Some (g_typ gl)) e U σ1 σ2 sf sf fstk fstk g
@@ -9902,7 +10354,10 @@ Section MemoryAndSerialization.
     eapply refine_mcfg_model_bind; [apply refine_mcfg_gread_same_g |].
     intros U1 s1' fv1 s2' fv2 _ (-> & -> & -> & -> & _).
     destruct fv2 as [[pt | | | | | | |] | |];
-      try apply refine_mcfg_raise_both.
+      lazymatch goal with
+      | |- refine_prov _ _ (interp_mcfg_model (raise _) _) _ => apply refine_mcfg_raise_both
+      | _ => idtac
+      end.
     eapply refine_prov_obs_eq;
       [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret |].
     apply refine_prov_ret;
@@ -9930,7 +10385,10 @@ Section MemoryAndSerialization.
     eapply refine_mcfg_model_bind; [apply refine_mcfg_gread_same_g |].
     intros U1 s1' fv1 s2' fv2 _ (-> & -> & -> & -> & _).
     destruct fv2 as [[pt | | | | | | |] | |];
-      try apply refine_mcfg_raise_both.
+      lazymatch goal with
+      | |- refine_prov _ _ (interp_mcfg_model (raise _) _) _ => apply refine_mcfg_raise_both
+      | _ => idtac
+      end.
     eapply refine_prov_obs_eq;
       [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret |].
     apply refine_prov_ret;
@@ -9964,7 +10422,7 @@ Section MemoryAndSerialization.
         [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret |].
       apply refine_prov_ret;
         exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl (Forall2_nil _)))).
-    - eapply refine_mcfg_model_bind;
+      - eapply refine_mcfg_model_bind;
         [exact (address_one_function_pair_sim Rfn d1 d2 U σ1 σ2 ls g Hnm Hfn) |].
       intros U1 s1' [z1 f1] s2' [z2 f2] _ (-> & -> & -> & <- & Hf).
       eapply refine_mcfg_model_bind; [exact IH |].
@@ -9975,7 +10433,7 @@ Section MemoryAndSerialization.
         exact (conj Logic.eq_refl
                  (conj Logic.eq_refl
                     (conj Logic.eq_refl
-                       (Forall2_cons _ _ (conj Logic.eq_refl Hf) Hfns)))).
+                       (Forall2_cons (z1, f1) (z1, f2) (conj Logic.eq_refl Hf) Hfns)))).
   Qed.
 
   Lemma map_monad_address_one_library_pair_sim
@@ -10012,7 +10470,7 @@ Section MemoryAndSerialization.
         exact (conj Logic.eq_refl
                  (conj Logic.eq_refl
                     (conj Logic.eq_refl
-                       (Forall2_cons _ _ (conj Logic.eq_refl Hf) Hfns)))).
+                       (Forall2_cons (z1, f1) (z1, f2) (conj Logic.eq_refl Hf) Hfns)))).
   Qed.
 
   Lemma convert_bitcast_vec1_scalar_eq
@@ -10123,13 +10581,14 @@ Section MemoryAndSerialization.
         eapply refine_prov__mon; [exact (Hst0 U' a1 a2 HR0) |].
         intros U'' b1 b2 [Hb | Hb];
           [left; left; exists R0; exact (conj Heq0 (conj Hst0 Hb)) | right; exact Hb].
-      + eapply refine_prov__obs_eq; [| exact Et1 | exact Et2 |].
-        * intros U'' x1 x1' x2 x2' Ex1 Ex2 [[Hx | (-> & E1 & E2)] | Hx].
-          -- left; left; exact (m2r_paco_obs_eq r U'' x1 x1' x2 x2' Ex1 Ex2 Hx).
-          -- left; right; split; [reflexivity | split; etransitivity; eassumption].
-          -- right; exact (obs_clos_eq r U'' x1 x1' x2 x2' Ex1 Ex2 Hx).
-        * eapply refine_prov__mon; [exact H |].
-          intros U'' b1 b2 [Hb | Hb]; [left; left; exact Hb | right; exact Hb].
+      + eapply refine_prov__obs_eq with
+          (r := fun U'' b1 b2 => R_fold U'' b1 b2 \/ obs_clos r U'' b1 b2);
+          [| exact Et1 | exact Et2
+           | eapply refine_prov__mon; [exact H | intros U'' b1 b2 [Hb | Hb]; [left; left; exact Hb | right; exact Hb]]].
+        intros U'' x1 x1' x2 x2' Ex1 Ex2 [[Hx | (-> & E1 & E2)] | Hx].
+        * left; left; exact (m2r_paco_obs_eq r U'' x1 x1' x2 x2' Ex1 Ex2 Hx).
+        * left; right; split; [reflexivity | split; etransitivity; eassumption].
+        * right; exact (obs_clos_eq r U'' x1 x1' x2 x2' Ex1 Ex2 Hx).
     - right; split; [reflexivity | split; reflexivity].
   Qed.
 
@@ -10516,10 +10975,18 @@ Section MemoryAndSerialization.
   Proof using.
     induction Hl as [| [k1 f1] [k2 f2] l1' l2' [<- Hf] _ IH]; intros z.
     - cbn; constructor.
-    - cbn [IntMaps.IP.of_list fold_right fst snd]; unfold lookup.
+    - cbn [IntMaps.IP.of_list fold_right]; unfold IntMaps.IP.uncurry, lookup; cbn [fst snd].
       destruct (Z.eq_dec k1 z) as [<- | Hne].
       + rewrite !IntMaps.IP.F.add_eq_o by reflexivity; constructor; exact Hf.
       + rewrite !IntMaps.IP.F.add_neq_o by exact Hne; apply IH.
+  Qed.
+
+  Lemma eq_itree_bind_congr_l {E : Type -> Type} {A B : Type}
+    {t1 t2 : itree E A} {k : A -> itree E B} (H : t1 ≅ t2) :
+    ITree.bind t1 k ≅ ITree.bind t2 k.
+  Proof using.
+    eapply eq_itree_clo_bind with (UU := Logic.eq);
+      [exact H | intros ? ? <-; reflexivity].
   Qed.
 
   Lemma interp_cfg_exc_call
@@ -10531,14 +10998,14 @@ Section MemoryAndSerialization.
            (interp_cfg_model ctx (mrec_ctx ctx _ (Call dt cc fv vs)) s)
            (fun '(s', y) => Tau (Ret (s', inr y)))).
   Proof using.
-    unfold call, Subevent.trigger.
-    rewrite (interp_cfg_exc_trigger_non_exc ctx
-               (subevent _ (Call dt cc fv vs)) s Logic.eq_refl).
-    change (ITree.trigger (subevent _ (Call dt cc fv vs)))
-      with (@call (@ParamsV IP IPT) dt cc fv vs).
-    rewrite (eq_itree_clo_bind _ _ _ _ Logic.eq
-               (interp_cfg_model_call ctx dt cc fv vs s)
-               (fun _ _ <- => Logic.eq_refl)).
+    assert (Ecall : call dt cc fv vs ≅ ITree.trigger (inl1 (Call dt cc fv vs) : @CFGEtop (@ParamsV IP IPT) _)).
+    { unfold call, trigger, ITree.trigger;
+        cbn [subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun];
+        reflexivity. }
+    rewrite (interp_cfg_exc_obs_eq ctx _ _ s Ecall).
+    rewrite interp_cfg_exc_trigger_non_exc; [| reflexivity].
+    rewrite <- (eq_itree_bind_congr_l (interp_cfg_model_obs_eq ctx _ _ s Ecall)).
+    rewrite (eq_itree_bind_congr_l (interp_cfg_model_call ctx dt cc fv vs s)).
     apply Eqit.bind_tau.
   Qed.
 
@@ -10569,9 +11036,7 @@ Section MemoryAndSerialization.
              (fun '(s1', y1) => Tau (k_out1 (s1', inr y1)))) ≅
       ITree.bind (interp_cfg_exc ctx1 (call dt cc fv vs) s1) k_out1).
     { symmetry.
-      rewrite (eq_itree_clo_bind _ _ _ _ Logic.eq
-                 (interp_cfg_exc_call ctx1 dt cc fv vs s1)
-                 (fun _ _ <- => Logic.eq_refl)).
+      rewrite (eq_itree_bind_congr_l (interp_cfg_exc_call ctx1 dt cc fv vs s1)).
       rewrite Eqit.bind_tau, Eqit.bind_bind.
       apply eqit_Tau.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
@@ -10582,9 +11047,7 @@ Section MemoryAndSerialization.
              (fun '(s2', y2) => Tau (k_out2 (s2', inr y2)))) ≅
       ITree.bind (interp_cfg_exc ctx2 (call dt cc fv vs) s2) k_out2).
     { symmetry.
-      rewrite (eq_itree_clo_bind _ _ _ _ Logic.eq
-                 (interp_cfg_exc_call ctx2 dt cc fv vs s2)
-                 (fun _ _ <- => Logic.eq_refl)).
+      rewrite (eq_itree_bind_congr_l (interp_cfg_exc_call ctx2 dt cc fv vs s2)).
       rewrite Eqit.bind_tau, Eqit.bind_bind.
       apply eqit_Tau.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
@@ -10638,11 +11101,11 @@ Section MemoryAndSerialization.
     Maps.lookup q (init_local_env bs) = None.
   Proof using.
     induction bs as [| [k dv] rest IH]; intros Hnin; cbn [init_local_env List.fold_right].
-    - apply lookup_empty.
+    - cbn [Maps.lookup Maps.empty Map_rmap]; apply RMF.F.empty_o.
     - cbn [List.map fst In] in Hnin.
       destruct (RawIDOrd.eq_dec k q) as [-> | Hne].
       + exfalso; apply Hnin; left; reflexivity.
-      + rewrite lookup_add_neq by exact Hne.
+      + cbn [Maps.lookup Maps.add Map_rmap]; rewrite RMF.F.add_neq_o by exact Hne.
         apply IH; intros Hin; apply Hnin; right; exact Hin.
   Qed.
 
@@ -10680,7 +11143,7 @@ Section MemoryAndSerialization.
   Proof using.
     intros Hnin Henv q v0 Hq Hlk.
     destruct (RawIDOrd.eq_dec x q) as [-> | Hne]; [contradiction |].
-    rewrite lookup_add_neq in Hlk by exact Hne.
+    cbn [Maps.lookup Maps.add Map_rmap] in Hlk; rewrite RMF.F.add_neq_o in Hlk by exact Hne.
     exact (Henv q v0 Hq Hlk).
   Qed.
 
@@ -10694,8 +11157,8 @@ Section MemoryAndSerialization.
   Proof using.
     intros Hv Henv q v0 Hq Hlk.
     destruct (RawIDOrd.eq_dec x q) as [<- | Hne].
-    - rewrite lookup_add_eq in Hlk; inversion Hlk; subst v0; exact Hv.
-    - rewrite lookup_add_neq in Hlk by exact Hne; exact (Henv q v0 Hq Hlk).
+    - cbn [Maps.lookup Maps.add Map_rmap] in Hlk; rewrite RMF.F.add_eq_o in Hlk by reflexivity; inversion Hlk; subst v0; exact Hv.
+    - cbn [Maps.lookup Maps.add Map_rmap] in Hlk; rewrite RMF.F.add_neq_o in Hlk by exact Hne; exact (Henv q v0 Hq Hlk).
   Qed.
 
   Lemma push_call_frame_stage1_sim
@@ -10729,77 +11192,141 @@ Section MemoryAndSerialization.
       (interp_cfg_model ctx1 (push_call_frame df1 args) (σ1, ((sf1, fstk1), g)))
       (interp_cfg_model ctx2 (push_call_frame df2 args) (σ2, ((sf2, fstk2), g))).
   Proof using.
-    unfold push_call_frame; rewrite <- Hargs.
-    destruct (combine_lists_varargs (df_args df1) args)
-      as [msg | msg | msg | [bs vs]] eqn:Ecomb; cbn [EOU_to_itree].
-    - eapply refine_cfg_model_bind with (RR := fun _ _ _ => False);
-        [apply refine_cfg_raise_both | intros ? ? ? ? ? _ []].
-    - eapply refine_cfg_model_bind with (RR := fun _ _ _ => False);
-        [apply refine_cfg_raiseOOM_l | intros ? ? ? ? ? _ []].
-    - eapply refine_cfg_model_bind with (RR := fun _ _ _ => False);
-        [apply refine_cfg_raiseUB_l | intros ? ? ? ? ? _ []].
-    - eapply refine_prov_obs_eq;
-        [symmetry; apply (interp_cfg_model_obs_eq _ _ _ _ (Eqit.bind_ret_l _ _))
-        | symmetry; apply (interp_cfg_model_obs_eq _ _ _ _ (Eqit.bind_ret_l _ _)) |].
-      destruct (map_monad dtyp_of_dvalue vs) as [msg | msg | msg | dts] eqn:Edts;
-        cbn [EOU_to_itree].
-      + eapply refine_cfg_model_bind with (RR := fun _ _ _ => False);
-          [apply refine_cfg_raise_both | intros ? ? ? ? ? _ []].
-      + eapply refine_cfg_model_bind with (RR := fun _ _ _ => False);
-          [apply refine_cfg_raiseOOM_l | intros ? ? ? ? ? _ []].
-      + eapply refine_cfg_model_bind with (RR := fun _ _ _ => False);
-          [apply refine_cfg_raiseUB_l | intros ? ? ? ? ? _ []].
+    unfold push_call_frame; rewrite <- Hargs;
+      cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+    eapply refine_cfg_model_bind with
+      (RA := fun U' '(s1', p1) '(s2', p2) =>
+               U' = U /\
+               s1' = (σ1, ((sf1, fstk1), g)) /\
+               s2' = (σ2, ((sf2, fstk2), g)) /\
+               p1 = p2 /\
+               combine_lists_varargs (df_args df1) args = raise_ret p1).
+    - destruct (combine_lists_varargs (df_args df1) args)
+        as [msg | msg | msg | [bs vs]] eqn:Ecomb; cbn [EOU_to_itree].
+      + apply refine_cfg_raise_both.
+      + apply refine_cfg_raiseOOM_l.
+      + apply refine_cfg_raiseUB_l.
       + eapply refine_prov_obs_eq;
-          [symmetry; apply (interp_cfg_model_obs_eq _ _ _ _ (Eqit.bind_ret_l _ _))
-          | symmetry; apply (interp_cfg_model_obs_eq _ _ _ _ (Eqit.bind_ret_l _ _)) |].
-        eapply refine_cfg_model_bind.
+          [symmetry; apply interp_cfg_model_ret | symmetry; apply interp_cfg_model_ret |].
+        apply refine_prov_ret;
+          exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl)))).
+    - intros U0 s1_0 [bs vs] s2_0 _ _ (-> & -> & -> & <- & Ecomb); cbn beta iota.
+      eapply refine_cfg_model_bind with
+        (RA := fun U' '(s1', d1) '(s2', d2) =>
+                 U' = U /\
+                 s1' = (σ1, ((sf1, fstk1), g)) /\
+                 s2' = (σ2, ((sf2, fstk2), g)) /\
+                 d1 = d2).
+      + eapply refine_cfg_EOU; [apply refine_EOU_refl |].
+        intros d1 d2 <-;
+          exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl))).
+      + intros U0' s1_0' dts s2_0' _ _ (-> & -> & -> & <-).
+        eapply refine_cfg_model_bind with
+          (RA := fun U' '(s1', _) '(s2', _) =>
+                   exists σ1_mp σ2_mp,
+                     U' = U /\
+                     s1' = (σ1_mp, ((sf1, fstk1), g)) /\
+                     s2' = (σ2_mp, ((sf2, fstk2), g)) /\
+                     stage1_mem_inv U P_unprom G σ1_mp σ2_mp /\
+                     top_frame_unprom_from
+                       (Memory_stack_frame_stack (state_memory_stack σ2)) G
+                       (state_memory_stack σ2_mp)).
         * unfold mem_push, Subevent.trigger; try unfold trigger_cast.
-          apply refine_cfg_memory_event, (stage1_mempush U P_unprom G σ1 σ2 Hinv).
-        * intros U1 [σ1_mp rest1_mp] _ [σ2_mp rest2_mp] _ _
-            ((<- & <-) & (-> & _ & _ & Hinv_mp & Htf_mp)).
-          eapply refine_cfg_model_bind.
-          -- eapply refine_prov_tau_star_l;
-               [apply tau_star_cfg_stack_push |].
-             eapply refine_prov_tau_star_r;
-               [apply tau_star_cfg_stack_push |].
+          apply refine_cfg_memory_event.
+          eapply refine_prov_weaken;
+            [exact (stage1_mempush U P_unprom G σ1 σ2 Hinv) |].
+          intros U1 [σ1_mp []] [σ2_mp []] (-> & _ & _ & Hinv_mp & Htf_mp).
+          exists σ1_mp, σ2_mp;
+            exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl (conj Hinv_mp Htf_mp)))).
+        * intros U1 s1_1 _ s2_1 _ _ (σ1_mp & σ2_mp & -> & -> & -> & Hinv_mp & Htf_mp).
+          eapply refine_cfg_model_bind with
+            (RA := fun U' '(s1', _) '(s2', _) =>
+                     U' = U /\
+                     s1' = (σ1_mp, (({| stack_vars := init_local_env bs;
+                                         stack_exc  := None;
+                                         stack_loc  := Some ""%string |}, sf1 :: fstk1), g)) /\
+                     s2' = (σ2_mp, (({| stack_vars := init_local_env bs;
+                                         stack_exc  := None;
+                                         stack_loc  := Some ""%string |}, sf2 :: fstk2), g))).
+          -- eapply refine_prov_tau_star_l; [apply tau_star_cfg_stack_push |].
+             eapply refine_prov_tau_star_r; [apply tau_star_cfg_stack_push |].
              apply refine_prov_ret;
                exact (conj (Logic.eq_refl U) (conj Logic.eq_refl Logic.eq_refl)).
           -- intros U2 s1_sp _ s2_sp _ _ (-> & -> & ->).
-             eapply refine_cfg_model_bind.
+             eapply refine_cfg_model_bind with
+               (RA := fun U' '(s1', va1) '(s2', va2) =>
+                        exists pr_va ptrs_va σ1_al σ2_al,
+                          ~ In pr_va U /\
+                          U' = pr_va :: U /\
+                          va1 = va2 /\
+                          is_safe_ptr_dvalue (pr_va :: P_unprom) va1 /\
+                          stage1_mem_inv (pr_va :: U) (pr_va :: P_unprom) G σ1_al σ2_al /\
+                          (forall z, In z (List.map ptr_to_int ptrs_va) -> forall gs, In gs G -> ~ gs_in_range gs z) /\
+                          Memory_stack_frame_stack (state_memory_stack σ2_al) =
+                            Memory_stack_frame_stack (add_all_to_frame ptrs_va (state_memory_stack σ2_mp)) /\
+                          s1' = (σ1_al, (({| stack_vars := init_local_env bs;
+                                             stack_exc  := None;
+                                             stack_loc  := Some ""%string |}, sf1 :: fstk1), g)) /\
+                          s2' = (σ2_al, (({| stack_vars := init_local_env bs;
+                                             stack_exc  := None;
+                                             stack_loc  := Some ""%string |}, sf2 :: fstk2), g))).
              ++ unfold alloca, Subevent.trigger; try unfold trigger_cast.
                 apply refine_cfg_memory_event.
-                exact (stage1_alloca_unprom (DTYPE_Struct true dts) 1%N None
-                         U P_unprom G σ1_mp σ2_mp Hinv_mp).
-             ++ intros U3 [σ1_al rest1_al] va1 [σ2_al rest2_al] va2 _
-                  ((<- & <-) &
-                   (pr_va & ptrs_va & Hnin_va & -> & <- & Hsafe_va & Hinv_al & Hdisj_va & Hfs_al)).
+                eapply refine_prov_weaken;
+                  [exact (stage1_alloca_unprom (DTYPE_Struct true dts) 1%N None
+                            U P_unprom G σ1_mp σ2_mp Hinv_mp) |].
+                intros U3 [σ1_al va1] [σ2_al va2]
+                  (pr_va & ptrs_va & Hnin_va & -> & <- & Hsafe_va & Hinv_al & Hdisj_va & Hfs_al).
+                exists pr_va, ptrs_va, σ1_al, σ2_al;
+                  exact (conj Hnin_va (conj Logic.eq_refl (conj Logic.eq_refl
+                           (conj Hsafe_va (conj Hinv_al (conj Hdisj_va
+                             (conj Hfs_al (conj Logic.eq_refl Logic.eq_refl)))))))).
+             ++ intros U3 s1_3 va1 s2_3 _ _
+                  (pr_va & ptrs_va & σ1_al & σ2_al & Hnin_va & -> & <- &
+                   Hsafe_va & Hinv_al & Hdisj_va & Hfs_al & -> & ->).
                 assert (Htf_al :
                           top_frame_unprom_from
                             (Memory_stack_frame_stack (state_memory_stack σ2)) G
                             (state_memory_stack σ2_al)).
                 { eapply top_frame_unprom_frame_eq; [symmetry; exact Hfs_al |].
                   exact (top_frame_unprom_add_ptrs _ G ptrs_va _ Htf_mp Hdisj_va). }
-                eapply refine_cfg_model_bind.
+                eapply refine_cfg_model_bind with
+                  (RA := fun U' '(s1', _) '(s2', _) =>
+                           exists σ1_st σ2_st,
+                             U' = pr_va :: U /\
+                             stage1_mem_inv (pr_va :: U) (pr_va :: P_unprom) G σ1_st σ2_st /\
+                             Memory_stack_frame_stack (state_memory_stack σ2_st) =
+                               Memory_stack_frame_stack (state_memory_stack σ2_al) /\
+                             s1' = (σ1_st, (({| stack_vars := init_local_env bs;
+                                                stack_exc  := None;
+                                                stack_loc  := Some ""%string |}, sf1 :: fstk1), g)) /\
+                             s2' = (σ2_st, (({| stack_vars := init_local_env bs;
+                                                stack_exc  := None;
+                                                stack_loc  := Some ""%string |}, sf2 :: fstk2), g))).
                 ** unfold store, Subevent.trigger; try unfold trigger_cast.
                    apply refine_cfg_memory_event.
-                   exact (stage1_store_unprom (DTYPE_Struct true dts) va1
-                            (DVALUE_Struct true vs)
-                            (pr_va :: U) (pr_va :: P_unprom) G σ1_al σ2_al Hinv_al Hsafe_va).
-                ** intros U4 [σ1_st rest1_st] _ [σ2_st rest2_st] _ _
-                     ((<- & <-) & (-> & _ & _ & Hinv_st & Hfs_st)).
+                   eapply refine_prov_weaken;
+                     [exact (stage1_store_unprom (DTYPE_Struct true dts) va1
+                               (DVALUE_Struct true vs)
+                               (pr_va :: U) (pr_va :: P_unprom) G σ1_al σ2_al Hinv_al Hsafe_va) |].
+                   intros U4 [σ1_st []] [σ2_st []] (-> & _ & _ & Hinv_st & Hfs_st).
+                   exists σ1_st, σ2_st;
+                     exact (conj Logic.eq_refl (conj Hinv_st (conj Hfs_st (conj Logic.eq_refl Logic.eq_refl)))).
+                ** intros U4 s1_4 _ s2_4 _ _ (σ1_st & σ2_st & -> & Hinv_st & Hfs_st & -> & ->).
                    assert (Htf_st :
                              top_frame_unprom_from
                                (Memory_stack_frame_stack (state_memory_stack σ2)) G
                                (state_memory_stack σ2_st)).
                    { eapply top_frame_unprom_frame_eq; [symmetry; exact Hfs_st | exact Htf_al]. }
                    destruct va1 as [[varg | | | | | | |] | |];
-                     try apply refine_cfg_raise_both.
+                     [| apply refine_cfg_raise_both ..].
                    eapply refine_prov_obs_eq;
                      [symmetry; apply interp_cfg_model_ret
                      | symmetry; apply interp_cfg_model_ret |].
                    apply refine_prov_ret.
                    exists pr_va, bs, vs, σ1_st, σ2_st.
-                   repeat split; assumption.
+                   exact (conj Hnin_va (conj Logic.eq_refl (conj Logic.eq_refl
+                            (conj Ecomb (conj Logic.eq_refl (conj Logic.eq_refl (conj Hinv_st Htf_st))))))).
   Qed.
 
   Lemma pop_call_frame_stage1_unprom_sim
@@ -10824,19 +11351,24 @@ Section MemoryAndSerialization.
       (interp_cfg_model ctx2 pop_call_frame (σ2, ((sf_cur2, sf_prev2 :: fstk2), g))).
   Proof using.
     unfold pop_call_frame.
-    eapply refine_cfg_model_bind.
+    eapply refine_cfg_model_bind with
+      (RA := fun U' '(s1', _) '(s2', _) =>
+               U' = U /\
+               s1' = (σ1, ((sf_prev1, fstk1), g)) /\
+               s2' = (σ2, ((sf_prev2, fstk2), g))).
     - eapply refine_prov_tau_star_l; [apply tau_star_cfg_stack_pop |].
       eapply refine_prov_tau_star_r; [apply tau_star_cfg_stack_pop |].
       apply refine_prov_ret;
         exact (conj (Logic.eq_refl U) (conj Logic.eq_refl Logic.eq_refl)).
     - intros U1 s1_sp _ s2_sp _ _ (-> & -> & ->).
       unfold mem_pop, Subevent.trigger; try unfold trigger_cast.
-      eapply refine_prov_weaken.
-      + apply refine_cfg_memory_event.
-        exact (stage1_mempop_unprom fs0 U P_unprom G σ1 σ2 Hinv Htf).
-      + intros U' [[σ1' rest1'] r1] [[σ2' rest2'] r2]
-          ((<- & <-) & (-> & -> & -> & Hinv' & Hfs')).
-        exists σ1', σ2'; repeat split; assumption.
+      apply refine_cfg_memory_event.
+      eapply refine_prov_weaken;
+        [exact (stage1_mempop_unprom fs0 U P_unprom G σ1 σ2 Hinv Htf) |].
+      intros U' [σ1' r1] [σ2' r2] (-> & -> & -> & Hinv' & Hfs').
+      exists σ1', σ2';
+        exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl
+                 (conj Logic.eq_refl (conj Logic.eq_refl (conj Hinv' Hfs')))))).
   Qed.
 
   Lemma pop_call_frame_stage1_prom_sim
@@ -10861,19 +11393,24 @@ Section MemoryAndSerialization.
       (interp_cfg_model ctx2 pop_call_frame (σ2, ((sf_cur2, sf_prev2 :: fstk2), g))).
   Proof using.
     unfold pop_call_frame.
-    eapply refine_cfg_model_bind.
+    eapply refine_cfg_model_bind with
+      (RA := fun U' '(s1', _) '(s2', _) =>
+               U' = U /\
+               s1' = (σ1, ((sf_prev1, fstk1), g)) /\
+               s2' = (σ2, ((sf_prev2, fstk2), g))).
     - eapply refine_prov_tau_star_l; [apply tau_star_cfg_stack_pop |].
       eapply refine_prov_tau_star_r; [apply tau_star_cfg_stack_pop |].
       apply refine_prov_ret;
         exact (conj (Logic.eq_refl U) (conj Logic.eq_refl Logic.eq_refl)).
     - intros U1 s1_sp _ s2_sp _ _ (-> & -> & ->).
       unfold mem_pop, Subevent.trigger; try unfold trigger_cast.
-      eapply refine_prov_weaken.
-      + apply refine_cfg_memory_event.
-        exact (stage1_mempop_prom fs0 U P_unprom gs G σ1 σ2 Hinv Htf).
-      + intros U' [[σ1' rest1'] r1] [[σ2' rest2'] r2]
-          ((<- & <-) & (-> & -> & -> & Hinv' & Hfs')).
-        exists σ1', σ2'; repeat split; assumption.
+      apply refine_cfg_memory_event.
+      eapply refine_prov_weaken;
+        [exact (stage1_mempop_prom fs0 U P_unprom gs G σ1 σ2 Hinv Htf) |].
+      intros U' [σ1' r1] [σ2' r2] (-> & -> & -> & Hinv' & Hfs').
+      exists σ1', σ2';
+        exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl
+                 (conj Logic.eq_refl (conj Logic.eq_refl (conj Hinv' Hfs')))))).
   Qed.
 
   Lemma pop_call_frame_stage2_sim
@@ -10898,19 +11435,24 @@ Section MemoryAndSerialization.
       (interp_cfg_model ctx2 pop_call_frame (σ2, ((sf_cur2, sf_prev :: fstk), g))).
   Proof using.
     unfold pop_call_frame.
-    eapply refine_cfg_model_bind.
+    eapply refine_cfg_model_bind with
+      (RA := fun U' '(s1', _) '(s2', _) =>
+               U' = U /\
+               s1' = (σ1, ((sf_prev, fstk), g)) /\
+               s2' = (σ2, ((sf_prev, fstk), g))).
     - eapply refine_prov_tau_star_l; [apply tau_star_cfg_stack_pop |].
       eapply refine_prov_tau_star_r; [apply tau_star_cfg_stack_pop |].
       apply refine_prov_ret;
         exact (conj (Logic.eq_refl U) (conj Logic.eq_refl Logic.eq_refl)).
     - intros U1 s1_sp _ s2_sp _ _ (-> & -> & ->).
       unfold mem_pop, Subevent.trigger; try unfold trigger_cast.
-      eapply refine_prov_weaken.
-      + apply refine_cfg_memory_event.
-        exact (stage2_mempop_restore U P_safe fs0 f2 base_dead pr_dead sz_dead σ1 σ2 Hinv).
-      + intros U' [[σ1' rest1'] r1] [[σ2' rest2'] r2]
-          ((<- & <-) & (-> & -> & -> & Heq' & Hfs')).
-        exists σ1', σ2'; repeat split; assumption.
+      apply refine_cfg_memory_event.
+      eapply refine_prov_weaken;
+        [exact (stage2_mempop_restore U P_safe fs0 f2 base_dead pr_dead sz_dead σ1 σ2 Hinv) |].
+      intros U' [σ1' r1] [σ2' r2] (-> & -> & -> & Heq' & Hfs').
+      exists σ1', σ2';
+        exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl
+                 (conj Logic.eq_refl (conj Logic.eq_refl (conj Heq' Hfs')))))).
   Qed.
 
   (** *** Promoted [init_op], [mk_store_val_exp], and [mk_load_val_exp] Simulations *)
@@ -10956,7 +11498,7 @@ Section MemoryAndSerialization.
       [reflexivity
       | symmetry;
         rewrite Eqit.bind_bind,
-          (eq_itree_clo_bind _ _ _ _ Logic.eq Eexp (fun _ _ <- => Logic.eq_refl)),
+          (eq_itree_bind_congr_l Eexp),
           !Eqit.bind_ret_l;
         apply interp_cfg_exc_bind
       |].
@@ -10979,7 +11521,7 @@ Section MemoryAndSerialization.
     unfold lread, Subevent.trigger; try unfold trigger_cast.
     eapply tau_star_mcfg_det; [reflexivity |].
     unfold interp_vellvm_prov_h;
-      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     exact (fused_local_prov_read_some x v (σ, ((sf, fstk), g)) Hlk).
   Qed.
 
@@ -10991,32 +11533,48 @@ Section MemoryAndSerialization.
     eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
   Qed.
 
+  Lemma interp_mcfg_model_raise_bind_eq {A2 R2 : Type}
+    (msg : string) (s2 : FusedS) (k2 : Res A2 -> itree ProvBotE R2) :
+    ITree.bind (interp_mcfg_model (raise msg) s2) k2 ≅
+    ITree.bind
+      (ITree.trigger ((inr1 (inr1 (inr1 (inr1 (inr1 (inr1 (Throw (print_msg msg)))))))) : ProvBotE void))
+      (fun v : void => match v return itree ProvBotE R2 with end).
+  Proof using.
+    unfold raise, trigger_cast.
+    rewrite interp_mcfg_model_bind, Eqit.bind_bind.
+    etransitivity.
+    { match goal with
+      | |- ITree.bind _ ?k ≅ _ =>
+          eapply eq_itree_clo_bind with (UU := Logic.eq) (k2 := k);
+          [apply interp_mcfg_model_non_intr; reflexivity | intros ? ? <-; reflexivity]
+      end. }
+    repeat (progress (try unfold subevent, resum, ReSum_id, ReSum_sum, ReSum_inl, ReSum_inr,
+                               cat, Cat_IFun, inl_, inr_, Inl_sum1, Inr_sum1, id_, Id_IFun;
+                      cbn beta iota)).
+    unfold interp_vellvm_prov_h, case_, Case_sum1, case_sum1, Case_sum1_Handler, Handler.case_; cbn beta iota.
+    repeat (progress (try unfold fused_trigger_prov, ITree.trigger, subevent, resum,
+                               ReSum_id, ReSum_sum, ReSum_inl, ReSum_inr,
+                               cat, Cat_IFun, inl_, inr_, Inl_sum1, Inr_sum1, id_, Id_IFun;
+                      cbn beta iota)).
+    rewrite !Eqit.bind_bind, !Eqit.bind_vis.
+    apply eqit_Vis; intros [].
+  Qed.
+
   Lemma memM_Merr_mcfg_raise_bind_sim {A1 A2 R2 : Type}
     (RR : list N -> (state * A1) -> R2 -> Prop)
     (U : list N) (msg1 msg2 : string) (σ1 : state) (s2 : FusedS)
     (k2 : Res A2 -> itree ProvBotE R2) :
     refine_prov RR U
-      (memM_interp_prov (@Merr state (@ptr ProvenanceV (@PointerV IP)) provenance A1 msg1) σ1)
+      (memM_interp_prov (@Merr _ _ _ A1 msg1) σ1)
       (ITree.bind (interp_mcfg_model (raise msg2) s2) k2).
   Proof using.
     cbn [memM_interp_prov].
-    assert (Er :
-              ITree.bind (interp_mcfg_model (raise msg2) s2) k2 ≅
-              ITree.bind (ITree.trigger (Throw (print_msg msg2)))
-                (fun v : void => match v with end)).
-    { unfold raise, trigger_cast.
-      rewrite interp_mcfg_model_bind, Eqit.bind_bind.
-      rewrite (eq_itree_clo_bind _ _ _ _ Logic.eq
-                 (interp_mcfg_model_non_intr (subevent _ (Throw (print_msg msg2))) s2 Logic.eq_refl)
-                 (fun _ _ <- => Logic.eq_refl)).
-      cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
-      unfold fused_trigger_prov, ITree.trigger.
-      rewrite !Eqit.bind_bind, !Eqit.bind_vis.
-      apply eqit_Vis; intros []. }
-    unfold raise, trigger_cast, ITree.trigger at 1.
     eapply refine_prov_obs_eq;
-      [symmetry; apply Eqit.bind_vis
-      | symmetry; rewrite Er; unfold ITree.trigger; apply Eqit.bind_vis |].
+      [reflexivity | symmetry; exact (interp_mcfg_model_raise_bind_eq msg2 s2 k2) |].
+    unfold raise, trigger_cast, ITree.trigger.
+    cbn [subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    eapply refine_prov_obs_eq;
+      [symmetry; apply Eqit.bind_vis | symmetry; apply Eqit.bind_vis |].
     pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
   Qed.
 
@@ -11024,25 +11582,21 @@ Section MemoryAndSerialization.
     ITree.bind t (fun _ : unit => Ret tt) ≅ t.
   Proof using.
     rewrite <- (Eqit.bind_ret_r t) at 2.
-    eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _; reflexivity].
+    eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] [] _; reflexivity].
   Qed.
 
   Lemma memM_void_to_mcfg_raise_bind_eq {A2 R2 : Type}
     (msg : string) (σ2 : state) (s2 : FusedS)
     (k2 : Res A2 -> itree ProvBotE R2) :
     ITree.bind
-      (memM_interp_prov (@Merr state (@ptr ProvenanceV (@PointerV IP)) provenance void msg) σ2)
+      (memM_interp_prov (@Merr _ _ _ void msg) σ2)
       (fun '(_, v) => match v with end) ≅
     ITree.bind (interp_mcfg_model (raise msg) s2) k2.
   Proof using.
+    rewrite (interp_mcfg_model_raise_bind_eq msg s2 k2).
     cbn [memM_interp_prov].
-    unfold raise, trigger_cast.
-    rewrite interp_mcfg_model_bind, !Eqit.bind_bind.
-    rewrite (eq_itree_clo_bind _ _ _ _ Logic.eq
-               (interp_mcfg_model_non_intr (subevent _ (Throw (print_msg msg))) s2 Logic.eq_refl)
-               (fun _ _ <- => Logic.eq_refl)).
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
-    unfold fused_trigger_prov, ITree.trigger.
+    unfold raise, trigger_cast, ITree.trigger.
+    cbn [subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     rewrite !Eqit.bind_bind, !Eqit.bind_vis.
     apply eqit_Vis; intros [].
   Qed.
@@ -11063,7 +11617,13 @@ Section MemoryAndSerialization.
     - cbn [dvalue_to_dvalue_base EOU_monad ExtLib.Structures.Monad.ret EOU_to_itree ExtLib.Structures.Monad.bind Monad_itree].
       rewrite !Eqit.bind_ret_l, ?Eqit.bind_bind, ?Eqit.bind_ret_l.
       unfold insert_element, extract_element, dvalue_to_Z, VellvmIntegers.signed, VellvmIntegers.zero;
-        cbn; rewrite ?Eqit.bind_ret_l; reflexivity.
+        rewrite ?(@Integers.signed_zero 1);
+        try change (N.to_nat 1%N) with 1%nat;
+        try change (Pos.to_nat 1%positive) with 1%nat;
+        cbn;
+        try change (Pos.to_nat 1%positive) with 1%nat;
+        cbn;
+        rewrite ?Eqit.bind_ret_l; reflexivity.
     - cbn [dvalue_to_dvalue_base EOU_to_itree].
       unfold raise, trigger_cast; rewrite !Eqit.bind_bind.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
@@ -11083,10 +11643,161 @@ Section MemoryAndSerialization.
     intros v _ <-; rewrite !Eqit.bind_ret_l; reflexivity.
   Qed.
 
+  #[local] Lemma denote_mk_store_val_exp_nonbase_sim
+    (ctx1 ctx2 : IntMap (@function_denotation (@ParamsV IP IPT)))
+    (RExc : list N -> FusedS -> FusedS -> @exc (@ParamsV IP IPT) -> @exc (@ParamsV IP IPT) -> Prop)
+    (st_reg : local_id) (dt : dtyp) (fs0 : @Framestack (@ParamsV IP IPT))
+    (U P_unprom : list N) (gs : ghost_slot) (G : list ghost_slot)
+    (σ1 σ2 : state)
+    (sf1 sf2 : @stack_frame (@ParamsV IP IPT)) (fstk1 fstk2 : stack)
+    (g : @global_env (@ParamsV IP IPT))
+    (v_bad : @dvalue (@ParamsV IP IPT))
+    (Hdt : gs_dt gs = dt)
+    (Hsc : is_scalar_dtyp dt = true)
+    (Hnb : forall db, v_bad <> DVALUE_Base db) :
+    refine_prov
+      (exc_post RExc
+         (fun U' s1' s2' r1 r2 =>
+            exists db' bs' σ1',
+              U' = U /\ r1 = tt /\ r2 = tt /\
+              dvalue_to_memory_bytes dt (DVALUE_Base db') None = raise_ret bs' /\
+              s1' = (σ1', ((sf1, fstk1), g)) /\
+              s2' = (σ2, ((upd_local_sf sf2 (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2)),
+                           fstk2), g)) /\
+              stage1_mem_inv U P_unprom (gs_set_val gs db' bs' :: G) σ1' σ2 /\
+              top_frame_prom_from fs0 (gs_set_val gs db' bs') G (state_memory_stack σ2)))
+      U
+      (interp_cfg_exc ctx1
+         (store (Pa := @ParamsV IP IPT) dt (DVALUE_Base (DVALUE_Pointer (gs_pt gs))) v_bad)
+         (σ1, ((sf1, fstk1), g)))
+      (ITree.bind
+         (interp_mcfg_model (R := @dvalue (@ParamsV IP IPT))
+            (raise "dvalue_to_dvalue_base: non-base dvalue")
+            (σ2, ((sf2, fstk2), g)))
+         (fun '(s2', x) =>
+            ITree.bind (Ret (s2', inr (A := @exc (@ParamsV IP IPT)) x))
+              (fun '(s2'', res) =>
+                 match res with
+                 | inl ex => Ret (s2'', inl ex)
+                 | inr uv =>
+                     interp_cfg_exc ctx2 (ITree.bind (lwrite st_reg uv) (fun _ => Ret tt)) s2''
+                 end))).
+  Proof using.
+    subst dt.
+    lazymatch goal with
+    | |- refine_prov ?R _ _ (ITree.bind _ ?k) =>
+        set (RR_post := R); clearbody RR_post;
+        set (k_cont := k); clearbody k_cont
+    end.
+    destruct (is_scalar_dtyp_inv (gs_dt gs) Hsc) as (dtb & Hdt_eq & _).
+    destruct (dvalue_to_memory_bytes_base_err dtb v_bad Hnb) as [msg1 Hser].
+    unfold store, Subevent.trigger; try unfold trigger_cast.
+    apply refine_cfg_exc_memory_event_l.
+    cbn [handle_memoryM]; unfold write_dvalue.
+    rewrite Hdt_eq, Hser; cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.bind memS_mon memS_bind memM_interp_prov].
+    eapply refine_prov_obs_eq;
+      [reflexivity
+      | symmetry;
+        exact (interp_mcfg_model_raise_bind_eq
+                 (A2 := @dvalue (@ParamsV IP IPT))
+                 "dvalue_to_dvalue_base: non-base dvalue"
+                 (σ2, ((sf2, fstk2), g)) k_cont)
+      |].
+    unfold raise, trigger_cast, ITree.trigger;
+      repeat (progress (try unfold subevent, resum, ReSum_id, ReSum_sum, ReSum_inl, ReSum_inr,
+                                   cat, Cat_IFun, inl_, inr_, Inl_sum1, Inr_sum1, id_, Id_IFun;
+                        cbn beta iota)).
+    eapply refine_prov_obs_eq;
+      [symmetry; apply Eqit.bind_vis | symmetry; apply Eqit.bind_vis |].
+    pstep; apply RP_Step; unfold rp_step_body; cbn [observe]; right; right; cbn;
+      split; [exact Logic.I | intros [] [] _].
+  Qed.
+
+  #[local] Lemma denote_mk_store_val_exp_base_sim
+    (ctx1 ctx2 : IntMap (@function_denotation (@ParamsV IP IPT)))
+    (RExc : list N -> FusedS -> FusedS -> @exc (@ParamsV IP IPT) -> @exc (@ParamsV IP IPT) -> Prop)
+    (st_reg : local_id) (dt : dtyp) (fs0 : @Framestack (@ParamsV IP IPT))
+    (U P_unprom : list N) (gs : ghost_slot) (G : list ghost_slot)
+    (σ1 σ2 : state)
+    (sf1 sf2 : @stack_frame (@ParamsV IP IPT)) (fstk1 fstk2 : stack)
+    (g : @global_env (@ParamsV IP IPT))
+    (db' : @dvalue_base (@ParamsV IP IPT))
+    (Hdt : gs_dt gs = dt)
+    (Hinv : stage1_mem_inv U P_unprom (gs :: G) σ1 σ2)
+    (Htf : top_frame_prom_from fs0 gs G (state_memory_stack σ2)) :
+    refine_prov
+      (exc_post RExc
+         (fun U' s1' s2' r1 r2 =>
+            exists db'0 bs' σ1',
+              U' = U /\ r1 = tt /\ r2 = tt /\
+              dvalue_to_memory_bytes dt (DVALUE_Base db'0) None = raise_ret bs' /\
+              s1' = (σ1', ((sf1, fstk1), g)) /\
+              s2' = (σ2, ((upd_local_sf sf2 (Maps.add st_reg (DVALUE_Base db'0) (stack_vars sf2)),
+                           fstk2), g)) /\
+              stage1_mem_inv U P_unprom (gs_set_val gs db'0 bs' :: G) σ1' σ2 /\
+              top_frame_prom_from fs0 (gs_set_val gs db'0 bs') G (state_memory_stack σ2)))
+      U
+      (interp_cfg_exc ctx1
+         (store (Pa := @ParamsV IP IPT) dt (DVALUE_Base (DVALUE_Pointer (gs_pt gs))) (DVALUE_Base db'))
+         (σ1, ((sf1, fstk1), g)))
+      (ITree.bind
+         (interp_mcfg_model (Ret (DVALUE_Base db')) (σ2, ((sf2, fstk2), g)))
+         (fun '(s2', x) =>
+            ITree.bind (Ret (s2', inr x))
+              (fun '(s2'', res) =>
+                 match res with
+                 | inl ex => Ret (s2'', inl ex)
+                 | inr uv =>
+                     interp_cfg_exc ctx2 (ITree.bind (lwrite st_reg uv) (fun _ => Ret tt)) s2''
+                 end))).
+  Proof using.
+    assert (Er_ok :
+              ITree.bind
+                (interp_mcfg_model (Ret (DVALUE_Base db')) (σ2, ((sf2, fstk2), g)))
+                (fun '(s2', x) =>
+                   ITree.bind (Ret (s2', inr x))
+                     (fun '(s2'', res) =>
+                        match res with
+                        | inl ex => Ret (s2'', inl ex)
+                        | inr uv =>
+                            interp_cfg_exc ctx2 (ITree.bind (lwrite st_reg uv) (fun _ => Ret tt)) s2''
+                        end)) ≅
+              interp_cfg_exc ctx2 (lwrite st_reg (DVALUE_Base db')) (σ2, ((sf2, fstk2), g))).
+    { etransitivity.
+      { match goal with
+        | |- ITree.bind _ ?k ≅ _ =>
+            eapply eq_itree_clo_bind with (UU := Logic.eq) (k2 := k);
+              [apply interp_mcfg_model_ret | intros [s2' x] _ <-; reflexivity]
+        end. }
+      rewrite !Eqit.bind_ret_l.
+      apply interp_cfg_exc_obs_eq, bind_unit_ret_r. }
+    eapply refine_prov_obs_eq;
+      [reflexivity | symmetry; exact Er_ok |]; clear Er_ok.
+    eapply refine_prov_tau_star_r;
+      [apply tau_star_cfg_exc_lwrite |].
+    subst dt.
+    unfold store, Subevent.trigger; try unfold trigger_cast.
+    apply refine_cfg_exc_memory_event_l.
+    eapply refine_prov_obs_eq;
+      [apply Eqit.bind_ret_r
+      | apply (Eqit.bind_ret_l (σ2, tt)
+                 (fun _ =>
+                    Ret ((σ2, ((upd_local_sf sf2 (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2)),
+                                fstk2), g)),
+                         inr tt))) |].
+    eapply PassCommon.refine_prov_bind;
+      [exact (stage1_store_prom_base U P_unprom gs G fs0 db' σ1 σ2 Hinv Htf) |].
+    intros U2 [σ1' r1_st] [σ2' r2_st] _ (bs' & -> & -> & _ & Hser' & Hinv' & Htf').
+    apply refine_prov_ret.
+    exists db', bs', σ1'.
+    exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl
+             (conj Hser' (conj Logic.eq_refl (conj Logic.eq_refl (conj Hinv' Htf'))))))).
+  Qed.
+
   Lemma denote_mk_store_val_exp_exc_sim
     (ctx1 ctx2 : IntMap (@function_denotation (@ParamsV IP IPT)))
     (RExc : list N -> FusedS -> FusedS -> @exc (@ParamsV IP IPT) -> @exc (@ParamsV IP IPT) -> Prop)
-    (vid : int) (p st_reg : local_id) (dt : dtyp) (val_exp : exp dtyp)
+    (vid : int_ast) (p st_reg : local_id) (dt : dtyp) (val_exp : exp dtyp)
     (anns_st : list (annotation dtyp)) (md_st : list (metadata dtyp))
     (va1 va2 : option (@ptr ProvenanceV (@PointerV IP)))
     (fs0 : @Framestack (@ParamsV IP IPT))
@@ -11143,18 +11854,51 @@ Section MemoryAndSerialization.
                       end) s2')).
     { rewrite (interp_mcfg_model_obs_eq _ _ _ (denote_mk_store_val_exp_eq dt val_exp)).
       apply interp_mcfg_model_bind. }
+    assert (Er_init :
+              ITree.bind
+                (interp_mcfg_model (denote_exp None (mk_store_val_exp dt val_exp))
+                   (σ2, ((sf2, fstk2), g)))
+                (fun r =>
+                   ITree.bind (let '(s2', x) := r in Ret (s2', inr x))
+                     (fun '(s2'', res) =>
+                        match res with
+                        | inl ex => Ret (s2'', inl ex)
+                        | inr uv =>
+                            interp_cfg_exc ctx2 (ITree.bind (lwrite st_reg uv) (fun _ => Ret tt)) s2''
+                        end)) ≅
+              ITree.bind (interp_mcfg_model (denote_exp (Some dt) val_exp) (σ2, ((sf2, fstk2), g)))
+                (fun '(s2'0, v) =>
+                   ITree.bind
+                     (interp_mcfg_model
+                        (match v with
+                         | DVALUE_Base db => Ret (DVALUE_Base db)
+                         | _ => raise "dvalue_to_dvalue_base: non-base dvalue"
+                         end) s2'0)
+                     (fun '(s2', x) =>
+                        ITree.bind (Ret (s2', inr x))
+                          (fun '(s2'', res) =>
+                             match res with
+                             | inl ex => Ret (s2'', inl ex)
+                             | inr uv =>
+                                 interp_cfg_exc ctx2 (ITree.bind (lwrite st_reg uv) (fun _ => Ret tt)) s2''
+                             end)))).
+    { rewrite (eq_itree_bind_congr_l EexpR), Eqit.bind_bind.
+      eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
+      intros [s2'0 v] _ <-; cbn beta iota.
+      eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
+      intros [s2' x] _ <-; reflexivity. }
     eapply refine_prov_obs_eq;
-      [symmetry; apply Eqit.bind_bind
-      | symmetry;
-        rewrite (eq_itree_clo_bind _ _ _ _ Logic.eq EexpR (fun _ _ <- => Logic.eq_refl)),
-          !Eqit.bind_bind;
-        reflexivity
-      |].
+      [symmetry; apply Eqit.bind_bind | symmetry; apply Eqit.bind_bind |].
+    eapply refine_prov_obs_eq;
+      [reflexivity | symmetry; exact Er_init |]; clear Er_init EexpR.
     eapply PassCommon.refine_prov_bind;
       [exact (denote_exp_mcfg_sim (Some dt) val_exp U σ1 σ2 sf1 sf2 fstk1 fstk2 g Hvars) |].
     intros U1 [s1_v v1] [s2_v v2] _ (-> & -> & -> & <- & _).
     eapply refine_prov_obs_eq;
-      [symmetry; rewrite Eqit.bind_ret_l; apply interp_cfg_exc_bind | reflexivity |].
+      [symmetry; apply Eqit.bind_ret_l | reflexivity |].
+    cbn beta iota.
+    eapply refine_prov_obs_eq;
+      [symmetry; apply interp_cfg_exc_bind | reflexivity |].
     eapply refine_prov_tau_expand;
       [apply tau_expand_bind_l, tau_expand_exc_withCall_denote_exp
       | apply tau_expand_refl |].
@@ -11164,96 +11908,37 @@ Section MemoryAndSerialization.
     eapply refine_prov_tau_star_l;
       [apply tau_star_bind, (tau_star_mcfg_lread_some p _ σ1 sf1 fstk1 g Hlk_p) |].
     eapply refine_prov_obs_eq;
-      [symmetry; rewrite !Eqit.bind_ret_l; reflexivity | reflexivity |].
+      [symmetry; apply Eqit.bind_ret_l | reflexivity |].
+    cbn beta iota.
+    eapply refine_prov_obs_eq;
+      [symmetry; apply Eqit.bind_ret_l | reflexivity |].
+    cbn beta iota.
     destruct (assert_alignment_ret_or_ub
-                (DVALUE_Base (DVALUE_Pointer (gs_pt gs))) anns_st
-                (set_loc (get_file_info md_st) ++ location_error_string md_st ++
+                (DVALUE_Base (DVALUE_Pointer (Pa := @ParamsV IP IPT) (gs_pt gs))) anns_st
+                ((set_loc (get_file_info md_st) ++ location_error_string md_st) ++
                  ": Store with overestimated alignment.")%string)
       as [Hal_ok | Hal_ub].
-    - rewrite Hal_ok; cbn [EOU_to_itree].
+    - rewrite Hal_ok; cbn [EOU_to_itree ExtLib.Structures.Monad.ret Monad_itree].
       assert (Est_l :
                 ITree.bind (Ret tt)
                   (fun _ : unit =>
-                     ITree.bind (store dt (DVALUE_Base (DVALUE_Pointer (gs_pt gs))) v1)
+                     ITree.bind
+                       (store (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT))
+                          dt (DVALUE_Base (DVALUE_Pointer (gs_pt gs))) v1)
                        (fun _ : unit => Ret tt)) ≅
-                store dt (DVALUE_Base (DVALUE_Pointer (gs_pt gs))) v1).
+                store (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT))
+                  dt (DVALUE_Base (DVALUE_Pointer (gs_pt gs))) v1).
       { rewrite Eqit.bind_ret_l; apply bind_unit_ret_r. }
       eapply refine_prov_obs_eq;
         [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ Est_l) | reflexivity |];
         clear Est_l.
-      assert (Hnonbase :
-                forall v_bad : @dvalue (@ParamsV IP IPT),
-                  (forall db, v_bad <> DVALUE_Base db) ->
-                  refine_prov
-                    (exc_post RExc
-                       (fun U' s1' s2' r1 r2 =>
-                          exists db' bs' σ1',
-                            U' = U /\ r1 = tt /\ r2 = tt /\
-                            dvalue_to_memory_bytes dt (DVALUE_Base db') None = raise_ret bs' /\
-                            s1' = (σ1', ((sf1, fstk1), g)) /\
-                            s2' = (σ2, ((upd_local_sf sf2 (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2)),
-                                         fstk2), g)) /\
-                            stage1_mem_inv U P_unprom (gs_set_val gs db' bs' :: G) σ1' σ2 /\
-                            top_frame_prom_from fs0 (gs_set_val gs db' bs') G (state_memory_stack σ2)))
-                    U
-                    (interp_cfg_exc ctx1
-                       (store dt (DVALUE_Base (DVALUE_Pointer (gs_pt gs))) v_bad)
-                       (σ1, ((sf1, fstk1), g)))
-                    (ITree.bind
-                       (interp_mcfg_model (raise "dvalue_to_dvalue_base: non-base dvalue")
-                          (σ2, ((sf2, fstk2), g)))
-                       (fun '(s2', x) =>
-                          ITree.bind (Ret (s2', inr x))
-                            (fun '(s2'', res) =>
-                               match res with
-                               | inl ex => Ret (s2'', inl ex)
-                               | inr uv =>
-                                   interp_cfg_exc ctx2 (ITree.bind (lwrite st_reg uv) (fun _ => Ret tt)) s2''
-                               end)))).
-      { clear v1; intros v_bad Hnb; subst dt.
-        unfold store, Subevent.trigger; try unfold trigger_cast.
-        apply refine_cfg_exc_memory_event_l.
-        eapply refine_prov_obs_eq;
-          [symmetry; apply Eqit.bind_ret_r
-          | symmetry; apply (memM_void_to_mcfg_raise_bind_eq
-                               "dvalue_to_dvalue_base: non-base dvalue" σ2) |].
-        eapply PassCommon.refine_prov_bind with
-          (RPre := fun _ _ '(_, v : void) => match v with end).
-        - exact (stage1_store_prom_err
-                   (fun _ _ '(_, v : void) => match v with end)
-                   U gs v_bad "dvalue_to_dvalue_base: non-base dvalue"%string σ1 σ2 Hsc Hnb).
-        - intros _ _ [_ []] _ _. }
       destruct v1 as [db' | pk flds | vec elts].
-      + clear Hnonbase.
-        eapply refine_prov_obs_eq;
-          [reflexivity
-          | symmetry;
-            rewrite (eq_itree_clo_bind _ _ _ _ Logic.eq
-                       (interp_mcfg_model_ret _ _) (fun _ _ <- => Logic.eq_refl)),
-              !Eqit.bind_ret_l;
-            apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (bind_unit_ret_r (lwrite st_reg (DVALUE_Base db'))))
-          |].
-        eapply refine_prov_tau_star_r;
-          [apply tau_star_cfg_exc_lwrite |].
-        subst dt.
-        unfold store, Subevent.trigger; try unfold trigger_cast.
-        apply refine_cfg_exc_memory_event_l.
-        eapply refine_prov_obs_eq;
-          [symmetry; apply Eqit.bind_ret_r
-          | symmetry;
-            apply (Eqit.bind_ret_l (σ2, tt)
-                     (fun _ =>
-                        Ret ((σ2, ((upd_local_sf sf2 (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2)),
-                                    fstk2), g)),
-                             inr tt))) |].
-        eapply PassCommon.refine_prov_bind;
-          [exact (stage1_store_prom_base U P_unprom gs G fs0 db' σ1 σ2 Hinv Htf) |].
-        intros U2 [σ1' r1_st] _ _ (bs' & -> & -> & _ & Hser' & Hinv' & Htf').
-        apply refine_prov_ret.
-        exists db', bs', σ1'.
-        repeat split; assumption.
-      + apply Hnonbase; intros ? ?; discriminate.
-      + apply Hnonbase; intros ? ?; discriminate.
+      + exact (denote_mk_store_val_exp_base_sim ctx1 ctx2 RExc st_reg dt fs0 U P_unprom gs G
+                 σ1 σ2 sf1 sf2 fstk1 fstk2 g db' Hdt Hinv Htf).
+      + exact (denote_mk_store_val_exp_nonbase_sim ctx1 ctx2 RExc st_reg dt fs0 U P_unprom gs G
+                 σ1 σ2 sf1 sf2 fstk1 fstk2 g (DVALUE_Struct pk flds) Hdt Hsc (ltac:(intros ? ?; discriminate))).
+      + exact (denote_mk_store_val_exp_nonbase_sim ctx1 ctx2 RExc st_reg dt fs0 U P_unprom gs G
+                 σ1 σ2 sf1 sf2 fstk1 fstk2 g (DVALUE_Array vec elts) Hdt Hsc (ltac:(intros ? ?; discriminate))).
     - rewrite Hal_ub; cbn [EOU_to_itree].
       eapply refine_prov_obs_eq;
         [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (raiseUB_bind_eq _ _)) | reflexivity |].
@@ -11275,17 +11960,132 @@ Section MemoryAndSerialization.
     rewrite Forall_forall in Hall.
     destruct (Hall gs Hin) as [(_ & Hpr & Eptrs & _ & Hlen_bs & _) _].
     destruct (get_consecutive_ptrs_spec (gs_pt gs) (@store_size_dtyp SizeofV (gs_dt gs)) (gs_ptrs gs) Eptrs)
-      as (_ & Hinv_ptrs & _).
+      as (Hlen_ptrs & Hinv_ptrs & _).
     cbn [handle_memoryM]; unfold read_dvalue, read_bytes.
-    rewrite memM_interp_prov_bind, memM_interp_prov_bind, Eptrs.
+    rewrite memM_interp_prov_bind, memM_interp_prov_bind; cbn [SIZE ParamsV]; rewrite Eptrs.
     cbn [Interfaces.Memory.lift ExtLib.Structures.Monad.ret memS_mon memM_interp_prov read_byte MemoryModelPrimitivesV].
     rewrite Eqit.bind_ret_l, memM_interp_prov_map_monad_acc.
     rewrite (map_monad_Read_gs_bytes_eq (gs_ptrs gs) (gs_bytes gs) (gs_addr gs) 0%nat (gs_pr gs) σ1).
     - rewrite Eqit.bind_ret_l; reflexivity.
-    - unfold gs_len in Hlen_bs; lia.
+    - unfold gs_len in Hlen_bs; cbn [SIZE SizeofV ParamsV] in Hlen_ptrs, Hlen_bs |- *; lia.
     - intros i q Hnth; destruct (Hinv_ptrs i q Hnth) as (_ & Hqi & Hqpr).
-      rewrite Hpr in Hqpr; unfold gs_addr; split; [lia | exact Hqpr].
+      rewrite Hpr in Hqpr; unfold gs_addr;
+        cbn [ptr_to_int PIV P2I PointerV PTR ParamsV fst] in Hqi |- *;
+        split; [lia | exact Hqpr].
     - intros i mb Hnth; destruct (Hgs gs i mb Hin Hnth) as [Hlk1 _]; exact Hlk1.
+  Qed.
+
+  Lemma denote_mk_load_val_exp_ok_sim
+    (ctx1 ctx2 : IntMap (@function_denotation (@ParamsV IP IPT)))
+    (RExc : list N -> FusedS -> FusedS -> @exc (@ParamsV IP IPT) -> @exc (@ParamsV IP IPT) -> Prop)
+    (dst : local_id)
+    (U P_unprom : list N) (gs : ghost_slot) (G : list ghost_slot)
+    (σ1 σ2 : state)
+    (sf1 sf2 : @stack_frame (@ParamsV IP IPT)) (fstk1 fstk2 : stack)
+    (g : @global_env (@ParamsV IP IPT))
+    (Hinv : stage1_mem_inv U P_unprom (gs :: G) σ1 σ2) :
+    refine_prov
+      (exc_post RExc
+         (fun U' s1' s2' r1 r2 =>
+            exists dv_ld,
+              U' = U /\ r1 = tt /\ r2 = tt /\
+              s1' = (σ1, ((upd_local_sf sf1 (Maps.add dst dv_ld (stack_vars sf1)), fstk1), g)) /\
+              s2' = (σ2, ((upd_local_sf sf2 (Maps.add dst dv_ld (stack_vars sf2)), fstk2), g))))
+      U
+      (interp_cfg_exc ctx1
+         (ITree.bind (load (Pa := @ParamsV IP IPT) (gs_dt gs) (DVALUE_Base (DVALUE_Pointer (gs_pt gs))))
+            (fun v => lwrite dst v))
+         (σ1, ((sf1, fstk1), g)))
+      (ITree.bind
+         (interp_mcfg_model
+            (EOU_to_itree (memory_bytes_to_dvalue (gs_bytes gs) (gs_dt gs)))
+            (σ2, ((sf2, fstk2), g)))
+         (fun '(s2', x) =>
+            ITree.bind (Ret (s2', inr x))
+              (fun '(s2'', res) =>
+                 match res with
+                 | inl ex => Ret (s2'', inl ex)
+                 | inr uv =>
+                     interp_cfg_exc ctx2 (ITree.bind (lwrite dst uv) (fun _ => Ret tt)) s2''
+                 end))).
+  Proof using.
+    eapply refine_prov_obs_eq;
+      [symmetry; apply interp_cfg_exc_bind | reflexivity |].
+    pose proof (stage1_load_prom_eq U P_unprom (gs :: G) gs σ1 σ2 Hinv (or_introl Logic.eq_refl))
+      as Hld_eq.
+    clear Hinv.
+    destruct (memory_bytes_to_dvalue (gs_bytes gs) (gs_dt gs))
+      as [msg | msg | msg | dv_ld] eqn:Edeser.
+    - cbn [EOU_to_itree]; cbn [Interfaces.Memory.lift] in Hld_eq.
+      unfold load, Subevent.trigger; try unfold trigger_cast.
+      eapply refine_prov_obs_eq;
+        [reflexivity
+        | exact (@memM_void_to_mcfg_raise_bind_eq (@dvalue (@ParamsV IP IPT)) _ msg σ2 (σ2, ((sf2, fstk2), g)) _) |].
+      eapply PassCommon.refine_prov_bind with
+        (RR := fun _ _ (p : _ * void) => match snd p with end).
+      + apply refine_cfg_exc_memory_event_l.
+        eapply refine_prov_obs_eq; [symmetry; exact Hld_eq | reflexivity |].
+        apply memM_interp_prov_raise_both.
+      + intros _ _ [_ []] _ _.
+    - cbn [EOU_to_itree]; cbn [Interfaces.Memory.lift] in Hld_eq.
+      unfold load, Subevent.trigger; try unfold trigger_cast.
+      eapply refine_prov_obs_eq;
+        [reflexivity | apply Eqit.bind_ret_r |].
+      eapply PassCommon.refine_prov_bind with (RR := fun _ _ _ => False).
+      + apply refine_cfg_exc_memory_event_l.
+        eapply refine_prov_obs_eq; [symmetry; exact Hld_eq | reflexivity |].
+        apply memM_interp_prov_raiseOOM_l.
+      + intros _ _ _ _ [].
+    - cbn [EOU_to_itree]; cbn [Interfaces.Memory.lift] in Hld_eq.
+      unfold load, Subevent.trigger; try unfold trigger_cast.
+      eapply refine_prov_obs_eq;
+        [reflexivity | apply Eqit.bind_ret_r |].
+      eapply PassCommon.refine_prov_bind with (RR := fun _ _ _ => False).
+      + apply refine_cfg_exc_memory_event_l.
+        eapply refine_prov_obs_eq; [symmetry; exact Hld_eq | reflexivity |].
+        apply memM_interp_prov_raiseUB_l.
+      + intros _ _ _ _ [].
+    - cbn [EOU_to_itree]; cbn [Interfaces.Memory.lift] in Hld_eq.
+      assert (Er :
+                ITree.bind
+                  (interp_mcfg_model (Ret dv_ld) (σ2, ((sf2, fstk2), g)))
+                  (fun '(s2', x) =>
+                     ITree.bind (Ret (s2', inr x))
+                       (fun '(s2'', res) =>
+                          match res with
+                          | inl ex => Ret (s2'', inl ex)
+                          | inr uv =>
+                              interp_cfg_exc ctx2 (ITree.bind (lwrite dst uv) (fun _ => Ret tt)) s2''
+                          end)) ≅
+                interp_cfg_exc ctx2 (lwrite dst dv_ld) (σ2, ((sf2, fstk2), g))).
+      { etransitivity.
+        { match goal with
+          | |- ITree.bind _ ?k ≅ _ =>
+              eapply eq_itree_clo_bind with (UU := Logic.eq) (k2 := k);
+                [apply interp_mcfg_model_ret | intros [s2' x] _ <-; reflexivity]
+          end. }
+        rewrite !Eqit.bind_ret_l.
+        apply interp_cfg_exc_obs_eq, bind_unit_ret_r. }
+      eapply refine_prov_obs_eq;
+        [reflexivity | symmetry; exact Er |]; clear Er.
+      eapply refine_prov_obs_eq;
+        [reflexivity | apply Eqit.bind_ret_r |].
+      unfold load, Subevent.trigger; try unfold trigger_cast.
+      eapply PassCommon.refine_prov_bind with
+        (RR := fun U' '(s1_ld, res_ld) y2 =>
+                   U' = U /\ s1_ld = (σ1, ((sf1, fstk1), g)) /\ res_ld = inr dv_ld /\
+                   y2 = ((σ2, ((upd_local_sf sf2 (Maps.add dst dv_ld (stack_vars sf2)), fstk2), g)),
+                         inr tt)).
+      + apply refine_cfg_exc_memory_event_l.
+        eapply refine_prov_obs_eq; [symmetry; exact Hld_eq | reflexivity |].
+        cbn [ExtLib.Structures.Monad.ret memS_mon memM_interp_prov].
+        eapply refine_prov_tau_star_r; [apply tau_star_cfg_exc_lwrite |].
+        apply refine_prov_ret;
+          exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl))).
+      + intros U2 [s1_ld res_ld] y2 _ (-> & -> & -> & ->).
+        eapply refine_prov_tau_star_l; [apply tau_star_cfg_exc_lwrite |].
+        apply refine_prov_ret; exists dv_ld;
+          exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl)))).
   Qed.
 
   Lemma denote_mk_load_val_exp_exc_sim
@@ -11345,114 +12145,95 @@ Section MemoryAndSerialization.
                         (DVALUE_Array true [v]) (gs_dt gs)) s2')).
     { rewrite (interp_mcfg_model_obs_eq _ _ _ (denote_mk_load_val_exp_eq (gs_dt gs) cur_reg)).
       apply interp_mcfg_model_bind. }
+    assert (Er_init :
+              ITree.bind
+                (interp_mcfg_model (denote_exp None (mk_load_val_exp (gs_dt gs) cur_reg))
+                   (σ2, ((sf2, fstk2), g)))
+                (fun r =>
+                   ITree.bind (let '(s2', x) := r in Ret (s2', inr x))
+                     (fun '(s2'', res) =>
+                        match res with
+                        | inl ex => Ret (s2'', inl ex)
+                        | inr uv =>
+                            interp_cfg_exc ctx2 (ITree.bind (lwrite dst uv) (fun _ => Ret tt)) s2''
+                        end)) ≅
+              ITree.bind (interp_mcfg_model (lread cur_reg) (σ2, ((sf2, fstk2), g)))
+                (fun '(s2'0, v) =>
+                   ITree.bind
+                     (interp_mcfg_model
+                        (convert CONV_Bitcast (DTYPE_Array true 1%N (gs_dt gs))
+                           (DVALUE_Array true [v]) (gs_dt gs)) s2'0)
+                     (fun '(s2', x) =>
+                        ITree.bind (Ret (s2', inr x))
+                          (fun '(s2'', res) =>
+                             match res with
+                             | inl ex => Ret (s2'', inl ex)
+                             | inr uv =>
+                                 interp_cfg_exc ctx2 (ITree.bind (lwrite dst uv) (fun _ => Ret tt)) s2''
+                             end)))).
+    { rewrite (eq_itree_bind_congr_l EexpR), Eqit.bind_bind.
+      eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
+      intros [s2'0 v] _ <-; cbn beta iota.
+      eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
+      intros [s2' x] _ <-; reflexivity. }
     eapply refine_prov_obs_eq;
-      [symmetry; apply Eqit.bind_bind
-      | symmetry;
-        rewrite (eq_itree_clo_bind _ _ _ _ Logic.eq EexpR (fun _ _ <- => Logic.eq_refl)),
-          !Eqit.bind_bind;
-        reflexivity
-      |].
+      [symmetry; apply Eqit.bind_bind | symmetry; apply Eqit.bind_bind |].
+    eapply refine_prov_obs_eq;
+      [reflexivity | symmetry; exact Er_init |]; clear Er_init EexpR.
     eapply refine_prov_tau_star_l;
       [apply tau_star_bind, (tau_star_mcfg_lread_some p _ σ1 sf1 fstk1 g Hlk_p) |].
     eapply refine_prov_tau_star_r;
       [apply tau_star_bind, (tau_star_mcfg_lread_some cur_reg _ σ2 sf2 fstk2 g Hlk_cur) |].
-    rewrite (convert_bitcast_vec1_scalar_eq (gs_dt gs) (gs_db gs) (gs_bytes gs) Hsc Hser).
     eapply refine_prov_obs_eq;
-      [symmetry; rewrite !Eqit.bind_ret_l; reflexivity
-      | symmetry; rewrite !Eqit.bind_ret_l; reflexivity |].
+      [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
+    cbn beta iota.
+    eapply refine_prov_obs_eq;
+      [symmetry; apply Eqit.bind_ret_l | reflexivity |].
+    cbn beta iota.
+    rewrite (convert_bitcast_vec1_scalar_eq (gs_dt gs) (gs_db gs) (gs_bytes gs) Hsc Hser).
     destruct (assert_alignment_ret_or_ub
-                (DVALUE_Base (DVALUE_Pointer (gs_pt gs))) anns_ld
-                (set_loc (get_file_info md_ld) ++ location_error_string md_ld ++
+                (DVALUE_Base (DVALUE_Pointer (Pa := @ParamsV IP IPT) (gs_pt gs))) anns_ld
+                ((set_loc (get_file_info md_ld) ++ location_error_string md_ld) ++
                  ": Load with overestimated alignment.")%string)
       as [Hal_ok | Hal_ub].
-    - rewrite Hal_ok; cbn [EOU_to_itree].
+    - rewrite Hal_ok; cbn [EOU_to_itree ExtLib.Structures.Monad.ret Monad_itree].
       assert (Eld_l :
                 ITree.bind (Ret tt)
                   (fun _ : unit =>
-                     ITree.bind (load (gs_dt gs) (DVALUE_Base (DVALUE_Pointer (gs_pt gs))))
+                     ITree.bind
+                       (load (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT))
+                          (gs_dt gs) (DVALUE_Base (DVALUE_Pointer (gs_pt gs))))
                        (fun v =>
                           ITree.bind
-                            (EOU_to_itree
+                            (EOU_to_itree (E := @CFGEtop (@ParamsV IP IPT))
                                (apply_value_attrs (load_metadata_attrs md_ld)
-                                  (set_loc (get_file_info md_ld) ++ location_error_string md_ld ++
+                                  ((set_loc (get_file_info md_ld) ++ location_error_string md_ld) ++
                                    ": Loaded value violates !noundef.")%string
                                   (value_metadata_range (metadata_range md_ld) v)))
                             (fun v0 =>
                                ITree.bind
-                                 (assert_load_dereferenceable md_ld v0
-                                    (set_loc (get_file_info md_ld) ++ location_error_string md_ld ++
+                                 (assert_load_dereferenceable (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT))
+                                    md_ld v0
+                                    ((set_loc (get_file_info md_ld) ++ location_error_string md_ld) ++
                                      ": Loaded value violates !dereferenceable.")%string)
-                                 (fun _ => lwrite dst v0)))) ≅
-                ITree.bind (load (gs_dt gs) (DVALUE_Base (DVALUE_Pointer (gs_pt gs))))
-                  (fun v => lwrite dst v)).
+                                 (fun _ => lwrite (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT)) dst v0)))) ≅
+                ITree.bind
+                  (load (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT))
+                     (gs_dt gs) (DVALUE_Base (DVALUE_Pointer (gs_pt gs))))
+                  (fun v => lwrite (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT)) dst v)).
       { rewrite Eqit.bind_ret_l, Hlattrs, Hmrange.
         eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
         intros v _ <-; cbn [value_metadata_range].
-        rewrite apply_value_attrs_nil_eq; cbn [EOU_to_itree].
+        rewrite apply_value_attrs_nil_eq; cbn [EOU_to_itree ExtLib.Structures.Monad.ret Monad_itree].
         rewrite Eqit.bind_ret_l.
-        unfold assert_load_dereferenceable; rewrite Hlderef, Eqit.bind_ret_l; reflexivity. }
+        unfold assert_load_dereferenceable; rewrite Hlderef;
+          cbn [EOU_to_itree ExtLib.Structures.Monad.ret Monad_itree];
+          rewrite Eqit.bind_ret_l; reflexivity. }
       eapply refine_prov_obs_eq;
-        [symmetry;
-         rewrite (interp_cfg_exc_obs_eq ctx1 _ _ _ Eld_l);
-         apply interp_cfg_exc_bind
-        | reflexivity |]; clear Eld_l.
-      pose proof (stage1_load_prom_eq U P_unprom (gs :: G) gs σ1 σ2 Hinv (or_introl Logic.eq_refl))
-        as Hld_eq.
-      destruct (memory_bytes_to_dvalue (gs_bytes gs) (gs_dt gs))
-        as [msg | msg | msg | dv_ld] eqn:Edeser; cbn [EOU_to_itree Interfaces.Memory.lift] in *.
-      + unfold load, Subevent.trigger; try unfold trigger_cast.
-        eapply refine_prov_obs_eq;
-          [reflexivity
-          | symmetry; apply (memM_void_to_mcfg_raise_bind_eq msg σ2) |].
-        eapply PassCommon.refine_prov_bind with
-          (RPre := fun _ _ '(_, v : void) => match v with end).
-        * apply refine_cfg_exc_memory_event_l.
-          eapply refine_prov_obs_eq; [symmetry; exact Hld_eq | reflexivity |].
-          apply memM_interp_prov_raise_both.
-        * intros _ _ [_ []] _ _.
-      + unfold load, Subevent.trigger; try unfold trigger_cast.
-        eapply refine_prov_obs_eq;
-          [reflexivity | symmetry; apply Eqit.bind_ret_r |].
-        eapply PassCommon.refine_prov_bind with (RPre := fun _ _ _ => False).
-        * apply refine_cfg_exc_memory_event_l.
-          eapply refine_prov_obs_eq; [symmetry; exact Hld_eq | reflexivity |].
-          apply memM_interp_prov_raiseOOM_l.
-        * intros _ _ _ _ [].
-      + unfold load, Subevent.trigger; try unfold trigger_cast.
-        eapply refine_prov_obs_eq;
-          [reflexivity | symmetry; apply Eqit.bind_ret_r |].
-        eapply PassCommon.refine_prov_bind with (RPre := fun _ _ _ => False).
-        * apply refine_cfg_exc_memory_event_l.
-          eapply refine_prov_obs_eq; [symmetry; exact Hld_eq | reflexivity |].
-          apply memM_interp_prov_raiseUB_l.
-        * intros _ _ _ _ [].
-      + unfold load, Subevent.trigger; try unfold trigger_cast.
-        eapply refine_prov_obs_eq;
-          [reflexivity
-          | symmetry;
-            rewrite (eq_itree_clo_bind _ _ _ _ Logic.eq
-                       (interp_mcfg_model_ret _ _) (fun _ _ <- => Logic.eq_refl)),
-              !Eqit.bind_ret_l;
-            apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (bind_unit_ret_r (lwrite dst dv_ld)))
-          |].
-        eapply refine_prov_obs_eq;
-          [reflexivity | symmetry; apply Eqit.bind_ret_r |].
-        eapply PassCommon.refine_prov_bind with
-          (RPre := fun U' '(s1_ld, res_ld) y2 =>
-                     U' = U /\ s1_ld = (σ1, ((sf1, fstk1), g)) /\ res_ld = inr dv_ld /\
-                     y2 = ((σ2, ((upd_local_sf sf2 (Maps.add dst dv_ld (stack_vars sf2)), fstk2), g)),
-                           inr tt)).
-        * apply refine_cfg_exc_memory_event_l.
-          eapply refine_prov_obs_eq;
-            [symmetry; rewrite Hld_eq; reflexivity | reflexivity |].
-          cbn [ExtLib.Structures.Monad.ret memS_mon memM_interp_prov].
-          eapply refine_prov_tau_star_r;
-            [apply tau_star_cfg_exc_lwrite |].
-          apply refine_prov_ret; repeat split; reflexivity.
-        * intros U2 [s1_ld res_ld] y2 _ (-> & -> & -> & ->).
-          eapply refine_prov_tau_star_l;
-            [apply tau_star_cfg_exc_lwrite |].
-          apply refine_prov_ret; exists dv_ld; repeat split; reflexivity.
+        [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ Eld_l) | reflexivity |];
+        clear Eld_l.
+      exact (denote_mk_load_val_exp_ok_sim ctx1 ctx2 RExc dst U P_unprom gs G
+               σ1 σ2 sf1 sf2 fstk1 fstk2 g Hinv).
     - rewrite Hal_ub; cbn [EOU_to_itree].
       eapply refine_prov_obs_eq;
         [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (raiseUB_bind_eq _ _)) | reflexivity |].
@@ -11571,15 +12352,16 @@ Section MemoryAndSerialization.
       apply on_mem_prov_g_sync, handle_intrinsicM_equal_sync, Heq.
     - destruct e3 as [gid dv | gid]; [discriminate Hng |].
       unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, update_globals_ref.
+      cbn - [Maps.lookup Maps.add lift_bot_prov].
       destruct (Maps.lookup gid g0) as [v |];
-        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
+        cbn - [Maps.lookup Maps.add lift_bot_prov].
       + eapply refine_prov_obs_eq;
-          [symmetry; rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity
-          | symmetry; rewrite !Eqit.bind_ret_l, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity |].
+          [symmetry; rewrite ?lift_bot_prov_bind_ret, ?lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity
+          | symmetry; rewrite ?lift_bot_prov_bind_ret, ?lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity |].
         apply refine_prov_ret;
           exact (conj (incl_refl U) (conj Heq (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl)))).
       + unfold raise, trigger_cast, ITree.trigger, lift_bot_prov;
-          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_stateT Monad_itree].
+          cbn - [Maps.lookup Maps.add].
         pstep; apply RP_Step; unfold rp_step_body.
         repeat (rewrite observe_bind || rewrite observe_translate); cbn; right; right; split; [exact I | intros [] [] _].
     - unfold fused_local_prov; apply on_ls_prov_g_sync, Heq.
@@ -11701,13 +12483,14 @@ Section MemoryAndSerialization.
     - apply ev_ok_ret.
   Qed.
 
-  Lemma m2r_assoc_in {K V : Type} {Heq : RelDec (@Logic.eq K)} {Hcorr : RelDec_Correct Heq}
+  Lemma m2r_assoc_in {K V : Type} {Heq : ExtLib.Core.RelDec.RelDec (@Logic.eq K)}
+    {Hcorr : ExtLib.Core.RelDec.RelDec_Correct Heq}
     (k : K) (l : list (K * V)) (v : V) :
     assoc k l = Some v ->
     exists k0, In (k0, v) l.
   Proof using.
     induction l as [| [k0 v0] rest IH]; cbn [assoc]; [intros H; discriminate H |].
-    destruct (rel_dec k k0).
+    destruct (ExtLib.Core.RelDec.rel_dec k k0).
     - intros H; inversion H; subst v0; exists k0; left; reflexivity.
     - intros H; destruct (IH H) as [k1 Hin]; exists k1; right; exact Hin.
   Qed.
@@ -11717,64 +12500,70 @@ Section MemoryAndSerialization.
       (fun '(_, f) =>
          forall args va,
            ev_ok (@is_non_global_mcfg_ev) (f args va))
-      (@defined_intrinsics (@ParamsV IP IPT) (@MCFGEtop (@ParamsV IP IPT)) _ _ _ _).
+      (defined_intrinsics (Pa := @ParamsV IP IPT) (E := @MCFGEtop (@ParamsV IP IPT))).
   Proof using.
     assert (Hpure : forall pf args va,
               ev_ok (@is_non_global_mcfg_ev)
-                (@pure_to_semantic (@ParamsV IP IPT) (@MCFGEtop (@ParamsV IP IPT)) _ _ _ pf args va)).
+                (pure_to_semantic (Pa := @ParamsV IP IPT) (E := @MCFGEtop (@ParamsV IP IPT)) pf args va)).
     { intros pf args va; unfold pure_to_semantic; apply ev_ok_EOU_mcfg. }
     assert (Hpbase : forall pbf args va,
               ev_ok (@is_non_global_mcfg_ev)
-                (@pure_base_to_semantic (@ParamsV IP IPT) (@MCFGEtop (@ParamsV IP IPT)) _ _ _ pbf args va)).
+                (pure_base_to_semantic (Pa := @ParamsV IP IPT) (E := @MCFGEtop (@ParamsV IP IPT)) pbf args va)).
     { intros pbf args va; unfold pure_base_to_semantic; apply Hpure. }
-    assert (Hmap_pb :
-              forall {A} (xs : list A) d_fn f_fn,
-                Forall
-                  (fun '(_, f) => forall args va, ev_ok (@is_non_global_mcfg_ev) (f args va))
-                  (List.map (fun x => (d_fn x, @pure_base_to_semantic (@ParamsV IP IPT) (@MCFGEtop (@ParamsV IP IPT)) _ _ _ (f_fn x))) xs)).
-    { intros A xs d_fn f_fn; induction xs as [| x xs' IH]; constructor; [apply Hpbase | exact IH]. }
-    assert (Hmap_p :
-              forall {A} (xs : list A) d_fn f_fn,
-                Forall
-                  (fun '(_, f) => forall args va, ev_ok (@is_non_global_mcfg_ev) (f args va))
-                  (List.map (fun x => (d_fn x, @pure_to_semantic (@ParamsV IP IPT) (@MCFGEtop (@ParamsV IP IPT)) _ _ _ (f_fn x))) xs)).
-    { intros A xs d_fn f_fn; induction xs as [| x xs' IH]; constructor; [apply Hpure | exact IH]. }
     unfold defined_intrinsics, extra_fp_intrinsics, extra_int_intrinsics,
            mk_int_unop_defs, mk_int_unop_flag_defs, mk_int_binop_defs,
            mk_expect_int_defs, mk_int_ternop_defs, mk_int_ovf_binop_defs.
-    repeat apply Forall_app; repeat split;
-      try apply Hmap_pb; try apply Hmap_p.
-    - repeat constructor; intros args va; apply Hpbase.
-    - repeat constructor; intros args va; apply Hpbase.
-    - constructor; [intros args va; apply Hpbase |].
-      constructor; [intros args va; apply Hpbase |].
-      constructor.
+    repeat (apply Forall_app; split);
+      try (apply Forall_map, Forall_forall; intros ? _ args va; first [apply Hpbase | apply Hpure]).
+    - repeat (apply Forall_cons; [intros args va; apply Hpbase |]); apply Forall_nil.
+    - repeat (apply Forall_cons; [intros args va; apply Hpbase |]); apply Forall_nil.
+    - apply Forall_cons; [intros args va; apply Hpbase |].
+      apply Forall_cons; [intros args va; apply Hpbase |].
+      apply Forall_cons.
       + intros args va; unfold llvm_va_start.
         destruct args as [| a [| ? ?]], va as [vp |];
-          try (unfold raise, trigger_cast; eapply ev_ok_bind; [apply ev_ok_trigger; reflexivity | intros []]).
-        destruct a as [db | |].
-        * destruct db;
-            try (eapply ev_ok_bind;
-                 [unfold store, Subevent.trigger; try unfold trigger_cast; apply ev_ok_trigger; reflexivity
-                 | intros u0; apply ev_ok_ret]).
-          unfold raiseUB, trigger_cast; eapply ev_ok_bind; [apply ev_ok_trigger; reflexivity | intros []].
-        * eapply ev_ok_bind;
+          lazymatch goal with
+          | |- ev_ok _ (match ?x with _ => _ end) => idtac
+          | |- _ =>
+              unfold raise, trigger_cast; eapply ev_ok_bind;
+              [apply ev_ok_trigger; reflexivity | intros []]
+          end.
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+        destruct a as [db | |];
+          [destruct db;
+           lazymatch goal with
+           | |- ev_ok _ (ITree.bind _ _) =>
+               eapply ev_ok_bind;
+               [unfold store, Subevent.trigger; try unfold trigger_cast; apply ev_ok_trigger; reflexivity
+               | intros u0; apply ev_ok_ret]
+           | |- _ =>
+               unfold raiseUB, trigger_cast; eapply ev_ok_bind;
+               [apply ev_ok_trigger; reflexivity | intros []]
+           end
+          | eapply ev_ok_bind;
             [unfold store, Subevent.trigger; try unfold trigger_cast; apply ev_ok_trigger; reflexivity
-            | intros u0; apply ev_ok_ret].
-        * eapply ev_ok_bind;
+            | intros u0; apply ev_ok_ret]
+          | eapply ev_ok_bind;
             [unfold store, Subevent.trigger; try unfold trigger_cast; apply ev_ok_trigger; reflexivity
-            | intros u0; apply ev_ok_ret].
-      + constructor.
-        * intros args va; unfold llvm_va_end; apply ev_ok_ret.
-        * constructor; [| constructor].
+            | intros u0; apply ev_ok_ret]].
+      + apply Forall_cons.
+        * intros args va; unfold llvm_va_end;
+            cbn [ExtLib.Structures.Monad.ret Monad_itree]; apply ev_ok_ret.
+        * apply Forall_cons; [| apply Forall_nil].
           intros args va; unfold llvm_va_copy.
           destruct args as [| dest [| src [| ? ?]]];
-            try (unfold raise, trigger_cast; eapply ev_ok_bind; [apply ev_ok_trigger; reflexivity | intros []]).
-          eapply ev_ok_bind;
-            [unfold load, Subevent.trigger; try unfold trigger_cast; apply ev_ok_trigger; reflexivity |].
-          intros vargs; eapply ev_ok_bind;
-            [unfold store, Subevent.trigger; try unfold trigger_cast; apply ev_ok_trigger; reflexivity |].
-          intros u0; apply ev_ok_ret.
+            cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+            lazymatch goal with
+            | |- ev_ok _ (ITree.bind (load _ _) _) =>
+                eapply ev_ok_bind;
+                [unfold load, Subevent.trigger; try unfold trigger_cast; apply ev_ok_trigger; reflexivity |];
+                intros vargs; eapply ev_ok_bind;
+                [unfold store, Subevent.trigger; try unfold trigger_cast; apply ev_ok_trigger; reflexivity |];
+                intros u0; apply ev_ok_ret
+            | |- _ =>
+                unfold raise, trigger_cast; eapply ev_ok_bind;
+                [apply ev_ok_trigger; reflexivity | intros []]
+            end.
   Qed.
 
   Lemma interp_state_ev_ok_g_sync {R : Type}
@@ -11827,35 +12616,35 @@ Section MemoryAndSerialization.
           apply RP_Step; unfold rp_step_body.
           rewrite !observe_bind, Hou1, Hou2; cbn.
           left; exists (k x1), s_a', s_b', ls1';
-            exact (conj Logic.eq_refl (conj Logic.eq_refl (conj (Hk x1) (conj Hinc Hm)))).
+            split; [reflexivity | split; [reflexivity | exact (conj (Hk x1) (conj Hinc Hm))]].
         + destruct (observe u2) as [? | m2 | ? ? ?] eqn:Hou2; try contradiction.
           pclearbot; apply RP_Step; unfold rp_step_body.
           rewrite !observe_bind, Hou1, Hou2.
           right; exists X, m1, m2, k;
-            exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Hk Hstep))).
+            split; [reflexivity | split; [reflexivity | exact (conj Hk Hstep)]].
         + apply RP_Step; unfold rp_step_body.
-          rewrite (observe_bind u1 (k_cont X k)), Hou1.
+          rewrite (observe_bind u1), Hou1.
           destruct Hstep as [Hub | [Hleft | Hboth]].
           * left; exact Hub.
           * right; left; destruct e1 as [p1 | b1']; [| contradiction]; destruct p1.
             intros p Hp; specialize (Hleft p Hp); pclearbot.
             right; exists X, (h1 p), u2, k;
-              exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Hk Hleft))).
+              split; [reflexivity | split; [reflexivity | exact (conj Hk Hleft)]].
           * right; right.
             destruct (observe u2) as [? | ? | Y2 e2 h2] eqn:Hou2; try contradiction.
-            rewrite (observe_bind u2 (k_cont X k)), Hou2.
+            rewrite (observe_bind u2), Hou2.
             destruct e1 as [p1 | b1'], e2 as [p2 | b2']; cbn in *; try contradiction.
             -- destruct p1, p2; intros p Hp; specialize (Hboth p Hp); pclearbot.
                right; exists X, (h1 p), (h2 p), k;
-                 exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Hk Hboth))).
+                 split; [reflexivity | split; [reflexivity | exact (conj Hk Hboth)]].
             -- destruct Hboth as [HE HA]; split; [exact HE |].
                intros a1 a2 Ha; specialize (HA a1 a2 Ha); pclearbot.
                right; exists X, (h1 a1), (h2 a2), k;
-                 exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Hk HA))).
+                 split; [reflexivity | split; [reflexivity | exact (conj Hk HA)]].
       - eapply RP_TauL;
-          [rewrite (observe_bind u1 (k_cont X k)), Hu1; reflexivity | exact IH].
+          [rewrite (observe_bind u1), Hu1; reflexivity | exact IH].
       - eapply RP_TauR;
-          [rewrite (observe_bind u2 (k_cont X k)), Hu2; reflexivity | exact IH]. }
+          [rewrite (observe_bind u2), Hu2; reflexivity | exact IH]. }
     assert (Hcore : forall U a1 a2, rel U a1 a2 -> refine_prov (mcfg_eq_g_post g0 U0) U a1 a2).
     { pcofix CIH; intros U a1 a2 Hst; pstep.
       eapply refine_prov__mon with (r := rel); [| intros U' x1 x2 Hx; right; apply CIH, Hx].
@@ -11878,12 +12667,12 @@ Section MemoryAndSerialization.
             by (symmetry; rewrite (itree_eta t0'), Hot; apply interp_state_tau).
           eapply refine_prov__obs_eq; [exact Hobs | exact Et1 | exact Et2 |].
           apply RP_Step; cbn; left; exists mt, s_a, s_b, ls0;
-            exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Hmt (conj Hinc Hm)))).
-        + assert (Et1 : ITree.bind (interp_vellvm_prov_h X e (s_a, (ls0, g0))) (k_cont X k) ≅
+            split; [reflexivity | split; [reflexivity | exact (conj Hmt (conj Hinc Hm))]].
+        + assert (Et1 : ITree.bind (interp_vellvm_prov_h e (s_a, (ls0, g0))) (k_cont X k) ≅
                         interp_state interp_vellvm_prov_h t0' (s_a, (ls0, g0))).
           { symmetry; rewrite (itree_eta t0'), Hot, interp_state_vis.
             eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [? ?] _ <-; reflexivity]. }
-          assert (Et2 : ITree.bind (interp_vellvm_prov_h X e (s_b, (ls0, g0))) (k_cont X k) ≅
+          assert (Et2 : ITree.bind (interp_vellvm_prov_h e (s_b, (ls0, g0))) (k_cont X k) ≅
                         interp_state interp_vellvm_prov_h t0' (s_b, (ls0, g0))).
           { symmetry; rewrite (itree_eta t0'), Hot, interp_state_vis.
             eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [? ?] _ <-; reflexivity]. }
@@ -11896,7 +12685,7 @@ Section MemoryAndSerialization.
       - eapply refine_prov__obs_eq; [exact Hobs | exact E1 | exact E2 |].
         exact (Hbind_step X U u1 u2 k Hk Hu). }
     apply Hcore; left; exists t, σ1, σ2, ls;
-      exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Hok (conj (incl_refl U0) Heq)))).
+      split; [reflexivity | split; [reflexivity | exact (conj Hok (conj (incl_refl U0) Heq))]].
   Qed.
 
   Lemma trigger_mcfg_non_global_g_sync {X : Type}
@@ -11912,9 +12701,12 @@ Section MemoryAndSerialization.
     unfold interp_mcfg_model.
     apply interp_state_ev_ok_g_sync; [| exact Heq].
     unfold interp_intrinsics.
-    assert (Etr : interp interp_intrinsics_h (ITree.trigger me) ≅
-                  ITree.bind (interp_intrinsics_h X me) (fun x => Tau (Ret x))).
-    { unfold ITree.trigger; rewrite unfold_interp; cbn [_interp observe].
+    match goal with
+    | |- ev_ok _ (interp ?h (ITree.trigger _)) =>
+        assert (Etr : interp h (ITree.trigger me) ≅
+                      ITree.bind (h X me) (fun x => Tau (Ret x)))
+    end.
+    { unfold ITree.trigger; rewrite interp_vis.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
       intros x _ <-; rewrite interp_ret; reflexivity. }
     eapply ev_ok_obs_eq; [symmetry; exact Etr |].
@@ -11923,14 +12715,15 @@ Section MemoryAndSerialization.
     - cbn [interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ E_trigger Subevent.trigger]; apply ev_ok_trigger; reflexivity.
     - cbn [interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_].
       unfold handle_intrinsics.
-      destruct ie as [dt fname args va]; cbn.
+      destruct ie as [dt fname args va]; cbn beta iota.
       destruct (assoc fname defs_assoc) as [f |] eqn:Eassoc.
-      + apply m2r_assoc_in in Eassoc as [k0 Hin].
+      + cbn beta iota.
+        apply m2r_assoc_in in Eassoc as [k0 Hin].
         unfold defs_assoc in Hin; apply in_map_iff in Hin as ([decl f0] & Heq_p & Hin_def).
-        inversion Heq_p; subst f0.
-        pose proof defined_intrinsics_ev_ok as Hall; rewrite Forall_forall in Hall.
-        exact (Hall (decl, f) Hin_def args va).
-      + cbn; apply ev_ok_trigger; reflexivity.
+        destruct (dc_name decl); inversion Heq_p; subst f0;
+          (pose proof defined_intrinsics_ev_ok as Hall; rewrite Forall_forall in Hall;
+           exact (Hall (decl, f) Hin_def args va)).
+      + cbn beta iota; apply ev_ok_trigger; reflexivity.
     - cbn [interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ F_trigger Subevent.trigger].
       apply ev_ok_trigger, Hng.
   Qed.
@@ -11947,7 +12740,7 @@ Section MemoryAndSerialization.
     (ok_ev : forall X, E X -> bool) (f : A -> B) (t : itree E A) :
     ev_ok ok_ev t ->
     ev_ok ok_ev (f <$> t).
-  Proof using.
+  Proof using IP IPT.
     intros Ht; unfold Functor.fmap, Functor_itree, ITree.map.
     eapply ev_ok_bind; [exact Ht | intros a; apply ev_ok_ret].
   Qed.
@@ -11957,7 +12750,7 @@ Section MemoryAndSerialization.
     (f : A -> itree E B) (xs : list A) :
     (forall a, In a xs -> ev_ok ok_ev (f a)) ->
     ev_ok ok_ev (map_monad f xs).
-  Proof using.
+  Proof using IP IPT.
     intros Hf; induction xs as [| x xs' IH];
       cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     - apply ev_ok_ret.
@@ -11972,7 +12765,7 @@ Section MemoryAndSerialization.
     (f : A -> itree E unit) (xs : list A) :
     (forall a, In a xs -> ev_ok ok_ev (f a)) ->
     ev_ok ok_ev (loop_monad f xs).
-  Proof using.
+  Proof using IP IPT.
     intros Hf; induction xs as [| x xs' IH];
       cbn [loop_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     - apply ev_ok_ret.
@@ -11985,7 +12778,7 @@ Section MemoryAndSerialization.
     (body : I -> itree E (I + R)) (i0 : I) :
     (forall i, ev_ok ok_ev (body i)) ->
     ev_ok ok_ev (ITree.iter body i0).
-  Proof using.
+  Proof using IP IPT.
     intros Hbody.
     set (k_it := fun lr : I + R =>
                    match lr with
@@ -12127,7 +12920,7 @@ Section MemoryAndSerialization.
   Proof using.
     unfold convert; destruct ct as [| pct | ict].
     - destruct (dtyp_eqb t_from t_to); [apply ev_ok_withCall_ret |].
-      destruct (@bit_sizeof_dtyp SizeofV t_from =? @bit_sizeof_dtyp SizeofV t_to)%N.
+      match goal with |- context [(?a =? ?b)%N] => destruct (a =? b)%N end.
       + apply ev_ok_withCall_EOU.
       + apply (ev_ok_withCall_EOU (raise_error _)).
     - apply ev_ok_withCall_EOU.
@@ -12180,7 +12973,7 @@ Section MemoryAndSerialization.
     - destruct dv as [db | p fields | vec elts]; cbn [freeze].
       + apply ev_ok_withCall_freeze_base.
       + destruct dt as [| p' dts |];
-          try apply (ev_ok_withCall_EOU (raise_error _)).
+          [apply (ev_ok_withCall_EOU (raise_error _)) | | apply (ev_ok_withCall_EOU (raise_error _))].
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply ev_ok_withCall_bind; [| intros vals; apply ev_ok_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
@@ -12198,10 +12991,10 @@ Section MemoryAndSerialization.
         * apply (ev_ok_withCall_EOU (raise_error _)).
         * apply (ev_ok_withCall_EOU (raise_error _)).
         * eapply ev_ok_withCall_bind.
-          -- fold (@freeze (@ParamsV IP IPT) _ _ _ _ t v); apply IH; lia.
-          -- intros v'; apply IHf; lia.
+          -- fold (@freeze (@ParamsV IP IPT) (@MCFGEtop (@ParamsV IP IPT)) _ _ _ _ t v); apply IH; lia.
+          -- intros dv'; apply IHf; lia.
       + destruct dt as [| | v' sz_n t];
-          try apply (ev_ok_withCall_EOU (raise_error _)).
+          [apply (ev_ok_withCall_EOU (raise_error _)) | apply (ev_ok_withCall_EOU (raise_error _)) |].
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply ev_ok_withCall_bind; [| intros vals; apply ev_ok_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
@@ -12217,8 +13010,8 @@ Section MemoryAndSerialization.
           cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         * apply ev_ok_withCall_ret.
         * eapply ev_ok_withCall_bind.
-          -- fold (@freeze (@ParamsV IP IPT) _ _ _ _ t v); apply IH; lia.
-          -- intros v'; apply IHe; lia.
+          -- fold (@freeze (@ParamsV IP IPT) (@MCFGEtop (@ParamsV IP IPT)) _ _ _ _ t v); apply IH; lia.
+          -- intros dv'; apply IHe; lia.
   Qed.
 
   Lemma ev_ok_denote_exp' (top : option dtyp) (e : exp dtyp) :
@@ -12237,7 +13030,7 @@ Section MemoryAndSerialization.
       { intros elts Helts; apply ev_ok_withCall_map_monad.
         intros [dt0 ex0] Hin; apply IH.
         clear -Hin Helts; induction elts as [| [d1 e1] rest IHr]; [contradiction |].
-        destruct Hin as [Heq | Hin]; [inversion Heq; subst; lia | apply IHr; [exact Hin | lia]]. }
+        destruct Hin as [Heq | Hin]; [inversion Heq; subst; lia | apply IHr; [lia | exact Hin]]. }
       destruct e; cbn [denote_exp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; cbn [m2r_exp_size] in Hle.
       + destruct id as [gid | lid]; cbn [lookup_id];
           unfold gread, lread, Subevent.trigger; try unfold trigger_cast;
@@ -12258,7 +13051,7 @@ Section MemoryAndSerialization.
       + eapply ev_ok_withCall_bind; [apply IH; lia | intros x1; eapply ev_ok_withCall_bind; [apply IH; lia | intros x2; apply ev_ok_withCall_EOU]].
       + eapply ev_ok_withCall_bind; [apply IH; lia | intros x1; eapply ev_ok_withCall_bind; [apply IH; lia | intros x2; apply ev_ok_withCall_EOU]].
       + eapply ev_ok_withCall_bind; [apply IH; lia | intros x1; eapply ev_ok_withCall_bind; [apply IH; lia | intros x2; apply ev_ok_withCall_EOU]].
-      + destruct op as [dt1 op1]; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x1; apply ev_ok_withCall_EOU].
+      + destruct v as [dt1 op1]; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x1; apply ev_ok_withCall_EOU].
       + eapply ev_ok_withCall_bind; [apply IH; lia | intros x1; eapply ev_ok_withCall_bind; [apply IH; lia | intros x2; apply ev_ok_withCall_EOU]].
       + eapply ev_ok_withCall_bind; [apply IH; lia | intros x1; apply ev_ok_withCall_convert].
       + destruct ptrval as [dt2 ptr_e].
@@ -12280,7 +13073,7 @@ Section MemoryAndSerialization.
         eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x1; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x2; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x3; apply ev_ok_withCall_EOU]]].
       + destruct v as [dt1 e1]; eapply ev_ok_withCall_bind; [apply IH; cbn in Hle; lia | intros x1; apply ev_ok_withCall_freeze].
       + apply (ev_ok_withCall_EOU (raise_error _)).
-      + destruct md as [| | [dt1 ex1] | | | |];
+      + match goal with m0 : metadata _ |- _ => destruct m0 as [| | [dt1 ex1] | | | |] end;
           try apply ev_ok_withCall_ret.
         apply IH; cbn in Hle; lia.
       + destruct elt as [dt1 e1].
@@ -12336,11 +13129,16 @@ Section MemoryAndSerialization.
 
   Lemma ev_ok_assert_dereferenceable
     (or_null : bool) (n : N) (v : @dvalue (@ParamsV IP IPT)) (msg : string) :
-    ev_ok (@is_non_global_cfg_ev) (@assert_dereferenceable (@ParamsV IP IPT) (@CFGEtop (@ParamsV IP IPT)) _ _ _ _ or_null n v msg).
+    ev_ok (@is_non_global_cfg_ev)
+      (assert_dereferenceable (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT)) or_null n v msg).
   Proof using.
     unfold assert_dereferenceable.
     destruct v as [db | |]; [| apply ev_ok_cfg_raise | apply ev_ok_cfg_raise].
-    destruct db as [p | ? ? | ? | ? | ? | | | ? ?]; try apply ev_ok_cfg_raise.
+    destruct db as [p | ? ? | ? | ? | ? | | | ? ?]; cbv beta iota;
+      lazymatch goal with
+      | |- ev_ok _ (raise _) => apply ev_ok_cfg_raise
+      | _ => idtac
+      end.
     - destruct ((or_null && (ptr_to_int p =? ptr_to_int null)%Z) || (n =? 0)%N).
       + apply ev_ok_ret.
       + eapply ev_ok_bind;
@@ -12350,18 +13148,24 @@ Section MemoryAndSerialization.
 
   Lemma ev_ok_assert_attrs_dereferenceable
     (attrs : list param_attr) (v : @dvalue (@ParamsV IP IPT)) (msg : string) :
-    ev_ok (@is_non_global_cfg_ev) (@assert_attrs_dereferenceable (@ParamsV IP IPT) (@CFGEtop (@ParamsV IP IPT)) _ _ _ _ attrs v msg).
+    ev_ok (@is_non_global_cfg_ev)
+      (assert_attrs_dereferenceable (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT)) attrs v msg).
   Proof using.
     unfold assert_attrs_dereferenceable.
     destruct (find_option attr_dereferenceable attrs) as [[or_null n] |];
       [| apply ev_ok_ret].
     destruct v as [db | |]; [| apply ev_ok_ret | apply ev_ok_ret].
-    destruct db; try apply ev_ok_ret; apply ev_ok_assert_dereferenceable.
+    destruct db;
+      lazymatch goal with
+      | |- ev_ok _ (assert_dereferenceable _ _ _ _) => apply ev_ok_assert_dereferenceable
+      | |- _ => apply ev_ok_ret
+      end.
   Qed.
 
   Lemma ev_ok_assert_load_dereferenceable
     (md : list (metadata dtyp)) (v : @dvalue (@ParamsV IP IPT)) (msg : string) :
-    ev_ok (@is_non_global_cfg_ev) (@assert_load_dereferenceable (@ParamsV IP IPT) (@CFGEtop (@ParamsV IP IPT)) _ _ _ _ md v msg).
+    ev_ok (@is_non_global_cfg_ev)
+      (assert_load_dereferenceable (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT)) md v msg).
   Proof using.
     unfold assert_load_dereferenceable.
     destruct (load_metadata_dereferenceable md) as [[or_null n] |];
@@ -12414,7 +13218,7 @@ Section MemoryAndSerialization.
 
   Lemma ev_ok_bundle_check
     (f : exp dtyp) (tag : string)
-    (check : @assume_bundle_check (@ParamsV IP IPT) (@CFGEtop (@ParamsV IP IPT)) _ _ _ _)
+    (check : assume_bundle_check (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT)))
     (loc : string) (vs : list (@dvalue (@ParamsV IP IPT))) :
     bundle_check f tag = Some check ->
     ev_ok (@is_non_global_cfg_ev) (check loc vs).
@@ -12426,14 +13230,26 @@ Section MemoryAndSerialization.
            end;
       cbn [option_map snd]; intros H; try discriminate H; inversion H; subst check; clear H.
     - unfold assume_nonnull, assume_violated, assume_malformed.
-      destruct vs as [| p [| ? ?]]; try apply ev_ok_cfg_raise.
+      destruct vs as [| p [| ? ?]]; cbv beta iota;
+        lazymatch goal with
+        | |- ev_ok _ (raise _) => apply ev_ok_cfg_raise
+        | _ => idtac
+        end.
       destruct (dvalue_ptr_address p) as [a |]; [| apply ev_ok_cfg_raiseUB].
       destruct (a =? 0)%Z; [apply ev_ok_cfg_raiseUB | apply ev_ok_ret].
     - unfold assume_noundef, assume_violated, assume_malformed.
-      destruct vs as [| v [| ? ?]]; try apply ev_ok_cfg_raise.
+      destruct vs as [| v [| ? ?]]; cbv beta iota;
+        lazymatch goal with
+        | |- ev_ok _ (raise _) => apply ev_ok_cfg_raise
+        | _ => idtac
+        end.
       destruct (dvalue_well_defined v); [apply ev_ok_ret | apply ev_ok_cfg_raiseUB].
     - unfold assume_align, assume_violated, assume_malformed.
-      destruct vs as [| p [| al off]]; try apply ev_ok_cfg_raise.
+      destruct vs as [| p [| al off]]; cbv beta iota;
+        lazymatch goal with
+        | |- ev_ok _ (raise _) => apply ev_ok_cfg_raise
+        | _ => idtac
+        end.
       destruct (dvalue_ptr_address p) as [a |]; [| apply ev_ok_cfg_raiseUB].
       destruct (bundle_uint al) as [n |]; [| apply ev_ok_cfg_raiseUB].
       destruct (match off with [] => Some 0%Z | [o] => bundle_sint o | _ => None end) as [o |];
@@ -12441,12 +13257,28 @@ Section MemoryAndSerialization.
       destruct ((if is_power_of_two n then (a - o) mod n =? 0 else a =? 0)%Z);
         [apply ev_ok_ret | apply ev_ok_cfg_raiseUB].
     - unfold assume_dereferenceable, assume_violated, assume_malformed.
-      destruct vs as [| p [| sz [| ? ?]]]; try apply ev_ok_cfg_raise.
-      destruct (dvalue_ptr_address p), (bundle_uint sz); try apply ev_ok_cfg_raiseUB.
+      destruct vs as [| p [| sz [| ? ?]]]; cbv beta iota;
+        lazymatch goal with
+        | |- ev_ok _ (raise _) => apply ev_ok_cfg_raise
+        | _ => idtac
+        end.
+      destruct (dvalue_ptr_address p), (bundle_uint sz); cbv beta iota;
+        lazymatch goal with
+        | |- ev_ok _ (raiseUB _) => apply ev_ok_cfg_raiseUB
+        | _ => idtac
+        end.
       destruct (_ =? 0)%Z; [apply ev_ok_ret | apply ev_ok_assert_dereferenceable].
     - unfold assume_dereferenceable, assume_violated, assume_malformed.
-      destruct vs as [| p [| sz [| ? ?]]]; try apply ev_ok_cfg_raise.
-      destruct (dvalue_ptr_address p), (bundle_uint sz); try apply ev_ok_cfg_raiseUB.
+      destruct vs as [| p [| sz [| ? ?]]]; cbv beta iota;
+        lazymatch goal with
+        | |- ev_ok _ (raise _) => apply ev_ok_cfg_raise
+        | _ => idtac
+        end.
+      destruct (dvalue_ptr_address p), (bundle_uint sz); cbv beta iota;
+        lazymatch goal with
+        | |- ev_ok _ (raiseUB _) => apply ev_ok_cfg_raiseUB
+        | _ => idtac
+        end.
       destruct (_ =? 0)%Z; [apply ev_ok_ret | apply ev_ok_assert_dereferenceable].
   Qed.
 
@@ -12479,9 +13311,13 @@ Section MemoryAndSerialization.
     eapply ev_ok_bind; [unfold load; apply ev_ok_cfg_subevent; reflexivity | intros loaded_v].
     eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros dv].
     destruct dv as [db | |]; [| apply ev_ok_cfg_raise | apply ev_ok_cfg_raise].
-    destruct db as [? | sz x | ? | ? | ? | | | ? ?]; try apply ev_ok_cfg_raise.
+    destruct db as [? | sz x | ? | ? | ? | | | ? ?]; cbv beta iota;
+      lazymatch goal with
+      | |- ev_ok _ (raise _) => apply ev_ok_cfg_raise
+      | _ => idtac
+      end.
     - destruct sz as [? | ? |]; [apply ev_ok_cfg_raise | apply ev_ok_cfg_raise |].
-      destruct (equ x one).
+      destruct (VellvmIntegers.equ x VellvmIntegers.one).
       + eapply ev_ok_bind;
           [unfold store; apply ev_ok_cfg_subevent; reflexivity
           | intros u1; unfold lwrite; apply ev_ok_cfg_subevent; reflexivity].
@@ -12494,12 +13330,20 @@ Section MemoryAndSerialization.
     ev_ok (@is_non_global_cfg_ev) (@denote_atomic_rmw_operation (@ParamsV IP IPT) a_op pv val).
   Proof using.
     unfold denote_atomic_rmw_operation.
-    destruct a_op;
+    destruct a_op; cbv beta iota;
       try apply ev_ok_ret;
       try apply ev_ok_EOU_cfg;
-      try apply ev_ok_cfg_raise.
+      lazymatch goal with
+      | |- ev_ok _ (raise _) => apply ev_ok_cfg_raise
+      | _ => idtac
+      end.
     destruct val as [db | |]; [| apply ev_ok_cfg_raise | apply ev_ok_cfg_raise].
-    destruct db; try apply ev_ok_cfg_raise; apply ev_ok_EOU_cfg.
+    destruct db; cbv beta iota;
+      lazymatch goal with
+      | |- ev_ok _ (raise _) => apply ev_ok_cfg_raise
+      | _ => idtac
+      end;
+      apply ev_ok_EOU_cfg.
   Qed.
 
   Lemma ev_ok_denote_atomicrmw (id : raw_id) (armw : atomicrmw dtyp) :
@@ -12531,18 +13375,22 @@ Section MemoryAndSerialization.
       eapply ev_ok_bind; [apply ev_ok_denote_exp' | intros uv].
       eapply ev_ok_bind;
         [unfold lwrite; apply ev_ok_cfg_subevent; reflexivity | intros u0; apply ev_ok_ret].
-    - eapply ev_ok_bind; [apply ev_ok_denote_call_args | intros vs].
-      eapply ev_ok_bind; [apply ev_ok_denote_operand_bundles | intros u0].
-      eapply ev_ok_bind.
-      + destruct (intrinsic_exp f) as [s |].
-        * unfold intrinsic; apply ev_ok_cfg_subevent; reflexivity.
-        * eapply ev_ok_bind;
-            [apply ev_ok_denote_exp' | intros fv; unfold call; apply ev_ok_cfg_subevent; reflexivity].
-      + intros res; eapply ev_ok_bind; [apply ev_ok_check_call_return | intros res'].
-        eapply ev_ok_bind;
-          [destruct res' as [ex | dv]; [apply ev_ok_cfg_raiseLLVM | apply ev_ok_ret] |].
-        intros rv; destruct iid as [id |];
-          [unfold lwrite; apply ev_ok_cfg_subevent; reflexivity | apply ev_ok_ret].
+    - destruct iid as [id |];
+        (eapply ev_ok_bind; [apply ev_ok_denote_call_args | intros vs];
+         eapply ev_ok_bind; [apply ev_ok_denote_operand_bundles | intros u0];
+         eapply ev_ok_bind;
+           [destruct (intrinsic_exp f) as [s |];
+            [unfold intrinsic; apply ev_ok_cfg_subevent; reflexivity
+            | eapply ev_ok_bind;
+              [apply ev_ok_denote_exp' | intros fv; unfold call; apply ev_ok_cfg_subevent; reflexivity]]
+           | intros res; eapply ev_ok_bind; [apply ev_ok_check_call_return | intros res'];
+             eapply ev_ok_bind;
+               [destruct res' as [ex | dv]; [apply ev_ok_cfg_raiseLLVM | apply ev_ok_ret] |];
+             intros rv;
+             lazymatch goal with
+             | |- ev_ok _ (lwrite _ _) => unfold lwrite; apply ev_ok_cfg_subevent; reflexivity
+             | |- _ => apply ev_ok_ret
+             end]).
     - destruct iid as [id |]; [| apply ev_ok_cfg_raise].
       eapply ev_ok_bind; [| intros u0; apply ev_ok_ret].
       destruct (find_option ann_num_elements annotations) as [[t num_exp] |].
@@ -12573,17 +13421,20 @@ Section MemoryAndSerialization.
          apply ev_ok_cfg_raiseUB
         | unfold store; apply ev_ok_cfg_subevent; reflexivity
         | unfold store; apply ev_ok_cfg_subevent; reflexivity].
-    - apply ev_ok_ret.
+    - destruct iid; cbn [ExtLib.Structures.Monad.ret Monad_itree]; apply ev_ok_ret.
     - destruct iid as [id |]; [apply ev_ok_denote_cmpxchg | apply ev_ok_cfg_raise].
     - destruct iid as [id |]; [apply ev_ok_denote_atomicrmw | apply ev_ok_cfg_raise].
-    - eapply ev_ok_bind; [apply ev_ok_denote_exp' | intros ptr_to_args].
-      eapply ev_ok_bind; [unfold load; apply ev_ok_cfg_subevent; reflexivity | intros args].
-      eapply ev_ok_bind; [unfold load; apply ev_ok_cfg_subevent; reflexivity | intros retv].
-      eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros ix].
-      eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros args'].
-      eapply ev_ok_bind; [unfold store; apply ev_ok_cfg_subevent; reflexivity | intros u0].
-      destruct iid as [id |];
-        [unfold lwrite; apply ev_ok_cfg_subevent; reflexivity | apply ev_ok_ret].
+    - destruct iid as [id |].
+      all: eapply ev_ok_bind; [apply ev_ok_denote_exp' | intros ptr_to_args].
+      all: eapply ev_ok_bind; [unfold load; apply ev_ok_cfg_subevent; reflexivity | intros args].
+      all: eapply ev_ok_bind; [unfold load; apply ev_ok_cfg_subevent; reflexivity | intros retv].
+      all: eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros ix].
+      all: eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros args'].
+      all: eapply ev_ok_bind; [unfold store; apply ev_ok_cfg_subevent; reflexivity | intros u0].
+      all: lazymatch goal with
+           | |- ev_ok _ (lwrite _ _) => unfold lwrite; apply ev_ok_cfg_subevent; reflexivity
+           | |- _ => apply ev_ok_ret
+           end.
     - destruct iid as [id |]; [| apply ev_ok_cfg_raise].
       eapply ev_ok_bind; [unfold stack_get_exc; apply ev_ok_cfg_subevent; reflexivity |].
       intros [e |];
@@ -12631,9 +13482,13 @@ Section MemoryAndSerialization.
     - apply ev_ok_ret.
     - eapply ev_ok_bind; [apply ev_ok_denote_exp' | intros v].
       destruct v as [db | |]; [| apply ev_ok_cfg_raise | apply ev_ok_cfg_raise].
-      destruct db as [? | sz x | ? | ? | ? | | | ? ?]; try apply ev_ok_cfg_raise.
+      destruct db as [? | sz x | ? | ? | ? | | | ? ?]; cbv beta iota;
+      lazymatch goal with
+      | |- ev_ok _ (raise _) => apply ev_ok_cfg_raise
+      | _ => idtac
+      end.
       + destruct sz as [? | ? |]; [apply ev_ok_cfg_raise | apply ev_ok_cfg_raise |].
-        destruct (equ x one); apply ev_ok_ret.
+        destruct (VellvmIntegers.equ x VellvmIntegers.one); apply ev_ok_ret.
       + apply ev_ok_cfg_raiseUB.
     - apply ev_ok_ret.
     - eapply ev_ok_bind; [apply ev_ok_denote_exp' | intros selector].
@@ -12709,7 +13564,7 @@ Section MemoryAndSerialization.
     eapply ev_ok_bind; [unfold store; apply ev_ok_cfg_subevent; reflexivity | intros u2].
     destruct varargs as [db | |]; [| apply ev_ok_cfg_raise | apply ev_ok_cfg_raise].
     destruct db as [varg | ? ? | ? | ? | ? | | | ? ?];
-      try apply ev_ok_cfg_raise; apply ev_ok_ret.
+      [apply ev_ok_ret | apply ev_ok_cfg_raise ..].
   Qed.
 
   Lemma ev_ok_pop_call_frame :
@@ -12739,18 +13594,26 @@ Section MemoryAndSerialization.
   Lemma ev_ok_i8_str_index
     (strptr : @ptr ProvenanceV (@PointerV IP)) (idx : Z) :
     ev_ok (@is_non_global_cfg_ev)
-      (@i8_str_index (@ParamsV IP IPT) (@CFGEtop (@ParamsV IP IPT)) _ _ _ _ strptr idx).
+      (@i8_str_index (@ParamsV IP IPT) strptr idx).
   Proof using.
     unfold i8_str_index.
     eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros i].
     eapply ev_ok_bind; [apply ev_ok_EOU_cfg | intros addr].
     eapply ev_ok_bind; [unfold load; apply ev_ok_cfg_subevent; reflexivity | intros d_byte].
     destruct d_byte as [db | |]; [| apply ev_ok_cfg_raise | apply ev_ok_cfg_raise].
-    destruct db as [? | sz b | ? | ? | ? | | | ? ?]; try apply ev_ok_cfg_raise.
-    destruct sz as [p | p |]; try apply ev_ok_cfg_raise;
-      destruct p as [p | p |]; try apply ev_ok_cfg_raise;
-      destruct p as [p | p |]; try apply ev_ok_cfg_raise;
-      destruct p as [p | p |]; try apply ev_ok_cfg_raise.
+    destruct db as [? | sz b | ? | ? | ? | | | ? ?]; cbv beta iota;
+      lazymatch goal with
+      | |- ev_ok _ (raise _) => apply ev_ok_cfg_raise
+      | _ => idtac
+      end.
+    destruct sz as [p | p |]; cbv beta iota;
+      lazymatch goal with | |- ev_ok _ (raise _) => apply ev_ok_cfg_raise | _ => idtac end;
+      destruct p as [p | p |]; cbv beta iota;
+      lazymatch goal with | |- ev_ok _ (raise _) => apply ev_ok_cfg_raise | _ => idtac end;
+      destruct p as [p | p |]; cbv beta iota;
+      lazymatch goal with | |- ev_ok _ (raise _) => apply ev_ok_cfg_raise | _ => idtac end;
+      destruct p as [p | p |]; cbv beta iota;
+      lazymatch goal with | |- ev_ok _ (raise _) => apply ev_ok_cfg_raise | _ => idtac end.
     apply ev_ok_ret.
   Qed.
 
@@ -12759,10 +13622,18 @@ Section MemoryAndSerialization.
     ev_ok (@is_non_global_cfg_ev) (@putchar_denotation (@ParamsV IP IPT) cc args).
   Proof using.
     unfold putchar_denotation.
-    destruct args as [| ch [| ? ?]]; try apply ev_ok_cfg_raise.
+    destruct args as [| ch [| ? ?]]; cbv beta iota;
+      lazymatch goal with
+      | |- ev_ok _ (raise _) => apply ev_ok_cfg_raise
+      | _ => idtac
+      end.
     apply ev_ok_fmap.
     destruct ch as [db | |]; [| apply ev_ok_cfg_raiseUB | apply ev_ok_cfg_raiseUB].
-    destruct db as [? | sz x32 | ? | ? | ? | | | ? ?]; try apply ev_ok_cfg_raiseUB.
+    destruct db as [? | sz x32 | ? | ? | ? | | | ? ?]; cbv beta iota;
+      lazymatch goal with
+      | |- ev_ok _ (raiseUB _) => apply ev_ok_cfg_raiseUB
+      | _ => idtac
+      end.
     destruct (Pos.eq_dec 32 sz) as [<- | _]; [| apply ev_ok_cfg_raiseUB].
     eapply ev_ok_bind;
       [unfold io_stdout; apply ev_ok_cfg_subevent; reflexivity | intros u0; apply ev_ok_ret].
@@ -12773,10 +13644,18 @@ Section MemoryAndSerialization.
     ev_ok (@is_non_global_cfg_ev) (@puts_denotation (@ParamsV IP IPT) cc args).
   Proof using.
     unfold puts_denotation.
-    destruct args as [| u_strptr [| ? ?]]; try apply ev_ok_cfg_raise.
+    destruct args as [| u_strptr [| ? ?]]; cbv beta iota;
+      lazymatch goal with
+      | |- ev_ok _ (raise _) => apply ev_ok_cfg_raise
+      | _ => idtac
+      end.
     apply ev_ok_fmap.
     destruct u_strptr as [db | |]; [| apply ev_ok_cfg_raiseUB | apply ev_ok_cfg_raiseUB].
-    destruct db as [strptr | ? ? | ? | ? | ? | | | ? ?]; try apply ev_ok_cfg_raiseUB.
+    destruct db as [strptr | ? ? | ? | ? | ? | | | ? ?]; cbv beta iota;
+      lazymatch goal with
+      | |- ev_ok _ (raiseUB _) => apply ev_ok_cfg_raiseUB
+      | _ => idtac
+      end.
     eapply ev_ok_bind; [apply ev_ok_i8_str_index | intros ch].
     eapply ev_ok_bind.
     - apply ev_ok_iter.
@@ -12794,10 +13673,10 @@ Section MemoryAndSerialization.
            ev_ok (@is_non_global_cfg_ev) (snd lib cc args))
       (@library_functions (@ParamsV IP IPT) decls).
   Proof using.
-    unfold library_functions, _LIBRARIES; cbn [List.filter].
-    repeat match goal with |- context [if ?b then _ else _] => destruct b end;
-      repeat constructor; intros cc args; cbn [snd];
-      first [apply ev_ok_puts_denotation | apply ev_ok_putchar_denotation].
+    rewrite Forall_forall; intros [n fn] Hin.
+    unfold library_functions, _LIBRARIES in Hin; rewrite filter_In in Hin; destruct Hin as [Hin _].
+    destruct Hin as [Heq | [Heq | []]]; inversion Heq; subst; intros cc args; cbn [snd];
+      [apply ev_ok_puts_denotation | apply ev_ok_putchar_denotation].
   Qed.
 
   Lemma ev_ok_external_call_inr
@@ -12835,7 +13714,7 @@ Section MemoryAndSerialization.
         if tau_flag then Tau (interp_cfg_model ctx (k x) s')
         else interp_cfg_model ctx (k x) s'.
 
-    Local Inductive lg_rel {R : Type} (U0 : list N)
+    Inductive lg_rel {R : Type} (U0 : list N)
       : list N -> itree ProvBotE (Res R) -> itree ProvBotE (Res R) -> Prop :=
     | LG_Tree U (t0 : @CFGtop (@ParamsV IP IPT) R) (s_a s_b : state) ls0
         (a1 a2 : itree ProvBotE (Res R)) :
@@ -12936,20 +13815,26 @@ Section MemoryAndSerialization.
              [apply refine_cfg_raise_both | intros _ _ _ _ _ _ []]
         | right; eapply refine_cfg_model_bind with (RA := fun _ _ _ => False);
              [apply refine_cfg_raise_both | intros _ _ _ _ _ _ []]].
-      destruct db as [addr | ? ? | ? | ? | ? | | | ? ?];
-        try (right; eapply refine_cfg_model_bind with (RA := fun _ _ _ => False);
-             [apply refine_cfg_raise_both | intros _ _ _ _ _ _ []]).
+      destruct db as [addr | ? ? | ? | ? | ? | | | ? ?]; cbn [check_callee EOU_to_itree];
+        lazymatch goal with
+        | |- context [ITree.bind (raise _) _] =>
+            right; eapply refine_cfg_model_bind with (RA := fun _ _ _ => False);
+            [apply refine_cfg_raise_both | intros _ _ _ _ _ _ []]
+        | _ => idtac
+        end.
       - cbn [check_callee].
         destruct ((ptr_to_int addr =? ptr_to_int null)%Z).
         + right; cbn [EOU_to_itree].
-          eapply refine_prov_obs_eq; [symmetry; apply interp_cfg_model_bind | reflexivity |].
-          eapply PassCommon.refine_prov_bind with (RPre := fun _ _ _ => False);
+          eapply refine_prov_obs_eq;
+            [symmetry; apply interp_cfg_model_bind | symmetry; apply interp_cfg_model_bind |].
+          eapply PassCommon.refine_prov_bind with (RR := fun _ _ _ => False);
             [apply refine_cfg_raiseUB_l | intros _ _ _ _ []].
         + cbn [EOU_to_itree lookup_defn].
           pose proof (Hctx (ptr_to_int addr)) as Hlk.
           destruct (lookup (ptr_to_int addr) ctx1) as [f1 |],
                    (lookup (ptr_to_int addr) ctx2) as [f2 |];
-            inversion Hlk as [? ? [[<- Hf1] | Hf12] |]; subst.
+            inversion Hlk; subst; clear Hlk;
+            try match goal with H : leaf_ctx_fn_rel _ _ _ _ |- _ => destruct H as [[<- Hf1] | Hf12] end.
           * left; exists (f1 cc vs);
               exact (conj (Eqit.bind_ret_l tt _) (conj (Eqit.bind_ret_l tt _) (Hf1 cc vs))).
           * right.
@@ -12963,8 +13848,9 @@ Section MemoryAndSerialization.
           * left; exists (inr <$> external_call dt (DVALUE_Base (DVALUE_Pointer addr)) vs);
               exact (conj (Eqit.bind_ret_l tt _) (conj (Eqit.bind_ret_l tt _) (ev_ok_external_call_inr dt _ vs))).
       - right; cbn [check_callee EOU_to_itree].
-        eapply refine_prov_obs_eq; [symmetry; apply interp_cfg_model_bind | reflexivity |].
-        eapply PassCommon.refine_prov_bind with (RPre := fun _ _ _ => False);
+        eapply refine_prov_obs_eq;
+          [symmetry; apply interp_cfg_model_bind | symmetry; apply interp_cfg_model_bind |].
+        eapply PassCommon.refine_prov_bind with (RR := fun _ _ _ => False);
           [apply refine_cfg_raiseUB_l | intros _ _ _ _ []].
     Qed.
 
@@ -12979,17 +13865,25 @@ Section MemoryAndSerialization.
         (interp_cfg_model ctx2 t0 (s_b, (ls0, g0))).
     Proof using Hctx.
       punfold Ht0; destruct Ht0 as [rv t0' Hot | mt t0' Hot Hmt | X e k t0' Hot He Hk]; pclearbot.
-      - assert (E1 : Ret ((s_a, (ls0, g0)), rv) ≅ interp_cfg_model ctx1 t0' (s_a, (ls0, g0)))
-          by (symmetry; rewrite (itree_eta t0'), Hot; apply interp_cfg_model_ret).
-        assert (E2 : Ret ((s_b, (ls0, g0)), rv) ≅ interp_cfg_model ctx2 t0' (s_b, (ls0, g0)))
-          by (symmetry; rewrite (itree_eta t0'), Hot; apply interp_cfg_model_ret).
+      - assert (E1 : Ret ((s_a, (ls0, g0)), rv) ≅ interp_cfg_model ctx1 t0' (s_a, (ls0, g0))).
+        { symmetry; etransitivity;
+            [apply interp_cfg_model_obs_eq; rewrite (itree_eta t0'), Hot; reflexivity
+            | apply interp_cfg_model_ret]. }
+        assert (E2 : Ret ((s_b, (ls0, g0)), rv) ≅ interp_cfg_model ctx2 t0' (s_b, (ls0, g0))).
+        { symmetry; etransitivity;
+            [apply interp_cfg_model_obs_eq; rewrite (itree_eta t0'), Hot; reflexivity
+            | apply interp_cfg_model_ret]. }
         eapply refine_prov__obs_eq; [exact (@lg_rel_obs_eq R U0) | exact E1 | exact E2 |].
         apply RP_Step; cbn;
           exact (conj Hinc (conj Hm (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl)))).
-      - assert (E1 : Tau (interp_cfg_model ctx1 mt (s_a, (ls0, g0))) ≅ interp_cfg_model ctx1 t0' (s_a, (ls0, g0)))
-          by (symmetry; rewrite (itree_eta t0'), Hot; apply interp_cfg_model_tau).
-        assert (E2 : Tau (interp_cfg_model ctx2 mt (s_b, (ls0, g0))) ≅ interp_cfg_model ctx2 t0' (s_b, (ls0, g0)))
-          by (symmetry; rewrite (itree_eta t0'), Hot; apply interp_cfg_model_tau).
+      - assert (E1 : Tau (interp_cfg_model ctx1 mt (s_a, (ls0, g0))) ≅ interp_cfg_model ctx1 t0' (s_a, (ls0, g0))).
+        { symmetry; etransitivity;
+            [apply interp_cfg_model_obs_eq; rewrite (itree_eta t0'), Hot; reflexivity
+            | apply interp_cfg_model_tau]. }
+        assert (E2 : Tau (interp_cfg_model ctx2 mt (s_b, (ls0, g0))) ≅ interp_cfg_model ctx2 t0' (s_b, (ls0, g0))).
+        { symmetry; etransitivity;
+            [apply interp_cfg_model_obs_eq; rewrite (itree_eta t0'), Hot; reflexivity
+            | apply interp_cfg_model_tau]. }
         eapply refine_prov__obs_eq; [exact (@lg_rel_obs_eq R U0) | exact E1 | exact E2 |].
         apply RP_Step; cbn;
           eapply LG_Tree; [reflexivity | reflexivity | exact Hmt | exact Hinc | exact Hm].
@@ -12997,9 +13891,13 @@ Section MemoryAndSerialization.
         + assert (Ecall : forall ctx s,
                     Tau (interp_cfg_model ctx (ITree.bind (mrec_ctx ctx X ce) k) s) ≅
                     interp_cfg_model ctx t0' s).
-          { intros ctx s; symmetry; rewrite (itree_eta t0'), Hot; unfold interp_cfg_model.
-            rewrite (interp_mcfg_model_obs_eq _ _ s (unfold_interp_mrec (mrec_ctx ctx) _)).
-            cbn [_interp_mrec observe]; apply interp_mcfg_model_tau. }
+          { intros ctx s; symmetry; etransitivity;
+              [apply interp_cfg_model_obs_eq; rewrite (itree_eta t0'), Hot; reflexivity |].
+            unfold interp_cfg_model.
+            assert (Hm0 : interp_mrec (mrec_ctx ctx) (Vis (inl1 ce) k) ≅
+                          Tau (interp_mrec (mrec_ctx ctx) (ITree.bind (mrec_ctx ctx X ce) k))).
+            { rewrite unfold_interp_mrec; reflexivity. }
+            rewrite (interp_mcfg_model_obs_eq _ _ s Hm0); apply interp_mcfg_model_tau. }
           eapply refine_prov__obs_eq; [exact (@lg_rel_obs_eq R U0) | apply Ecall | apply Ecall |].
           apply RP_Step; cbn.
           destruct (lg_call_dispatch ce U0 U s_a s_b ls0 Hpu0 Hinc Hm)
@@ -13018,13 +13916,16 @@ Section MemoryAndSerialization.
         + assert (Emcfg : forall ctx s,
                     ITree.bind (interp_mcfg_model (ITree.trigger me) s) (k_lg true ctx k) ≅
                     interp_cfg_model ctx t0' s).
-          { intros ctx s; symmetry; rewrite (itree_eta t0'), Hot; unfold interp_cfg_model.
-            rewrite (interp_mcfg_model_obs_eq _ _ s (unfold_interp_mrec (mrec_ctx ctx) _)).
-            cbn [_interp_mrec observe].
+          { intros ctx s; symmetry; etransitivity;
+              [apply interp_cfg_model_obs_eq; rewrite (itree_eta t0'), Hot; reflexivity |].
+            unfold interp_cfg_model.
+            assert (Hm0 : interp_mrec (mrec_ctx ctx) (Vis (inr1 me) k) ≅
+                          Vis me (fun x => Tau (interp_mrec (mrec_ctx ctx) (k x)))).
+            { rewrite unfold_interp_mrec; reflexivity. }
             assert (Ev : Vis me (fun x => Tau (interp_mrec (mrec_ctx ctx) (k x))) ≅
                          ITree.bind (ITree.trigger me) (fun x => Tau (interp_mrec (mrec_ctx ctx) (k x)))).
-            { unfold ITree.trigger; rewrite Eqit.bind_vis; apply eqit_Vis; intros x; symmetry; apply Eqit.bind_ret_l. }
-            rewrite (interp_mcfg_model_obs_eq _ _ s Ev), interp_mcfg_model_bind.
+            { unfold ITree.trigger; rewrite Eqit.bind_vis; apply eqit_Vis; intros x; rewrite Eqit.bind_ret_l; reflexivity. }
+            rewrite (interp_mcfg_model_obs_eq _ _ s Hm0), (interp_mcfg_model_obs_eq _ _ s Ev), interp_mcfg_model_bind.
             eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
             intros [s' x] _ <-; apply interp_mcfg_model_tau. }
           eapply refine_prov__obs_eq; [exact (@lg_rel_obs_eq R U0) | apply Emcfg | apply Emcfg |].
@@ -13096,7 +13997,7 @@ Section MemoryAndSerialization.
         (interp_cfg_model ctx1 t (σ1, (ls, g0)))
         (interp_cfg_model ctx2 t (σ2, (ls, g0))).
     Proof using Hctx.
-      assert (Hcore : forall U a1 a2,
+      assert (Hcore : forall U (a1 a2 : itree ProvBotE (Res R)),
                 lg_rel U0 U a1 a2 ->
                 refine_prov (mcfg_eq_g_post g0 U0) U a1 a2).
       { pcofix CIH; intros U a1 a2 Hst; pstep.
@@ -13162,7 +14063,7 @@ Section MemoryAndSerialization.
     ~ In p (flat_map (fun '(iid, _, _) => instr_id_defs iid) post_al) /\
     ~ In p (instr_id_defs (fst (fst (blk_term b_init)))) /\
     (forall bk, In bk bks -> blk_id bk <> blk_id b_init -> ~ In p (full_block_defs bk)).
-  Proof using.
+  Proof using IP IPT.
     intros Hnd_ids Hin_init Hsplit Hcnt.
     pose proof (m2r_nodup_map_inv blk_id bks Hnd_ids) as Hnd_bks.
     assert (Hge_init :
@@ -13177,10 +14078,20 @@ Section MemoryAndSerialization.
               m2r_count_id p (flat_map (fun '(iid, _, _) => instr_id_defs iid) post_al) = 0%nat /\
               m2r_count_id p (instr_id_defs (fst (fst (blk_term b_init)))) = 0%nat /\
               m2r_count_id p fargs = 0%nat).
-    { unfold full_block_defs in Hge_init.
-      rewrite Hsplit, m2r_flat_map_app in Hge_init; cbn [flat_map instr_id_defs] in Hge_init.
-      rewrite !m2r_count_id_app in Hge_init; cbn [m2r_count_id] in Hge_init.
-      rewrite raw_id_eqb_refl in Hge_init; lia. }
+    { assert (Hsum : (1 +
+                      m2r_count_id p (List.map (fun '(x, _, _) => x) (blk_phis b_init)) +
+                      m2r_count_id p (flat_map (fun '(iid, _, _) => instr_id_defs iid) pre_al) +
+                      m2r_count_id p (flat_map (fun '(iid, _, _) => instr_id_defs iid) post_al) +
+                      m2r_count_id p (instr_id_defs (fst (fst (blk_term b_init)))) <=
+                      m2r_count_id p (full_block_defs b_init))%nat).
+      { unfold full_block_defs; rewrite Hsplit, m2r_flat_map_app.
+        replace (flat_map (fun '(iid, _, _) => instr_id_defs iid) ((IId p, ins_p, md_p) :: post_al))
+          with ([p] ++ flat_map (fun '(iid, _, _) => instr_id_defs iid) post_al) by reflexivity.
+        rewrite !m2r_count_id_app.
+        replace (m2r_count_id p [p]) with 1%nat
+          by (cbn [m2r_count_id]; rewrite raw_id_eqb_refl; reflexivity).
+        destruct (blk_term b_init) as [[tiid tm] tmd]; cbn [fst]; lia. }
+      lia. }
     destruct Hdefs_init as (Hc_phi & Hc_pre & Hc_post & Hc_tm & Hc_fargs).
     rewrite m2r_count_id_zero in Hc_phi, Hc_pre, Hc_post, Hc_tm, Hc_fargs.
     refine (conj Hc_fargs (conj Hc_phi (conj Hc_pre (conj Hc_post (conj Hc_tm _))))).
@@ -13215,12 +14126,16 @@ Section MemoryAndSerialization.
     intros s1 s2; unfold gread, Subevent.trigger.
     apply refine_cfg_exc_trigger; [reflexivity | reflexivity |].
     eapply refine_prov_tau_expand;
-      [change (ITree.trigger (subevent _ (GlobalRead gid)))
-         with (@withCall (@ParamsV IP IPT) _ (ITree.trigger (subevent _ (GlobalRead gid))));
-       apply tau_expand_cfg_withCall_trigger
-      | change (ITree.trigger (subevent _ (GlobalRead gid)))
-          with (@withCall (@ParamsV IP IPT) _ (ITree.trigger (subevent _ (GlobalRead gid))));
-        apply tau_expand_cfg_withCall_trigger |].
+      [eapply tau_expand_obs_eq;
+         [apply (interp_cfg_model_obs_eq ctx1 _ _ s1
+                   (withCall_trigger_eq (subevent _ (GlobalRead gid))))
+         | reflexivity
+         | apply tau_expand_cfg_withCall_trigger]
+      | eapply tau_expand_obs_eq;
+          [apply (interp_cfg_model_obs_eq ctx2 _ _ s2
+                    (withCall_trigger_eq (subevent _ (GlobalRead gid))))
+          | reflexivity
+          | apply tau_expand_cfg_withCall_trigger] |].
     eapply refine_prov_weaken; [apply (refine_mcfg_gread_same_g gid U σ1 σ2 ls1 ls2 g) |].
     intros U' [s1' v1] [s2' v2] (-> & -> & -> & <- & _);
       exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl))).
@@ -13251,7 +14166,8 @@ Section MemoryAndSerialization.
       cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     - apply refine_cfg_exc_ret;
         exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl))).
-    - eapply refine_cfg_exc_bind.
+    - eapply refine_cfg_exc_bind
+        with (RA := fun U' s1' s2' z1 z2 => U' = U /\ s1' = s1 /\ s2' = s2 /\ z1 = z2).
       + eapply refine_cfg_exc_bind; [apply refine_cfg_exc_gread_same_g |].
         intros U1 s1' ba1 s2' ba2 _ (-> & -> & -> & <-).
         apply refine_cfg_exc_ret;
@@ -13304,10 +14220,14 @@ Section MemoryAndSerialization.
       intros U1 s1' v1 s2' v2 _ (-> & -> & -> & <- & _).
       destruct v1 as [db | |];
         [| apply refine_cfg_exc_raise_both | apply refine_cfg_exc_raise_both].
-      destruct db as [? | sz x | ? | ? | ? | | | ? ?]; try apply refine_cfg_exc_raise_both.
+      destruct db as [? | sz x | ? | ? | ? | | | ? ?]; cbv beta iota;
+        lazymatch goal with
+        | |- refine_prov _ _ (interp_cfg_exc _ (raise _) _) _ => apply refine_cfg_exc_raise_both
+        | _ => idtac
+        end.
       + destruct sz as [? | ? |];
           [apply refine_cfg_exc_raise_both | apply refine_cfg_exc_raise_both |].
-        destruct (equ x one).
+        destruct (VellvmIntegers.equ x VellvmIntegers.one).
         * apply refine_cfg_exc_ret; cbn [m2r_term_succs];
             refine (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl _))));
             left; reflexivity.
@@ -13332,11 +14252,11 @@ Section MemoryAndSerialization.
       destruct sw_eou as [msg | msg | msg | bid] eqn:Esw; cbn [EOU_to_itree].
       + eapply refine_cfg_exc_bind with (RA := fun _ _ _ _ _ => False);
           [apply refine_cfg_exc_raise_both | intros _ _ _ _ _ _ []].
-      + eapply refine_prov_obs_eq; [symmetry; apply interp_cfg_exc_bind | reflexivity |].
-        eapply PassCommon.refine_prov_bind with (RPre := fun _ _ _ => False);
+      + eapply refine_prov_obs_eq; [symmetry; apply interp_cfg_exc_bind | symmetry; apply interp_cfg_exc_bind |].
+        eapply PassCommon.refine_prov_bind with (RR := fun _ _ _ => False);
           [apply refine_cfg_exc_raiseOOM_l | intros _ _ _ _ []].
-      + eapply refine_prov_obs_eq; [symmetry; apply interp_cfg_exc_bind | reflexivity |].
-        eapply PassCommon.refine_prov_bind with (RPre := fun _ _ _ => False);
+      + eapply refine_prov_obs_eq; [symmetry; apply interp_cfg_exc_bind | symmetry; apply interp_cfg_exc_bind |].
+        eapply PassCommon.refine_prov_bind with (RR := fun _ _ _ => False);
           [apply refine_cfg_exc_raiseUB_l | intros _ _ _ _ []].
       + eapply refine_prov_obs_eq;
           [symmetry; apply interp_cfg_exc_obs_eq, Eqit.bind_ret_l
@@ -13361,7 +14281,7 @@ Section MemoryAndSerialization.
         [| apply refine_cfg_exc_raiseUB_l].
       apply refine_cfg_exc_ret;
         refine (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl _)))).
-      cbn [m2r_term_succs]; exact (indirectbr_target_In z brs addrs1 b Eib).
+      cbn [m2r_term_succs]; eapply indirectbr_target_In; exact Eib.
     - eapply refine_cfg_exc_bind; [apply denote_exp_cfg_exc_sim, Hvars |].
       intros U1 s1' ex1 s2' ex2 _ (-> & -> & -> & <- & _).
       apply refine_cfg_exc_raiseLLVM_both, Hexc.
@@ -13386,7 +14306,7 @@ Section MemoryAndSerialization.
     revert env; induction dvs as [| [id dv] rest IH]; intros env Hnin; cbn [write_phi_dvs List.map fst] in *.
     - reflexivity.
     - rewrite IH by (intros H; apply Hnin; right; exact H).
-      apply lookup_add_neq; intros ->; apply Hnin; left; reflexivity.
+      cbn [Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_neq_o; intros ->; apply Hnin; left; reflexivity.
   Qed.
 
   Lemma write_phi_dvs_lookup_agree
@@ -13398,9 +14318,10 @@ Section MemoryAndSerialization.
     revert env1 env2; induction dvs as [| [id dv] rest IH]; intros env1 env2 Heq; cbn [write_phi_dvs].
     - exact Heq.
     - apply IH.
-      destruct (raw_id_eqb_spec x id) as [-> | Hne].
-      + rewrite !lookup_add_eq; reflexivity.
-      + rewrite !lookup_add_neq by exact Hne; exact Heq.
+      cbn [Maps.lookup Maps.add Map_rmap].
+      destruct (raw_id_eqb x id) eqn:Ex_id; [apply raw_id_eqb_spec in Ex_id; subst x | apply raw_id_eqb_neq in Ex_id; rename Ex_id into Hne].
+      + rewrite !RMF.F.add_eq_o by reflexivity; reflexivity.
+      + rewrite !RMF.F.add_neq_o by (intros Heq'; exact (Hne (Logic.eq_sym Heq'))); exact Heq.
   Qed.
 
   Lemma write_phi_dvs_safe_locals
@@ -13447,8 +14368,8 @@ Section MemoryAndSerialization.
           eapply TS_Eq;
             [apply interp_cfg_exc_obs_eq;
              rewrite Eqit.bind_bind;
-             eapply eq_itree_clo_bind with (UU := Logic.eq);
-               [reflexivity | intros bs _ <-; apply Eqit.bind_ret_l]
+             eapply eq_itree_clo_bind with (UU := Logic.eq) (k2 := fun _ : list unit => Ret tt);
+               [reflexivity | intros bs _ _; rewrite Eqit.bind_ret_l; reflexivity]
             | apply IH].
         * destruct sf as [sv se sl]; cbn; apply TS_Refl.
   Qed.
@@ -13491,7 +14412,9 @@ Section MemoryAndSerialization.
     - apply refine_cfg_exc_ret; repeat split; reflexivity.
     - destruct (assoc bid_from p_args) as [op |] eqn:Eassoc.
       + destruct (m2r_assoc_in bid_from p_args op Eassoc) as [k0 Hin_op].
-        eapply refine_cfg_exc_bind.
+        eapply refine_cfg_exc_bind with
+          (RA := fun U' s1' s2' p1 p2 =>
+                   U' = U /\ s1' = s1 /\ s2' = s2 /\ p1 = p2 /\ fst p2 = id).
         * eapply refine_cfg_exc_bind.
           -- apply denote_exp_cfg_exc_sim.
              intros x Hx; apply Hvars.
@@ -13499,12 +14422,15 @@ Section MemoryAndSerialization.
              apply in_app_iff; left; apply in_app_iff; left.
              apply in_flat_map; exists (k0, op); split; [exact Hin_op | exact Hx].
           -- intros U1 s1' uv1 s2' uv2 _ (-> & -> & -> & <- & _).
-             apply refine_cfg_exc_ret; repeat split; reflexivity.
-        * intros U1 s1' p1 s2' p2 _ (-> & -> & -> & <- & ->).
+             apply refine_cfg_exc_ret;
+               repeat match goal with |- _ /\ _ => split end; reflexivity.
+        * intros U1 s1' p1 s2' p2 _ (-> & -> & -> & <- & Hfst_p).
           eapply refine_cfg_exc_bind.
           -- apply IH; intros x Hx; apply Hvars; cbn [flat_map]; apply in_app_iff; right; exact Hx.
           -- intros U2 s1'' dvs1 s2'' dvs2 _ (-> & -> & -> & <- & Hfst).
-             apply refine_cfg_exc_ret; repeat split; [cbn; f_equal; exact Hfst].
+             apply refine_cfg_exc_ret;
+               repeat match goal with |- _ /\ _ => split end;
+               try reflexivity; cbn [List.map]; rewrite Hfst_p, Hfst; reflexivity.
       + eapply refine_cfg_exc_bind with (RA := fun _ _ _ _ _ => False);
           [apply refine_cfg_exc_raise_both | intros _ _ _ _ _ _ []].
   Qed.
@@ -13568,16 +14494,34 @@ Section MemoryAndSerialization.
       (interp_cfg_exc ctx2 (ITree.bind (alloca dt_a num align) (fun v => lwrite id0 v))
          (σ2, ((sf2, fstk2), g))).
   Proof using.
-    eapply refine_cfg_exc_bind.
+    eapply refine_cfg_exc_bind with
+      (RA := fun U' s1' s2' v1 v2 =>
+               exists pr ptrs σ1' σ2',
+                 ~ In pr U /\
+                 U' = pr :: U /\
+                 v1 = v2 /\
+                 is_safe_ptr_dvalue (pr :: P_unprom) v1 /\
+                 stage1_mem_inv (pr :: U) (pr :: P_unprom) G σ1' σ2' /\
+                 (forall z, In z (List.map ptr_to_int ptrs) -> forall gs, In gs G -> ~ gs_in_range gs z) /\
+                 Memory_stack_frame_stack (state_memory_stack σ2') =
+                   Memory_stack_frame_stack (add_all_to_frame ptrs (state_memory_stack σ2)) /\
+                 s1' = (σ1', ((sf1, fstk1), g)) /\
+                 s2' = (σ2', ((sf2, fstk2), g))).
     - unfold alloca, Subevent.trigger; try unfold trigger_cast.
       apply refine_cfg_exc_memory_event.
-      exact (stage1_alloca_unprom dt_a num align U P_unprom G σ1 σ2 Hinv).
-    - intros U1 [σ1' rest1'] v1 [σ2' rest2'] v2 _
-        ((<- & <-) & (pr & ptrs & Hnin & -> & <- & Hsafe_v & Hinv' & Hdisj & Hfs')).
+      eapply refine_prov_weaken;
+        [exact (stage1_alloca_unprom dt_a num align U P_unprom G σ1 σ2 Hinv) |].
+      intros U1 [σ1' v1] [σ2' v2]
+        (pr & ptrs & Hnin & -> & <- & Hsafe_v & Hinv' & Hdisj & Hfs').
+      exists pr, ptrs, σ1', σ2';
+        exact (conj Hnin (conj Logic.eq_refl (conj Logic.eq_refl
+                 (conj Hsafe_v (conj Hinv' (conj Hdisj (conj Hfs' (conj Logic.eq_refl Logic.eq_refl)))))))).
+    - intros U1 s1' v1 s2' _ _
+        (pr & ptrs & σ1' & σ2' & Hnin & -> & <- & Hsafe_v & Hinv' & Hdisj & Hfs' & -> & ->).
       eapply refine_prov_tau_star_l; [apply tau_star_cfg_exc_lwrite |].
       eapply refine_prov_tau_star_r; [apply tau_star_cfg_exc_lwrite |].
       apply refine_prov_ret.
-      exists pr, ptrs, v1, σ1', σ2'; repeat split; assumption.
+      exists pr, ptrs, v1, σ1', σ2'; repeat match goal with |- _ /\ _ => split end; try reflexivity; assumption.
   Qed.
 
   Lemma stage1_no_call_instr_exc_sim
@@ -13675,24 +14619,29 @@ Section MemoryAndSerialization.
     - (* IId id0, INSTR_Alloca dt anns *)
       cbn [denote_instr].
       eapply refine_cfg_exc_bind.
-      + destruct (find_option ann_num_elements annotations) as [[t num_exp] |] eqn:Enum.
+      + destruct (find_option ann_num_elements anns) as [[t_num num_exp] |] eqn:Enum.
         * eapply refine_cfg_exc_bind.
           -- apply denote_exp_cfg_exc_sim.
              intros x Hx; apply Huse_vars; cbn [m2r_code_entry_uses full_instr_uses].
              apply in_app_iff; left.
-             exact (find_option_ann_num_elements_uses annotations t num_exp Enum x Hx).
+             exact (find_option_ann_num_elements_uses anns t_num num_exp Enum x Hx).
           -- intros U1 s1' n1 s2' n2 _ (-> & -> & -> & <- & _).
              destruct (dvalue_is_poison n1); [apply refine_cfg_exc_raiseUB_l |].
-             eapply refine_cfg_exc_bind.
+             eapply refine_cfg_exc_bind with
+               (RA := fun U' s1' s2' nb1 nb2 =>
+                        U' = U /\
+                        s1' = (σ1, ((sf1, fstk1), g)) /\
+                        s2' = (σ2, ((sf2, fstk2), g)) /\
+                        nb1 = nb2).
              ++ eapply refine_cfg_exc_EOU; [apply refine_EOU_refl |].
                 intros nb1 nb2 <-; repeat split; reflexivity.
              ++ intros U2 s1'' nb1 s2'' nb2 _ (-> & -> & -> & <-).
-                exact (stage1_alloca_lwrite_exc_sim ctx1 ctx2 RExc id0 dt
+                exact (stage1_alloca_lwrite_exc_sim ctx1 ctx2 RExc id0 t
                          (Z.to_N (dvalue_base_int_unsigned nb1))
-                         (explicit_alignment annotations)
+                         (explicit_alignment anns)
                          U P_unprom G σ1 σ2 sf1 sf2 fstk1 fstk2 g Hinv).
-        * exact (stage1_alloca_lwrite_exc_sim ctx1 ctx2 RExc id0 dt 1%N
-                   (explicit_alignment annotations)
+        * exact (stage1_alloca_lwrite_exc_sim ctx1 ctx2 RExc id0 t 1%N
+                   (explicit_alignment anns)
                    U P_unprom G σ1 σ2 sf1 sf2 fstk1 fstk2 g Hinv).
       + intros U1 s1' _ s2' _ _
           (pr & ptrs & v & σ1' & σ2' & Hnin & -> & _ & _ & Hsafe_v & Hinv' & Hdisj & Hfs' & -> & ->).
@@ -13724,16 +14673,33 @@ Section MemoryAndSerialization.
           apply in_app_iff; left; apply in_app_iff; left; exact Hx.
       + intros U1 s1' a1 s2' a2 _ (-> & -> & -> & <- & Hptr_safe).
         pose proof (Hptr_safe P_unprom safe_sub Hgenv Hsafe_loc Hsafe_im) as Ha_safe.
-        eapply refine_cfg_exc_bind.
+        eapply refine_cfg_exc_bind with
+          (RA := fun U' s1' s2' (_ _ : unit) =>
+                   U' = U /\
+                   s1' = (σ1, ((sf1, fstk1), g)) /\
+                   s2' = (σ2, ((sf2, fstk2), g))).
         * eapply refine_cfg_exc_EOU; [apply refine_EOU_refl |].
           intros [] [] _; exact (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl)).
         * intros U2 s1'' _ s2'' _ _ (-> & -> & ->).
-          eapply refine_cfg_exc_bind.
+          eapply refine_cfg_exc_bind with
+            (RA := fun U' s1' s2' v1 v2 =>
+                     U' = U /\
+                     s1' = (σ1, ((sf1, fstk1), g)) /\
+                     s2' = (σ2, ((sf2, fstk2), g)) /\
+                     v1 = v2).
           -- unfold load, Subevent.trigger; try unfold trigger_cast.
              apply refine_cfg_exc_memory_event.
-             exact (stage1_load_unprom t a1 U P_unprom G σ1 σ2 Hinv Ha_safe).
-          -- intros U3 [σ1_l r1_l] v1 [σ2_l r2_l] v2 _ ((<- & <-) & (-> & -> & -> & <-)).
-             eapply refine_cfg_exc_bind.
+             eapply refine_prov_weaken;
+               [exact (stage1_load_unprom t a1 U P_unprom G σ1 σ2 Hinv Ha_safe) |].
+             intros U3 [σ1_l v1] [σ2_l v2] (-> & -> & -> & ->);
+               exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl))).
+          -- intros U3 s1_l v1 s2_l _ _ (-> & -> & -> & <-).
+             eapply refine_cfg_exc_bind with
+               (RA := fun U' s1' s2' w1 w2 =>
+                        U' = U /\
+                        s1' = (σ1, ((sf1, fstk1), g)) /\
+                        s2' = (σ2, ((sf2, fstk2), g)) /\
+                        w1 = w2).
              ++ eapply refine_cfg_exc_EOU; [apply refine_EOU_refl |].
                 intros w1 w2 <-; repeat split; reflexivity.
              ++ intros U4 s1_a w1 s2_a w2 _ (-> & -> & -> & <-).
@@ -13785,7 +14751,11 @@ Section MemoryAndSerialization.
             apply in_app_iff; left; apply in_app_iff; right; apply in_app_iff; left; exact Hx.
         * intros U2 s1'' a1 s2'' a2 _ (-> & -> & -> & <- & Hptr_safe).
           pose proof (Hptr_safe P_unprom safe_sub Hgenv Hsafe_loc Hsafe_im) as Ha_safe.
-          eapply refine_cfg_exc_bind.
+          eapply refine_cfg_exc_bind with
+            (RA := fun U' s1' s2' (_ _ : unit) =>
+                     U' = U /\
+                     s1' = (σ1, ((sf1, fstk1), g)) /\
+                     s2' = (σ2, ((sf2, fstk2), g))).
           -- eapply refine_cfg_exc_EOU; [apply refine_EOU_refl |].
              intros [] [] _; exact (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl)).
           -- intros U3 s1_a _ s2_a _ _ (-> & -> & ->).
@@ -13816,12 +14786,23 @@ Section MemoryAndSerialization.
                            (interp_cfg_exc ctx2 (ITree.bind (store dt_s a_st v1) (fun _ => Ret tt))
                               (σ2, ((sf2, fstk2), g)))).
              { intros a_st Ha_st.
-               eapply refine_cfg_exc_bind.
+               eapply refine_cfg_exc_bind with
+                 (RA := fun U' s1' s2' _ _ =>
+                          exists σ1' σ2',
+                            U' = U /\
+                            stage1_mem_inv U P_unprom G σ1' σ2' /\
+                            Memory_stack_frame_stack (state_memory_stack σ2') =
+                              Memory_stack_frame_stack (state_memory_stack σ2) /\
+                            s1' = (σ1', ((sf1, fstk1), g)) /\
+                            s2' = (σ2', ((sf2, fstk2), g))).
                - unfold store, Subevent.trigger; try unfold trigger_cast.
                  apply refine_cfg_exc_memory_event.
-                 exact (stage1_store_unprom dt_s a_st v1 U P_unprom G σ1 σ2 Hinv Ha_st).
-               - intros U4 [σ1' rest1'] _ [σ2' rest2'] _ _
-                   ((<- & <-) & (-> & _ & _ & Hinv' & Hfs')).
+                 eapply refine_prov_weaken;
+                   [exact (stage1_store_unprom dt_s a_st v1 U P_unprom G σ1 σ2 Hinv Ha_st) |].
+                 intros U4 [σ1' []] [σ2' []] (-> & _ & _ & Hinv' & Hfs').
+                 exists σ1', σ2';
+                   exact (conj Logic.eq_refl (conj Hinv' (conj Hfs' (conj Logic.eq_refl Logic.eq_refl)))).
+               - intros U4 s1' _ s2' _ _ (σ1' & σ2' & -> & Hinv' & Hfs' & -> & ->).
                  apply refine_cfg_exc_ret.
                  exists P_unprom, σ1', σ2', sf1, sf2.
                  refine (conj (incl_refl U) (conj (incl_refl P_unprom)
@@ -13906,7 +14887,7 @@ Section MemoryAndSerialization.
     revert pre_c U P_unprom σ1 σ2 sf1 sf2 Hsplit Hchk Hinv HTF Hgenv Hsafe_loc Hvars.
     induction cd as [| im rest IH];
       intros pre_c U P_unprom σ1 σ2 sf1 sf2 Hsplit Hchk Hinv HTF Hgenv Hsafe_loc Hvars;
-      unfold denote_code; cbn [loop_monad forallb flat_map].
+      unfold denote_code; cbn [forallb] in Hchk; cbn [loop_monad flat_map].
     - apply refine_cfg_exc_ret.
       exists P_unprom, σ1, σ2, sf1, sf2.
       refine (conj (incl_refl U) (conj (incl_refl P_unprom)
@@ -13932,10 +14913,10 @@ Section MemoryAndSerialization.
         { intros x Hne.
           destruct Hsf_step as [[-> ->] | (id0 & v & _ & -> & ->)].
           - exact (Hvars x Hne).
-          - cbn [stack_vars upd_local_sf].
-            destruct (raw_id_eqb_spec x id0) as [-> | Hne_id].
-            + rewrite !lookup_add_eq; reflexivity.
-            + rewrite !lookup_add_neq by exact Hne_id; exact (Hvars x Hne). }
+          - cbn [stack_vars upd_local_sf Maps.lookup Maps.add Map_rmap].
+            destruct (raw_id_eqb x id0) eqn:Ex_id; [apply raw_id_eqb_spec in Ex_id; subst x | apply raw_id_eqb_neq in Ex_id; rename Ex_id into Hne_id].
+            + rewrite !RMF.F.add_eq_o by reflexivity; reflexivity.
+            + rewrite !RMF.F.add_neq_o by (intros Heq'; exact (Hne_id (Logic.eq_sym Heq'))); exact (Hvars x Hne). }
         assert (Hsplit_rest : blk_code bk = (pre_c ++ [im]) ++ rest ++ post_c).
         { rewrite <- app_assoc; exact Hsplit. }
         eapply refine_prov_weaken.
@@ -13964,7 +14945,8 @@ Section MemoryAndSerialization.
                [split; reflexivity |].
              subst iid_im; cbn [instr_id_defs] in Hnin_im.
              assert (Hne_id : x <> id0) by (intros ->; apply Hnin_im; left; reflexivity).
-             cbn [stack_vars upd_local_sf]; rewrite !lookup_add_neq by exact Hne_id;
+             cbn [stack_vars upd_local_sf Maps.lookup Maps.add Map_rmap];
+               rewrite !RMF.F.add_neq_o by (intros Heq'; exact (Hne_id (Logic.eq_sym Heq')));
                split; reflexivity.
           -- intros Heq_sf; apply Heq2.
              destruct Hsf_step as [[-> ->] | (id0 & v & _ & -> & ->)]; [exact Heq_sf |].
@@ -13975,7 +14957,9 @@ Section MemoryAndSerialization.
     @denote_phis (@ParamsV IP IPT) bid [] ≅ Ret tt.
   Proof using.
     unfold denote_phis; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-    rewrite !Eqit.bind_ret_l; reflexivity.
+    rewrite Eqit.bind_ret_l.
+    cbn [map_monad ExtLib.Structures.Monad.ret Monad_itree].
+    rewrite Eqit.bind_ret_l; reflexivity.
   Qed.
 
   Lemma interp_cfg_exc_unfold_iter {I R : Type}
@@ -14036,26 +15020,64 @@ Section MemoryAndSerialization.
     cbn [denote_instr]; rewrite Hnum.
     assert (Eal :
               ITree.bind
-                (ITree.bind (alloca dt 1%N (explicit_alignment anns_al)) (fun v => lwrite p v))
+                (ITree.bind
+                   (alloca (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT)) dt 1%N (explicit_alignment anns_al))
+                   (fun v => lwrite (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT)) p v))
                 (fun _ => Ret tt) ≅
-              ITree.bind (alloca dt 1%N (explicit_alignment anns_al)) (fun v => lwrite p v)).
+              ITree.bind
+                (alloca (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT)) dt 1%N (explicit_alignment anns_al))
+                (fun v => lwrite (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT)) p v)).
     { rewrite Eqit.bind_bind.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
       intros v _ <-; apply bind_unit_ret_r. }
+    assert (Elhs :
+              interp_cfg_exc ctx1
+                (ITree.bind
+                   (ITree.bind (alloca dt 1%N (explicit_alignment anns_al)) (fun v => lwrite p v))
+                   (fun _ => Ret tt))
+                (σ1, ((sf, fstk), g)) ≅
+              ITree.bind
+                (interp_cfg_exc ctx1 (alloca dt 1%N (explicit_alignment anns_al))
+                   (σ1, ((sf, fstk), g)))
+                (fun '(s1_a, res_a) =>
+                   match res_a with
+                   | inl ex => Ret (s1_a, inl ex)
+                   | inr v => interp_cfg_exc ctx1 (lwrite p v) s1_a
+                   end)).
+    { rewrite (interp_cfg_exc_obs_eq ctx1 _ _ _ Eal); apply interp_cfg_exc_bind. }
+    assert (Erhs :
+              interp_cfg_exc ctx2 (Ret tt) (σ2, ((sf, fstk), g)) ≅
+              ITree.bind (Ret ((σ2, ((sf, fstk), g)), inr tt)) (fun x => Ret x)).
+    { rewrite interp_cfg_exc_ret; symmetry; apply Eqit.bind_ret_r. }
     eapply refine_prov_obs_eq;
-      [symmetry; rewrite (interp_cfg_exc_obs_eq ctx1 _ _ _ Eal); apply interp_cfg_exc_bind
-      | symmetry; rewrite interp_cfg_exc_ret; apply Eqit.bind_ret_r |].
+      [symmetry; exact Elhs | symmetry; exact Erhs |];
+      clear Eal Elhs Erhs.
     unfold alloca, Subevent.trigger; try unfold trigger_cast.
-    eapply PassCommon.refine_prov_bind.
+    eapply PassCommon.refine_prov_bind with
+      (RR := fun U1 '(s1_a, res_a) y2 =>
+               exists pr pt σ1',
+                 ~ In pr U /\
+                 U1 = pr :: U /\
+                 s1_a = (σ1', ((sf, fstk), g)) /\
+                 res_a = inr (DVALUE_Base (DVALUE_Pointer pt)) /\
+                 y2 = ((σ2, ((sf, fstk), g)), inr tt) /\
+                 stage2_mem_inv (pr :: U) P_safe fs0 f2 (ptr_to_int pt) pr
+                   (N.to_nat (@store_size_dtyp SizeofV dt)) σ1' σ2).
     - apply refine_cfg_exc_memory_event_l.
-      exact (stage2_alloca_dead_l
-               ((σ2, ((sf, fstk), g)), inr tt)
-               dt (explicit_alignment anns_al) U P_safe fs0 f2 σ1 σ2 Hsc Hpu Heq Hfs2).
+      eapply refine_prov_weaken;
+        [exact (stage2_alloca_dead_l
+                  ((σ2, ((sf, fstk), g)), inr tt)
+                  dt (explicit_alignment anns_al) U P_safe fs0 f2 σ1 σ2 Hsc Hpu Heq Hfs2) |].
+      intros U1 [σ1' r1] y2 (pr & pt & Hnin & -> & -> & -> & Hinv').
+      exists pr, pt, σ1';
+        exact (conj Hnin (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl Hinv'))))).
     - intros U1 [s1_a res_a] y2 _
-        (pr & pt & Hnin & -> & -> & -> & Hinv').
+        (pr & pt & σ1' & Hnin & -> & -> & -> & -> & Hinv').
       eapply refine_prov_tau_star_l; [apply tau_star_cfg_exc_lwrite |].
       apply refine_prov_ret.
-      destruct s1_a as [σ1' _]; exists pr, pt, σ1'; repeat split; assumption.
+      exists pr, pt, σ1';
+        exact (conj Hnin (conj Logic.eq_refl (conj Logic.eq_refl
+                 (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl Hinv')))))).
   Qed.
 
   Lemma stage2_instr_exc_sim
@@ -14133,9 +15155,9 @@ Section MemoryAndSerialization.
         refine (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl
                   (conj Logic.eq_refl (conj Logic.eq_refl
                     (conj Hinv (conj (safe_locals_env_add_other P_safe safe_no_p id0 uv1 _ Hnid_safe Hsafe_loc) _))))))).
-        intros x Hne; cbn [stack_vars upd_local_sf].
-        destruct (raw_id_eqb_spec x id0) as [-> | Hne_id];
-          [rewrite !lookup_add_eq; reflexivity | rewrite !lookup_add_neq by exact Hne_id; exact (Hvars x Hne)].
+        intros x Hne; cbn [stack_vars upd_local_sf Maps.lookup Maps.add Map_rmap].
+        destruct (raw_id_eqb x id0) eqn:Ex_id; [apply raw_id_eqb_spec in Ex_id; subst x | apply raw_id_eqb_neq in Ex_id; rename Ex_id into Hne_id];
+          [rewrite !RMF.F.add_eq_o by reflexivity; reflexivity | rewrite !RMF.F.add_neq_o by (intros Heq'; exact (Hne_id (Logic.eq_sym Heq'))); exact (Hvars x Hne)].
     - assert (Hnid_safe : ~ In id0 safe_no_p).
       { intros Hin_s.
         destruct (unique_alloca_code_def_is_alloca fargs bks id0 Hnd_bks (Hsub id0 Hin_s)
@@ -14148,23 +15170,40 @@ Section MemoryAndSerialization.
           apply in_app_iff; left; apply in_app_iff; left; exact Hx.
       + intros U1 s1' a1 s2' a2 _ (-> & -> & -> & <- & Hptr_safe).
         pose proof (Hptr_safe P_safe safe_no_p Hgenv Hsafe_loc Hsafe_ptr) as Ha_safe.
-        eapply refine_cfg_exc_bind.
+        eapply refine_cfg_exc_bind with
+          (RA := fun U' s1' s2' (_ _ : unit) =>
+                   U' = U /\
+                   s1' = (σ1, ((sf1, fstk), g)) /\
+                   s2' = (σ2, ((sf2, fstk), g))).
         * eapply refine_cfg_exc_EOU; [apply refine_EOU_refl |].
           intros [] [] _; exact (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl)).
         * intros U2 s1'' _ s2'' _ _ (-> & -> & ->).
-          eapply refine_cfg_exc_bind.
+          eapply refine_cfg_exc_bind with
+            (RA := fun U' s1' s2' v1 v2 =>
+                     U' = U /\
+                     s1' = (σ1, ((sf1, fstk), g)) /\
+                     s2' = (σ2, ((sf2, fstk), g)) /\
+                     v1 = v2).
           -- unfold load, Subevent.trigger; try unfold trigger_cast.
              apply refine_cfg_exc_memory_event.
-             exact (stage2_load_safe dt_l a1 U P_safe fs0 f2 base_dead pr_dead sz_dead σ1 σ2 Hinv Ha_safe).
-          -- intros U3 [σ1_l r1_l] v1 [σ2_l r2_l] v2 _ ((<- & <-) & (-> & -> & -> & <-)).
-             eapply refine_cfg_exc_bind.
+             eapply refine_prov_weaken;
+               [exact (stage2_load_safe dt_l a1 U P_safe fs0 f2 base_dead pr_dead sz_dead σ1 σ2 Hinv Ha_safe) |].
+             intros U3 [σ1_l v1] [σ2_l v2] (-> & -> & -> & ->);
+               exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl))).
+          -- intros U3 s1_l v1 s2_l _ _ (-> & -> & -> & <-).
+             eapply refine_cfg_exc_bind with
+               (RA := fun U' s1' s2' w1 w2 =>
+                        U' = U /\
+                        s1' = (σ1, ((sf1, fstk), g)) /\
+                        s2' = (σ2, ((sf2, fstk), g)) /\
+                        w1 = w2).
              ++ eapply refine_cfg_exc_EOU; [apply refine_EOU_refl |].
                 intros w1 w2 <-; repeat split; reflexivity.
              ++ intros U4 s1_a w1 s2_a w2 _ (-> & -> & -> & <-).
                 unfold assert_load_dereferenceable; rewrite Hderef_none.
                 eapply refine_prov_obs_eq;
-                  [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (Eqit.bind_ret_l _ _))
-                  | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_ret_l _ _)) |].
+                  [symmetry; apply interp_cfg_exc_obs_eq, Eqit.bind_ret_l
+                  | symmetry; apply interp_cfg_exc_obs_eq, Eqit.bind_ret_l |].
                 eapply refine_prov_tau_star_l; [apply tau_star_cfg_exc_lwrite |].
                 eapply refine_prov_tau_star_r; [apply tau_star_cfg_exc_lwrite |].
                 apply refine_prov_ret.
@@ -14174,10 +15213,10 @@ Section MemoryAndSerialization.
                 refine (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl
                           (conj Logic.eq_refl (conj Logic.eq_refl
                             (conj Hinv (conj (safe_locals_env_add_other P_safe safe_no_p id0 w1 _ Hnid_safe Hsafe_loc) _))))))).
-                intros x Hne; cbn [stack_vars upd_local_sf].
-                destruct (raw_id_eqb_spec x id0) as [-> | Hne_id];
-                  [rewrite !lookup_add_eq; reflexivity
-                  | rewrite !lookup_add_neq by exact Hne_id; exact (Hvars x Hne)].
+                intros x Hne; cbn [stack_vars upd_local_sf Maps.lookup Maps.add Map_rmap].
+                destruct (raw_id_eqb x id0) eqn:Ex_id; [apply raw_id_eqb_spec in Ex_id; subst x | apply raw_id_eqb_neq in Ex_id; rename Ex_id into Hne_id];
+                  [rewrite !RMF.F.add_eq_o by reflexivity; reflexivity
+                  | rewrite !RMF.F.add_neq_o by (intros Heq'; exact (Hne_id (Logic.eq_sym Heq'))); exact (Hvars x Hne)].
     - cbn [denote_instr].
       eapply refine_cfg_exc_bind.
       + apply denote_exp_cfg_exc_sim.
@@ -14190,7 +15229,11 @@ Section MemoryAndSerialization.
             apply in_app_iff; left; apply in_app_iff; right; apply in_app_iff; left; exact Hx.
         * intros U2 s1'' a1 s2'' a2 _ (-> & -> & -> & <- & Hptr_safe).
           pose proof (Hptr_safe P_safe safe_no_p Hgenv Hsafe_loc Hsafe_ptr) as Ha_safe.
-          eapply refine_cfg_exc_bind.
+          eapply refine_cfg_exc_bind with
+            (RA := fun U' s1' s2' (_ _ : unit) =>
+                     U' = U /\
+                     s1' = (σ1, ((sf1, fstk), g)) /\
+                     s2' = (σ2, ((sf2, fstk), g))).
           -- eapply refine_cfg_exc_EOU; [apply refine_EOU_refl |].
              intros [] [] _; exact (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl)).
           -- intros U3 s1_a _ s2_a _ _ (-> & -> & ->).
@@ -14213,22 +15256,35 @@ Section MemoryAndSerialization.
                            (interp_cfg_exc ctx2 (ITree.bind (store dt_s a_st v1) (fun _ => Ret tt))
                               (σ2, ((sf2, fstk), g)))).
              { intros a_st Ha_st.
-               eapply refine_cfg_exc_bind.
+               eapply refine_cfg_exc_bind with
+                 (RA := fun U' s1' s2' _ _ =>
+                          exists σ1' σ2',
+                            U' = U /\
+                            stage2_mem_inv U P_safe fs0 f2 base_dead pr_dead sz_dead σ1' σ2' /\
+                            s1' = (σ1', ((sf1, fstk), g)) /\
+                            s2' = (σ2', ((sf2, fstk), g))).
                - unfold store, Subevent.trigger; try unfold trigger_cast.
                  apply refine_cfg_exc_memory_event.
-                 exact (stage2_store_safe dt_s a_st v1 U P_safe fs0 f2 base_dead pr_dead sz_dead σ1 σ2 Hinv Ha_st).
-               - intros U4 [σ1' rest1'] _ [σ2' rest2'] _ _ ((<- & <-) & (-> & _ & _ & Hinv')).
+                 eapply refine_prov_weaken;
+                   [exact (stage2_store_safe dt_s a_st v1 U P_safe fs0 f2 base_dead pr_dead sz_dead σ1 σ2 Hinv Ha_st) |].
+                 intros U4 [σ1' []] [σ2' []] (-> & _ & _ & Hinv').
+                 exists σ1', σ2';
+                   exact (conj Logic.eq_refl (conj Hinv' (conj Logic.eq_refl Logic.eq_refl))).
+               - intros U4 s1' _ s2' _ _ (σ1' & σ2' & -> & Hinv' & -> & ->).
                  apply refine_cfg_exc_ret.
-                 exists σ1', σ2', sf1, sf2; repeat split; assumption. }
+                 exists σ1', σ2', sf1, sf2;
+                   repeat match goal with |- _ /\ _ => split end; try reflexivity; assumption. }
              destruct a1 as [[? | ? ? | ? | ? | ? | | | ? ?] | |];
                try (apply Hdo_store, Ha_safe).
              eapply refine_prov_obs_eq;
                [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (raiseUB_bind_eq _ _)) | reflexivity |].
              apply refine_cfg_exc_raiseUB_l.
     - cbn [denote_instr]; apply refine_cfg_exc_ret.
-      exists σ1, σ2, sf1, sf2; repeat split; assumption.
+      exists σ1, σ2, sf1, sf2;
+        repeat match goal with |- _ /\ _ => split end; try reflexivity; assumption.
     - destruct iid0; cbn [denote_instr]; apply refine_cfg_exc_ret;
-        exists σ1, σ2, sf1, sf2; repeat split; assumption.
+        exists σ1, σ2, sf1, sf2;
+        repeat match goal with |- _ /\ _ => split end; try reflexivity; assumption.
   Qed.
 
   Lemma stage2_code_exc_sim
@@ -14275,8 +15331,9 @@ Section MemoryAndSerialization.
     revert pre_c σ1 σ2 sf1 sf2 Hsplit Hchk Hinv Hsafe_loc Hvars.
     induction cd as [| im rest IH];
       intros pre_c σ1 σ2 sf1 sf2 Hsplit Hchk Hinv Hsafe_loc Hvars;
-      unfold denote_code; cbn [loop_monad forallb].
-    - apply refine_cfg_exc_ret; exists σ1, σ2, sf1, sf2; repeat split; assumption.
+      unfold denote_code; cbn [forallb] in Hchk; cbn [loop_monad].
+    - apply refine_cfg_exc_ret; exists σ1, σ2, sf1, sf2;
+        repeat match goal with |- _ /\ _ => split end; try reflexivity; assumption.
     - rewrite andb_true_iff in Hchk; destruct Hchk as [Hchk_im Hchk_rest].
       assert (Hnin_p_im : ~ In p (m2r_code_entry_uses im)).
       { intros Hp; apply Hnin_p_blk; eapply m2r_code_entry_uses_in_block; [| exact Hp].
@@ -14366,7 +15423,11 @@ Section MemoryAndSerialization.
     set (fcc := anns_cconv (dc_annotations (df_prototype df))).
     set (fs0 := Memory_stack_frame_stack (state_memory_stack σ2_in)).
     pose proof (stage1_equal_to_mem_inv U0 P0 σ1_in σ2_in Hpu0 Heq_in) as Hinv0.
-    eapply refine_cfg_model_bind.
+    eapply refine_cfg_model_bind with
+      (RA := fun U' '(s1', _) '(s2', _) =>
+               U' = U0 /\
+               s1' = (σ1_in, ((sf_caller, fstk_caller), g0)) /\
+               s2' = (σ2_in, ((sf_caller, fstk_caller), g0))).
     - eapply refine_cfg_EOU; [apply refine_EOU_refl |].
       intros [] [] _; exact (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl)).
     - intros U_cc s1_cc _ s2_cc _ _ (-> & -> & ->).
@@ -14432,13 +15493,14 @@ Section MemoryAndSerialization.
                 eapply refine_prov_obs_eq;
                   [symmetry; apply interp_cfg_exc_unfold_iter
                   | symmetry; apply interp_cfg_exc_unfold_iter |].
+                cbn beta iota.
                 rewrite ScopeTheory.ocfg_map_find_block, Efind_init.
-                rewrite ScopeTheory.ocfg_map_find_block; cbn [blks].
+                rewrite ScopeTheory.ocfg_map_find_block; unfold c'; cbn [init blks].
                 rewrite (m2r_find_block_map_id_pres f_blk (blks c) (init c) Hf_id), Efind_init.
                 cbn [option_map]; unfold f_blk at 1; rewrite Hid_init, raw_id_eqb_refl.
                 unfold denote_block; cbn [blk_phis blk_code blk_term]; rewrite Hphis_init.
                 eapply PassCommon.refine_prov_bind with
-                  (RPre := exc_post RExc_s2
+                  (RR := exc_post RExc_s2
                              (fun U_s s1_s s2_s
                                 (lr1 lr2 : (block_id * block_id) + ((block_id * block_id) + @dvalue (@ParamsV IP IPT))) =>
                                 exists P_pre f2 base_dead pr_dead σ1_b1 σ2_b1 sf1_b1 sf2_b1,
@@ -14457,35 +15519,46 @@ Section MemoryAndSerialization.
                 ** eapply refine_prov_obs_eq;
                      [symmetry;
                       apply (interp_cfg_exc_obs_eq ctx1 _ _ _
-                               (eq_itree_clo_bind _ _ _ _ Logic.eq
-                                  (eq_itree_clo_bind _ _ _ _ Logic.eq (denote_phis_nil_eq (init c))
-                                     (fun _ _ <- => Logic.eq_refl))
-                                  (fun _ _ <- => Logic.eq_refl)))
+                               (eq_itree_bind_congr_l
+                                  (eq_itree_bind_congr_l (denote_phis_nil_eq (init c)))))
                      | symmetry;
                        apply (interp_cfg_exc_obs_eq ctx2 _ _ _
-                                (eq_itree_clo_bind _ _ _ _ Logic.eq
-                                   (eq_itree_clo_bind _ _ _ _ Logic.eq (denote_phis_nil_eq (init c))
-                                      (fun _ _ <- => Logic.eq_refl))
-                                   (fun _ _ <- => Logic.eq_refl))) |].
+                                (eq_itree_bind_congr_l
+                                   (eq_itree_bind_congr_l (denote_phis_nil_eq (init c))))) |].
                    eapply refine_prov_obs_eq;
                      [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (Eqit.bind_bind _ _ _))
                      | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
                    eapply refine_prov_obs_eq;
-                     [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (Eqit.bind_ret_l _ _))
-                     | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_ret_l _ _)) |].
+                     [symmetry; apply interp_cfg_exc_obs_eq, Eqit.bind_ret_l
+                     | symmetry; apply interp_cfg_exc_obs_eq, Eqit.bind_ret_l |].
                    rewrite Hsplit_init.
-                   eapply refine_cfg_exc_bind.
+                   eapply refine_cfg_exc_bind with
+                     (RA := fun U_b1 s1_b1 s2_b1 bd1 bd2 =>
+                              exists (P_pre : list N) f2 base_dead pr_dead σ1_b1 σ2_b1
+                                     (sf1_b1 sf2_b1 : @stack_frame (@ParamsV IP IPT)),
+                                incl (pr_va :: U0) U_b1 /\
+                                bd1 = bd2 /\
+                                s1_b1 = (σ1_b1, ((sf1_b1, fstk), g0)) /\
+                                s2_b1 = (σ2_b1, ((sf2_b1, fstk), g0)) /\
+                                stage2_mem_inv U_b1 P_pre fs0 f2 base_dead pr_dead sz_dead σ1_b1 σ2_b1 /\
+                                genv_safe P_pre g0 /\
+                                safe_locals_env P_pre safe_no_p (stack_vars sf2_b1) /\
+                                (forall x, x <> p ->
+                                   Maps.lookup x (stack_vars sf1_b1) = Maps.lookup x (stack_vars sf2_b1)) /\
+                                match bd1 with
+                                | inl bid_target => In bid_target (m2r_block_succs b_init)
+                                | inr _ => True
+                                end).
                    --- eapply refine_prov_obs_eq;
                          [symmetry;
                           apply (interp_cfg_exc_obs_eq ctx1 _ _ _
-                                   (eq_itree_clo_bind _ _ _ _ Logic.eq
-                                      (denote_code_app_eq pre_al _ (Some varg1))
-                                      (fun _ _ <- => Logic.eq_refl)))
+                                   (eq_itree_bind_congr_l (denote_code_app_eq pre_al _ (Some varg1))))
                          | symmetry;
                            apply (interp_cfg_exc_obs_eq ctx2 _ _ _
-                                    (eq_itree_clo_bind _ _ _ _ Logic.eq
-                                       (denote_code_app_eq pre_al post_al (Some varg1))
-                                       (fun _ _ <- => Logic.eq_refl))) |].
+                                    (eq_itree_bind_congr_l (denote_code_app_eq pre_al post_al (Some varg1)))) |].
+                       eapply refine_prov_obs_eq;
+                         [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (Eqit.bind_bind _ _ _))
+                         | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
                        eapply refine_cfg_exc_bind.
                        +++ assert (Hsplit_pre :
                                      blk_code b_init = [] ++ pre_al ++ (IId p, INSTR_Alloca dt anns_al, md_al) :: post_al)
@@ -14517,12 +15590,10 @@ Section MemoryAndSerialization.
                                        (fun _ => denote_code post_al (Some varg1)))
                              by reflexivity.
                            eapply refine_prov_obs_eq;
-                             [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _
-                                                 (eq_itree_clo_bind _ _ _ _ Logic.eq Econs_l (fun _ _ <- => Logic.eq_refl)))
+                             [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (eq_itree_bind_congr_l Econs_l))
                              | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _
-                                                  (eq_itree_clo_bind _ _ _ _ Logic.eq
-                                                     (symmetry (Eqit.bind_ret_l tt (fun _ => denote_code post_al (Some varg1))))
-                                                     (fun _ _ <- => Logic.eq_refl))) |].
+                                                  (eq_itree_bind_congr_l
+                                                     (symmetry (Eqit.bind_ret_l tt (fun _ => denote_code post_al (Some varg1)))))) |].
                            eapply refine_prov_obs_eq;
                              [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (Eqit.bind_bind _ _ _))
                              | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
@@ -14540,7 +15611,7 @@ Section MemoryAndSerialization.
                                          x <> p ->
                                          Maps.lookup x (stack_vars (upd_local_sf sf2_pre (Maps.add p (DVALUE_Base (DVALUE_Pointer pt_dead)) (stack_vars sf2_pre)))) =
                                          Maps.lookup x (stack_vars sf2_pre)).
-                               { intros x Hne; cbn [stack_vars upd_local_sf]; apply lookup_add_neq, Hne. }
+                               { intros x Hne; cbn [stack_vars upd_local_sf Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_neq_o; intros Heq'; exact (Hne (Logic.eq_sym Heq')). }
                                assert (Hsplit_post :
                                          blk_code b_init = (pre_al ++ [(IId p, INSTR_Alloca dt anns_al, md_al)]) ++ post_al ++ []).
                                { rewrite <- app_assoc, app_nil_r; exact Hsplit_init. }
@@ -14572,13 +15643,15 @@ Section MemoryAndSerialization.
                                                   Hni_init Htm_vars).
                                          intros ex; refine (conj Logic.eq_refl (conj HincU_al _)).
                                          exists P_pre, f2, (ptr_to_int pt_dead), pr_dead, σ1_post, σ2_post, sf1_post, sf2_post;
-                                           repeat split; exact Hinv_post.
+                                           exact (conj Logic.eq_refl (conj Logic.eq_refl Hinv_post)).
                                     ++++ intros U_t [s1_t res1_t] [s2_t res2_t].
                                          destruct res1_t as [ex1 | bd1], res2_t as [ex2 | bd2]; cbn [exc_post];
                                            try (intros H; exact H).
                                          intros (-> & -> & -> & <- & Hsucc).
+                                         destruct bd1 as [bid_t | dv_t];
+                                           [cbn in Hsucc |- *; unfold m2r_block_succs; rewrite Etm_init |];
                                          exists P_pre, f2, (ptr_to_int pt_dead), pr_dead,
-                                                σ1_post, σ2_post, sf1_post, sf2_post.
+                                                σ1_post, σ2_post, sf1_post, sf2_post;
                                          exact (conj HincU_al (conj Logic.eq_refl (conj Logic.eq_refl
                                                   (conj Logic.eq_refl (conj Hinv_post
                                                     (conj Hgenv_pre (conj Hsafe_post (conj Hvars_post Hsucc)))))))).
@@ -14588,8 +15661,7 @@ Section MemoryAndSerialization.
                        destruct bd1 as [bid_next | dv_ret].
                        +++ assert (Hne_init : bid_next <> init c).
                            { intros Heq_n; apply Hno_entry_pred; rewrite <- Heq_n.
-                             unfold m2r_all_succs; apply in_flat_map; exists b_init; split; [exact Hin_init |].
-                             unfold m2r_block_succs; destruct (blk_term b_init) as [[? ?] ?]; exact Hsucc_b1. }
+                             unfold m2r_all_succs; apply in_flat_map; exists b_init; split; [exact Hin_init | exact Hsucc_b1]. }
                            apply refine_cfg_exc_ret.
                            exists P_pre, f2, base_dead, pr_dead, σ1_b1, σ2_b1, sf1_b1, sf2_b1.
                            exact (conj HincU_b1 (conj Logic.eq_refl (conj Logic.eq_refl
@@ -14602,10 +15674,17 @@ Section MemoryAndSerialization.
                                       (conj Hgenv_pre (conj Hsafe_b1 (conj Hvars_b1 I)))))))).
                 ** intros U_step [s1_step res1_s] [s2_step res2_s] _.
                    destruct res1_s as [ex1 | [j1 | r1]], res2_s as [ex2 | [j2 | r2]]; cbn [exc_post];
-                     try contradiction.
+                     try contradiction;
+                     try (let H := fresh in intros H;
+                          repeat match goal with
+                                 | H0 : _ /\ _ |- _ => destruct H0
+                                 | H0 : exists _, _ |- _ => destruct H0
+                                 end;
+                          discriminate).
                    --- intros Hex; apply refine_prov_ret; exact Hex.
                    --- intros (P_pre & f2 & base_dead & pr_dead & σ1_s & σ2_s & sf1_s & sf2_s &
-                               HincU_s & <- & -> & -> & Hinv_s & Hgenv_pre & Hsafe_s & Hvars_s & Hne_s).
+                               HincU_s & Hjeq & -> & -> & Hinv_s & Hgenv_pre & Hsafe_s & Hvars_s & Hne_s).
+                       inversion Hjeq; subst j2; clear Hjeq.
                        destruct j1 as [bid_from0 bid_src0].
                        apply refine_prov_tau_both.
                        set (RI_loop :=
@@ -14624,23 +15703,39 @@ Section MemoryAndSerialization.
                              (Heq_ij & Hne_bs & HincU_l & σ1_l & σ2_l & sf1_l & sf2_l &
                               -> & -> & Hinv_l & Hsafe_l & Hvars_l).
                            inversion Heq_ij; subst bf1 bs1; clear Heq_ij; cbn [snd] in Hne_bs.
-                           rewrite !ScopeTheory.ocfg_map_find_block; cbn [blks].
+                           cbn beta iota.
+                           rewrite !ScopeTheory.ocfg_map_find_block; unfold c'; cbn [blks].
                            rewrite (m2r_find_block_map_id_pres f_blk (blks c) bs2 Hf_id).
                            destruct (find_block (blks c) bs2) as [bk_cur |] eqn:Efind_cur; cbn [option_map].
                            *** destruct (m2r_find_block_some_inv (blks c) bs2 bk_cur Efind_cur)
                                  as [Hin_cur Hid_cur].
-                               unfold f_blk at 1.
-                               destruct (raw_id_eqb_spec (blk_id bk_cur) (init c)) as [Hbad | _];
-                                 [exfalso; congruence |].
+                               assert (Hf_eq : f_blk bk_cur = bk_cur).
+                               { unfold f_blk; destruct (raw_id_eqb (blk_id bk_cur) (init c)) eqn:Ebad;
+                                   [apply raw_id_eqb_spec in Ebad; exfalso; congruence | reflexivity]. }
+                               rewrite Hf_eq.
                                pose proof Ebks_chk as Hbk_cur_chk.
                                rewrite forallb_forall in Hbk_cur_chk.
                                specialize (Hbk_cur_chk bk_cur Hin_cur).
-                               destruct (raw_id_eqb_spec (blk_id bk_cur) (init c)) as [Hbad | _];
+                               destruct (raw_id_eqb (blk_id bk_cur) (init c)) eqn:Ebad; [apply raw_id_eqb_spec in Ebad; rename Ebad into Hbad | clear Ebad];
                                  [exfalso; congruence |].
                                rewrite andb_true_iff in Hbk_cur_chk.
                                destruct Hbk_cur_chk as [Hcd_cur Hni_cur].
                                unfold denote_block.
-                               eapply refine_cfg_exc_bind.
+                               eapply refine_cfg_exc_bind with
+                                 (RA := fun U_bd s1_bd s2_bd bd1 bd2 =>
+                                          exists σ1_cd σ2_cd (sf1_cd sf2_cd : @stack_frame (@ParamsV IP IPT)),
+                                            U_bd = U_l /\
+                                            bd1 = bd2 /\
+                                            s1_bd = (σ1_cd, ((sf1_cd, fstk), g0)) /\
+                                            s2_bd = (σ2_cd, ((sf2_cd, fstk), g0)) /\
+                                            stage2_mem_inv U_l P_pre fs0 f2 base_dead pr_dead sz_dead σ1_cd σ2_cd /\
+                                            safe_locals_env P_pre safe_no_p (stack_vars sf2_cd) /\
+                                            (forall x, x <> p ->
+                                               Maps.lookup x (stack_vars sf1_cd) = Maps.lookup x (stack_vars sf2_cd)) /\
+                                            match bd1 with
+                                            | inl bid_target => In bid_target (m2r_block_succs bk_cur)
+                                            | inr _ => True
+                                            end).
                                ---- eapply refine_cfg_exc_bind.
                                     ++++ apply denote_phis_same_exc_sim.
                                          intros x Hx; apply Hvars_l; intros ->.
@@ -14655,8 +15750,8 @@ Section MemoryAndSerialization.
                                          { apply write_phi_dvs_safe_locals; [| exact Hsafe_l].
                                            intros q Hq Hin_dvs; rewrite Hfst_dvs in Hin_dvs.
                                            apply in_map_iff in Hin_dvs as ([[x_ph ph_q] md_q] & <- & Hpe_in).
-                                           exact (unique_alloca_not_phi_def fargs (blks c) q Hnd_bks
-                                                    (Hsub_safe q Hq) bk_cur q ph_q md_q Hin_cur Hpe_in Logic.eq_refl). }
+                                           exact (unique_alloca_not_phi_def fargs (blks c) x_ph Hnd_bks
+                                                    (Hsub_safe x_ph Hq) bk_cur x_ph ph_q md_q Hin_cur Hpe_in Logic.eq_refl). }
                                          assert (Hvars_ph :
                                                    forall x,
                                                      x <> p ->
@@ -14696,12 +15791,14 @@ Section MemoryAndSerialization.
                                                              Hni_cur Htm_vars).
                                                     intros ex; refine (conj Logic.eq_refl (conj HincU_l _)).
                                                     exists P_pre, f2, base_dead, pr_dead, σ1_cd, σ2_cd, sf1_cd, sf2_cd;
-                                                      repeat split; exact Hinv_cd.
+                                                      exact (conj Logic.eq_refl (conj Logic.eq_refl Hinv_cd)).
                                               ----- intros U_t [s1_t res1_t] [s2_t res2_t].
                                                     destruct res1_t as [ex1 | bd1], res2_t as [ex2 | bd2]; cbn [exc_post];
                                                       try (intros H; exact H).
                                                     intros (-> & -> & -> & <- & Hsucc_cur).
-                                                    exists σ1_cd, σ2_cd, sf1_cd, sf2_cd.
+                                                    destruct bd1 as [bid_t | dv_t];
+                                                      [cbn in Hsucc_cur |- *; unfold m2r_block_succs; rewrite Etm_cur |];
+                                                    exists σ1_cd, σ2_cd, sf1_cd, sf2_cd;
                                                     exact (conj Logic.eq_refl (conj Logic.eq_refl
                                                              (conj Logic.eq_refl (conj Logic.eq_refl
                                                                (conj Hinv_cd (conj Hsafe_cd (conj Hvars_cd Hsucc_cur))))))).
@@ -14712,8 +15809,7 @@ Section MemoryAndSerialization.
                                     ++++ apply refine_cfg_exc_ret.
                                          assert (Hne_tgt : bid_tgt <> init c).
                                          { intros Heq_t; apply Hno_entry_pred; rewrite <- Heq_t.
-                                           unfold m2r_all_succs; apply in_flat_map; exists bk_cur; split; [exact Hin_cur |].
-                                           unfold m2r_block_succs; destruct (blk_term bk_cur) as [[? ?] ?]; exact Hsucc_cur. }
+                                           unfold m2r_all_succs; apply in_flat_map; exists bk_cur; split; [exact Hin_cur | exact Hsucc_cur]. }
                                          refine (conj Logic.eq_refl (conj Hne_tgt (conj HincU_l _))).
                                          exists σ1_cd, σ2_cd, sf1_cd, sf2_cd;
                                            exact (conj Logic.eq_refl (conj Logic.eq_refl
@@ -14730,7 +15826,8 @@ Section MemoryAndSerialization.
                            exists σ1_s, σ2_s, sf1_s, sf2_s;
                              exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Hinv_s (conj Hsafe_s Hvars_s)))).
                    --- intros (P_pre & f2 & base_dead & pr_dead & σ1_s & σ2_s & sf1_s & sf2_s &
-                               HincU_s & <- & -> & -> & Hinv_s & _).
+                               HincU_s & Hreq & -> & -> & Hinv_s & _).
+                       inversion Hreq; subst r2; clear Hreq.
                        apply refine_prov_ret.
                        refine (conj Logic.eq_refl (conj HincU_s _)).
                        exists P_pre, f2, base_dead, pr_dead, σ1_s, σ2_s, sf1_s, sf2_s;
@@ -14825,43 +15922,82 @@ Section MemoryAndSerialization.
   Proof using.
     destruct (is_only_align_anns_num_elts anns_al Hanns) as [Hnum _].
     eapply refine_prov_obs_eq;
-      [symmetry;
-       apply (interp_cfg_exc_obs_eq ctx1 _ _ _
-                (bind_unit_ret_r (denote_instr (IId p, INSTR_Alloca dt anns_al, md_al) va1)))
+      [apply (interp_cfg_exc_obs_eq ctx1 _ _ _
+                (bind_unit_ret_r (denote_instr (Pa := @ParamsV IP IPT) (IId p, INSTR_Alloca dt anns_al, md_al) va1)))
       | reflexivity |].
-    eapply refine_cfg_exc_bind.
+    eapply refine_cfg_exc_bind with
+      (RA := fun U' s1' s2' r1 r2 =>
+               exists gs0 σ1' σ2',
+                 ~ In (gs_pr gs0) U /\
+                 U' = gs_pr gs0 :: U /\
+                 r1 = tt /\ r2 = tt /\
+                 gs_dt gs0 = dt /\
+                 gs_db gs0 = DVALUE_Poison /\
+                 s1' = (σ1', ((upd_local_sf sf1
+                                 (Maps.add p (DVALUE_Base (DVALUE_Pointer (Pa := @ParamsV IP IPT) (gs_pt gs0))) (stack_vars sf1)),
+                               fstk1), g)) /\
+                 s2' = (σ2', ((upd_local_sf sf2
+                                 (Maps.add p (DVALUE_Base (DVALUE_Pointer (Pa := @ParamsV IP IPT) (gs_pt gs0))) (stack_vars sf2)),
+                               fstk2), g)) /\
+                 stage1_mem_inv (gs_pr gs0 :: U) P_unprom (gs0 :: G) σ1' σ2' /\
+                 top_frame_prom_from fs0 gs0 G (state_memory_stack σ2')).
     - cbn [denote_instr]; rewrite Hnum.
       assert (Eal :
                 ITree.bind
-                  (ITree.bind (alloca dt 1%N (explicit_alignment anns_al)) (fun v => lwrite p v))
+                  (ITree.bind
+                     (alloca (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT)) dt 1%N (explicit_alignment anns_al))
+                     (fun v => lwrite (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT)) p v))
                   (fun _ => Ret tt) ≅
-                ITree.bind (alloca dt 1%N (explicit_alignment anns_al)) (fun v => lwrite p v)).
+                ITree.bind
+                  (alloca (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT)) dt 1%N (explicit_alignment anns_al))
+                  (fun v => lwrite (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT)) p v)).
       { rewrite Eqit.bind_bind.
         eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
         intros v _ <-; apply bind_unit_ret_r. }
       eapply refine_prov_obs_eq;
         [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ Eal)
         | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ Eal) |].
-      eapply refine_cfg_exc_bind.
+      eapply refine_cfg_exc_bind with
+        (RA := fun U' s1' s2' v1 v2 =>
+                 exists gs0 σ1' σ2',
+                   ~ In (gs_pr gs0) U /\
+                   U' = gs_pr gs0 :: U /\
+                   gs_dt gs0 = dt /\
+                   gs_db gs0 = DVALUE_Poison /\
+                   v1 = DVALUE_Base (DVALUE_Pointer (Pa := @ParamsV IP IPT) (gs_pt gs0)) /\
+                   v2 = DVALUE_Base (DVALUE_Pointer (Pa := @ParamsV IP IPT) (gs_pt gs0)) /\
+                   stage1_mem_inv (gs_pr gs0 :: U) P_unprom (gs0 :: G) σ1' σ2' /\
+                   top_frame_prom_from fs0 gs0 G (state_memory_stack σ2') /\
+                   s1' = (σ1', ((sf1, fstk1), g)) /\
+                   s2' = (σ2', ((sf2, fstk2), g))).
       + unfold alloca, Subevent.trigger; try unfold trigger_cast.
         apply refine_cfg_exc_memory_event.
-        exact (stage1_alloca_prom dt (explicit_alignment anns_al) fs0 U P_unprom G σ1 σ2 Hsc Hinv Htf).
-      + intros U1 [σ1' rest1'] v1 [σ2' rest2'] v2 _
-          ((<- & <-) & (gs0 & Hnin & -> & Hdt0 & Hdb0 & -> & -> & Hinv' & Htf')).
+        eapply refine_prov_weaken;
+          [exact (stage1_alloca_prom dt (explicit_alignment anns_al) fs0 U P_unprom G σ1 σ2 Hsc Hinv Htf) |].
+        intros U1 [σ1' v1] [σ2' v2]
+          (gs0 & Hnin & -> & Hdt0 & Hdb0 & -> & -> & Hinv' & Htf').
+        exists gs0, σ1', σ2';
+          exact (conj Hnin (conj Logic.eq_refl (conj Hdt0 (conj Hdb0 (conj Logic.eq_refl
+                   (conj Logic.eq_refl (conj Hinv' (conj Htf' (conj Logic.eq_refl Logic.eq_refl))))))))).
+      + intros U1 s1' _ s2' _ _
+          (gs0 & σ1' & σ2' & Hnin & -> & Hdt0 & Hdb0 & -> & -> & Hinv' & Htf' & -> & ->).
         eapply refine_prov_tau_star_l; [apply tau_star_cfg_exc_lwrite |].
         eapply refine_prov_tau_star_r; [apply tau_star_cfg_exc_lwrite |].
         apply refine_prov_ret.
-        exists gs0, σ1', σ2'; repeat split; assumption.
+        exists gs0, σ1', σ2';
+          exact (conj Hnin (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl
+                   (conj Hdt0 (conj Hdb0 (conj Logic.eq_refl (conj Logic.eq_refl (conj Hinv' Htf'))))))))).
     - intros U1 s1_m _ s2_m _ _
         (gs0 & σ1' & σ2' & Hnin & -> & _ & _ & Hdt0 & Hdb0 & -> & -> & Hinv' & Htf').
       apply denote_init_copy_poison_exc_r.
       eapply refine_prov_obs_eq; [symmetry; apply interp_cfg_exc_ret | reflexivity |].
       destruct sf2 as [sv2 se2 sl2]; cbn [upd_local_sf stack_vars].
       apply refine_prov_ret.
-      exists gs0, σ1', σ2'; repeat split; assumption.
+      exists gs0, σ1', σ2'; repeat match goal with |- _ /\ _ => split end; try reflexivity; assumption.
   Qed.
 
-  Lemma m2r_assoc_nodup {K V : Type} {Heq : RelDec (@Logic.eq K)} {Hcorr : RelDec_Correct Heq}
+  Lemma m2r_assoc_nodup {K V : Type} {Heq : ExtLib.Core.RelDec.RelDec (@Logic.eq K)}
+    {Hcorr : ExtLib.Core.RelDec.RelDec_Correct Heq}
     (k : K) (l : list (K * V)) (v : V) :
     NoDup (List.map fst l) ->
     In (k, v) l ->
@@ -14870,11 +16006,11 @@ Section MemoryAndSerialization.
     induction l as [| [k0 v0] rest IH]; cbn [List.map fst In assoc]; [intros _ [] |].
     intros Hnd [Heq_p | Hin].
     - inversion Heq_p; subst k0 v0.
-      destruct (rel_dec k k) eqn:Er; [reflexivity |].
-      exfalso; pose proof (proj2 (rel_dec_correct k k) Logic.eq_refl) as Htr; congruence.
+      destruct (ExtLib.Core.RelDec.rel_dec k k) eqn:Er; [reflexivity |].
+      exfalso; pose proof (proj2 (ExtLib.Core.RelDec.rel_dec_correct k k) Logic.eq_refl) as Htr; congruence.
     - inversion Hnd as [| ? ? Hnin Hnd']; subst.
-      destruct (rel_dec k k0) eqn:Er.
-      + exfalso; pose proof (proj1 (rel_dec_correct k k0) Er) as ->.
+      destruct (ExtLib.Core.RelDec.rel_dec k k0) eqn:Er.
+      + exfalso; pose proof (proj1 (ExtLib.Core.RelDec.rel_dec_correct k k0) Er) as ->.
         exact (Hnin (in_map fst rest (k0, v) Hin)).
       + exact (IH Hnd' Hin).
   Qed.
@@ -14914,28 +16050,33 @@ Section MemoryAndSerialization.
     assert (Er_assoc :
       ITree.bind
         (ITree.bind
-           (ITree.bind (denote_exp' (Some dt) (EXP_Ident (ID_Local src_reg)))
+           (ITree.bind (denote_exp' (Pa := @ParamsV IP IPT) (Some dt) (EXP_Ident (ID_Local src_reg)))
               (fun dv => Ret (phi_reg, dv)))
            (fun y =>
-              ITree.bind (map_monad (denote_phi bid_from) phis)
+              ITree.bind (map_monad (denote_phi (Pa := @ParamsV IP IPT) bid_from) phis)
                 (fun ys => Ret (y :: ys))))
         (fun dvs =>
-           ITree.bind (map_monad (fun '(id, dv) => lwrite id dv) dvs) (fun _ => Ret tt)) ≅
-      ITree.bind (denote_exp' (Some dt) (EXP_Ident (ID_Local src_reg)))
+           ITree.bind
+             (map_monad (fun '(id, dv) => lwrite (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT)) id dv) dvs)
+             (fun _ => Ret tt)) ≅
+      ITree.bind (denote_exp' (Pa := @ParamsV IP IPT) (Some dt) (EXP_Ident (ID_Local src_reg)))
         (fun dv0' =>
-           ITree.bind (map_monad (denote_phi bid_from) phis)
+           ITree.bind (map_monad (denote_phi (Pa := @ParamsV IP IPT) bid_from) phis)
              (fun dvs =>
-                ITree.bind (map_monad (fun '(id, dv) => lwrite id dv) ((phi_reg, dv0') :: dvs))
+                ITree.bind
+                  (map_monad (fun '(id, dv) => lwrite (Pa := @ParamsV IP IPT) (E := @CFGEtop (@ParamsV IP IPT)) id dv)
+                     ((phi_reg, dv0') :: dvs))
                   (fun _ => Ret tt)))).
     { rewrite !Eqit.bind_bind.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
       intros dv0' _ <-; rewrite Eqit.bind_ret_l, Eqit.bind_bind.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
-      intros dvs _ <-; apply Eqit.bind_ret_l. }
+      intros dvs _ <-; rewrite Eqit.bind_ret_l; reflexivity. }
     eapply refine_prov_obs_eq;
-      [reflexivity
-      | symmetry; rewrite (interp_cfg_exc_obs_eq ctx2 _ _ _ Er_assoc);
-        apply interp_cfg_exc_bind |].
+      [reflexivity | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ Er_assoc) |];
+      clear Er_assoc.
+    eapply refine_prov_obs_eq;
+      [reflexivity | symmetry; apply interp_cfg_exc_bind |].
     eapply refine_prov_tau_expand_r;
       [apply tau_expand_bind_l, tau_expand_exc_withCall_denote_exp |].
     unfold mcfg_inr_exc; cbn [denote_exp lookup_id].
@@ -14943,7 +16084,11 @@ Section MemoryAndSerialization.
     eapply refine_prov_tau_star_r;
       [apply tau_star_bind, (tau_star_mcfg_lread_some src_reg dv0 σ2 sf2 fstk2 g Hlk_src) |].
     eapply refine_prov_obs_eq;
-      [reflexivity | symmetry; rewrite !Eqit.bind_ret_l; reflexivity |].
+      [reflexivity | symmetry; apply Eqit.bind_ret_l |].
+    cbn beta iota.
+    eapply refine_prov_obs_eq;
+      [reflexivity | symmetry; apply Eqit.bind_ret_l |].
+    cbn beta iota.
     eapply refine_cfg_exc_bind; [apply map_monad_denote_phi_same_exc_sim, Hvars |].
     intros U1 s1' dvs1 s2' dvs2 _ (-> & -> & -> & <- & Hfst).
     eapply refine_prov_tau_star_l; [apply tau_star_cfg_exc_write_phi_dvs |].
@@ -14973,17 +16118,17 @@ Section MemoryAndSerialization.
          find_block (List.map f ps) bid = Some (f (bk, pr, cd, er))).
   Proof using.
     induction ps as [| [[[bk0 pr0] cd0] er0] rest [IH_none IH_some]]; cbn [List.map].
-    - split; [intros _ _; reflexivity | intros ? ? H; cbn in H; discriminate H].
+    - split; [intros bid0 Hnone; exact Hnone | intros ? ? H; cbn in H; discriminate H].
     - pose proof (Hf_id bk0 pr0 cd0 er0) as Hid0.
       split.
       + intros bid Hnone.
-        destruct (raw_id_eqb_spec (blk_id bk0) bid) as [Heq | Hne].
+        destruct (raw_id_eqb (blk_id bk0) bid) eqn:Ebid; [apply raw_id_eqb_spec in Ebid; rename Ebid into Heq | apply raw_id_eqb_neq in Ebid; rename Ebid into Hne].
         * rewrite find_block_eq in Hnone by exact Heq; discriminate Hnone.
         * rewrite find_block_ineq in Hnone by exact Hne.
           rewrite find_block_ineq by congruence.
           exact (IH_none bid Hnone).
       + intros bid bk Hsome.
-        destruct (raw_id_eqb_spec (blk_id bk0) bid) as [Heq | Hne].
+        destruct (raw_id_eqb (blk_id bk0) bid) eqn:Ebid; [apply raw_id_eqb_spec in Ebid; rename Ebid into Heq | apply raw_id_eqb_neq in Ebid; rename Ebid into Hne].
         * rewrite find_block_eq in Hsome by exact Heq; inversion Hsome; subst bk0.
           rewrite find_block_eq by congruence.
           exists pr0, cd0, er0; split; [left; reflexivity | reflexivity].
@@ -15016,7 +16161,9 @@ Section MemoryAndSerialization.
                       blk_code := cd'; blk_term := blk_term bk; blk_comments := blk_comments bk |})).
   Proof using.
     intros end_map bks'; subst bks'; unfold build_promoted_blocks; fold end_map.
-    rewrite <- Hbks at 1; rewrite <- Hbks at 2.
+    replace (find_block all_bks)
+      with (find_block (List.map (fun '(bk, _, _, _) => bk) pass1_out))
+      by (rewrite Hbks; reflexivity).
     apply (pass1_find_block_gen
              (fun '(bk, phi_r, cd', _) =>
                 if raw_id_eqb (blk_id bk) init_bid then
@@ -15116,14 +16263,14 @@ Section MemoryAndSerialization.
     set (avoid2 := phi_regs ++ avoid1).
     destruct (rewrite_code_for_slot p dt init_reg avoid2 post_al)
       as [[post_al' init_end_reg] avoid3] eqn:Erw_post.
-    set (init_op := (IId init_reg, INSTR_Op (mk_copy_exp (DTYPE_Base (DTYPE_I 1)) dt EXP_Poison), [])).
+    set (init_op := (IId init_reg, INSTR_Op (mk_copy_exp (DTYPE_Base (DTYPE_I 1)) dt EXP_Poison), @nil (metadata dtyp))).
     set (init_code' := pre_al ++ (IId p, INSTR_Alloca dt anns_al, md_al) :: init_op :: post_al').
     set (bk_phis := List.combine (blks c) phi_regs).
     destruct (rewrite_non_entry_blocks_pass1 (init c) p dt init_end_reg init_code' avoid3 bk_phis)
       as [pass1_out avoid_out] eqn:Epass1.
     assert (Hinit_ba : flat_map (fun '(_, i, _) => instr_block_addresses i) init_code' = []).
     { pose proof (Hbk_nil b_init Hin_init) as Hb0; unfold block_block_addresses in Hb0.
-      apply app_eq_nil in Hb0 as [Hb0a _]; apply app_eq_nil in Hb0a as [_ Hb0_cd].
+      apply app_eq_nil in Hb0 as [_ Hb0a]; apply app_eq_nil in Hb0a as [Hb0_cd _].
       rewrite Hsplit_init, flat_map_app in Hb0_cd; cbn [flat_map instr_block_addresses] in Hb0_cd.
       apply app_eq_nil in Hb0_cd as [Hpre_ba Hpost_ba].
       pose proof (rewrite_code_for_slot_block_addresses_nil p dt init_reg avoid2
@@ -15143,13 +16290,15 @@ Section MemoryAndSerialization.
     destruct (rewrite_non_entry_blocks_pass1_spec avoid0 (init c) p dt init_end_reg init_code'
                 avoid3 bk_phis pass1_out avoid_out Epass1 Hinc3 Hinit_er_nin0 Hphis_nin0)
       as (Hbks_p1 & _ & _ & Hall_p1).
-    unfold bk_phis in Hbks_p1; rewrite (combine_fst_eq _ _ Hlen_pr) in Hbks_p1.
+    assert (Hbks_eq : List.map (fun '(bk, _, _, _) => bk) pass1_out = blks c)
+      by (etransitivity; [exact Hbks_p1 | exact (combine_fst_eq _ _ Hlen_pr)]);
+      clear Hbks_p1; rename Hbks_eq into Hbks_p1.
     unfold build_promoted_blocks; intros b' Hb'.
     apply in_map_iff in Hb' as [[[[bk phi_r] cd'] end_r] [<- Hin_p1]].
     assert (Hin_bk : In bk (blks c)).
     { rewrite <- Hbks_p1; exact (in_map (fun '(b0, _, _, _) => b0) _ _ Hin_p1). }
     pose proof (Hbk_nil bk Hin_bk) as Hbk_ba; unfold block_block_addresses in Hbk_ba.
-    apply app_eq_nil in Hbk_ba as [Hbk_ba1 Hbk_tm]; apply app_eq_nil in Hbk_ba1 as [Hbk_ph Hbk_cd].
+    apply app_eq_nil in Hbk_ba as [Hbk_ph Hbk_ba1]; apply app_eq_nil in Hbk_ba1 as [Hbk_cd Hbk_tm].
     pose proof (Hall_p1 bk phi_r cd' end_r Hin_p1) as (_ & _ & Hcd_spec).
     destruct (raw_id_eqb (blk_id bk) (init c)).
     - destruct Hcd_spec as [-> _]; unfold block_block_addresses; cbn.
@@ -15204,11 +16353,11 @@ Section MemoryAndSerialization.
     pose proof (Hbk_nil bk Hin_bk) as Hbk_ba.
     destruct (raw_id_eqb (blk_id bk) (init c)); [| exact Hbk_ba].
     pose proof (Hbk_nil b_init Hin_init) as Hb0; unfold block_block_addresses in Hb0.
-    apply app_eq_nil in Hb0 as [Hb0a _]; apply app_eq_nil in Hb0a as [_ Hb0_cd].
+    apply app_eq_nil in Hb0 as [_ Hb0a]; apply app_eq_nil in Hb0a as [Hb0_cd _].
     rewrite Hsplit_init, flat_map_app in Hb0_cd; cbn [flat_map instr_block_addresses] in Hb0_cd.
     apply app_eq_nil in Hb0_cd as [Hpre_ba Hpost_ba].
     unfold block_block_addresses in Hbk_ba |- *; cbn [blk_phis blk_code blk_term].
-    apply app_eq_nil in Hbk_ba as [Hbk_ba1 Hbk_tm]; apply app_eq_nil in Hbk_ba1 as [Hbk_ph _].
+    apply app_eq_nil in Hbk_ba as [Hbk_ph Hbk_ba1]; apply app_eq_nil in Hbk_ba1 as [_ Hbk_tm].
     rewrite flat_map_app, Hbk_ph, Hpre_ba, Hpost_ba, Hbk_tm; reflexivity.
   Qed.
 
@@ -15242,7 +16391,7 @@ Section MemoryAndSerialization.
     destruct Hq_im as [<- | []].
     apply in_app_iff; right; eapply in_defs_in_cfg_all_ids; [exact Hbk |].
     unfold full_block_defs; apply in_app_iff; right; apply in_app_iff; left.
-    apply in_flat_map; exists (IId q, INSTR_Alloca dt annotations, md);
+    apply in_flat_map; exists (IId id0, INSTR_Alloca t anns, md);
       split; [exact Him | left; reflexivity].
   Qed.
 
@@ -15320,7 +16469,7 @@ Section MemoryAndSerialization.
       unfold denote_code; cbn [loop_monad].
       apply refine_cfg_exc_ret.
       exists P_unprom, gs, σ1, σ2, sf1, sf2;
-        repeat split; try apply incl_refl; assumption.
+        repeat match goal with |- _ /\ _ => split end; try apply incl_refl; try reflexivity; assumption.
     - rewrite andb_true_iff in Hchk; destruct Hchk as [Hchk_im Hchk_rest].
       assert (Hp_nd_im : ~ In p (instr_id_defs (fst (fst im)))).
       { destruct im as [[iid_i ?] ?]; intros Hp; apply Hp_nd_cd, in_app_iff; left; exact Hp. }
@@ -15356,17 +16505,17 @@ Section MemoryAndSerialization.
         * intros U1 s1_m _ s2_m _ _ (dv_ld & -> & _ & _ & -> & ->).
           assert (Hlk_p1 : Maps.lookup p (Maps.add dst dv_ld (stack_vars sf1)) =
                            Some (DVALUE_Base (DVALUE_Pointer (gs_pt gs)))).
-          { rewrite lookup_add_neq by (intros ->; exact (Hdst_ne_p Logic.eq_refl)); exact Hlk_p. }
+          { cbn [Maps.lookup Maps.add Map_rmap]; rewrite RMF.F.add_neq_o by (intros ->; exact (Hdst_ne_p Logic.eq_refl)); exact Hlk_p. }
           assert (Hlk_cur1 : Maps.lookup cur_reg (Maps.add dst dv_ld (stack_vars sf2)) =
                              Some (DVALUE_Base (gs_db gs))).
-          { rewrite lookup_add_neq by exact Hcur_ne_dst; exact Hlk_cur. }
+          { cbn [Maps.lookup Maps.add Map_rmap]; rewrite RMF.F.add_neq_o by (intros Heq'; exact (Hcur_ne_dst (Logic.eq_sym Heq'))); exact Hlk_cur. }
           assert (Hsafe1 : safe_locals_env P_unprom safe_no_p (Maps.add dst dv_ld (stack_vars sf2)))
             by (apply safe_locals_env_add_other; assumption).
           assert (Hvars1 : forall x, In x avoid0 -> x <> p ->
                              Maps.lookup x (Maps.add dst dv_ld (stack_vars sf1)) =
                              Maps.lookup x (Maps.add dst dv_ld (stack_vars sf2))).
-          { intros x Hx Hne; destruct (raw_id_eqb_spec x dst) as [-> | Hxd];
-              [rewrite !lookup_add_eq; reflexivity | rewrite !lookup_add_neq by exact Hxd; exact (Hvars x Hx Hne)]. }
+          { intros x Hx Hne; cbn [Maps.lookup Maps.add Map_rmap]; destruct (raw_id_eqb x dst) eqn:Exd; [apply raw_id_eqb_spec in Exd; subst x | apply raw_id_eqb_neq in Exd; rename Exd into Hxd];
+              [rewrite !RMF.F.add_eq_o by reflexivity; reflexivity | rewrite !RMF.F.add_neq_o by (intros Heq'; exact (Hxd (Logic.eq_sym Heq'))); exact (Hvars x Hx Hne)]. }
           exact (IH (pre_c ++ [_]) cur_reg avoid rest' er av' U P_unprom gs σ1 σ2
                    (upd_local_sf sf1 (Maps.add dst dv_ld (stack_vars sf1)))
                    (upd_local_sf sf2 (Maps.add dst dv_ld (stack_vars sf2)))
@@ -15387,7 +16536,7 @@ Section MemoryAndSerialization.
                     In x (full_exp_uses val_exp) ->
                     Maps.lookup x (stack_vars sf1) = Maps.lookup x (stack_vars sf2)).
           { intros x Hx; apply Hvars.
-            - apply Hval_av0_fn; cbn [m2r_code_entry_uses full_instr_uses full_texp_uses snd];
+            - apply (Hval_av0_fn x (or_introl Logic.eq_refl)); cbn [m2r_code_entry_uses full_instr_uses full_texp_uses snd];
                 apply in_app_iff; left; apply in_app_iff; left; exact Hx.
             - intros ->; exact (Hnin_p_val Hx). }
           unfold denote_code; cbn [loop_monad].
@@ -15400,14 +16549,14 @@ Section MemoryAndSerialization.
                by (intros z Hz; right; exact (Hinc_av z Hz)).
              assert (Hlk_st : Maps.lookup st_reg (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2)) =
                               Some (DVALUE_Base (gs_db (gs_set_val gs db' bs'))))
-               by (cbn [gs_db gs_set_val]; apply lookup_add_eq).
+               by (cbn [gs_db gs_set_val Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity).
              assert (Hsafe1 : safe_locals_env P_unprom safe_no_p
                                 (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2)))
                by (apply safe_locals_env_add_other; assumption).
              assert (Hvars1 : forall x, In x avoid0 -> x <> p ->
                                 Maps.lookup x (stack_vars sf1) =
                                 Maps.lookup x (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2))).
-             { intros x Hx Hne; rewrite lookup_add_neq by (intros ->; exact (Hst_nin0 Hx));
+             { intros x Hx Hne; cbn [Maps.lookup Maps.add Map_rmap]; rewrite RMF.F.add_neq_o by (intros ->; exact (Hst_nin0 Hx));
                  exact (Hvars x Hx Hne). }
              exact (IH (pre_c ++ [_]) st_reg (st_reg :: avoid) rest' er av'
                       U P_unprom (gs_set_val gs db' bs') σ1' σ2 sf1
@@ -15450,12 +16599,12 @@ Section MemoryAndSerialization.
                  by (intros ->; apply Hp_nd_im; rewrite Heq_iid; left; reflexivity).
                assert (Hcur_ne_id : cur_reg <> id0)
                  by (intros ->; exact (Hcur_nin0 Hid_av0)).
-               cbn [stack_vars upd_local_sf]; split;
-                 [rewrite lookup_add_neq by exact Hp_ne_id; exact Hlk_p | split;
-                 [rewrite lookup_add_neq by exact Hcur_ne_id; exact Hlk_cur |]].
-               intros x Hx Hne; destruct (raw_id_eqb_spec x id0) as [-> | Hx_id];
-                 [rewrite !lookup_add_eq; reflexivity
-                 | rewrite !lookup_add_neq by exact Hx_id; exact (Hvars x Hx Hne)]. }
+               cbn [stack_vars upd_local_sf Maps.lookup Maps.add Map_rmap]; split;
+                 [rewrite RMF.F.add_neq_o by (intros Heq'; exact (Hp_ne_id (Logic.eq_sym Heq'))); exact Hlk_p | split;
+                 [rewrite RMF.F.add_neq_o by (intros Heq'; exact (Hcur_ne_id (Logic.eq_sym Heq'))); exact Hlk_cur |]].
+               intros x Hx Hne; destruct (raw_id_eqb x id0) eqn:Ex_id; [apply raw_id_eqb_spec in Ex_id; subst x | apply raw_id_eqb_neq in Ex_id; rename Ex_id into Hx_id];
+                 [rewrite !RMF.F.add_eq_o by reflexivity; reflexivity
+                 | rewrite !RMF.F.add_neq_o by (intros Heq'; exact (Hx_id (Logic.eq_sym Heq'))); exact (Hvars x Hx Hne)]. }
              destruct Hstep_env as (Hlk_p1 & Hlk_cur1 & Hvars1).
              eapply refine_prov_weaken.
              ++ exact (IH (pre_c ++ [im]) cur_reg avoid rest' er av' U1 P1 gs σ1_m σ2_m sf1_m sf2_m
@@ -15536,7 +16685,7 @@ Section MemoryAndSerialization.
     set (avoid2 := phi_regs ++ avoid1).
     destruct (rewrite_code_for_slot p dt init_reg avoid2 post_al)
       as [[post_al' init_end_reg] avoid3] eqn:Erw_post.
-    set (init_op := (IId init_reg, INSTR_Op (mk_copy_exp (DTYPE_Base (DTYPE_I 1)) dt EXP_Poison), [])).
+    set (init_op := (IId init_reg, INSTR_Op (mk_copy_exp (DTYPE_Base (DTYPE_I 1)) dt EXP_Poison), @nil (metadata dtyp))).
     set (init_code' := pre_al ++ (IId p, INSTR_Alloca dt anns_al, md_al) :: init_op :: post_al').
     set (bk_phis := List.combine (blks c) phi_regs).
     destruct (rewrite_non_entry_blocks_pass1 (init c) p dt init_end_reg init_code' avoid3 bk_phis)
@@ -15564,7 +16713,9 @@ Section MemoryAndSerialization.
     destruct (rewrite_non_entry_blocks_pass1_spec avoid0 (init c) p dt init_end_reg init_code'
                 avoid3 bk_phis pass1_out avoid_out Epass1 Hinc_av3 Hinit_er_nin0 Hphis_nin0)
       as (Hbks_p1 & _ & _ & Hall_p1).
-    unfold bk_phis in Hbks_p1; rewrite (combine_fst_eq _ _ Hlen_pr) in Hbks_p1.
+    assert (Hbks_eq : List.map (fun '(bk, _, _, _) => bk) pass1_out = blks c)
+      by (etransitivity; [exact Hbks_p1 | exact (combine_fst_eq _ _ Hlen_pr)]);
+      clear Hbks_p1; rename Hbks_eq into Hbks_p1.
     set (end_map := List.map (fun '(bk, _, _, end_r) => (blk_id bk, end_r)) pass1_out).
     assert (Hnd_end_map : NoDup (List.map fst end_map)).
     { unfold end_map; rewrite pass1_end_map_fst, Hbks_p1; exact Hnd_bks. }
@@ -15577,7 +16728,11 @@ Section MemoryAndSerialization.
     set (fname := show_raw_id (dc_name (df_prototype df))).
     set (fs0 := Memory_stack_frame_stack (state_memory_stack σ2_in)).
     pose proof (stage1_equal_to_mem_inv U0 P0 σ1_in σ2_in Hpu0 Heq_in) as Hinv0.
-    eapply refine_cfg_model_bind.
+    eapply refine_cfg_model_bind with
+      (RA := fun U' '(s1', _) '(s2', _) =>
+               U' = U0 /\
+               s1' = (σ1_in, ((sf_caller, fstk_caller), g0)) /\
+               s2' = (σ2_in, ((sf_caller, fstk_caller), g0))).
     - eapply refine_cfg_EOU; [apply refine_EOU_refl |].
       intros [] [] _; exact (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl)).
     - intros U_cc s1_cc _ s2_cc _ _ (-> & -> & ->).
@@ -15641,21 +16796,25 @@ Section MemoryAndSerialization.
                 { apply lookup_end_reg_in_nodup; [exact Hnd_end_map |].
                   unfold end_map; rewrite <- Hid_init.
                   exact (in_map (fun '(bk, _, _, er) => (blk_id bk, er)) _ _ Hin_p1_init). }
+                cbn beta iota.
                 rewrite ScopeTheory.ocfg_map_find_block, Efind_init.
                 rewrite ScopeTheory.ocfg_map_find_block, Efind_init'.
                 unfold denote_block; cbn [blk_phis blk_code blk_term]; rewrite Ephis_init.
                 eapply PassCommon.refine_prov_bind with
-                  (RPre := exc_post RExc_s1
+                  (RR := exc_post RExc_s1
                              (fun U_s s1_s s2_s
                                 (lr1 lr2 : (block_id * block_id) + ((block_id * block_id) + @dvalue (@ParamsV IP IPT))) =>
-                                exists P_b1 gs_b1 σ1_b1 σ2_b1 sf1_b1 sf2_b1,
+                                exists (P_b1 : list N) gs_b1 σ1_b1 σ2_b1
+                                       (sf1_b1 sf2_b1 : @stack_frame (@ParamsV IP IPT)),
                                   incl (pr_va :: U0) U_s /\
                                   lr1 = lr2 /\
                                   s1_s = (σ1_b1, ((sf1_b1, fstk), g0)) /\
                                   s2_s = (σ2_b1, ((sf2_b1, fstk), g0)) /\
                                   gs_dt gs_b1 = dt /\
-                                  Maps.lookup p (stack_vars sf1_b1) = Some (DVALUE_Base (DVALUE_Pointer (gs_pt gs_b1))) /\
-                                  Maps.lookup init_end_reg (stack_vars sf2_b1) = Some (DVALUE_Base (gs_db gs_b1)) /\
+                                  Maps.lookup p (stack_vars sf1_b1) =
+                                    Some (@DVALUE_Base (@ParamsV IP IPT) (@DVALUE_Pointer (@ParamsV IP IPT) (gs_pt gs_b1))) /\
+                                  Maps.lookup init_end_reg (stack_vars sf2_b1) =
+                                    Some (@DVALUE_Base (@ParamsV IP IPT) (gs_db gs_b1)) /\
                                   stage1_mem_inv U_s P_b1 (gs_b1 :: []) σ1_b1 σ2_b1 /\
                                   top_frame_prom_from fs0 gs_b1 [] (state_memory_stack σ2_b1) /\
                                   genv_safe P_b1 g0 /\
@@ -15668,30 +16827,49 @@ Section MemoryAndSerialization.
                                   end)).
                 ** eapply refine_prov_obs_eq;
                      [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _
-                                         (eq_itree_clo_bind _ _ _ _ Logic.eq
-                                            (eq_itree_clo_bind _ _ _ _ Logic.eq (denote_phis_nil_eq (init c))
-                                               (fun _ _ <- => Logic.eq_refl)) (fun _ _ <- => Logic.eq_refl)))
+                                         (eq_itree_bind_congr_l
+                                            (eq_itree_bind_congr_l (denote_phis_nil_eq (init c)))))
                      | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _
-                                          (eq_itree_clo_bind _ _ _ _ Logic.eq
-                                             (eq_itree_clo_bind _ _ _ _ Logic.eq (denote_phis_nil_eq (init c))
-                                                (fun _ _ <- => Logic.eq_refl)) (fun _ _ <- => Logic.eq_refl))) |].
+                                          (eq_itree_bind_congr_l
+                                             (eq_itree_bind_congr_l (denote_phis_nil_eq (init c))))) |].
                    eapply refine_prov_obs_eq;
                      [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (Eqit.bind_bind _ _ _))
                      | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
                    eapply refine_prov_obs_eq;
-                     [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (Eqit.bind_ret_l _ _))
-                     | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_ret_l _ _)) |].
+                     [symmetry; apply interp_cfg_exc_obs_eq, Eqit.bind_ret_l
+                     | symmetry; apply interp_cfg_exc_obs_eq, Eqit.bind_ret_l |].
                    rewrite Hsplit_init; unfold init_code'.
-                   eapply refine_cfg_exc_bind.
+                   eapply refine_cfg_exc_bind with
+                     (RA := fun U_b1 s1_b1 s2_b1 bd1 bd2 =>
+                              exists (P_b1 : list N) gs_b1 σ1_b1 σ2_b1
+                                     (sf1_b1 sf2_b1 : @stack_frame (@ParamsV IP IPT)),
+                                incl (pr_va :: U0) U_b1 /\
+                                bd1 = bd2 /\
+                                s1_b1 = (σ1_b1, ((sf1_b1, fstk), g0)) /\
+                                s2_b1 = (σ2_b1, ((sf2_b1, fstk), g0)) /\
+                                gs_dt gs_b1 = dt /\
+                                Maps.lookup p (stack_vars sf1_b1) =
+                                  Some (@DVALUE_Base (@ParamsV IP IPT) (@DVALUE_Pointer (@ParamsV IP IPT) (gs_pt gs_b1))) /\
+                                Maps.lookup init_end_reg (stack_vars sf2_b1) =
+                                  Some (@DVALUE_Base (@ParamsV IP IPT) (gs_db gs_b1)) /\
+                                stage1_mem_inv U_b1 P_b1 (gs_b1 :: []) σ1_b1 σ2_b1 /\
+                                top_frame_prom_from fs0 gs_b1 [] (state_memory_stack σ2_b1) /\
+                                genv_safe P_b1 g0 /\
+                                safe_locals_env P_b1 safe_no_p (stack_vars sf2_b1) /\
+                                (forall x, In x avoid0 -> x <> p ->
+                                   Maps.lookup x (stack_vars sf1_b1) = Maps.lookup x (stack_vars sf2_b1)) /\
+                                match bd1 with
+                                | inl bid_target => In bid_target (m2r_block_succs b_init)
+                                | inr _ => True
+                                end).
                    --- eapply refine_prov_obs_eq;
                          [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _
-                                             (eq_itree_clo_bind _ _ _ _ Logic.eq
-                                                (denote_code_app_eq pre_al _ (Some varg1))
-                                                (fun _ _ <- => Logic.eq_refl)))
+                                             (eq_itree_bind_congr_l (denote_code_app_eq pre_al _ (Some varg1))))
                          | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _
-                                              (eq_itree_clo_bind _ _ _ _ Logic.eq
-                                                 (denote_code_app_eq pre_al _ (Some varg1))
-                                                 (fun _ _ <- => Logic.eq_refl))) |].
+                                              (eq_itree_bind_congr_l (denote_code_app_eq pre_al _ (Some varg1)))) |].
+                       eapply refine_prov_obs_eq;
+                         [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (Eqit.bind_bind _ _ _))
+                         | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
                        eapply refine_cfg_exc_bind.
                        +++ assert (Hsplit_pre :
                                      blk_code b_init = [] ++ pre_al ++ (IId p, INSTR_Alloca dt anns_al, md_al) :: post_al)
@@ -15728,10 +16906,8 @@ Section MemoryAndSerialization.
                                        (fun _ => denote_code post_al' (Some varg1))).
                            { unfold denote_code; cbn [loop_monad]; symmetry; apply Eqit.bind_bind. }
                            eapply refine_prov_obs_eq;
-                             [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _
-                                                 (eq_itree_clo_bind _ _ _ _ Logic.eq Econs_l (fun _ _ <- => Logic.eq_refl)))
-                             | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _
-                                                  (eq_itree_clo_bind _ _ _ _ Logic.eq Econs_r (fun _ _ <- => Logic.eq_refl))) |].
+                             [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (eq_itree_bind_congr_l Econs_l))
+                             | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (eq_itree_bind_congr_l Econs_r)) |].
                            eapply refine_prov_obs_eq;
                              [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (Eqit.bind_bind _ _ _))
                              | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
@@ -15748,13 +16924,13 @@ Section MemoryAndSerialization.
                                assert (Hlk_p_al :
                                          Maps.lookup p (Maps.add p (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))) (stack_vars sf2_pre)) =
                                          Some (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))))
-                                 by apply lookup_add_eq.
+                                 by (cbn [Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity).
                                assert (Hlk_init_al :
                                          Maps.lookup init_reg
                                            (Maps.add init_reg (DVALUE_Base DVALUE_Poison)
                                               (Maps.add p (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))) (stack_vars sf2_pre))) =
                                          Some (DVALUE_Base (gs_db gs0))).
-                               { rewrite Hdb0; apply lookup_add_eq. }
+                               { rewrite Hdb0; cbn [Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity. }
                                assert (Hsafe_al :
                                          safe_locals_env P_pre safe_no_p
                                            (Maps.add init_reg (DVALUE_Base DVALUE_Poison)
@@ -15767,8 +16943,8 @@ Section MemoryAndSerialization.
                                            Maps.lookup x (Maps.add p (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))) (stack_vars sf2_pre)) =
                                            Maps.lookup x (Maps.add init_reg (DVALUE_Base DVALUE_Poison)
                                                             (Maps.add p (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))) (stack_vars sf2_pre)))).
-                               { intros x Hx _; rewrite (lookup_add_neq x init_reg)
-                                   by (intros ->; exact (Hinit_nin0 Hx)); reflexivity. }
+                               { intros x Hx _; cbn [Maps.lookup Maps.add Map_rmap]; symmetry;
+                                 rewrite RMF.F.add_neq_o by (intros ->; exact (Hinit_nin0 Hx)); reflexivity. }
                                assert (Hsplit_post :
                                          blk_code b_init = (pre_al ++ [(IId p, INSTR_Alloca dt anns_al, md_al)]) ++ post_al ++ [])
                                  by (rewrite <- app_assoc, app_nil_r; exact Hsplit_init).
@@ -15788,7 +16964,13 @@ Section MemoryAndSerialization.
                                              (pre_al ++ [(IId p, INSTR_Alloca dt anns_al, md_al)]) post_al []
                                              safe_no_p p dt init_reg avoid2 post_al' init_end_reg avoid3
                                              (Some varg1) (Some varg1) fs0 (gs_pr gs0 :: U_pre) P_pre gs0 []
-                                             σ1_al σ2_al _ _ fstk fstk g0
+                                             σ1_al σ2_al
+                                             (upd_local_sf sf2_pre
+                                                (Maps.add p (@DVALUE_Base (@ParamsV IP IPT) (@DVALUE_Pointer (@ParamsV IP IPT) (gs_pt gs0))) (stack_vars sf2_pre)))
+                                             (upd_local_sf sf2_pre
+                                                (Maps.add init_reg (@DVALUE_Base (@ParamsV IP IPT) DVALUE_Poison)
+                                                   (Maps.add p (@DVALUE_Base (@ParamsV IP IPT) (@DVALUE_Pointer (@ParamsV IP IPT) (gs_pt gs0))) (stack_vars sf2_pre))))
+                                             fstk fstk g0
                                              Hnd_bks Hin_init Hsplit_post Hsub_safe Hsafe_av0
                                              Huses_post Hdefs_post Hp_nd_post Hpost_chk Erw_post
                                              Hinc_av2 Hinit_nin0 Hsc Hdt0 Hlk_p_al Hlk_init_al
@@ -15807,7 +16989,7 @@ Section MemoryAndSerialization.
                                     { intros x Hx; apply Hvars_post.
                                       - apply (Hblk_uses_av0 b_init x Hin_init), m2r_term_entry_uses_in_block.
                                         rewrite Etm_init; cbn [m2r_term_entry_uses]; apply in_app_iff; left; exact Hx.
-                                      - intros ->; apply Hterm_p; rewrite Etm_init;
+                                      - intros ->; apply Hterm_p; try rewrite Etm_init;
                                           cbn [m2r_term_entry_uses]; apply in_app_iff; left; exact Hx. }
                                     eapply refine_prov_weaken.
                                     ++++ apply (denote_non_invoke_term_exc_sim ctx1 ctx2 RExc_s1
@@ -15821,7 +17003,9 @@ Section MemoryAndSerialization.
                                          destruct res1_t as [ex1 | bd1], res2_t as [ex2 | bd2]; cbn [exc_post];
                                            try (intros H; exact H).
                                          intros (-> & -> & -> & <- & Hsucc).
-                                         exists P_post, gs_post, σ1_post, σ2_post, sf1_post, sf2_post.
+                                         destruct bd1 as [bid_t | dv_t];
+                                           [cbn in Hsucc |- *; unfold m2r_block_succs; rewrite Etm_init |];
+                                         exists P_post, gs_post, σ1_post, σ2_post, sf1_post, sf2_post;
                                          exact (conj HincU_p (conj Logic.eq_refl (conj Logic.eq_refl
                                                   (conj Logic.eq_refl (conj Hdt_post (conj Hlk_p_post
                                                     (conj Hlk_er_post (conj Hinv_post (conj Htf_post
@@ -15831,8 +17015,8 @@ Section MemoryAndSerialization.
                           HincU_b1 & <- & -> & -> & Hdt_b1 & Hlk_p_b1 & Hlk_er_b1 &
                           Hinv_b1 & Htf_b1 & Hgenv_b1 & Hsafe_b1 & Hvars_b1 & Hsucc_b1).
                        destruct bd1 as [bid_next | dv_ret].
-                       +++ assert (Hsucc_init : In bid_next (m2r_block_succs b_init)).
-                           { unfold m2r_block_succs; destruct (blk_term b_init) as [[? ?] ?]; exact Hsucc_b1. }
+                       +++ assert (Hsucc_init : In bid_next (m2r_block_succs b_init))
+                             by exact Hsucc_b1.
                            assert (Hne_init : bid_next <> init c).
                            { intros Heq_n; apply Hno_entry_pred; rewrite <- Heq_n.
                              unfold m2r_all_succs; apply in_flat_map; exists b_init; split; assumption. }
@@ -15851,12 +17035,19 @@ Section MemoryAndSerialization.
                                         (conj Hgenv_b1 (conj Hsafe_b1 (conj Hvars_b1 I)))))))))))).
                 ** intros U_step [s1_step res1_s] [s2_step res2_s] _.
                    destruct res1_s as [ex1 | [j1 | r1]], res2_s as [ex2 | [j2 | r2]]; cbn [exc_post];
-                     try contradiction.
+                     try contradiction;
+                     try (let H := fresh in intros H;
+                          repeat match goal with
+                                 | H0 : _ /\ _ |- _ => destruct H0
+                                 | H0 : exists _, _ |- _ => destruct H0
+                                 end;
+                          discriminate).
                    --- intros Hex; apply refine_prov_ret; exact Hex.
                    --- intros (P_s & gs_s & σ1_s & σ2_s & sf1_s & sf2_s &
-                               HincU_s & <- & -> & -> & Hdt_s & Hlk_p_s & Hlk_er_s &
+                               HincU_s & Hjeq & -> & -> & Hdt_s & Hlk_p_s & Hlk_er_s &
                                Hinv_s & Htf_s & Hgenv_s & Hsafe_s & Hvars_s &
                                Hjid_s & Hsucc_s & Hne_s).
+                       inversion Hjeq; subst j2; clear Hjeq.
                        apply refine_prov_tau_both.
                        set (RI_loop :=
                               fun U_l (s1_l s2_l : FusedS) (i1 i2 : block_id * block_id) =>
@@ -15867,11 +17058,13 @@ Section MemoryAndSerialization.
                                    In b_pred (blks c) /\
                                    blk_id b_pred = fst i2 /\
                                    In (snd i2) (m2r_block_succs b_pred)) /\
-                                exists P_l gs_l σ1_l σ2_l sf1_l sf2_l,
+                                exists (P_l : list N) gs_l σ1_l σ2_l
+                                       (sf1_l sf2_l : @stack_frame (@ParamsV IP IPT)),
                                   gs_dt gs_l = dt /\
-                                  Maps.lookup p (stack_vars sf1_l) = Some (DVALUE_Base (DVALUE_Pointer (gs_pt gs_l))) /\
+                                  Maps.lookup p (stack_vars sf1_l) =
+                                    Some (@DVALUE_Base (@ParamsV IP IPT) (@DVALUE_Pointer (@ParamsV IP IPT) (gs_pt gs_l))) /\
                                   Maps.lookup (lookup_end_reg end_map (fst i2) init_reg) (stack_vars sf2_l) =
-                                    Some (DVALUE_Base (gs_db gs_l)) /\
+                                    Some (@DVALUE_Base (@ParamsV IP IPT) (gs_db gs_l)) /\
                                   s1_l = (σ1_l, ((sf1_l, fstk), g0)) /\
                                   s2_l = (σ2_l, ((sf2_l, fstk), g0)) /\
                                   stage1_mem_inv U_l P_l (gs_l :: []) σ1_l σ2_l /\
@@ -15887,6 +17080,7 @@ Section MemoryAndSerialization.
                               Hdt_l & Hlk_p_l & Hlk_end_l & -> & -> &
                               Hinv_l & Htf_l & Hgenv_l & Hsafe_l & Hvars_l).
                            inversion Heq_ij; subst bf1 bs1; clear Heq_ij; cbn [fst snd] in *.
+                           cbn beta iota.
                            rewrite !ScopeTheory.ocfg_map_find_block.
                            destruct (find_block (blks c) bs2) as [bk_cur |] eqn:Efind_cur.
                            *** destruct (m2r_find_block_some_inv (blks c) bs2 bk_cur Efind_cur)
@@ -15896,13 +17090,13 @@ Section MemoryAndSerialization.
                                rewrite Efind_cur'.
                                pose proof (Hall_p1 bk_cur phi_r cd_cur' end_r Hin_p1_cur)
                                  as (Hphi_nin0 & Hend_nin0 & Hcur_p1_spec).
-                               destruct (raw_id_eqb_spec (blk_id bk_cur) (init c)) as [Hbad | Hne_cur_id];
+                               destruct (raw_id_eqb (blk_id bk_cur) (init c)) eqn:Ecur_id; [apply raw_id_eqb_spec in Ecur_id; rename Ecur_id into Hbad | apply raw_id_eqb_neq in Ecur_id; rename Ecur_id into Hne_cur_id];
                                  [exfalso; congruence |].
                                destruct Hcur_p1_spec as (av_in & av_out & Hinc_avin & Erw_cur).
                                pose proof Ebks_chk as Hbk_cur_chk.
                                rewrite forallb_forall in Hbk_cur_chk.
                                specialize (Hbk_cur_chk bk_cur Hin_cur).
-                               destruct (raw_id_eqb_spec (blk_id bk_cur) (init c)) as [Hbad | _];
+                               destruct (raw_id_eqb (blk_id bk_cur) (init c)) eqn:Ebad; [apply raw_id_eqb_spec in Ebad; rename Ebad into Hbad | clear Ebad];
                                  [exfalso; congruence |].
                                unfold check_block_non_entry_for_slot in Hbk_cur_chk.
                                rewrite !andb_true_iff, !negb_true_iff in Hbk_cur_chk.
@@ -15931,7 +17125,30 @@ Section MemoryAndSerialization.
                                     exact (m2r_phi_entry_uses_in_block bk_cur pe x Hpe Hx_pe)
                                    | intros ->; exact (Hphi_np Hx)]. }
                                unfold denote_block; cbn [blk_phis blk_code blk_term]; fold preds_cur inc_cur.
-                               eapply refine_cfg_exc_bind.
+                               eapply refine_cfg_exc_bind with
+                                 (RA := fun U_bd s1_bd s2_bd bd1 bd2 =>
+                                          exists (P_cd : list N) gs_cd σ1_cd σ2_cd
+                                                 (sf1_cd sf2_cd : @stack_frame (@ParamsV IP IPT)),
+                                            incl (pr_va :: U0) U_bd /\
+                                            bd1 = bd2 /\
+                                            s1_bd = (σ1_cd, ((sf1_cd, fstk), g0)) /\
+                                            s2_bd = (σ2_cd, ((sf2_cd, fstk), g0)) /\
+                                            gs_dt gs_cd = dt /\
+                                            Maps.lookup p (stack_vars sf1_cd) =
+                                              Some (@DVALUE_Base (@ParamsV IP IPT) (@DVALUE_Pointer (@ParamsV IP IPT) (gs_pt gs_cd))) /\
+                                            lookup_end_reg end_map bs2 init_reg = end_r /\
+                                            Maps.lookup end_r (stack_vars sf2_cd) =
+                                              Some (@DVALUE_Base (@ParamsV IP IPT) (gs_db gs_cd)) /\
+                                            stage1_mem_inv U_bd P_cd (gs_cd :: []) σ1_cd σ2_cd /\
+                                            top_frame_prom_from fs0 gs_cd [] (state_memory_stack σ2_cd) /\
+                                            genv_safe P_cd g0 /\
+                                            safe_locals_env P_cd safe_no_p (stack_vars sf2_cd) /\
+                                            (forall x, In x avoid0 -> x <> p ->
+                                               Maps.lookup x (stack_vars sf1_cd) = Maps.lookup x (stack_vars sf2_cd)) /\
+                                            match bd1 with
+                                            | inl bid_target => In bid_target (m2r_block_succs bk_cur)
+                                            | inr _ => True
+                                            end).
                                ---- eapply refine_cfg_exc_bind.
                                     ++++ exact (denote_phis_stage1_prom_sim ctx1 ctx2 RExc_s1
                                                   bf2 phi_r (lookup_end_reg end_map bf2 init_reg)
@@ -15957,7 +17174,7 @@ Section MemoryAndSerialization.
                                                    Some (DVALUE_Base (gs_db gs_l))).
                                          { cbn [write_phi_dvs];
                                              rewrite (write_phi_dvs_lookup_not_in dvs _ phi_r Hphi_nin_dvs);
-                                             apply lookup_add_eq. }
+                                             cbn [Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity. }
                                          assert (Hsafe_ph :
                                                    safe_locals_env P_l safe_no_p
                                                      (write_phi_dvs ((phi_r, DVALUE_Base (gs_db gs_l)) :: dvs) (stack_vars sf2_l))).
@@ -15966,14 +17183,15 @@ Section MemoryAndSerialization.
                                            - subst q; exact (Hphi_nin0 (Hsafe_av0 _ Hq)).
                                            - rewrite Hfst_dvs in Hin_dvs.
                                              apply in_map_iff in Hin_dvs as ([[x_ph ph_q] md_q] & <- & Hpe_in).
-                                             exact (unique_alloca_not_phi_def fargs (blks c) q Hnd_bks
-                                                      (Hsub_safe q Hq) bk_cur q ph_q md_q Hin_cur Hpe_in Logic.eq_refl). }
+                                             exact (unique_alloca_not_phi_def fargs (blks c) x_ph Hnd_bks
+                                                      (Hsub_safe x_ph Hq) bk_cur x_ph ph_q md_q Hin_cur Hpe_in Logic.eq_refl). }
                                          assert (Hvars_ph :
                                                    forall x, In x avoid0 -> x <> p ->
                                                      Maps.lookup x (write_phi_dvs dvs (stack_vars sf1_l)) =
                                                      Maps.lookup x (write_phi_dvs ((phi_r, DVALUE_Base (gs_db gs_l)) :: dvs) (stack_vars sf2_l))).
                                          { intros x Hx Hne; cbn [write_phi_dvs]; apply write_phi_dvs_lookup_agree.
-                                           rewrite (lookup_add_neq x phi_r) by (intros ->; exact (Hphi_nin0 Hx)).
+                                           cbn [Maps.lookup Maps.add Map_rmap];
+                                           rewrite RMF.F.add_neq_o by (intros ->; exact (Hphi_nin0 Hx)).
                                            exact (Hvars_l x Hx Hne). }
                                          assert (Hsplit_cur : blk_code bk_cur = [] ++ blk_code bk_cur ++ [])
                                            by (rewrite app_nil_r; reflexivity).
@@ -15992,7 +17210,11 @@ Section MemoryAndSerialization.
                                                        avoid0 fargs (blks c) bk_cur [] (blk_code bk_cur) []
                                                        safe_no_p p dt phi_r av_in cd_cur' end_r av_out
                                                        (Some varg1) (Some varg1) fs0 U_l P_l gs_l []
-                                                       σ1_l σ2_l _ _ fstk fstk g0
+                                                       σ1_l σ2_l
+                                                       (upd_local_sf sf1_l (write_phi_dvs dvs (stack_vars sf1_l)))
+                                                       (upd_local_sf sf2_l
+                                                          (write_phi_dvs ((phi_r, @DVALUE_Base (@ParamsV IP IPT) (gs_db gs_l)) :: dvs) (stack_vars sf2_l)))
+                                                       fstk fstk g0
                                                        Hnd_bks Hin_cur Hsplit_cur Hsub_safe Hsafe_av0
                                                        Huses_cur Hdefs_cur Hp_nd_cd_cur Hcd_cur Erw_cur
                                                        Hinc_avin Hphi_nin0 Hsc Hdt_l Hlk_p_ph Hlk_phi_ph
@@ -16015,7 +17237,7 @@ Section MemoryAndSerialization.
                                               { intros x Hx; apply Hvars_cd.
                                                 - apply (Hblk_uses_av0 bk_cur x Hin_cur), m2r_term_entry_uses_in_block.
                                                   rewrite Etm_cur; cbn [m2r_term_entry_uses]; apply in_app_iff; left; exact Hx.
-                                                - intros ->; apply Htm_np; rewrite Etm_cur;
+                                                - intros ->; apply Htm_np; try rewrite Etm_cur;
                                                     cbn [m2r_term_entry_uses]; apply in_app_iff; left; exact Hx. }
                                               eapply refine_prov_weaken.
                                               ----- apply (denote_non_invoke_term_exc_sim ctx1 ctx2 RExc_s1
@@ -16029,7 +17251,9 @@ Section MemoryAndSerialization.
                                                     destruct res1_t as [ex1 | bd1], res2_t as [ex2 | bd2]; cbn [exc_post];
                                                       try (intros H; exact H).
                                                     intros (-> & -> & -> & <- & Hsucc_cur).
-                                                    exists P_cd, gs_cd, σ1_cd, σ2_cd, sf1_cd, sf2_cd.
+                                                    destruct bd1 as [bid_t | dv_t];
+                                                      [cbn in Hsucc_cur |- *; unfold m2r_block_succs; rewrite Etm_cur |];
+                                                    exists P_cd, gs_cd, σ1_cd, σ2_cd, sf1_cd, sf2_cd;
                                                     exact (conj HincU_c (conj Logic.eq_refl (conj Logic.eq_refl
                                                              (conj Logic.eq_refl (conj Hdt_cd (conj Hlk_p_cd
                                                                (conj Hlk_end_cur (conj Hlk_er_cd (conj Hinv_cd
@@ -16041,19 +17265,19 @@ Section MemoryAndSerialization.
                                        Hlk_er_cd & Hinv_cd & Htf_cd & Hgenv_cd & Hsafe_cd & Hvars_cd & Hsucc_cur).
                                     destruct bd1 as [bid_tgt | dv_cur].
                                     ++++ apply refine_cfg_exc_ret.
-                                         assert (Hsucc_bk_cur : In bid_tgt (m2r_block_succs bk_cur)).
-                                         { unfold m2r_block_succs; destruct (blk_term bk_cur) as [[? ?] ?]; exact Hsucc_cur. }
+                                         assert (Hsucc_bk_cur : In bid_tgt (m2r_block_succs bk_cur))
+                                           by exact Hsucc_cur.
                                          assert (Hne_tgt : bid_tgt <> init c).
                                          { intros Heq_t; apply Hno_entry_pred; rewrite <- Heq_t.
                                            unfold m2r_all_succs; apply in_flat_map; exists bk_cur; split; assumption. }
                                          refine (conj Logic.eq_refl (conj Hne_tgt (conj HincU_c (conj _ _)))).
-                                         * exists bk_cur; exact (conj Hin_cur (conj Hid_cur Hsucc_bk_cur)).
-                                         * exists P_cd, gs_cd, σ1_cd, σ2_cd, sf1_cd, sf2_cd; cbn [fst].
+                                         { exists bk_cur; exact (conj Hin_cur (conj Hid_cur Hsucc_bk_cur)). }
+                                         { exists P_cd, gs_cd, σ1_cd, σ2_cd, sf1_cd, sf2_cd; cbn [fst].
                                            rewrite Hlk_end_cur.
                                            exact (conj Hdt_cd (conj Hlk_p_cd (conj Hlk_er_cd
                                                     (conj Logic.eq_refl (conj Logic.eq_refl
                                                       (conj Hinv_cd (conj Htf_cd (conj Hgenv_cd
-                                                        (conj Hsafe_cd Hvars_cd))))))))).
+                                                        (conj Hsafe_cd Hvars_cd))))))))). }
                                     ++++ apply refine_cfg_exc_ret.
                                          refine (conj Logic.eq_refl (conj HincU_c _)).
                                          exists P_cd, σ1_cd, σ2_cd, sf1_cd, sf2_cd;
@@ -16064,16 +17288,17 @@ Section MemoryAndSerialization.
                                exists P_l, σ1_l, σ2_l, sf1_l, sf2_l;
                                  split; [reflexivity | split; [reflexivity | right; exists gs_l; split; assumption]].
                        +++ refine (conj Logic.eq_refl (conj Hne_s (conj HincU_s (conj _ _)))).
-                           *** exists b_init;
-                                 exact (conj Hin_init (conj (eq_trans Hid_init (eq_sym Hjid_s)) Hsucc_s)).
-                           *** exists P_s, gs_s, σ1_s, σ2_s, sf1_s, sf2_s.
-                               rewrite Hjid_s, Hlk_end_init.
-                               exact (conj Hdt_s (conj Hlk_p_s (conj Hlk_er_s
-                                        (conj Logic.eq_refl (conj Logic.eq_refl
-                                          (conj Hinv_s (conj Htf_s (conj Hgenv_s
-                                            (conj Hsafe_s Hvars_s))))))))).
+                           { exists b_init;
+                               exact (conj Hin_init (conj (eq_trans Hid_init (eq_sym Hjid_s)) Hsucc_s)). }
+                           { exists P_s, gs_s, σ1_s, σ2_s, sf1_s, sf2_s.
+                             rewrite Hjid_s, Hlk_end_init.
+                             exact (conj Hdt_s (conj Hlk_p_s (conj Hlk_er_s
+                                      (conj Logic.eq_refl (conj Logic.eq_refl
+                                        (conj Hinv_s (conj Htf_s (conj Hgenv_s
+                                          (conj Hsafe_s Hvars_s))))))))). }
                    --- intros (P_s & gs_s & σ1_s & σ2_s & sf1_s & sf2_s &
-                               HincU_s & <- & -> & -> & _ & _ & _ & Hinv_s & Htf_s & _).
+                               HincU_s & Hreq & -> & -> & _ & _ & _ & Hinv_s & Htf_s & _).
+                       inversion Hreq; subst r2; clear Hreq.
                        apply refine_prov_ret.
                        refine (conj Logic.eq_refl (conj HincU_s _)).
                        exists P_s, σ1_s, σ2_s, sf1_s, sf2_s;
@@ -16085,7 +17310,8 @@ Section MemoryAndSerialization.
           -- intros U_rv s1_rv rv1 s2_rv rv2 _ Hrv_post.
              assert (Hrv_unif : rv1 = rv2 /\ ExitRel U_rv s1_rv s2_rv).
              { destruct rv1 as [ex1 | v1], rv2 as [ex2 | v2]; cbn [exc_post] in Hrv_post;
-                 try contradiction; exact Hrv_post. }
+                 try contradiction;
+                 (destruct Hrv_post as [<- Hex]; split; [reflexivity | exact Hex]). }
              clear Hrv_post; destruct Hrv_unif as [<- (HincU_rv & P_e & σ1_e & σ2_e & sf1_e & sf2_e & -> & -> & Hcase_e)].
              assert (Hpop :
                        refine_prov
@@ -16131,14 +17357,24 @@ Section MemoryAndSerialization.
     eapply refine_prov_obs_eq;
       [symmetry; apply interp_mcfg_model_bind | symmetry; apply interp_mcfg_model_bind |].
     eapply refine_prov_obs_eq;
-      [symmetry; rewrite (interp_mcfg_model_non_intr _ s1 Logic.eq_refl); reflexivity
-      | symmetry; rewrite (interp_mcfg_model_non_intr _ s2 Logic.eq_refl); reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+      [symmetry;
+       match goal with
+       | |- ITree.bind _ ?k ≅ _ =>
+           eapply eq_itree_clo_bind with (UU := Logic.eq) (k2 := k);
+           [apply interp_mcfg_model_non_intr; reflexivity | intros ? ? <-; reflexivity]
+       end
+      | symmetry;
+        match goal with
+        | |- ITree.bind _ ?k ≅ _ =>
+            eapply eq_itree_clo_bind with (UU := Logic.eq) (k2 := k);
+            [apply interp_mcfg_model_non_intr; reflexivity | intros ? ? <-; reflexivity]
+        end |].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
       | symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
-    pstep; apply RP_Step; cbn; right; right; split; [apply EqE_bot_refl | intros [] [] _].
+    pstep; apply RP_Step; cbn; right; right; split; [reflexivity | intros [] [] _].
   Qed.
 
   Lemma library_functions_leaf_rel
@@ -16166,8 +17402,8 @@ Section MemoryAndSerialization.
     apply filter_In in Hin as [Hin Hex].
     destruct Hin as [Heq | [Heq | []]]; inversion Heq; subst fnm fden; [| reflexivity].
     exfalso; apply existsb_exists in Hex as (s & Hs & Heq_s).
-    destruct (RawIDOrd.eq_dec s (Name "puts"%string)) as [-> | _];
-      [exact (Hno Hs) | discriminate Heq_s].
+    destruct (RawIDOrd.eq_dec s (Name "puts"%string)) as [Heq_p | Hne];
+      [rewrite Heq_p in Hs; exact (Hno Hs) | discriminate Heq_s].
   Qed.
 
   Lemma module_defs_refines_gen
@@ -16205,7 +17441,7 @@ Section MemoryAndSerialization.
     set (ls0 := (Build_stack_frame Maps.empty None None, ([] : stack))).
     assert (Heq_init : mem_stack_equal (state_memory_stack initial_state)
                                        (state_memory_stack initial_state))
-      by (repeat split; reflexivity).
+      by (unfold mem_stack_equal; repeat match goal with |- _ /\ _ => split end; reflexivity).
     eapply refine_mcfg_model_bind.
     - exact (build_global_environment_safe_sim M1 U [] initial_state initial_state
                ls0 Maps.empty (fun _ H => match H with end) (genv_safe_empty []) Heq_init).
@@ -16419,7 +17655,7 @@ Section MemoryAndSerialization.
     @denote_operand_bundles (@ParamsV IP IPT) loc f [] ≅ Ret tt.
   Proof using.
     unfold denote_operand_bundles; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-    apply Eqit.bind_ret_l.
+    rewrite Eqit.bind_ret_l; reflexivity.
   Qed.
 
   Lemma safe_mem_code_to_check_other
@@ -16883,98 +18119,113 @@ Section MemoryAndSerialization.
           destruct (intrinsic_exp fn_e); try discriminate Hintr;
           exact (conj Hobs Logic.eq_refl). }
       destruct Hcall_chk as [-> Hintr_none].
-      cbn [denote_instr]; rewrite Hintr_none.
-      eapply s1_cps_cfg_exc_bind.
-      - apply refine_prov_to_s1_cps.
-        eapply denote_call_args_stage1_exc_sim; [exact Hinv |].
-        intros x Hx; apply Huse_vars.
-        cbn [m2r_code_entry_uses full_instr_uses].
-        apply in_app_iff; left; apply in_app_iff; right; apply in_app_iff; left; exact Hx.
-      - intros U1 s1_a vs1 s2_a vs2 _ (-> & -> & -> & <-).
-        eapply s1_cps_cfg_exc_bind.
-        + eapply s1_cps_obs_eq;
-            [symmetry; apply interp_cfg_exc_obs_eq, denote_operand_bundles_nil_eq
-            | symmetry; apply interp_cfg_exc_obs_eq, denote_operand_bundles_nil_eq |].
-          apply refine_prov_to_s1_cps, refine_cfg_exc_ret;
-            exact (conj (Logic.eq_refl U) (conj Logic.eq_refl Logic.eq_refl)).
-        + intros U2 s1_ob _ s2_ob _ _ (-> & -> & ->).
+      destruct iid as [id_call_orig | vid_call_orig];
+        cbn [denote_instr]; rewrite Hintr_none;
+        [..].
+      all: eapply s1_cps_cfg_exc_bind;
+        [apply refine_prov_to_s1_cps;
+         eapply denote_call_args_stage1_exc_sim; [exact Hinv |];
+         intros x Hx; apply Huse_vars;
+         cbn [m2r_code_entry_uses full_instr_uses];
+         apply in_app_iff; left; apply in_app_iff; right; apply in_app_iff; left; exact Hx
+        | intros U1 s1_a vs1 s2_a vs2 _ (-> & -> & -> & <-);
           eapply s1_cps_cfg_exc_bind with
-            (RA := fun U_c s1_c s2_c rv1 rv2 =>
-                     exists P_c σ1_c σ2_c,
-                       incl U U_c /\
-                       incl P_unprom P_c /\
-                       rv1 = rv2 /\
-                       s1_c = (σ1_c, ((sf1, fstk1), g0)) /\
-                       s2_c = (σ2_c, ((sf2, fstk2), g0)) /\
-                       stage1_mem_inv U_c P_c G σ1_c σ2_c /\
-                       Memory_stack_frame_stack (state_memory_stack σ2_c) =
-                         Memory_stack_frame_stack (state_memory_stack σ2) /\
-                       genv_safe P_c g0).
-          * eapply s1_cps_cfg_exc_bind.
-            -- apply refine_prov_to_s1_cps, denote_exp_cfg_exc_sim.
-               intros x Hx; apply Huse_vars.
-               cbn [m2r_code_entry_uses full_instr_uses full_texp_uses snd].
-               apply in_app_iff; left; apply in_app_iff; left; exact Hx.
-            -- intros U3 s1_fn fv1 s2_fn fv2 _ (-> & -> & -> & <- & _).
-               intros k_c1 k_c2 Hk_c.
-               apply (m2r_cps_call_exc s1_lfp); apply s1_lfp_fold; left.
-               exists dt_c, (anns_cconv anns_c), fv1, vs1, P_unprom, G,
-                      σ1, σ2, (sf1, fstk1), (sf2, fstk2),
-                      (fun '(s1', y1) => Tau (k_c1 (s1', inr y1))),
-                      (fun '(s2', y2) => Tau (k_c2 (s2', inr y2))).
-               refine (conj Hinv (conj Hgenv (conj _ (conj Logic.eq_refl Logic.eq_refl)))).
-               intros U_c [s1_c rv1] [s2_c rv2] Hinc_c Hpost_c.
-               apply m2r_paco_fold; eapply RP_TauL; [reflexivity |]; eapply RP_TauR; [reflexivity |];
-                 apply m2r_paco_unfold.
-               exact (Hk_c U_c (s1_c, inr rv1) (s2_c, inr rv2) Hinc_c Hpost_c).
-          * intros U_c s1_c rv1 s2_c rv2 _
-              (P_c & σ1_c & σ2_c & HincU_c & HincP_c & <- & -> & -> & Hinv_c & Hfs_c & Hgenv_c).
-            pose proof (HTF_eq σ2 σ2_c Hfs_c HTF) as HTF_c.
-            pose proof (safe_locals_env_incl P_unprom P_c safe_sub (stack_vars sf2) HincP_c Hsafe_loc)
-              as Hsafe_c.
-            eapply s1_cps_cfg_exc_bind.
-            -- apply refine_prov_to_s1_cps.
-               exact (check_call_return_stage1_exc_sim ctx1 ctx2 RExc
-                        (ann_fun_attributes anns_c) (ann_ret_attributes anns_c)
-                        (metadata_range md) _ vs1 rv1
-                        U_c P_c G σ1_c σ2_c ((sf1, fstk1), g0) ((sf2, fstk2), g0) Hinv_c).
-            -- intros U_cr s1_cr res1 s2_cr res2 _ (-> & -> & -> & <-).
-               eapply s1_cps_cfg_exc_bind.
-               ++ destruct res1 as [ex | dv].
-                  ** apply refine_prov_to_s1_cps, refine_cfg_exc_raiseLLVM_both.
-                     exact (HRExc U_c P_c σ1_c σ2_c ex HincU_c HincP_c Hinv_c HTF_c Hgenv_c).
-                  ** apply refine_prov_to_s1_cps, refine_cfg_exc_ret.
-                     exact (conj (Logic.eq_refl U_c)
-                              (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl))).
-               ++ intros U_ret s1_ret dv1 s2_ret dv2 _ (-> & -> & -> & <-).
-                  destruct iid as [id0 | vid0].
-                  ** assert (Hid_nsafe : ~ In id0 safe_sub).
-                     { intros Hin_s.
-                       destruct (unique_alloca_code_def_is_alloca fargs bks id0 Hnd_bks (Hsub id0 Hin_s)
-                                   bk pre_c (INSTR_Call (dt_c, fn_e) args_c anns_c []) md post_c
-                                   Hbk Hsplit) as (? & ? & Hbad);
-                         discriminate Hbad. }
-                     apply refine_prov_to_s1_cps.
-                     eapply refine_prov_tau_star_l; [apply tau_star_cfg_exc_lwrite |].
-                     eapply refine_prov_tau_star_r; [apply tau_star_cfg_exc_lwrite |].
-                     apply refine_prov_ret.
-                     exists P_c, σ1_c, σ2_c,
-                            (upd_local_sf sf1 (Maps.add id0 dv1 (stack_vars sf1))),
-                            (upd_local_sf sf2 (Maps.add id0 dv1 (stack_vars sf2))).
-                     refine (conj HincU_c (conj HincP_c
-                               (conj Logic.eq_refl (conj Logic.eq_refl
-                                 (conj Logic.eq_refl (conj Logic.eq_refl
-                                   (conj Hinv_c (conj HTF_c (conj Hgenv_c
-                                     (conj (safe_locals_env_add_other P_c safe_sub id0 dv1 _ Hid_nsafe Hsafe_c)
-                                           _)))))))))).
-                     right; exists id0, dv1; repeat split; reflexivity.
-                  ** apply refine_prov_to_s1_cps, refine_cfg_exc_ret.
-                     exists P_c, σ1_c, σ2_c, sf1, sf2.
-                     refine (conj HincU_c (conj HincP_c
-                               (conj Logic.eq_refl (conj Logic.eq_refl
-                                 (conj Logic.eq_refl (conj Logic.eq_refl
-                                   (conj Hinv_c (conj HTF_c (conj Hgenv_c
-                                     (conj Hsafe_c (or_introl (conj Logic.eq_refl Logic.eq_refl)))))))))))).
+            (RA := fun U' s1' s2' (_ _ : unit) =>
+                     U' = U /\
+                     s1' = (σ1, ((sf1, fstk1), g0)) /\
+                     s2' = (σ2, ((sf2, fstk2), g0)));
+          [eapply s1_cps_obs_eq;
+             [symmetry; apply interp_cfg_exc_obs_eq, denote_operand_bundles_nil_eq
+             | symmetry; apply interp_cfg_exc_obs_eq, denote_operand_bundles_nil_eq |];
+           apply refine_prov_to_s1_cps, refine_cfg_exc_ret;
+           exact (conj (Logic.eq_refl U) (conj Logic.eq_refl Logic.eq_refl))
+          | intros U2 s1_ob _ s2_ob _ _ (-> & -> & ->);
+            eapply s1_cps_cfg_exc_bind with
+              (RA := fun U_c s1_c s2_c rv1 rv2 =>
+                       exists P_c σ1_c σ2_c,
+                         incl U U_c /\
+                         incl P_unprom P_c /\
+                         rv1 = rv2 /\
+                         s1_c = (σ1_c, ((sf1, fstk1), g0)) /\
+                         s2_c = (σ2_c, ((sf2, fstk2), g0)) /\
+                         stage1_mem_inv U_c P_c G σ1_c σ2_c /\
+                         Memory_stack_frame_stack (state_memory_stack σ2_c) =
+                           Memory_stack_frame_stack (state_memory_stack σ2) /\
+                         genv_safe P_c g0);
+            [eapply s1_cps_cfg_exc_bind;
+               [apply refine_prov_to_s1_cps, denote_exp_cfg_exc_sim;
+                intros x Hx; apply Huse_vars;
+                cbn [m2r_code_entry_uses full_instr_uses full_texp_uses snd];
+                apply in_app_iff; left; apply in_app_iff; left; exact Hx
+               | intros U3 s1_fn fv1 s2_fn fv2 _ (-> & -> & -> & <- & _);
+                 intros k_c1 k_c2 Hk_c;
+                 apply (m2r_cps_call_exc s1_lfp); apply s1_lfp_fold; left;
+                 exists dt_c, (anns_cconv anns_c), fv1, vs1, P_unprom, G,
+                        σ1, σ2, (sf1, fstk1), (sf2, fstk2),
+                        (fun '(s1', y1) => Tau (k_c1 (s1', inr y1))),
+                        (fun '(s2', y2) => Tau (k_c2 (s2', inr y2)));
+                 refine (conj Hinv (conj Hgenv (conj _ (conj _ _))));
+                 [intros U_c [s1_c rv1] [s2_c rv2] Hinc_c Hpost_c;
+                  apply m2r_paco_fold; eapply RP_TauL; [reflexivity |]; eapply RP_TauR; [reflexivity |];
+                  apply m2r_paco_unfold;
+                  exact (Hk_c U_c (s1_c, inr rv1) (s2_c, inr rv2) Hinc_c Hpost_c)
+                 | reflexivity | reflexivity]]
+            | intros U_c s1_c rv1 s2_c rv2 _
+                (P_c & σ1_c & σ2_c & HincU_c & HincP_c & <- & -> & -> & Hinv_c & Hfs_c & Hgenv_c);
+              pose proof (HTF_eq σ2 σ2_c Hfs_c HTF) as HTF_c;
+              pose proof (safe_locals_env_incl P_unprom P_c safe_sub (stack_vars sf2) HincP_c Hsafe_loc)
+                as Hsafe_c;
+              eapply s1_cps_cfg_exc_bind;
+                [apply refine_prov_to_s1_cps;
+                 exact (check_call_return_stage1_exc_sim ctx1 ctx2 RExc
+                          (ann_fun_attributes anns_c) (ann_ret_attributes anns_c)
+                          (metadata_range md) _ vs1 rv1
+                          U_c P_c G σ1_c σ2_c ((sf1, fstk1), g0) ((sf2, fstk2), g0) Hinv_c)
+                | intros U_cr s1_cr res1 s2_cr res2 _ (-> & -> & -> & <-);
+                  eapply s1_cps_cfg_exc_bind with
+                    (RA := fun U' s1' s2' r1 r2 =>
+                             U' = U_c /\
+                             s1' = (σ1_c, ((sf1, fstk1), g0)) /\
+                             s2' = (σ2_c, ((sf2, fstk2), g0)) /\
+                             r1 = r2);
+                    [destruct res1 as [ex | dv];
+                     [apply refine_prov_to_s1_cps, refine_cfg_exc_raiseLLVM_both;
+                      exact (HRExc U_c P_c σ1_c σ2_c ex HincU_c HincP_c Hinv_c HTF_c Hgenv_c)
+                     | apply refine_prov_to_s1_cps, refine_cfg_exc_ret;
+                       exact (conj (Logic.eq_refl U_c)
+                                (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl)))]
+                    | intros U_ret s1_ret dv1 s2_ret dv2 _ (-> & -> & -> & <-);
+                      lazymatch goal with
+                      | |- s1_cps _ _ _ (interp_cfg_exc _ (lwrite ?id0 _) _) _ =>
+                          assert (Hid_nsafe : ~ In id0 safe_sub) by
+                            (intros Hin_s;
+                             destruct (unique_alloca_code_def_is_alloca fargs bks id0 Hnd_bks (Hsub id0 Hin_s)
+                                         bk pre_c (INSTR_Call (dt_c, fn_e) args_c anns_c []) md post_c
+                                         Hbk Hsplit) as (? & ? & Hbad);
+                             discriminate Hbad);
+                          apply refine_prov_to_s1_cps;
+                          eapply refine_prov_tau_star_l; [apply tau_star_cfg_exc_lwrite |];
+                          eapply refine_prov_tau_star_r; [apply tau_star_cfg_exc_lwrite |];
+                          apply refine_prov_ret;
+                          exists P_c, σ1_c, σ2_c,
+                                 (upd_local_sf sf1 (Maps.add id0 dv1 (stack_vars sf1))),
+                                 (upd_local_sf sf2 (Maps.add id0 dv1 (stack_vars sf2)));
+                          refine (conj HincU_c (conj HincP_c
+                                    (conj Logic.eq_refl (conj Logic.eq_refl
+                                      (conj Logic.eq_refl (conj Logic.eq_refl
+                                        (conj Hinv_c (conj HTF_c (conj Hgenv_c
+                                          (conj (safe_locals_env_add_other P_c safe_sub id0 dv1 _ Hid_nsafe Hsafe_c)
+                                                _))))))))));
+                          right; exists id0, dv1; repeat split; reflexivity
+                      | |- _ =>
+                          apply refine_prov_to_s1_cps, refine_cfg_exc_ret;
+                          exists P_c, σ1_c, σ2_c, sf1, sf2;
+                          refine (conj HincU_c (conj HincP_c
+                                    (conj Logic.eq_refl (conj Logic.eq_refl
+                                      (conj Logic.eq_refl (conj Logic.eq_refl
+                                        (conj Hinv_c (conj HTF_c (conj Hgenv_c
+                                          (conj Hsafe_c (or_introl (conj Logic.eq_refl Logic.eq_refl))))))))))))
+                      end]]]]].
     Qed.
 
     Local Lemma s1_other_code_exc_cps
@@ -17039,7 +18290,7 @@ Section MemoryAndSerialization.
       revert pre_c U P_unprom σ1 σ2 sf1 sf2 Hsplit Hchk HRExc Hinv HTF Hgenv Hsafe_loc Hvars.
       induction cd as [| im rest IH];
         intros pre_c U P_unprom σ1 σ2 sf1 sf2 Hsplit Hchk HRExc Hinv HTF Hgenv Hsafe_loc Hvars;
-        unfold denote_code; cbn [loop_monad forallb].
+        unfold denote_code; cbn [forallb] in Hchk; cbn [loop_monad].
       - apply refine_prov_to_s1_cps, refine_cfg_exc_ret.
         exists P_unprom, σ1, σ2, sf1, sf2.
         refine (conj (incl_refl U) (conj (incl_refl P_unprom)
@@ -17054,7 +18305,7 @@ Section MemoryAndSerialization.
         { intros x Hx; apply Hvars; intros ->.
           unfold check_other_instr_for_slot in Hchk_im.
           rewrite andb_true_iff, negb_true_iff in Hchk_im.
-          exact (in_raw_ids_false _ _ (proj1 Hchk_im) Hx). }
+          exact (proj1 (in_raw_ids_false _ _) (proj1 Hchk_im) Hx). }
         eapply s1_cps_cfg_exc_bind.
         + exact (s1_other_instr_exc_cps RExc TF fargs bks bk pre_c (rest ++ post_c)
                    safe_sub p im va1 va2 U P_unprom G σ1 σ2 sf1 sf2 fstk1 fstk2
@@ -17068,9 +18319,9 @@ Section MemoryAndSerialization.
           assert (Hvars1 : forall x, x <> p -> Maps.lookup x (stack_vars sf1_m) = Maps.lookup x (stack_vars sf2_m)).
           { intros x Hne; destruct Hsf_step as [[-> ->] | (id0 & v & _ & -> & ->)];
               [exact (Hvars x Hne) |].
-            cbn [stack_vars upd_local_sf]; destruct (raw_id_eqb_spec x id0) as [-> | Hx_id];
-              [rewrite !lookup_add_eq; reflexivity
-              | rewrite !lookup_add_neq by exact Hx_id; exact (Hvars x Hne)]. }
+            cbn [stack_vars upd_local_sf Maps.lookup Maps.add Map_rmap]; destruct (raw_id_eqb x id0) eqn:Ex_id; [apply raw_id_eqb_spec in Ex_id; subst x | apply raw_id_eqb_neq in Ex_id; rename Ex_id into Hx_id];
+              [rewrite !RMF.F.add_eq_o by reflexivity; reflexivity
+              | rewrite !RMF.F.add_neq_o by (intros Heq'; exact (Hx_id (Logic.eq_sym Heq'))); exact (Hvars x Hne)]. }
           assert (Hsplit_rest : blk_code bk = (pre_c ++ [im]) ++ rest ++ post_c)
             by (rewrite <- app_assoc; exact Hsplit).
           eapply s1_cps_weaken.
@@ -17171,7 +18422,7 @@ Section MemoryAndSerialization.
         unfold denote_code; cbn [loop_monad].
         apply refine_prov_to_s1_cps, refine_cfg_exc_ret.
         exists P_unprom, gs, σ1, σ2, sf1, sf2;
-          repeat split; try apply incl_refl; assumption.
+          repeat match goal with |- _ /\ _ => split end; try apply incl_refl; try reflexivity; assumption.
       - rewrite andb_true_iff in Hchk; destruct Hchk as [Hchk_im Hchk_rest].
         assert (Hp_nd_im : ~ In p (instr_id_defs (fst (fst im))))
           by (destruct im as [[iid_i ?] ?]; intros Hp; apply Hp_nd_cd, in_app_iff; left; exact Hp).
@@ -17208,18 +18459,18 @@ Section MemoryAndSerialization.
           * intros U1 s1_m _ s2_m _ _ (dv_ld & -> & _ & _ & -> & ->).
             assert (Hlk_p1 : Maps.lookup p (Maps.add dst dv_ld (stack_vars sf1)) =
                              Some (DVALUE_Base (DVALUE_Pointer (gs_pt gs))))
-              by (rewrite lookup_add_neq by (intros ->; exact (Hdst_ne_p Logic.eq_refl)); exact Hlk_p).
+              by (cbn [Maps.lookup Maps.add Map_rmap]; rewrite RMF.F.add_neq_o by (intros ->; exact (Hdst_ne_p Logic.eq_refl)); exact Hlk_p).
             assert (Hlk_cur1 : Maps.lookup cur_reg (Maps.add dst dv_ld (stack_vars sf2)) =
                                Some (DVALUE_Base (gs_db gs)))
-              by (rewrite lookup_add_neq by exact Hcur_ne_dst; exact Hlk_cur).
+              by (cbn [Maps.lookup Maps.add Map_rmap]; rewrite RMF.F.add_neq_o by (intros Heq'; exact (Hcur_ne_dst (Logic.eq_sym Heq'))); exact Hlk_cur).
             assert (Hsafe1 : safe_locals_env P_unprom safe_no_p (Maps.add dst dv_ld (stack_vars sf2)))
               by (apply safe_locals_env_add_other; assumption).
             assert (Hvars1 : forall x, In x avoid0 -> x <> p ->
                                Maps.lookup x (Maps.add dst dv_ld (stack_vars sf1)) =
                                Maps.lookup x (Maps.add dst dv_ld (stack_vars sf2))).
-            { intros x Hx Hne; destruct (raw_id_eqb_spec x dst) as [-> | Hxd];
-                [rewrite !lookup_add_eq; reflexivity
-                | rewrite !lookup_add_neq by exact Hxd; exact (Hvars x Hx Hne)]. }
+            { intros x Hx Hne; cbn [Maps.lookup Maps.add Map_rmap]; destruct (raw_id_eqb x dst) eqn:Exd; [apply raw_id_eqb_spec in Exd; subst x | apply raw_id_eqb_neq in Exd; rename Exd into Hxd];
+                [rewrite !RMF.F.add_eq_o by reflexivity; reflexivity
+                | rewrite !RMF.F.add_neq_o by (intros Heq'; exact (Hxd (Logic.eq_sym Heq'))); exact (Hvars x Hx Hne)]. }
             exact (IH (pre_c ++ [_]) cur_reg avoid rest' er av' U P_unprom gs σ1 σ2
                      (upd_local_sf sf1 (Maps.add dst dv_ld (stack_vars sf1)))
                      (upd_local_sf sf2 (Maps.add dst dv_ld (stack_vars sf2)))
@@ -17240,7 +18491,7 @@ Section MemoryAndSerialization.
                       In x (full_exp_uses val_exp) ->
                       Maps.lookup x (stack_vars sf1) = Maps.lookup x (stack_vars sf2)).
             { intros x Hx; apply Hvars.
-              - apply Hval_av0_fn; cbn [m2r_code_entry_uses full_instr_uses full_texp_uses snd];
+              - apply (Hval_av0_fn x (or_introl Logic.eq_refl)); cbn [m2r_code_entry_uses full_instr_uses full_texp_uses snd];
                   apply in_app_iff; left; apply in_app_iff; left; exact Hx.
               - intros ->; exact (Hnin_p_val Hx). }
             unfold denote_code; cbn [loop_monad].
@@ -17254,14 +18505,14 @@ Section MemoryAndSerialization.
                  by (intros z Hz; right; exact (Hinc_av z Hz)).
                assert (Hlk_st : Maps.lookup st_reg (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2)) =
                                 Some (DVALUE_Base (gs_db (gs_set_val gs db' bs'))))
-                 by (cbn [gs_db gs_set_val]; apply lookup_add_eq).
+                 by (cbn [gs_db gs_set_val Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity).
                assert (Hsafe1 : safe_locals_env P_unprom safe_no_p
                                   (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2)))
                  by (apply safe_locals_env_add_other; assumption).
                assert (Hvars1 : forall x, In x avoid0 -> x <> p ->
                                   Maps.lookup x (stack_vars sf1) =
                                   Maps.lookup x (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2))).
-               { intros x Hx Hne; rewrite lookup_add_neq by (intros ->; exact (Hst_nin0 Hx));
+               { intros x Hx Hne; cbn [Maps.lookup Maps.add Map_rmap]; rewrite RMF.F.add_neq_o by (intros ->; exact (Hst_nin0 Hx));
                    exact (Hvars x Hx Hne). }
                exact (IH (pre_c ++ [_]) st_reg (st_reg :: avoid) rest' er av'
                         U P_unprom (gs_set_val gs db' bs') σ1' σ2 sf1
@@ -17277,7 +18528,7 @@ Section MemoryAndSerialization.
               - exact (Huses_av0 im x (or_introl Logic.eq_refl) Hx).
               - intros ->; unfold check_other_instr_for_slot in Hchk_im;
                   rewrite andb_true_iff, negb_true_iff in Hchk_im;
-                  exact (in_raw_ids_false _ _ (proj1 Hchk_im) Hx). }
+                  exact (proj1 (in_raw_ids_false _ _) (proj1 Hchk_im) Hx). }
             unfold denote_code; cbn [loop_monad].
             eapply s1_cps_cfg_exc_bind.
             -- exact (s1_other_instr_exc_cps RExc
@@ -17308,12 +18559,12 @@ Section MemoryAndSerialization.
                    by (intros ->; apply Hp_nd_im; rewrite Heq_iid; left; reflexivity).
                  assert (Hcur_ne_id : cur_reg <> id0)
                    by (intros ->; exact (Hcur_nin0 Hid_av0)).
-                 cbn [stack_vars upd_local_sf]; split;
-                   [rewrite lookup_add_neq by exact Hp_ne_id; exact Hlk_p | split;
-                   [rewrite lookup_add_neq by exact Hcur_ne_id; exact Hlk_cur |]].
-                 intros x Hx Hne; destruct (raw_id_eqb_spec x id0) as [-> | Hx_id];
-                   [rewrite !lookup_add_eq; reflexivity
-                   | rewrite !lookup_add_neq by exact Hx_id; exact (Hvars x Hx Hne)]. }
+                 cbn [stack_vars upd_local_sf Maps.lookup Maps.add Map_rmap]; split;
+                   [rewrite RMF.F.add_neq_o by (intros Heq'; exact (Hp_ne_id (Logic.eq_sym Heq'))); exact Hlk_p | split;
+                   [rewrite RMF.F.add_neq_o by (intros Heq'; exact (Hcur_ne_id (Logic.eq_sym Heq'))); exact Hlk_cur |]].
+                 intros x Hx Hne; destruct (raw_id_eqb x id0) eqn:Ex_id; [apply raw_id_eqb_spec in Ex_id; subst x | apply raw_id_eqb_neq in Ex_id; rename Ex_id into Hx_id];
+                   [rewrite !RMF.F.add_eq_o by reflexivity; reflexivity
+                   | rewrite !RMF.F.add_neq_o by (intros Heq'; exact (Hx_id (Logic.eq_sym Heq'))); exact (Hvars x Hx Hne)]. }
                destruct Hstep_env as (Hlk_p1 & Hlk_cur1 & Hvars1).
                eapply s1_cps_weaken.
                ++ exact (IH (pre_c ++ [im]) cur_reg avoid rest' er av' U1 P1 gs σ1_m σ2_m sf1_m sf2_m
@@ -17350,12 +18601,17 @@ Section MemoryAndSerialization.
         (interp_cfg_model ctx2 (inr <$> external_call dt fv vs) (σ2, (ls2, g0))).
     Proof using.
       unfold Functor.fmap, Functor_itree, ITree.map.
-      eapply refine_cfg_model_bind.
+      eapply refine_cfg_model_bind with
+        (RA := fun U' '(s1', r1) '(s2', r2) =>
+                 incl U U' /\
+                 s1' = (σ1, (ls1, g0)) /\
+                 s2' = (σ2, (ls2, g0)) /\
+                 r1 = r2).
       - unfold external_call, Subevent.trigger; try unfold trigger_cast.
         eapply refine_prov_obs_eq;
           [symmetry; apply interp_cfg_model_non_intr; reflexivity
           | symmetry; apply interp_cfg_model_non_intr; reflexivity |].
-        cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun inr1 inl1].
+        cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
         unfold fused_trigger_prov.
         eapply refine_prov_obs_eq;
           [symmetry; apply Eqit.bind_bind | symmetry; apply Eqit.bind_bind |].
@@ -17447,7 +18703,18 @@ Section MemoryAndSerialization.
         rewrite forallb_forall in Hbks_chk; specialize (Hbks_chk bk Hin_bk).
         rewrite andb_true_iff in Hbks_chk; destruct Hbks_chk as [Hcd_safe Hni_tm].
         unfold denote_block.
-        eapply s1_cps_cfg_exc_bind.
+        eapply s1_cps_cfg_exc_bind with
+          (RA := fun U_bd s1_bd s2_bd bd1 bd2 =>
+                   exists P_cd σ1_cd σ2_cd sf2_cd,
+                     incl U0 U_bd /\
+                     incl P0 P_cd /\
+                     bd1 = bd2 /\
+                     s1_bd = (σ1_cd, ((sf2_cd, fstk1), g0)) /\
+                     s2_bd = (σ2_cd, ((sf2_cd, fstk2), g0)) /\
+                     stage1_mem_inv U_bd P_cd G σ1_cd σ2_cd /\
+                     top_frame_unprom_from fs0 G (state_memory_stack σ2_cd) /\
+                     genv_safe P_cd g0 /\
+                     safe_locals_env P_cd safe_locals (stack_vars sf2_cd)).
         + eapply s1_cps_cfg_exc_bind.
           * apply refine_prov_to_s1_cps.
             exact (denote_phis_same_exc_sim ctx1 ctx2
@@ -17460,8 +18727,8 @@ Section MemoryAndSerialization.
             { apply write_phi_dvs_safe_locals; [| exact Hsafe_loc].
               intros q Hq Hin_dvs; rewrite Hfst_dvs in Hin_dvs.
               apply in_map_iff in Hin_dvs as ([[x_ph ph_q] md_q] & <- & Hpe_in).
-              exact (unique_alloca_not_phi_def fargs (blks c) q Hnd_bks Hq
-                       bk q ph_q md_q Hin_bk Hpe_in Logic.eq_refl). }
+              exact (unique_alloca_not_phi_def fargs (blks c) x_ph Hnd_bks Hq
+                       bk x_ph ph_q md_q Hin_bk Hpe_in Logic.eq_refl). }
             set (p_dummy := fresh_name "m2r_unused" (flat_map m2r_code_entry_uses (blk_code bk))).
             assert (Hchk_cd : forallb (check_other_instr_for_slot true safe_locals p_dummy) (blk_code bk) = true)
               by (apply safe_mem_code_to_check_other; [apply fresh_name_not_in | exact Hcd_safe]).
@@ -17556,7 +18823,11 @@ Section MemoryAndSerialization.
       destruct (dc_param_attrs (df_prototype d)) as [ret_attrs args_attrs].
       set (fname := show_raw_id (dc_name (df_prototype d))).
       set (fs0 := Memory_stack_frame_stack (state_memory_stack σ2_in)).
-      eapply s1_cps_cfg_bind.
+      eapply s1_cps_cfg_bind with
+        (RA := fun U' '(s1', _) '(s2', _) =>
+                 U' = U0 /\
+                 s1' = (σ1_in, ((sf_c1, fstk_c1), g0)) /\
+                 s2' = (σ2_in, ((sf_c2, fstk_c2), g0))).
       - apply refine_prov_to_s1_cps.
         eapply refine_cfg_EOU; [apply refine_EOU_refl |].
         intros [] [] _; exact (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl)).
@@ -17635,7 +18906,8 @@ Section MemoryAndSerialization.
                   ** intros U' s1' s2' j' _ Hli'; apply s1_lfp_fold; right; left.
                      exists d, (Some varg1), fs0, (pr_va :: U0), (pr_va :: P0), G,
                             fstk1, fstk2, s1', s2', j', k_o1, k_o2.
-                     exact (conj Hd (conj Hli' (conj Hk_o (conj Logic.eq_refl Logic.eq_refl)))).
+                     rewrite !denote_ocfg_map_eq_iter.
+                     refine (conj Hd (conj Hli' (conj Hk_o (conj _ _)))); reflexivity.
                   ** exact Hk_o.
                ++ intros U_ocfg s1_ocfg r_ocfg1 s2_ocfg r_ocfg2 _ [<- Hexit_ocfg].
                   destruct r_ocfg1 as [bid_miss | uv_ret].
@@ -17647,7 +18919,8 @@ Section MemoryAndSerialization.
                          rv1 = rv2 /\
                          s1_unprom_exit_rel fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2 U_rv s1_rv s2_rv).
                { destruct rv1 as [ex1 | v1], rv2 as [ex2 | v2]; cbn [exc_post] in Hrv_post;
-                   try contradiction; exact Hrv_post. }
+                   try contradiction;
+                   destruct Hrv_post as [<- Hpost_r]; exact (conj Logic.eq_refl Hpost_r). }
                clear Hrv_post.
                destruct Hrv_unif as [<- (HincU_rv & P_e & σ1_e & σ2_e & sf1_e & sf2_e &
                                          HincP_e & -> & -> & Hinv_e & Htf_e & Hgenv_e)].
@@ -17738,7 +19011,7 @@ Section MemoryAndSerialization.
         rewrite Efind_cur'.
         pose proof (Hall_p1 bk_cur phi_r cd_cur' end_r Hin_p1_cur)
           as (Hphi_nin0 & Hend_nin0 & Hcur_p1_spec).
-        destruct (raw_id_eqb_spec (blk_id bk_cur) (init c)) as [Hbad | Hne_cur_id];
+        destruct (raw_id_eqb (blk_id bk_cur) (init c)) eqn:Ecur_id; [apply raw_id_eqb_spec in Ecur_id; rename Ecur_id into Hbad | apply raw_id_eqb_neq in Ecur_id; rename Ecur_id into Hne_cur_id];
           [exfalso; congruence |].
         destruct Hcur_p1_spec as (av_in & av_out & Hinc_avin & Erw_cur).
         destruct (Hbks_other bk_cur Hin_cur Hne_cur_id) as [Hbk_cur_chk Hp_nd_bk_cur].
@@ -17747,7 +19020,7 @@ Section MemoryAndSerialization.
         destruct Hbk_cur_chk as (((Hphi_np & Hcd_cur) & Htm_np) & Hni_cur).
         apply in_raw_ids_false in Hphi_np; apply in_raw_ids_false in Htm_np.
         set (preds_cur := List.filter (fun b_p => in_raw_ids (blk_id bk_cur) (m2r_block_succs b_p)) (blks c)).
-        set (inc_cur := List.map (fun b_p => (blk_id b_p, EXP_Ident (ID_Local (lookup_end_reg end_map (blk_id b_p) init_reg)))) preds_cur).
+        set (inc_cur := List.map (fun b_p => (blk_id b_p, @EXP_Ident dtyp (ID_Local (lookup_end_reg end_map (blk_id b_p) init_reg)))) preds_cur).
         assert (Hassoc_cur :
                   assoc bf2 inc_cur =
                   Some (EXP_Ident (ID_Local (lookup_end_reg end_map bf2 init_reg)))).
@@ -17755,7 +19028,7 @@ Section MemoryAndSerialization.
           - unfold inc_cur; rewrite map_map; cbn [fst].
             exact (m2r_nodup_map_filter blk_id _ (blks c) Hnd_bks).
           - unfold inc_cur; rewrite <- Hid_pred at 1 2.
-            apply (in_map (fun b_p => (blk_id b_p, EXP_Ident (ID_Local (lookup_end_reg end_map (blk_id b_p) init_reg))))).
+            apply (in_map (fun b_p => (blk_id b_p, @EXP_Ident dtyp (ID_Local (lookup_end_reg end_map (blk_id b_p) init_reg))))).
             unfold preds_cur; apply filter_In; split; [exact Hin_pred |].
             rewrite Hid_cur; apply in_raw_ids_spec, Hsucc_pred. }
         assert (Hphi_vars :
@@ -17767,7 +19040,31 @@ Section MemoryAndSerialization.
              exact (m2r_phi_entry_uses_in_block bk_cur pe x Hpe Hx_pe)
             | intros ->; exact (Hphi_np Hx)]. }
         unfold denote_block; cbn [blk_phis blk_code blk_term]; fold preds_cur inc_cur.
-        eapply s1_cps_cfg_exc_bind.
+        eapply s1_cps_cfg_exc_bind with
+          (RA := fun U_bd s1_bd s2_bd bd1 bd2 =>
+                   exists (P_cd : list N) gs_cd σ1_cd σ2_cd
+                          (sf1_cd sf2_cd : @stack_frame (@ParamsV IP IPT)),
+                     incl U0 U_bd /\
+                     incl P0 P_cd /\
+                     bd1 = bd2 /\
+                     s1_bd = (σ1_cd, ((sf1_cd, fstk1), g0)) /\
+                     s2_bd = (σ2_cd, ((sf2_cd, fstk2), g0)) /\
+                     gs_dt gs_cd = dt /\
+                     Maps.lookup p (stack_vars sf1_cd) =
+                       Some (@DVALUE_Base (@ParamsV IP IPT) (@DVALUE_Pointer (@ParamsV IP IPT) (gs_pt gs_cd))) /\
+                     lookup_end_reg end_map bs2 init_reg = end_r /\
+                     Maps.lookup end_r (stack_vars sf2_cd) =
+                       Some (@DVALUE_Base (@ParamsV IP IPT) (gs_db gs_cd)) /\
+                     stage1_mem_inv U_bd P_cd (gs_cd :: G) σ1_cd σ2_cd /\
+                     top_frame_prom_from fs0 gs_cd G (state_memory_stack σ2_cd) /\
+                     genv_safe P_cd g0 /\
+                     safe_locals_env P_cd safe_no_p (stack_vars sf2_cd) /\
+                     (forall x, In x avoid0 -> x <> p ->
+                        Maps.lookup x (stack_vars sf1_cd) = Maps.lookup x (stack_vars sf2_cd)) /\
+                     match bd1 with
+                     | inl bid_target => In bid_target (m2r_block_succs bk_cur)
+                     | inr _ => True
+                     end).
         + eapply s1_cps_cfg_exc_bind.
           * apply refine_prov_to_s1_cps.
             exact (denote_phis_stage1_prom_sim ctx1 ctx2
@@ -17794,7 +19091,7 @@ Section MemoryAndSerialization.
                       Some (DVALUE_Base (gs_db gs_l))).
             { cbn [write_phi_dvs];
                 rewrite (write_phi_dvs_lookup_not_in dvs _ phi_r Hphi_nin_dvs);
-                apply lookup_add_eq. }
+                cbn [Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity. }
             assert (Hsafe_ph :
                       safe_locals_env P_l safe_no_p
                         (write_phi_dvs ((phi_r, DVALUE_Base (gs_db gs_l)) :: dvs) (stack_vars sf2_l))).
@@ -17803,14 +19100,15 @@ Section MemoryAndSerialization.
               - subst q; exact (Hphi_nin0 (Hsafe_av0 _ Hq)).
               - rewrite Hfst_dvs in Hin_dvs.
                 apply in_map_iff in Hin_dvs as ([[x_ph ph_q] md_q] & <- & Hpe_in).
-                exact (unique_alloca_not_phi_def fargs (blks c) q Hnd_bks
-                         (Hsub_safe q Hq) bk_cur q ph_q md_q Hin_cur Hpe_in Logic.eq_refl). }
+                exact (unique_alloca_not_phi_def fargs (blks c) x_ph Hnd_bks
+                         (Hsub_safe x_ph Hq) bk_cur x_ph ph_q md_q Hin_cur Hpe_in Logic.eq_refl). }
             assert (Hvars_ph :
                       forall x, In x avoid0 -> x <> p ->
                         Maps.lookup x (write_phi_dvs dvs (stack_vars sf1_l)) =
                         Maps.lookup x (write_phi_dvs ((phi_r, DVALUE_Base (gs_db gs_l)) :: dvs) (stack_vars sf2_l))).
             { intros x Hx Hne; cbn [write_phi_dvs]; apply write_phi_dvs_lookup_agree.
-              rewrite (lookup_add_neq x phi_r) by (intros ->; exact (Hphi_nin0 Hx)).
+              cbn [Maps.lookup Maps.add Map_rmap];
+              rewrite RMF.F.add_neq_o by (intros ->; exact (Hphi_nin0 Hx)).
               exact (Hvars_l x Hx Hne). }
             assert (Hsplit_cur : blk_code bk_cur = [] ++ blk_code bk_cur ++ [])
               by (rewrite app_nil_r; reflexivity).
@@ -17863,7 +19161,7 @@ Section MemoryAndSerialization.
                { intros x Hx; apply Hvars_cd.
                  - apply (Hblk_uses_av0 bk_cur x Hin_cur), m2r_term_entry_uses_in_block.
                    rewrite Etm_cur; cbn [m2r_term_entry_uses]; apply in_app_iff; left; exact Hx.
-                 - intros ->; apply Htm_np; rewrite Etm_cur;
+                 - intros ->; apply Htm_np; try rewrite Etm_cur;
                      cbn [m2r_term_entry_uses]; apply in_app_iff; left; exact Hx. }
                apply refine_prov_to_s1_cps; eapply refine_prov_weaken.
                ++ apply (denote_non_invoke_term_exc_sim ctx1 ctx2
@@ -17879,7 +19177,9 @@ Section MemoryAndSerialization.
                   destruct res1_t as [ex1 | bd1], res2_t as [ex2 | bd2]; cbn [exc_post];
                     try (intros H; exact H).
                   intros (-> & -> & -> & <- & Hsucc_cur).
-                  exists P_cd, gs_cd, σ1_cd, σ2_cd, sf1_cd, sf2_cd.
+                  destruct bd1 as [bid_t | dv_t];
+                    [cbn in Hsucc_cur |- *; unfold m2r_block_succs; rewrite Etm_cur |];
+                  exists P_cd, gs_cd, σ1_cd, σ2_cd, sf1_cd, sf2_cd;
                   exact (conj HincU_c (conj HincP_c (conj Logic.eq_refl (conj Logic.eq_refl
                            (conj Logic.eq_refl (conj Hdt_cd (conj Hlk_p_cd
                              (conj Hlk_end_cur (conj Hlk_er_cd (conj Hinv_cd
@@ -17892,7 +19192,7 @@ Section MemoryAndSerialization.
           destruct bd1 as [bid_tgt | dv_cur].
           * apply refine_prov_to_s1_cps, refine_cfg_exc_ret.
             assert (Hsucc_bk_cur : In bid_tgt (m2r_block_succs bk_cur))
-              by (unfold m2r_block_succs; destruct (blk_term bk_cur) as [[? ?] ?]; exact Hsucc_cur).
+              by exact Hsucc_cur.
             assert (Hne_tgt : bid_tgt <> init c).
             { intros Heq_t; apply Hno_entry_pred; rewrite <- Heq_t.
               unfold m2r_all_succs; apply in_flat_map; exists bk_cur; split; assumption. }
@@ -17985,7 +19285,7 @@ Section MemoryAndSerialization.
       set (avoid2 := phi_regs ++ avoid1).
       destruct (rewrite_code_for_slot p dt init_reg avoid2 post_al)
         as [[post_al' init_end_reg] avoid3] eqn:Erw_post.
-      set (init_op := (IId init_reg, INSTR_Op (mk_copy_exp (DTYPE_Base (DTYPE_I 1)) dt EXP_Poison), [])).
+      set (init_op := (IId init_reg, INSTR_Op (mk_copy_exp (DTYPE_Base (DTYPE_I 1)) dt EXP_Poison), @nil (metadata dtyp))).
       set (init_code' := pre_al ++ (IId p, INSTR_Alloca dt anns_al, md_al) :: init_op :: post_al').
       set (bk_phis := List.combine (blks c) phi_regs).
       destruct (rewrite_non_entry_blocks_pass1 (init c) p dt init_end_reg init_code' avoid3 bk_phis)
@@ -17993,7 +19293,7 @@ Section MemoryAndSerialization.
       assert (Hc'_eq :
         c' = {| init := init c;
                 blks := build_promoted_blocks (init c) dt init_reg (blks c) pass1_out;
-                args := args c |}).
+                args := CFG.args c |}).
       { unfold c', promote_slot_in_cfg; cbn zeta.
         fold avoid0 init_reg avoid1 phi_regs avoid2.
         rewrite Erw_post; fold init_op init_code' bk_phis.
@@ -18013,7 +19313,9 @@ Section MemoryAndSerialization.
       destruct (rewrite_non_entry_blocks_pass1_spec avoid0 (init c) p dt init_end_reg init_code'
                   avoid3 bk_phis pass1_out avoid_out Epass1 Hinc_av3 Hinit_er_nin0 Hphis_nin0)
         as (Hbks_p1 & _ & _ & Hall_p1).
-      unfold bk_phis in Hbks_p1; rewrite (combine_fst_eq _ _ Hlen_pr) in Hbks_p1.
+      assert (Hbks_eq : List.map (fun '(bk, _, _, _) => bk) pass1_out = blks c)
+        by (etransitivity; [exact Hbks_p1 | exact (combine_fst_eq _ _ Hlen_pr)]);
+        clear Hbks_p1; rename Hbks_eq into Hbks_p1.
       set (sp := {| sps_fargs    := fargs;
                     sps_c        := c;
                     sps_b_init   := b_init;
@@ -18029,18 +19331,22 @@ Section MemoryAndSerialization.
         refine (conj Hnd_bks (conj Hno_entry_pred (conj Hin_init (conj Hid_init (conj Hsc (conj _ (conj Hbks_p1 Hall_p1))))))).
         intros bk Hbk Hne; split.
         - pose proof Ebks_chk as Hb; rewrite forallb_forall in Hb; specialize (Hb bk Hbk).
-          destruct (raw_id_eqb_spec (blk_id bk) (init c)) as [Hbad | _]; [exfalso; congruence | exact Hb].
+          destruct (raw_id_eqb (blk_id bk) (init c)) eqn:Ebad; [apply raw_id_eqb_spec in Ebad; rename Ebad into Hbad | clear Ebad]; [exfalso; exact (Hne Hbad) | exact Hb].
         - exact (Hp_nd_other bk Hbk (fun Heq => Hne (eq_trans Heq Hid_init))). }
       set (end_map := sps_end_map sp).
       assert (Hnd_end_map : NoDup (List.map fst end_map))
-        by (unfold end_map, sps_end_map; cbn [sps_pass1]; rewrite pass1_end_map_fst, Hbks_p1; exact Hnd_bks).
+        by (unfold end_map, sps_end_map, sp; cbn [sps_pass1]; rewrite pass1_end_map_fst, Hbks_p1; exact Hnd_bks).
       pose proof (pass1_find_block_spec (init c) dt init_reg (blks c) pass1_out Hbks_p1)
         as [_ Hfb_some]; cbv zeta in Hfb_some; fold end_map in Hfb_some.
       unfold denote_function; cbn [df_prototype df_args df_instrs]; fold fargs c c'.
       destruct (dc_param_attrs (df_prototype df)) as [ret_attrs args_attrs].
       set (fname := show_raw_id (dc_name (df_prototype df))).
       set (fs0 := Memory_stack_frame_stack (state_memory_stack σ2_in)).
-      eapply s1_cps_cfg_bind.
+      eapply s1_cps_cfg_bind with
+        (RA := fun U' '(s1', _) '(s2', _) =>
+                 U' = U0 /\
+                 s1' = (σ1_in, ((sf_c1, fstk_c1), g0)) /\
+                 s2' = (σ2_in, ((sf_c2, fstk_c2), g0))).
       - apply refine_prov_to_s1_cps.
         eapply refine_cfg_EOU; [apply refine_EOU_refl |].
         intros [] [] _; exact (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl)).
@@ -18116,36 +19422,56 @@ Section MemoryAndSerialization.
                      { apply lookup_end_reg_in_nodup; [exact Hnd_end_map |].
                        unfold end_map, sps_end_map; cbn [sps_pass1]; rewrite <- Hid_init.
                        exact (in_map (fun '(bk, _, _, er) => (blk_id bk, er)) _ _ Hin_p1_init). }
-                     unfold ocfg_step_body, sps_blks'; cbn [sps_c sps_dt sps_init_reg sps_pass1 ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+                     unfold ocfg_step_body, sps_blks', sp; cbn [sps_c sps_dt sps_init_reg sps_pass1 ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
                      rewrite ScopeTheory.ocfg_map_find_block, Efind_init.
                      rewrite ScopeTheory.ocfg_map_find_block, Efind_init'.
                      unfold denote_block; cbn [blk_phis blk_code blk_term]; rewrite Ephis_init.
                      eapply s1_cps_obs_eq;
                        [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _
-                                           (eq_itree_clo_bind _ _ _ _ Logic.eq
-                                              (eq_itree_clo_bind _ _ _ _ Logic.eq (denote_phis_nil_eq (init c))
-                                                 (fun _ _ <- => Logic.eq_refl)) (fun _ _ <- => Logic.eq_refl)))
+                                           (eq_itree_bind_congr_l
+                                              (eq_itree_bind_congr_l (denote_phis_nil_eq (init c)))))
                        | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _
-                                            (eq_itree_clo_bind _ _ _ _ Logic.eq
-                                               (eq_itree_clo_bind _ _ _ _ Logic.eq (denote_phis_nil_eq (init c))
-                                                  (fun _ _ <- => Logic.eq_refl)) (fun _ _ <- => Logic.eq_refl))) |].
+                                            (eq_itree_bind_congr_l
+                                               (eq_itree_bind_congr_l (denote_phis_nil_eq (init c))))) |].
                      eapply s1_cps_obs_eq;
                        [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (Eqit.bind_bind _ _ _))
                        | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
                      eapply s1_cps_obs_eq;
-                       [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (Eqit.bind_ret_l _ _))
-                       | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_ret_l _ _)) |].
+                       [symmetry; apply interp_cfg_exc_obs_eq, Eqit.bind_ret_l
+                       | symmetry; apply interp_cfg_exc_obs_eq, Eqit.bind_ret_l |].
                      rewrite Hsplit_init; unfold init_code'.
-                     eapply s1_cps_cfg_exc_bind.
+                     eapply s1_cps_cfg_exc_bind with
+                       (RA := fun U_b1 s1_b1 s2_b1 bd1 bd2 =>
+                                exists (P_b1 : list N) gs_b1 σ1_b1 σ2_b1
+                                       (sf1_b1 sf2_b1 : @stack_frame (@ParamsV IP IPT)),
+                                  incl (pr_va :: U0) U_b1 /\
+                                  incl (pr_va :: P0) P_b1 /\
+                                  bd1 = bd2 /\
+                                  s1_b1 = (σ1_b1, ((sf1_b1, fstk1), g0)) /\
+                                  s2_b1 = (σ2_b1, ((sf2_b1, fstk2), g0)) /\
+                                  gs_dt gs_b1 = dt /\
+                                  Maps.lookup p (stack_vars sf1_b1) =
+                                    Some (@DVALUE_Base (@ParamsV IP IPT) (@DVALUE_Pointer (@ParamsV IP IPT) (gs_pt gs_b1))) /\
+                                  Maps.lookup init_end_reg (stack_vars sf2_b1) =
+                                    Some (@DVALUE_Base (@ParamsV IP IPT) (gs_db gs_b1)) /\
+                                  stage1_mem_inv U_b1 P_b1 (gs_b1 :: G) σ1_b1 σ2_b1 /\
+                                  top_frame_prom_from fs0 gs_b1 G (state_memory_stack σ2_b1) /\
+                                  genv_safe P_b1 g0 /\
+                                  safe_locals_env P_b1 safe_no_p (stack_vars sf2_b1) /\
+                                  (forall x, In x avoid0 -> x <> p ->
+                                     Maps.lookup x (stack_vars sf1_b1) = Maps.lookup x (stack_vars sf2_b1)) /\
+                                  match bd1 with
+                                  | inl bid_target => In bid_target (m2r_block_succs b_init)
+                                  | inr _ => True
+                                  end).
                      --- eapply s1_cps_obs_eq;
                            [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _
-                                               (eq_itree_clo_bind _ _ _ _ Logic.eq
-                                                  (denote_code_app_eq pre_al _ (Some varg1))
-                                                  (fun _ _ <- => Logic.eq_refl)))
+                                               (eq_itree_bind_congr_l (denote_code_app_eq pre_al _ (Some varg1))))
                            | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _
-                                                (eq_itree_clo_bind _ _ _ _ Logic.eq
-                                                   (denote_code_app_eq pre_al _ (Some varg1))
-                                                   (fun _ _ <- => Logic.eq_refl))) |].
+                                                (eq_itree_bind_congr_l (denote_code_app_eq pre_al _ (Some varg1)))) |].
+                         eapply s1_cps_obs_eq;
+                           [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (Eqit.bind_bind _ _ _))
+                           | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
                          eapply s1_cps_cfg_exc_bind.
                          +++ assert (Hsplit_pre :
                                        blk_code b_init = [] ++ pre_al ++ (IId p, INSTR_Alloca dt anns_al, md_al) :: post_al)
@@ -18191,10 +19517,8 @@ Section MemoryAndSerialization.
                                          (fun _ => denote_code post_al' (Some varg1))).
                              { unfold denote_code; cbn [loop_monad]; symmetry; apply Eqit.bind_bind. }
                              eapply s1_cps_obs_eq;
-                               [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _
-                                                   (eq_itree_clo_bind _ _ _ _ Logic.eq Econs_l (fun _ _ <- => Logic.eq_refl)))
-                               | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _
-                                                    (eq_itree_clo_bind _ _ _ _ Logic.eq Econs_r (fun _ _ <- => Logic.eq_refl))) |].
+                               [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (eq_itree_bind_congr_l Econs_l))
+                               | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (eq_itree_bind_congr_l Econs_r)) |].
                              eapply s1_cps_obs_eq;
                                [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (Eqit.bind_bind _ _ _))
                                | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
@@ -18213,13 +19537,13 @@ Section MemoryAndSerialization.
                                  assert (Hlk_p_al :
                                            Maps.lookup p (Maps.add p (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))) (stack_vars sf2_pre)) =
                                            Some (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))))
-                                   by apply lookup_add_eq.
+                                   by (cbn [Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity).
                                  assert (Hlk_init_al :
                                            Maps.lookup init_reg
                                              (Maps.add init_reg (DVALUE_Base DVALUE_Poison)
                                                 (Maps.add p (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))) (stack_vars sf2_pre))) =
                                            Some (DVALUE_Base (gs_db gs0)))
-                                   by (rewrite Hdb0; apply lookup_add_eq).
+                                   by (rewrite Hdb0; cbn [Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity).
                                  assert (Hsafe_al :
                                            safe_locals_env P_pre safe_no_p
                                              (Maps.add init_reg (DVALUE_Base DVALUE_Poison)
@@ -18232,8 +19556,8 @@ Section MemoryAndSerialization.
                                              Maps.lookup x (Maps.add p (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))) (stack_vars sf2_pre)) =
                                              Maps.lookup x (Maps.add init_reg (DVALUE_Base DVALUE_Poison)
                                                               (Maps.add p (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))) (stack_vars sf2_pre))))
-                                   by (intros x Hx _; rewrite (lookup_add_neq x init_reg)
-                                         by (intros ->; exact (Hinit_nin0 Hx)); reflexivity).
+                                   by (intros x Hx _; cbn [Maps.lookup Maps.add Map_rmap]; symmetry;
+                                       rewrite RMF.F.add_neq_o by (intros ->; exact (Hinit_nin0 Hx)); reflexivity).
                                  assert (Hsplit_post :
                                            blk_code b_init = (pre_al ++ [(IId p, INSTR_Alloca dt anns_al, md_al)]) ++ post_al ++ [])
                                    by (rewrite <- app_assoc, app_nil_r; exact Hsplit_init).
@@ -18254,7 +19578,13 @@ Section MemoryAndSerialization.
                                                (pre_al ++ [(IId p, INSTR_Alloca dt anns_al, md_al)]) post_al []
                                                safe_no_p p dt init_reg avoid2 post_al' init_end_reg avoid3
                                                (Some varg1) (Some varg1) fs0 (gs_pr gs0 :: U_pre) P_pre gs0 G
-                                               σ1_al σ2_al _ _ fstk1 fstk2
+                                               σ1_al σ2_al
+                                               (upd_local_sf sf2_pre
+                                                  (Maps.add p (@DVALUE_Base (@ParamsV IP IPT) (@DVALUE_Pointer (@ParamsV IP IPT) (gs_pt gs0))) (stack_vars sf2_pre)))
+                                               (upd_local_sf sf2_pre
+                                                  (Maps.add init_reg (@DVALUE_Base (@ParamsV IP IPT) DVALUE_Poison)
+                                                     (Maps.add p (@DVALUE_Base (@ParamsV IP IPT) (@DVALUE_Pointer (@ParamsV IP IPT) (gs_pt gs0))) (stack_vars sf2_pre))))
+                                               fstk1 fstk2
                                                Hnd_bks Hin_init Hsplit_post Hsub_safe Hsafe_av0
                                                Huses_post Hdefs_post Hp_nd_post Hpost_chk Erw_post
                                                Hinc_av2 Hinit_nin0 Hsc
@@ -18284,7 +19614,7 @@ Section MemoryAndSerialization.
                                       { intros x Hx; apply Hvars_post.
                                         - apply (Hblk_uses_av0 b_init x Hin_init), m2r_term_entry_uses_in_block.
                                           rewrite Etm_init; cbn [m2r_term_entry_uses]; apply in_app_iff; left; exact Hx.
-                                        - intros ->; apply Hterm_p; rewrite Etm_init;
+                                        - intros ->; apply Hterm_p; try rewrite Etm_init;
                                             cbn [m2r_term_entry_uses]; apply in_app_iff; left; exact Hx. }
                                       apply refine_prov_to_s1_cps; eapply refine_prov_weaken.
                                       ++++ apply (denote_non_invoke_term_exc_sim ctx1 ctx2
@@ -18300,7 +19630,9 @@ Section MemoryAndSerialization.
                                            destruct res1_t as [ex1 | bd1], res2_t as [ex2 | bd2]; cbn [exc_post];
                                              try (intros H; exact H).
                                            intros (-> & -> & -> & <- & Hsucc).
-                                           exists P_post, gs_post, σ1_post, σ2_post, sf1_post, sf2_post.
+                                           destruct bd1 as [bid_t | dv_t];
+                                             [cbn in Hsucc |- *; unfold m2r_block_succs; rewrite Etm_init |];
+                                           exists P_post, gs_post, σ1_post, σ2_post, sf1_post, sf2_post;
                                            exact (conj HincU_p (conj HincP_p (conj Logic.eq_refl (conj Logic.eq_refl
                                                     (conj Logic.eq_refl (conj Hdt_post (conj Hlk_p_post
                                                       (conj Hlk_er_post (conj Hinv_post (conj Htf_post
@@ -18312,17 +19644,27 @@ Section MemoryAndSerialization.
                          destruct bd1 as [bid_next | dv_ret].
                          +++ apply refine_prov_to_s1_cps, refine_cfg_exc_ret.
                              assert (Hsucc_init : In bid_next (m2r_block_succs b_init))
-                               by (unfold m2r_block_succs; destruct (blk_term b_init) as [[? ?] ?]; exact Hsucc_b1).
+                               by exact Hsucc_b1.
                              assert (Hne_init : bid_next <> init c).
                              { intros Heq_n; apply Hno_entry_pred; rewrite <- Heq_n.
                                unfold m2r_all_succs; apply in_flat_map; exists b_init; split; assumption. }
                              refine (conj Logic.eq_refl _).
-                             unfold s1_prom_loop_inv; cbn [sps_c sps_dt sps_p sps_init_reg fst snd]; fold end_map.
+                             unfold s1_prom_loop_inv; cbn [sps_c sps_dt sps_p sps_init_reg fst snd].
                              unfold sps_safe_no_p, sps_avoid0; cbn [sps_fargs sps_c sps_p]; fold all_defs safe_locals safe_no_p avoid0.
                              refine (conj Hne_init (conj HincU_b1 (conj _ _))).
                              *** exists b_init; exact (conj Hin_init (conj Hid_init Hsucc_init)).
-                             *** exists P_b1, gs_b1, σ1_b1, σ2_b1, sf1_b1, sf2_b1.
-                                 rewrite Hlk_end_init.
+                             *** assert (Hlk_end_init' :
+                                           lookup_end_reg
+                                             (sps_end_map
+                                                {| sps_fargs := fargs; sps_c := c; sps_b_init := b_init;
+                                                   sps_p := p; sps_dt := dt; sps_init_reg := init_reg;
+                                                   sps_end_reg0 := init_end_reg;
+                                                   sps_code0' := pre_al ++ (IId p, INSTR_Alloca dt anns_al, md_al) :: init_op :: post_al';
+                                                   sps_pass1 := pass1_out |})
+                                             (init c) init_reg = init_end_reg)
+                                   by exact Hlk_end_init.
+                                 exists P_b1, gs_b1, σ1_b1, σ2_b1, sf1_b1, sf2_b1.
+                                 rewrite Hlk_end_init'.
                                  exact (conj HincP_b1 (conj Hdt_b1 (conj Hlk_p_b1 (conj Hlk_er_b1
                                           (conj Logic.eq_refl (conj Logic.eq_refl
                                             (conj Hinv_b1 (conj Htf_b1 (conj Hgenv_b1
@@ -18335,7 +19677,8 @@ Section MemoryAndSerialization.
                   ** intros U' s1' s2' j' _ Hli'; apply s1_lfp_fold; right; right.
                      exists sp, (Some varg1), fs0, (pr_va :: U0), (pr_va :: P0), G,
                             fstk1, fstk2, s1', s2', j', k_o1, k_o2.
-                     exact (conj Hwf (conj Hli' (conj Hk_o (conj Logic.eq_refl Logic.eq_refl)))).
+                     rewrite !denote_ocfg_map_eq_iter.
+                     refine (conj Hwf (conj Hli' (conj Hk_o (conj _ _)))); reflexivity.
                   ** exact Hk_o.
                ++ intros U_ocfg s1_ocfg r_ocfg1 s2_ocfg r_ocfg2 _ [<- Hexit_ocfg].
                   destruct r_ocfg1 as [bid_miss | uv_ret].
@@ -18347,7 +19690,8 @@ Section MemoryAndSerialization.
                          rv1 = rv2 /\
                          s1_prom_exit_rel fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2 U_rv s1_rv s2_rv).
                { destruct rv1 as [ex1 | v1], rv2 as [ex2 | v2]; cbn [exc_post] in Hrv_post;
-                   try contradiction; exact Hrv_post. }
+                   try contradiction;
+                   destruct Hrv_post as [<- Hpost_r]; exact (conj Logic.eq_refl Hpost_r). }
                clear Hrv_post.
                destruct Hrv_unif as [<- (HincU_rv & P_e & σ1_e & σ2_e & sf1_e & sf2_e &
                                          HincP_e & -> & -> & Hgenv_e & Hcase_e)].
@@ -18406,9 +19750,13 @@ Section MemoryAndSerialization.
                [apply refine_prov_to_s1_cps, refine_cfg_raise_both | intros _ _ _ _ _ _ []]
           | eapply s1_cps_cfg_bind with (RA := fun _ _ _ => False);
                [apply refine_prov_to_s1_cps, refine_cfg_raise_both | intros _ _ _ _ _ _ []]].
-        destruct db as [addr | ? ? | ? | ? | ? | | | ? ?];
-          try (eapply s1_cps_cfg_bind with (RA := fun _ _ _ => False);
-               [apply refine_prov_to_s1_cps, refine_cfg_raise_both | intros _ _ _ _ _ _ []]).
+        destruct db as [addr | ? ? | ? | ? | ? | | | ? ?]; cbn [check_callee EOU_to_itree];
+          lazymatch goal with
+          | |- context [ITree.bind (raise _) _] =>
+              eapply s1_cps_cfg_bind with (RA := fun _ _ _ => False);
+              [apply refine_prov_to_s1_cps, refine_cfg_raise_both | intros _ _ _ _ _ _ []]
+          | _ => idtac
+          end.
         + cbn [check_callee].
           destruct ((ptr_to_int addr =? ptr_to_int null)%Z).
           * cbn [EOU_to_itree].
@@ -18421,8 +19769,10 @@ Section MemoryAndSerialization.
             pose proof (Hctx (ptr_to_int addr)) as Hlk.
             destruct (lookup (ptr_to_int addr) ctx1) as [f1 |],
                      (lookup (ptr_to_int addr) ctx2) as [f2 |];
-              inversion Hlk as [? ? Hf12 |]; subst.
-            -- destruct Hf12 as [[-> ->] | [(d & Hd & -> & ->) | (df & df' & Htry & -> & ->)]].
+              inversion Hlk; subst; clear Hlk.
+            -- match goal with H : s1_fn_entry_rel _ _ |- _ =>
+                 destruct H as [[-> ->] | [(d & Hd & -> & ->) | (df & df' & Htry & -> & ->)]]
+               end.
                ++ apply refine_prov_to_s1_cps; eapply refine_prov_weaken;
                     [apply putchar_denotation_stage1_cfg_sim |].
                   intros U' [s1' r1] [s2' r2] (-> & -> & -> & <-).
@@ -18454,7 +19804,7 @@ Section MemoryAndSerialization.
         + intros U' s1' s2' j' _ Hli'; apply s1_lfp_fold; right; left.
           exists d, va, fs0, U0, P0, G, fstk1, fstk2, s1', s2', j', k_out1, k_out2.
           rewrite !denote_ocfg_map_eq_iter.
-          exact (conj Hd (conj Hli' (conj Hk_out (conj Logic.eq_refl Logic.eq_refl)))).
+          refine (conj Hd (conj Hli' (conj Hk_out (conj _ _)))); reflexivity.
         + intros U' a1 a2 Hinc Ha; exact (Hk_out U' a1 a2 (incl_tran Hinc0 Hinc) Ha).
       - destruct Hprom as (sp & va & fs0 & U0 & P0 & G & fstk1 & fstk2 & s1 & s2 & j &
                            k_out1 & k_out2 & Hwf & Hli & Hk_out & E1 & E2).
@@ -18472,7 +19822,7 @@ Section MemoryAndSerialization.
         + intros U' s1' s2' j' _ Hli'; apply s1_lfp_fold; right; right.
           exists sp, va, fs0, U0, P0, G, fstk1, fstk2, s1', s2', j', k_out1, k_out2.
           rewrite !denote_ocfg_map_eq_iter.
-          exact (conj Hwf (conj Hli' (conj Hk_out (conj Logic.eq_refl Logic.eq_refl)))).
+          refine (conj Hwf (conj Hli' (conj Hk_out (conj _ _)))); reflexivity.
         + intros U' a1 a2 Hinc Ha; exact (Hk_out U' a1 a2 (incl_tran Hinc0 Hinc) Ha).
     Qed.
 
@@ -18543,8 +19893,8 @@ Section MemoryAndSerialization.
   Proof using.
     intros M'.
     assert (Hmba : mcfg_block_addresses M' = mcfg_block_addresses M)
-      by (unfold mcfg_block_addresses; cbn [m_globals m_definitions]; rewrite Hba; reflexivity).
-    unfold build_global_environment; rewrite Hmba;
+      by (unfold mcfg_block_addresses, M'; cbn [m_globals m_definitions]; rewrite Hba; reflexivity).
+    unfold build_global_environment; rewrite Hmba; unfold M';
       cbn [m_declarations m_globals m_definitions]; rewrite Hproto; reflexivity.
   Qed.
 
@@ -18621,7 +19971,7 @@ Section MemoryAndSerialization.
       defs defs'.
   Proof using.
     revert defs'; induction defs as [| df rest IH]; intros defs' Hsafe Hprom;
-      cbn [forallb promote_first_in_defs] in *; [discriminate Hprom |].
+      cbn [forallb] in Hsafe; cbn [promote_first_in_defs] in Hprom; [discriminate Hprom |].
     rewrite andb_true_iff in Hsafe; destruct Hsafe as [Hdf_safe Hrest_safe].
     destruct (try_promote_slot_in_defn true df) as [df' |] eqn:Etry.
     - inversion Hprom; subst defs'; clear Hprom.

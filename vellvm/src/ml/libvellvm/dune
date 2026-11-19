@@ -2,7 +2,7 @@
  (dev
   (flags (:standard -g -w -20-32-33-39)))
  (release
-  (ocamlopt_flags (:standard -O3))
+  (ocamlopt_flags -Oclassic)
   (flags (:standard -w -20-32-33-39))))
 
 (menhir

@@ -152,31 +152,73 @@ jobs:
 
       - name: Layer-1 kernel Print Assumptions audit gate
         run: |
-          OUT="$(cd vellvm/src && opam exec -- rocq top -q -R rocq Vellvm -R ../../passes CertPasses -R ../../validator CertValidator <<'EOF'
+          PA_DIR="$(mktemp -d /tmp/pa-audit-XXXXXX)"
+          trap 'rm -rf "$PA_DIR"' EXIT
+          cat > "$PA_DIR/audit.v" <<EOF
           Set Printing Width 10000.
+          From Vellvm Require Theory.I2F.I2F_toplevel.
           From CertPasses Require Pipeline ModuleMerge.
           From CertValidator Require AigLrat AlgRules CertValidator.
-          Print Assumptions CertPasses.Pipeline.optimize_mcfg_I2F_model_refine.
-          Print Assumptions CertPasses.ModuleMerge.validate_module_merge_parsed_I2F_model_refine.
-          Print Assumptions CertPasses.ModuleMerge.validate_module_merge_tle_refines.
-          Print Assumptions CertPasses.ModuleMerge.validate_module_merge_certified_tle_refines.
-          Print Assumptions CertValidator.AigLrat.check_lrat_unsat_sound.
-          Print Assumptions CertValidator.AlgRules.check_expr_refines_with_lrat_sound.
-          Print Assumptions CertValidator.CertValidator.validate_tle_pair_with_cert_str_sound.
+          Redirect "$PA_DIR/vellvm_i2f" Print Assumptions Vellvm.Theory.I2F.I2F_toplevel.model_refine.
+          Redirect "$PA_DIR/pipeline" Print Assumptions CertPasses.Pipeline.optimize_mcfg_I2F_model_refine.
+          Redirect "$PA_DIR/merge_i2f" Print Assumptions CertPasses.ModuleMerge.validate_module_merge_parsed_I2F_model_refine.
+          Redirect "$PA_DIR/merge_tle" Print Assumptions CertPasses.ModuleMerge.validate_module_merge_tle_refines.
+          Redirect "$PA_DIR/merge_cert" Print Assumptions CertPasses.ModuleMerge.validate_module_merge_certified_tle_refines.
+          Redirect "$PA_DIR/aig_lrat" Print Assumptions CertValidator.AigLrat.check_lrat_unsat_sound.
+          Redirect "$PA_DIR/alg_rules" Print Assumptions CertValidator.AlgRules.check_expr_refines_with_lrat_sound.
+          Redirect "$PA_DIR/cert_val" Print Assumptions CertValidator.CertValidator.validate_tle_pair_with_cert_str_sound.
           EOF
-          )"
-          echo "$OUT"
-          python3 - "$OUT" <<'PY'
-          import sys
-          out = sys.argv[1]
-          allowed_markers = (
-              "Closed under the global context",
-          )
-          for raw in out.splitlines():
-              if not raw.strip() or raw.startswith(" "):
-                  continue
-              if not any(m in raw for m in allowed_markers):
-                  print(f"Unapproved assumption in Print Assumptions output: {raw}", file=sys.stderr)
+          (cd vellvm/src && opam exec -- rocq top -q -w none -R rocq Vellvm -R ../../passes CertPasses -R ../../validator CertValidator -batch -load-vernac-source "$PA_DIR/audit.v")
+          python3 - "$PA_DIR" <<'PY'
+          import pathlib, sys
+
+          pa_dir = pathlib.Path(sys.argv[1])
+
+          def parse_axioms(name: str) -> set[str]:
+              txt = (pa_dir / f"{name}.out").read_text(encoding="utf-8")
+              print(f"=== {name} ===\n{txt.strip()}")
+              lines = [ln.strip() for ln in txt.splitlines() if ln.strip()]
+              if lines == ["Closed under the global context"]:
+                  return set()
+              if not lines or lines[0] != "Axioms:":
+                  print(f"Unexpected Print Assumptions header in {name}: {lines}", file=sys.stderr)
+                  sys.exit(1)
+              axs: set[str] = set()
+              for raw in txt.splitlines()[1:]:
+                  if not raw.strip() or raw.startswith(" "):
+                      continue
+                  axs.add(raw.split(":", 1)[0].strip())
+              return axs
+
+          approved_vellvm3_classical = {
+              "ClassicalDedekindReals.sig_not_dec",
+              "ClassicalDedekindReals.sig_forall_dec",
+              "FunctionalExtensionality.functional_extensionality_dep",
+              "Eqdep.Eq_rect_eq.eq_rect_eq",
+              "Classical_Prop.classic",
+          }
+          vellvm_base = parse_axioms("vellvm_i2f")
+          if not vellvm_base.issubset(approved_vellvm3_classical):
+              print(f"Unexpected upstream Vellvm 3.0 axioms: {sorted(vellvm_base - approved_vellvm3_classical)}", file=sys.stderr)
+              sys.exit(1)
+
+          aig_axs = parse_axioms("aig_lrat")
+          if aig_axs:
+              print(f"AigLrat must be 100% axiom-free, got: {sorted(aig_axs)}", file=sys.stderr)
+              sys.exit(1)
+
+          for validator_thm in ("alg_rules", "cert_val"):
+              axs = parse_axioms(validator_thm)
+              extra = axs - (vellvm_base - {"Eqdep.Eq_rect_eq.eq_rect_eq"})
+              if extra:
+                  print(f"Unapproved axiom in {validator_thm}: {sorted(extra)}", file=sys.stderr)
+                  sys.exit(1)
+
+          for pass_thm in ("pipeline", "merge_i2f", "merge_tle", "merge_cert"):
+              axs = parse_axioms(pass_thm)
+              extra = axs - vellvm_base
+              if extra:
+                  print(f"CertPasses theorem {pass_thm} introduced axiom(s) beyond upstream Vellvm 3.0: {sorted(extra)}", file=sys.stderr)
                   sys.exit(1)
           PY
 
