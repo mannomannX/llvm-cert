@@ -3943,5 +3943,7 @@ Proof.
   destruct (parse_dimacs_cnf cnf_str) as [| f] eqn:Ef; [discriminate H |].
   destruct (parse_ascii_lrat lrat_str) as [| pf] eqn:Ep; [discriminate H |].
   destruct (check_lrat_unsat f pf) eqn:Hchk; [| discriminate H].
-  exists f, pf; split; [exact Ef | split; [exact Ep | exact (check_lrat_unsat_sound f pf Hchk)]].
+  exists f, pf; split;
+    [first [reflexivity | exact Ef]
+    | split; [first [reflexivity | exact Ep] | exact (check_lrat_unsat_sound f pf Hchk)]].
 Qed.
