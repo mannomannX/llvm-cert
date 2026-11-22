@@ -3,8 +3,9 @@
 
 Assures the OCaml-extracted `cert-validator` and `verified-opt-fallback` binaries:
 1. 28/28 native-vs.-bytecode exit-code & accept/reject parity on `run_forged_cert_suite.py`.
-2. 220 deterministic forged-certificate & IR mutations across 5 valid seed proofs
-   verifying 100% rejection, 0 crashes/timeouts, and 100% native-vs.-bytecode exit parity.
+2. 230 deterministic malformed-format, contract-tampered, and semantically unsound
+   mutations verifying 100% rejection, 0 crashes/timeouts, and 100% native-vs.-bytecode
+   exit-code parity.
 3. Byte-for-byte identical `--pass pipeline` IR output between native `ocamlopt` and
    bytecode `ocamlc` builds of `verified-opt-fallback` across 5 core optimization patterns.
 """
@@ -14,12 +15,9 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import pathlib
-import random
-import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
-from typing import Callable
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -28,7 +26,6 @@ if str(SCRIPT_DIR) not in sys.path:
 from run_forged_cert_suite import (  # noqa: E402
     CRASH_STDERR_MARKERS,
     CommandOutcome,
-    SuiteCase,
     build_cert_v1,
     build_suite_cases,
     evaluate_outcome,
@@ -195,61 +192,127 @@ def _build_valid_seeds() -> list[SeedProof]:
     return seeds
 
 
-def _flip_hex_char(ch: str) -> str:
-    return "0" if ch != "0" else "1"
+def _replace_digest_char(cert_text: str, prefix: str, offset: int, repl: str) -> str:
+    idx = cert_text.find(prefix)
+    assert idx >= 0, f"missing prefix {prefix}"
+    pos = idx + len(prefix) + offset
+    return cert_text[:pos] + repl + cert_text[pos + 1 :]
 
 
-def _mutate_digest_line(cert_text: str, prefix: str, offset: int) -> str:
+def _resize_digest(cert_text: str, prefix: str, new_len: int) -> str:
     idx = cert_text.find(prefix)
     assert idx >= 0, f"missing prefix {prefix}"
     start = idx + len(prefix)
-    pos = start + offset
-    mutated = _flip_hex_char(cert_text[pos])
-    return cert_text[:pos] + mutated + cert_text[pos + 1 :]
+    digest = cert_text[start : start + 64]
+    if new_len < 64:
+        resized = digest[:new_len]
+    else:
+        resized = digest + "a" * (new_len - 64)
+    return cert_text[:start] + resized + cert_text[start + 64 :]
+
+
+def _mk_tv_mut(
+    name: str,
+    src_ir: str,
+    tgt_ir: str,
+    width: int,
+    src_sexp: str,
+    tgt_sexp: str,
+    *,
+    ub_assumptions: tuple[str, ...] = (),
+) -> MutationCase:
+    return MutationCase(
+        name=name,
+        src_ir=src_ir,
+        tgt_ir=tgt_ir,
+        cert_bytes=build_cert_v1(
+            "f",
+            src_ir,
+            tgt_ir,
+            scalar_refines_sexp(width, src_sexp, tgt_sexp),
+            ub_assumptions=ub_assumptions,
+        ),
+    )
+
+
+def _mk_single_inst_mut(
+    name: str,
+    sig: str,
+    ret_ty: str,
+    src_body: str,
+    tgt_body: str,
+    width: int,
+    src_sexp: str,
+    tgt_sexp: str,
+) -> MutationCase:
+    src_ir = f"define {ret_ty} @f({sig}) {{\nentry:\n{src_body}}}\n"
+    tgt_ir = f"define {ret_ty} @f({sig}) {{\nentry:\n{tgt_body}}}\n"
+    return _mk_tv_mut(name, src_ir, tgt_ir, width, src_sexp, tgt_sexp)
 
 
 def build_mutation_cases() -> list[MutationCase]:
     seeds = _build_valid_seeds()
-    rng = random.Random(0xC3E7_5AF3)
     cases: list[MutationCase] = []
 
-    # 1. Deterministic SHA-256 digest corruptions (20 positions * 5 seeds = 100 cases).
+    # 1. Strictly invalid SHA-256 format corruptions (10 * 5 = 50 cases).
     for seed in seeds:
-        src_positions = rng.sample(range(64), 10)
-        tgt_positions = rng.sample(range(64), 10)
-        for pos in src_positions:
-            m_txt = _mutate_digest_line(seed.cert_text, "(src-sha256 ", pos)
+        for pos, bad_ch in ((0, "g"), (31, "z"), (63, "-")):
             cases.append(
                 MutationCase(
-                    f"{seed.name}_src_sha_pos_{pos:02d}",
+                    f"{seed.name}_src_sha_nonhex_{pos:02d}",
                     seed.src_ir,
                     seed.tgt_ir,
-                    m_txt.encode("utf-8"),
+                    _replace_digest_char(seed.cert_text, "(src-sha256 ", pos, bad_ch).encode("utf-8"),
                 )
             )
-        for pos in tgt_positions:
-            m_txt = _mutate_digest_line(seed.cert_text, "(tgt-sha256 ", pos)
             cases.append(
                 MutationCase(
-                    f"{seed.name}_tgt_sha_pos_{pos:02d}",
+                    f"{seed.name}_tgt_sha_nonhex_{pos:02d}",
                     seed.src_ir,
                     seed.tgt_ir,
-                    m_txt.encode("utf-8"),
+                    _replace_digest_char(seed.cert_text, "(tgt-sha256 ", pos, bad_ch).encode("utf-8"),
                 )
             )
+        cases.append(
+            MutationCase(
+                f"{seed.name}_src_sha_upper",
+                seed.src_ir,
+                seed.tgt_ir,
+                _replace_digest_char(seed.cert_text, "(src-sha256 ", 5, "A").encode("utf-8"),
+            )
+        )
+        cases.append(
+            MutationCase(
+                f"{seed.name}_tgt_sha_upper",
+                seed.src_ir,
+                seed.tgt_ir,
+                _replace_digest_char(seed.cert_text, "(tgt-sha256 ", 17, "F").encode("utf-8"),
+            )
+        )
+        cases.append(
+            MutationCase(
+                f"{seed.name}_src_sha_trunc_63",
+                seed.src_ir,
+                seed.tgt_ir,
+                _resize_digest(seed.cert_text, "(src-sha256 ", 63).encode("utf-8"),
+            )
+        )
+        cases.append(
+            MutationCase(
+                f"{seed.name}_tgt_sha_overlong_65",
+                seed.src_ir,
+                seed.tgt_ir,
+                _resize_digest(seed.cert_text, "(tgt-sha256 ", 65).encode("utf-8"),
+            )
+        )
 
-    # 2. Structural S-expression / truncation / encoding mutations (10 * 5 = 50 cases).
+    # 2. Structural S-expression / truncation / encoding corruptions (10 * 5 = 50 cases).
     for seed in seeds:
         raw = seed.cert_text.encode("utf-8")
         for frac_pct in (10, 25, 50, 75, 90):
             cut = max(1, (len(raw) * frac_pct) // 100)
             cases.append(
-                MutationCase(
-                    f"{seed.name}_trunc_{frac_pct}pct",
-                    seed.src_ir,
-                    seed.tgt_ir,
-                    raw[:cut],
-                )
+                MutationCase(f"{seed.name}_trunc_{frac_pct}pct", seed.src_ir, seed.tgt_ir, raw[:cut])
             )
         cases.append(
             MutationCase(
@@ -293,31 +356,29 @@ def build_mutation_cases() -> list[MutationCase]:
             )
         )
 
-    # 3. Semantic / contract / width / IR-pair corruptions across seeds (70 cases).
+    # 3. Certificate schema, width, variable & function-name corruptions (12 * 5 = 60 cases).
     for seed in seeds:
-        cert_variants: list[tuple[str, str]] = [
+        schema_variants: list[tuple[str, str]] = [
             ("fn_rename_g", seed.cert_text.replace('(fn "f")', '(fn "g")', 1)),
             ("fn_empty", seed.cert_text.replace('(fn "f")', '(fn "")', 1)),
             ("width_16", seed.cert_text.replace("(width 32)", "(width 16)", 1)),
             ("width_64", seed.cert_text.replace("(width 32)", "(width 64)", 1)),
             ("width_0", seed.cert_text.replace("(width 32)", "(width 0)", 1)),
-            ("entry_to_bb1", seed.cert_text.replace('(src-bb "entry")', '(src-bb "bb1")', 1)),
-            ("tgt_bb_to_bb2", seed.cert_text.replace('(tgt-bb "entry")', '(tgt-bb "bb2")', 1)),
             ("var_x_to_z", seed.cert_text.replace('"%x"', '"%z"')),
-            ("sha_upper", _mutate_hex_case(seed.cert_text, "(src-sha256 ")),
-            ("kind_cutpoint_fake", seed.cert_text.replace("(kind entry)", "(kind cutpoint)", 1)),
+            ("bad_src_bb_tag", seed.cert_text.replace("(src-bb ", "(src-b ", 1)),
+            ("bad_tgt_bb_tag", seed.cert_text.replace("(tgt-bb ", "(tgt-b ", 1)),
+            ("bad_block_kind", seed.cert_text.replace("(kind entry)", "(kind bogus)", 1)),
+            ("bad_smt_verified_tok", seed.cert_text.replace("(smt-verified false)", "(smt-verified maybe)", 1)),
+            ("missing_blocks_section", seed.cert_text.replace("(blocks", "(blks", 1)),
+            ("bad_return_tag", seed.cert_text.replace("(scalar-refines", "(scalar-bad", 1)),
         ]
-        for vname, vtxt in cert_variants:
+        for vname, vtxt in schema_variants:
             cases.append(
-                MutationCase(
-                    f"{seed.name}_{vname}",
-                    seed.src_ir,
-                    seed.tgt_ir,
-                    vtxt.encode("utf-8"),
-                )
+                MutationCase(f"{seed.name}_{vname}", seed.src_ir, seed.tgt_ir, vtxt.encode("utf-8"))
             )
 
-        # Target IR poison / attribute / signature tampering keeping unmodified cert (4 * 5 = 20 cases).
+    # 4. Target IR prototype / attribute tampering (4 * 5 = 20 cases).
+    for seed in seeds:
         ir_mutations: list[tuple[str, str]] = [
             ("ir_tgt_ret_attr_noundef", seed.tgt_ir.replace("define i32 @f(", "define noundef i32 @f(", 1)),
             ("ir_tgt_fn_noreturn", seed.tgt_ir.replace(") {", ") noreturn {", 1)),
@@ -326,153 +387,423 @@ def build_mutation_cases() -> list[MutationCase]:
         ]
         for mname, m_tgt in ir_mutations:
             cases.append(
-                MutationCase(
-                    f"{seed.name}_{mname}",
-                    seed.src_ir,
-                    m_tgt,
-                    seed.cert_text.encode("utf-8"),
-                )
+                MutationCase(f"{seed.name}_{mname}", seed.src_ir, m_tgt, seed.cert_text.encode("utf-8"))
             )
 
-    # Spot semantic mutations exercising flags, constants, and freeze/noundef obligations.
+    # 5. Strictly unsound semantic, poison-laundering & bitvector miscompilations (50 cases).
     s1, s2, s3, s4, s5 = seeds
-    extra_semantic: list[MutationCase] = [
-        MutationCase(
-            "add_zero_const_43_in_tgt",
-            s1.src_ir,
-            s1.tgt_ir.replace("42", "43"),
-            build_cert_v1(
-                "f",
+    cases.extend(
+        [
+            _mk_tv_mut(
+                "add_zero_const_43_in_tgt",
                 s1.src_ir,
                 s1.tgt_ir.replace("42", "43"),
-                scalar_refines_sexp(
-                    32,
-                    '(binop add 32 (flags 0 0 0 0) (binop add 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 0)) (bv 32 42))',
-                    '(binop add 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 43))',
-                ),
+                32,
+                '(binop add 32 (flags 0 0 0 0) (binop add 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 0)) (bv 32 42))',
+                '(binop add 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 43))',
             ),
-        ),
-        MutationCase(
-            "add_zero_target_nsw",
-            s1.src_ir,
-            s1.tgt_ir.replace("add i32", "add nsw i32"),
-            build_cert_v1(
-                "f",
+            _mk_tv_mut(
+                "add_zero_target_nsw",
                 s1.src_ir,
                 s1.tgt_ir.replace("add i32", "add nsw i32"),
-                scalar_refines_sexp(
-                    32,
-                    '(binop add 32 (flags 0 0 0 0) (binop add 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 0)) (bv 32 42))',
-                    '(binop add 32 (flags 0 1 0 0) (var "%x" 32) (bv 32 42))',
-                ),
+                32,
+                '(binop add 32 (flags 0 0 0 0) (binop add 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 0)) (bv 32 42))',
+                '(binop add 32 (flags 0 1 0 0) (var "%x" 32) (bv 32 42))',
             ),
-        ),
-        MutationCase(
-            "reassoc_target_nuw",
-            s2.src_ir,
-            s2.tgt_ir.replace("add i32", "add nuw i32"),
-            build_cert_v1(
-                "f",
+            _mk_tv_mut(
+                "reassoc_target_nuw",
                 s2.src_ir,
                 s2.tgt_ir.replace("add i32", "add nuw i32"),
-                scalar_refines_sexp(
-                    32,
-                    '(binop add 32 (flags 0 0 0 0) (binop add 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 1)) (bv 32 1))',
-                    '(binop add 32 (flags 1 0 0 0) (var "%x" 32) (bv 32 2))',
-                ),
+                32,
+                '(binop add 32 (flags 0 0 0 0) (binop add 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 1)) (bv 32 1))',
+                '(binop add 32 (flags 1 0 0 0) (var "%x" 32) (bv 32 2))',
             ),
-        ),
-        MutationCase(
-            "xor_self_reversed_refines",
-            s3.tgt_ir,
-            s3.src_ir,
-            build_cert_v1(
-                "f",
+            _mk_tv_mut(
+                "xor_self_reversed_refines",
                 s3.tgt_ir,
                 s3.src_ir,
-                scalar_refines_sexp(
-                    32,
-                    "(bv 32 0)",
-                    '(binop xor 32 (flags 0 0 0 0) (var "%x" 32) (var "%x" 32))',
-                ),
+                32,
+                "(bv 32 0)",
+                '(binop xor 32 (flags 0 0 0 0) (var "%x" 32) (var "%x" 32))',
             ),
-        ),
-        MutationCase(
-            "noundef_drop_param_attr",
-            s4.src_ir.replace("i32 noundef %x", "i32 %x"),
-            s4.tgt_ir.replace("i32 noundef %x", "i32 %x"),
-            build_cert_v1(
-                "f",
+            _mk_tv_mut(
+                "noundef_drop_param_attr",
                 s4.src_ir.replace("i32 noundef %x", "i32 %x"),
                 s4.tgt_ir.replace("i32 noundef %x", "i32 %x"),
-                scalar_refines_sexp(
-                    32,
-                    '(select 32 (var "%c" 1) (freeze 32 (var "%x" 32)) (bv 32 0))',
-                    '(select 32 (var "%c" 1) (var "%x" 32) (bv 32 0))',
-                ),
+                32,
+                '(select 32 (var "%c" 1) (freeze 32 (var "%x" 32)) (bv 32 0))',
+                '(select 32 (var "%c" 1) (var "%x" 32) (bv 32 0))',
                 ub_assumptions=('(param-noundef "%x" 32)',),
             ),
-        ),
-        MutationCase(
-            "noundef_drop_ub_assumption",
-            s4.src_ir,
-            s4.tgt_ir,
-            build_cert_v1(
-                "f",
-                s4.src_ir,
-                s4.tgt_ir,
-                scalar_refines_sexp(
-                    32,
-                    '(select 32 (var "%c" 1) (freeze 32 (var "%x" 32)) (bv 32 0))',
-                    '(select 32 (var "%c" 1) (var "%x" 32) (bv 32 0))',
-                ),
-                ub_assumptions=(),
-            ),
-        ),
-        MutationCase(
-            "freeze_or_reversed",
-            s5.tgt_ir,
-            s5.src_ir,
-            build_cert_v1(
-                "f",
+            _mk_tv_mut(
+                "freeze_or_reversed",
                 s5.tgt_ir,
                 s5.src_ir,
-                scalar_refines_sexp(
-                    32,
-                    "(bv 32 4294967295)",
-                    '(binop or 32 (flags 0 0 0 0) (freeze 32 (var "%x" 32)) (bv 32 4294967295))',
-                ),
+                32,
+                "(bv 32 4294967295)",
+                '(binop or 32 (flags 0 0 0 0) (freeze 32 (var "%x" 32)) (bv 32 4294967295))',
             ),
-        ),
-        MutationCase(
-            "freeze_or_const_0",
-            s5.src_ir,
-            s5.tgt_ir.replace("-1", "0"),
-            build_cert_v1(
-                "f",
+            _mk_tv_mut(
+                "freeze_or_const_0",
                 s5.src_ir,
                 s5.tgt_ir.replace("-1", "0"),
-                scalar_refines_sexp(
-                    32,
-                    '(binop or 32 (flags 0 0 0 0) (freeze 32 (var "%x" 32)) (bv 32 4294967295))',
-                    "(bv 32 0)",
-                ),
+                32,
+                '(binop or 32 (flags 0 0 0 0) (freeze 32 (var "%x" 32)) (bv 32 4294967295))',
+                "(bv 32 0)",
             ),
-        ),
+        ]
+    )
+
+    # 15 target-invented poison flag injections.
+    binop_poison_specs = [
+        ("add_nuw", "add", "add nuw", "(flags 0 0 0 0)", "(flags 1 0 0 0)", "5"),
+        ("sub_nsw", "sub", "sub nsw", "(flags 0 0 0 0)", "(flags 0 1 0 0)", "5"),
+        ("sub_nuw", "sub", "sub nuw", "(flags 0 0 0 0)", "(flags 1 0 0 0)", "5"),
+        ("mul_nsw", "mul", "mul nsw", "(flags 0 0 0 0)", "(flags 0 1 0 0)", "3"),
+        ("mul_nuw", "mul", "mul nuw", "(flags 0 0 0 0)", "(flags 1 0 0 0)", "3"),
+        ("shl_nsw", "shl", "shl nsw", "(flags 0 0 0 0)", "(flags 0 1 0 0)", "2"),
+        ("shl_nuw", "shl", "shl nuw", "(flags 0 0 0 0)", "(flags 1 0 0 0)", "2"),
+        ("lshr_exact", "lshr", "lshr exact", "(flags 0 0 0 0)", "(flags 0 0 1 0)", "1"),
+        ("ashr_exact", "ashr", "ashr exact", "(flags 0 0 0 0)", "(flags 0 0 1 0)", "1"),
+        ("udiv_exact", "udiv", "udiv exact", "(flags 0 0 0 0)", "(flags 0 0 1 0)", "2"),
+        ("sdiv_exact", "sdiv", "sdiv exact", "(flags 0 0 0 0)", "(flags 0 0 1 0)", "2"),
+        ("or_disjoint", "or", "or disjoint", "(flags 0 0 0 0)", "(flags 0 0 0 1)", "1"),
     ]
-    cases.extend(extra_semantic)
+    for mname, op, tgt_op, s_fl, t_fl, imm in binop_poison_specs:
+        cases.append(
+            _mk_single_inst_mut(
+                f"poison_{mname}",
+                "i32 %x",
+                "i32",
+                f"  %r = {op} i32 %x, {imm}\n  ret i32 %r\n",
+                f"  %r = {tgt_op} i32 %x, {imm}\n  ret i32 %r\n",
+                32,
+                f'(binop {op} 32 {s_fl} (var "%x" 32) (bv 32 {imm}))',
+                f'(binop {op} 32 {t_fl} (var "%x" 32) (bv 32 {imm}))',
+            )
+        )
+    cases.extend(
+        [
+            _mk_single_inst_mut(
+                "poison_trunc_nuw",
+                "i32 %x",
+                "i8",
+                "  %r = trunc i32 %x to i8\n  ret i8 %r\n",
+                "  %r = trunc nuw i32 %x to i8\n  ret i8 %r\n",
+                8,
+                '(cast trunc 32 8 (flags 0 0 0) (var "%x" 32))',
+                '(cast trunc 32 8 (flags 0 1 0) (var "%x" 32))',
+            ),
+            _mk_single_inst_mut(
+                "poison_trunc_nsw",
+                "i32 %x",
+                "i8",
+                "  %r = trunc i32 %x to i8\n  ret i8 %r\n",
+                "  %r = trunc nsw i32 %x to i8\n  ret i8 %r\n",
+                8,
+                '(cast trunc 32 8 (flags 0 0 0) (var "%x" 32))',
+                '(cast trunc 32 8 (flags 0 0 1) (var "%x" 32))',
+            ),
+            _mk_single_inst_mut(
+                "poison_zext_nneg",
+                "i8 %x",
+                "i32",
+                "  %r = zext i8 %x to i32\n  ret i32 %r\n",
+                "  %r = zext nneg i8 %x to i32\n  ret i32 %r\n",
+                32,
+                '(cast zext 8 32 (flags 0 0 0) (var "%x" 8))',
+                '(cast zext 8 32 (flags 1 0 0) (var "%x" 8))',
+            ),
+        ]
+    )
+
+    # 28 semantically wrong arithmetic, bitwise, shift, icmp, select & cast miscompilations.
+    cases.extend(
+        [
+            _mk_single_inst_mut(
+                "bad_add_i8_const",
+                "i8 %x",
+                "i8",
+                "  %r = add i8 %x, 5\n  ret i8 %r\n",
+                "  %r = add i8 %x, 6\n  ret i8 %r\n",
+                8,
+                '(binop add 8 (flags 0 0 0 0) (var "%x" 8) (bv 8 5))',
+                '(binop add 8 (flags 0 0 0 0) (var "%x" 8) (bv 8 6))',
+            ),
+            _mk_single_inst_mut(
+                "bad_add_i16_const",
+                "i16 %x",
+                "i16",
+                "  %r = add i16 %x, 100\n  ret i16 %r\n",
+                "  %r = add i16 %x, 101\n  ret i16 %r\n",
+                16,
+                '(binop add 16 (flags 0 0 0 0) (var "%x" 16) (bv 16 100))',
+                '(binop add 16 (flags 0 0 0 0) (var "%x" 16) (bv 16 101))',
+            ),
+            _mk_single_inst_mut(
+                "bad_add_i64_const",
+                "i64 %x",
+                "i64",
+                "  %r = add i64 %x, 42\n  ret i64 %r\n",
+                "  %r = add i64 %x, 43\n  ret i64 %r\n",
+                64,
+                '(binop add 64 (flags 0 0 0 0) (var "%x" 64) (bv 64 42))',
+                '(binop add 64 (flags 0 0 0 0) (var "%x" 64) (bv 64 43))',
+            ),
+            _mk_single_inst_mut(
+                "bad_sub_commuted",
+                "i32 %x",
+                "i32",
+                "  %r = sub i32 %x, 5\n  ret i32 %r\n",
+                "  %r = sub i32 5, %x\n  ret i32 %r\n",
+                32,
+                '(binop sub 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 5))',
+                '(binop sub 32 (flags 0 0 0 0) (bv 32 5) (var "%x" 32))',
+            ),
+            _mk_single_inst_mut(
+                "bad_sub_self_to_one",
+                "i32 %x",
+                "i32",
+                "  %r = sub i32 %x, %x\n  ret i32 %r\n",
+                "  ret i32 1\n",
+                32,
+                '(binop sub 32 (flags 0 0 0 0) (var "%x" 32) (var "%x" 32))',
+                "(bv 32 1)",
+            ),
+            _mk_single_inst_mut(
+                "bad_mul3_to_shl1",
+                "i32 %x",
+                "i32",
+                "  %r = mul i32 %x, 3\n  ret i32 %r\n",
+                "  %r = shl i32 %x, 1\n  ret i32 %r\n",
+                32,
+                '(binop mul 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 3))',
+                '(binop shl 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 1))',
+            ),
+            _mk_single_inst_mut(
+                "bad_mul2_to_add2",
+                "i32 %x",
+                "i32",
+                "  %r = mul i32 %x, 2\n  ret i32 %r\n",
+                "  %r = add i32 %x, 2\n  ret i32 %r\n",
+                32,
+                '(binop mul 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 2))',
+                '(binop add 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 2))',
+            ),
+            _mk_single_inst_mut(
+                "bad_and_mask_shrink",
+                "i32 %x",
+                "i32",
+                "  %r = and i32 %x, 7\n  ret i32 %r\n",
+                "  %r = and i32 %x, 3\n  ret i32 %r\n",
+                32,
+                '(binop and 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 7))',
+                '(binop and 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 3))',
+            ),
+            _mk_single_inst_mut(
+                "bad_and_allones_zero",
+                "i32 %x",
+                "i32",
+                "  %r = and i32 %x, -1\n  ret i32 %r\n",
+                "  ret i32 0\n",
+                32,
+                '(binop and 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 4294967295))',
+                "(bv 32 0)",
+            ),
+            _mk_single_inst_mut(
+                "bad_or_to_xor",
+                "i32 %x",
+                "i32",
+                "  %r = or i32 %x, 1\n  ret i32 %r\n",
+                "  %r = xor i32 %x, 1\n  ret i32 %r\n",
+                32,
+                '(binop or 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 1))',
+                '(binop xor 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 1))',
+            ),
+            _mk_single_inst_mut(
+                "bad_or_zero_one",
+                "i32 %x",
+                "i32",
+                "  %r = or i32 %x, 0\n  ret i32 %r\n",
+                "  ret i32 1\n",
+                32,
+                '(binop or 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 0))',
+                "(bv 32 1)",
+            ),
+            _mk_single_inst_mut(
+                "bad_xor_zero_zero",
+                "i32 %x",
+                "i32",
+                "  %r = xor i32 %x, 0\n  ret i32 %r\n",
+                "  ret i32 0\n",
+                32,
+                '(binop xor 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 0))',
+                "(bv 32 0)",
+            ),
+            _mk_single_inst_mut(
+                "bad_not_dropped",
+                "i32 %x",
+                "i32",
+                "  %r = xor i32 %x, -1\n  ret i32 %r\n",
+                "  ret i32 %x\n",
+                32,
+                '(binop xor 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 4294967295))',
+                '(var "%x" 32)',
+            ),
+            _mk_single_inst_mut(
+                "bad_shl1_to_add1",
+                "i32 %x",
+                "i32",
+                "  %r = shl i32 %x, 1\n  ret i32 %r\n",
+                "  %r = add i32 %x, 1\n  ret i32 %r\n",
+                32,
+                '(binop shl 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 1))',
+                '(binop add 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 1))',
+            ),
+            _mk_single_inst_mut(
+                "bad_lshr_to_ashr",
+                "i32 %x",
+                "i32",
+                "  %r = lshr i32 %x, 1\n  ret i32 %r\n",
+                "  %r = ashr i32 %x, 1\n  ret i32 %r\n",
+                32,
+                '(binop lshr 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 1))',
+                '(binop ashr 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 1))',
+            ),
+            _mk_single_inst_mut(
+                "bad_ashr_to_lshr",
+                "i32 %x",
+                "i32",
+                "  %r = ashr i32 %x, 1\n  ret i32 %r\n",
+                "  %r = lshr i32 %x, 1\n  ret i32 %r\n",
+                32,
+                '(binop ashr 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 1))',
+                '(binop lshr 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 1))',
+            ),
+            _mk_single_inst_mut(
+                "bad_udiv_to_sdiv",
+                "i32 %x",
+                "i32",
+                "  %r = udiv i32 %x, 2\n  ret i32 %r\n",
+                "  %r = sdiv i32 %x, 2\n  ret i32 %r\n",
+                32,
+                '(binop udiv 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 2))',
+                '(binop sdiv 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 2))',
+            ),
+            _mk_single_inst_mut(
+                "bad_urem_to_srem",
+                "i32 %x",
+                "i32",
+                "  %r = urem i32 %x, 4\n  ret i32 %r\n",
+                "  %r = srem i32 %x, 4\n  ret i32 %r\n",
+                32,
+                '(binop urem 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 4))',
+                '(binop srem 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 4))',
+            ),
+            _mk_single_inst_mut(
+                "bad_icmp_ult_to_slt",
+                "i32 %x",
+                "i1",
+                "  %r = icmp ult i32 %x, 10\n  ret i1 %r\n",
+                "  %r = icmp slt i32 %x, 10\n  ret i1 %r\n",
+                1,
+                '(icmp ult 0 32 (var "%x" 32) (bv 32 10))',
+                '(icmp slt 0 32 (var "%x" 32) (bv 32 10))',
+            ),
+            _mk_single_inst_mut(
+                "bad_icmp_ule_to_sle",
+                "i32 %x",
+                "i1",
+                "  %r = icmp ule i32 %x, 10\n  ret i1 %r\n",
+                "  %r = icmp sle i32 %x, 10\n  ret i1 %r\n",
+                1,
+                '(icmp ule 0 32 (var "%x" 32) (bv 32 10))',
+                '(icmp sle 0 32 (var "%x" 32) (bv 32 10))',
+            ),
+            _mk_single_inst_mut(
+                "bad_icmp_eq_to_ne",
+                "i32 %x",
+                "i1",
+                "  %r = icmp eq i32 %x, 0\n  ret i1 %r\n",
+                "  %r = icmp ne i32 %x, 0\n  ret i1 %r\n",
+                1,
+                '(icmp eq 0 32 (var "%x" 32) (bv 32 0))',
+                '(icmp ne 0 32 (var "%x" 32) (bv 32 0))',
+            ),
+            _mk_single_inst_mut(
+                "bad_icmp_ugt_to_sgt_i16",
+                "i16 %x",
+                "i1",
+                "  %r = icmp ugt i16 %x, 7\n  ret i1 %r\n",
+                "  %r = icmp sgt i16 %x, 7\n  ret i1 %r\n",
+                1,
+                '(icmp ugt 0 16 (var "%x" 16) (bv 16 7))',
+                '(icmp sgt 0 16 (var "%x" 16) (bv 16 7))',
+            ),
+            _mk_single_inst_mut(
+                "bad_icmp_ugt_to_uge",
+                "i32 %x",
+                "i1",
+                "  %r = icmp ugt i32 %x, 5\n  ret i1 %r\n",
+                "  %r = icmp uge i32 %x, 5\n  ret i1 %r\n",
+                1,
+                '(icmp ugt 0 32 (var "%x" 32) (bv 32 5))',
+                '(icmp uge 0 32 (var "%x" 32) (bv 32 5))',
+            ),
+            _mk_single_inst_mut(
+                "bad_select_swapped_arms",
+                "i1 %c, i32 %x, i32 %y",
+                "i32",
+                "  %r = select i1 %c, i32 %x, i32 %y\n  ret i32 %r\n",
+                "  %r = select i1 %c, i32 %y, i32 %x\n  ret i32 %r\n",
+                32,
+                '(select 32 (var "%c" 1) (var "%x" 32) (var "%y" 32))',
+                '(select 32 (var "%c" 1) (var "%y" 32) (var "%x" 32))',
+            ),
+            _mk_single_inst_mut(
+                "bad_select_dropped_then",
+                "i1 %c, i32 %x",
+                "i32",
+                "  %r = select i1 %c, i32 %x, i32 0\n  ret i32 %r\n",
+                "  ret i32 0\n",
+                32,
+                '(select 32 (var "%c" 1) (var "%x" 32) (bv 32 0))',
+                "(bv 32 0)",
+            ),
+            _mk_single_inst_mut(
+                "bad_zext_to_sext",
+                "i8 %x",
+                "i32",
+                "  %r = zext i8 %x to i32\n  ret i32 %r\n",
+                "  %r = sext i8 %x to i32\n  ret i32 %r\n",
+                32,
+                '(cast zext 8 32 (flags 0 0 0) (var "%x" 8))',
+                '(cast sext 8 32 (flags 0 0 0) (var "%x" 8))',
+            ),
+            _mk_single_inst_mut(
+                "bad_sext_to_zext",
+                "i8 %x",
+                "i32",
+                "  %r = sext i8 %x to i32\n  ret i32 %r\n",
+                "  %r = zext i8 %x to i32\n  ret i32 %r\n",
+                32,
+                '(cast sext 8 32 (flags 0 0 0) (var "%x" 8))',
+                '(cast zext 8 32 (flags 0 0 0) (var "%x" 8))',
+            ),
+            _mk_single_inst_mut(
+                "bad_trunc_to_zero",
+                "i32 %x",
+                "i8",
+                "  %r = trunc i32 %x to i8\n  ret i8 %r\n",
+                "  ret i8 0\n",
+                8,
+                '(cast trunc 32 8 (flags 0 0 0) (var "%x" 32))',
+                "(bv 8 0)",
+            ),
+        ]
+    )
+
     return cases
-
-
-def _mutate_hex_case(cert_text: str, prefix: str) -> str:
-    idx = cert_text.find(prefix)
-    assert idx >= 0, f"missing prefix {prefix}"
-    start = idx + len(prefix)
-    digest = cert_text[start : start + 64]
-    swapped = digest.upper()
-    if swapped == digest:
-        swapped = digest[:-1] + _flip_hex_char(digest[-1])
-    return cert_text[:start] + swapped + cert_text[start + 64 :]
 
 
 def _build_fallback_determinism_programs() -> list[tuple[str, str]]:
@@ -692,7 +1023,7 @@ def run_dual_suite(
 
     if failures:
         print(f"\nDual-compiler & mutation gate FAILED ({len(failures)} issue(s)):", file=sys.stderr)
-        for err in failures[:20]:
+        for err in failures[:50]:
             print(f"  - {err}", file=sys.stderr)
         return 1
 
@@ -707,8 +1038,8 @@ def run_dual_suite(
 
 def run_self_test() -> int:
     mutations = build_mutation_cases()
-    if len(mutations) < 200:
-        raise AssertionError(f"expected >= 200 mutations, got {len(mutations)}")
+    if len(mutations) < 220:
+        raise AssertionError(f"expected >= 220 mutations, got {len(mutations)}")
     names = [m.name for m in mutations]
     if len(names) != len(set(names)):
         raise AssertionError("duplicate mutation case name generated")
@@ -736,7 +1067,7 @@ def run_self_test() -> int:
         mock_f_b = tmp / "mock_f_bc.py"
 
         v_script = (
-            "import hashlib, pathlib, sys\n"
+            "import hashlib, pathlib, re, sys\n"
             "args = sys.argv[1:]\n"
             "if '--slice' in args:\n"
             "    sys.exit(2)\n"
@@ -749,21 +1080,27 @@ def run_self_test() -> int:
             "src = pathlib.Path(args[args.index('--src') + 1]).read_text(encoding='utf-8')\n"
             "tgt = pathlib.Path(args[args.index('--tgt') + 1]).read_text(encoding='utf-8')\n"
             "cert = pathlib.Path(args[args.index('--cert') + 1]).read_bytes().decode('utf-8', errors='replace')\n"
-            "sh = hashlib.sha256(src.encode('utf-8')).hexdigest()\n"
-            "th = hashlib.sha256(tgt.encode('utf-8')).hexdigest()\n"
-            "if ('\\x00' in cert or f'(src-sha256 {sh})' not in cert or f'(tgt-sha256 {th})' not in cert\n"
-            "    or '(cert-v1' not in cert or '[blocks' in cert or not cert.rstrip().endswith(')')):\n"
+            "m_sh = re.search(r'\\(src-sha256 ([^)]+)\\)', cert)\n"
+            "m_th = re.search(r'\\(tgt-sha256 ([^)]+)\\)', cert)\n"
+            "hex_ok = lambda s: len(s) == 64 and all(c in '0123456789abcdef' for c in s)\n"
+            "if ('\\x00' in cert or not m_sh or not m_th or not hex_ok(m_sh.group(1)) or not hex_ok(m_th.group(1))\n"
+            "    or '(cert-v1' not in cert or '[blocks' in cert or not cert.rstrip().endswith(')')\n"
+            "    or cert.count('(') != cert.count(')')):\n"
+            "    sys.exit(4)\n"
+            "schema_bad = (\n"
+            "    '(src-b ' in cert or '(tgt-b ' in cert or '(kind bogus)' in cert\n"
+            "    or '(smt-verified maybe)' in cert or '(blks' in cert or '(scalar-bad' in cert\n"
+            "    or '\"%z\"' in cert\n"
+            ")\n"
+            "if schema_bad or '(width 32)' not in cert or '(fn \"f\")' not in cert:\n"
             "    sys.exit(4)\n"
             "pos_ok = (\n"
-            "    ('add i32 %x, 42' in tgt and 'flags 0 0 0 0' in cert)\n"
-            "    or ('add i32 %x, 2' in tgt and 'flags 0 0 0 0' in cert)\n"
-            "    or ('ret i32 0' in tgt and 'xor 32' in cert)\n"
-            "    or ('select i1 %c, i32 %x, i32 0' in tgt and '(param-noundef \"%x\" 32)' in cert and 'noundef' in src)\n"
-            "    or ('ret i32 -1' in tgt and '4294967295' in cert)\n"
-            ") and '(width 32)' in cert and '(fn \"f\")' in cert and 'nsw' not in tgt and 'nuw' not in tgt and 'noreturn' not in tgt and 'nocreateundeforpoison' not in tgt\n"
-            "if ('\"%z\"' in cert or '(src-bb \"bb1\")' in cert or '(tgt-bb \"bb2\")' in cert\n"
-            "    or '(kind cutpoint)' in cert or cert.count('(') != cert.count(')')):\n"
-            "    sys.exit(4)\n"
+            "    ('  %res = add i32 %x, 42\\n' in tgt and '  %t0 = add i32 %x, 0\\n' in src and 'flags 0 0 0 0' in cert)\n"
+            "    or ('  %res = add i32 %x, 2\\n' in tgt and '  %t0 = add i32 %x, 1\\n' in src and 'flags 0 0 0 0' in cert)\n"
+            "    or ('  ret i32 0\\n' in tgt and 'xor i32 %x, %x' in src and 'xor 32' in cert)\n"
+            "    or ('select i1 %c, i32 %x, i32 0' in tgt and 'i32 noundef %x' in src and '(param-noundef \"%x\" 32)' in cert)\n"
+            "    or ('  ret i32 -1\\n' in tgt and 'freeze i32 %x' in src and '4294967295' in cert)\n"
+            ") and 'define i32 @f(' in tgt and ') {' in tgt\n"
             "sys.exit(0 if pos_ok else 4)\n"
         )
         f_script = (
@@ -781,7 +1118,6 @@ def run_self_test() -> int:
         mock_f_n.write_text(f_script, encoding="utf-8", newline="\n")
         mock_f_b.write_text(f_script, encoding="utf-8", newline="\n")
 
-        # Note: Windows .py direct execution uses sys.executable wrappers (.cmd/.bat).
         wraps: list[pathlib.Path] = []
         for idx, py in enumerate((mock_v_n, mock_v_b, mock_f_n, mock_f_b)):
             if sys.platform == "win32":
