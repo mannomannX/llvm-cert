@@ -14,6 +14,7 @@ on:
       - "passes/**"
       - "validator/**"
       - "scripts/run_forged_cert_suite.py"
+      - "scripts/run_cert_mutation_suite.py"
       - ".github/workflows/rocq-ci.yml"
 
 concurrency:
@@ -248,6 +249,39 @@ jobs:
           python3 scripts/run_forged_cert_suite.py \
             vellvm/src/_build/default/ml/bin/cert-validator \
             vellvm/src/_build/default/ml/bin/verified-opt-fallback
+
+      - name: Dual-compiler (ocamlopt vs. ocamlc) & certificate mutation assurance gate
+        run: |
+          python3 scripts/run_cert_mutation_suite.py \
+            vellvm/src/_build/default/ml/bin/cert-validator \
+            vellvm/src/_build/default/ml/bin/cert-validator.bc \
+            vellvm/src/_build/default/ml/bin/verified-opt-fallback \
+            vellvm/src/_build/default/ml/bin/verified-opt-fallback.bc
+
+      - name: Package & upload verified Rocq/OCaml validator & fallback binaries
+        run: |
+          STAGE_DIR="dist/llvm-cert-rocq-tools-linux-x86_64"
+          mkdir -p "$STAGE_DIR/bin"
+          for bin in cert-validator cert-validator.bc verified-opt-fallback verified-opt-fallback.bc; do
+            cp -a "vellvm/src/_build/default/ml/bin/$bin" "$STAGE_DIR/bin/$bin"
+          done
+          cp LICENSE "$STAGE_DIR/LICENSE"
+          {
+            echo "git_commit=$(git rev-parse HEAD)"
+            echo "rocq=$(opam exec -- rocq --version | tr '\n' ' ')"
+            echo "ocamlopt=$(opam exec -- ocamlopt -version)"
+            echo "ocamlc=$(opam exec -- ocamlc -version)"
+            echo "dune=$(opam exec -- dune --version)"
+          } > "$STAGE_DIR/TOOLCHAIN.txt"
+          (cd "$STAGE_DIR" && sha256sum bin/* LICENSE TOOLCHAIN.txt > SHA256SUMS.txt)
+          tar -C dist -I 'zstd -19 -T0' -cf llvm-cert-rocq-tools-linux-x86_64.tar.zst llvm-cert-rocq-tools-linux-x86_64
+
+      - name: Upload verified Rocq/OCaml validator & fallback artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: llvm-cert-rocq-tools-linux-x86_64
+          path: llvm-cert-rocq-tools-linux-x86_64.tar.zst
+          retention-days: 90
 
       - name: Persist compiled Vellvm core .vo proof objects (even if downstream fails)
         if: always() && steps.vellvm-core-vo-cache.outputs.cache-hit != 'true' && hashFiles('vellvm/src/rocq/Theory/I2F/I2F_toplevel.vo') != '' && hashFiles('vellvm/src/rocq/Theory/Equational.vo') != ''

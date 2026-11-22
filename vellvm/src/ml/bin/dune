@@ -1,11 +1,13 @@
 (executable
  (name verified_opt_fallback)
  (modules verified_opt_fallback)
+ (modes native byte_complete)
  (libraries vellvmLib libvellvm extracted))
 
 (executable
  (name cert_validator)
  (modules cert_validator)
+ (modes native byte_complete)
  (libraries vellvmLib libvellvm extracted))
 
 (rule
@@ -14,10 +16,24 @@
  (action (copy %{deps} %{target})))
 
 (rule
+ (target verified-opt-fallback.bc)
+ (deps verified_opt_fallback.bc.exe)
+ (action (copy %{deps} %{target})))
+
+(rule
  (target cert-validator)
  (deps cert_validator.exe)
  (action (copy %{deps} %{target})))
 
+(rule
+ (target cert-validator.bc)
+ (deps cert_validator.bc.exe)
+ (action (copy %{deps} %{target})))
+
 (alias
  (name default)
- (deps verified_opt_fallback.exe verified-opt-fallback cert_validator.exe cert-validator))
+ (deps
+  verified_opt_fallback.exe verified-opt-fallback
+  verified_opt_fallback.bc.exe verified-opt-fallback.bc
+  cert_validator.exe cert-validator
+  cert_validator.bc.exe cert-validator.bc))
