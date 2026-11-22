@@ -34,5 +34,6 @@ Check @CertValidator.AigLrat.check_lrat_unsat_sound.
 Check @CertValidator.AigLrat.blast_refinement_cex_unsat_sound.
 Check @CertValidator.AlgRules.check_expr_refines_sound.
 Check @CertValidator.AlgRules.check_expr_refines_with_lrat_sound.
+Check @CertValidator.CertFormat.validate_dimacs_lrat_str_sound.
 Check @CertValidator.CertValidator.validate_mcfg_with_cert_sound.
 Check @CertValidator.CertValidator.validate_tle_pair_with_cert_str_sound.

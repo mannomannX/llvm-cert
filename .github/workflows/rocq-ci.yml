@@ -159,13 +159,14 @@ jobs:
           Set Printing Width 10000.
           From Vellvm Require Theory.I2F.I2F_toplevel.
           From CertPasses Require Pipeline ModuleMerge.
-          From CertValidator Require AigLrat AlgRules CertValidator.
+          From CertValidator Require CertFormat AigLrat AlgRules CertValidator.
           Redirect "$PA_DIR/vellvm_i2f" Print Assumptions Vellvm.Theory.I2F.I2F_toplevel.model_refine.
           Redirect "$PA_DIR/pipeline" Print Assumptions CertPasses.Pipeline.optimize_mcfg_I2F_model_refine.
           Redirect "$PA_DIR/merge_i2f" Print Assumptions CertPasses.ModuleMerge.validate_module_merge_parsed_I2F_model_refine.
           Redirect "$PA_DIR/merge_tle" Print Assumptions CertPasses.ModuleMerge.validate_module_merge_tle_refines.
           Redirect "$PA_DIR/merge_cert" Print Assumptions CertPasses.ModuleMerge.validate_module_merge_certified_tle_refines.
           Redirect "$PA_DIR/aig_lrat" Print Assumptions CertValidator.AigLrat.check_lrat_unsat_sound.
+          Redirect "$PA_DIR/dimacs_lrat" Print Assumptions CertValidator.CertFormat.validate_dimacs_lrat_str_sound.
           Redirect "$PA_DIR/alg_rules" Print Assumptions CertValidator.AlgRules.check_expr_refines_with_lrat_sound.
           Redirect "$PA_DIR/cert_val" Print Assumptions CertValidator.CertValidator.validate_tle_pair_with_cert_str_sound.
           EOF
@@ -203,10 +204,11 @@ jobs:
               print(f"Unexpected upstream Vellvm 3.0 axioms: {sorted(vellvm_base - approved_vellvm3_classical)}", file=sys.stderr)
               sys.exit(1)
 
-          aig_axs = parse_axioms("aig_lrat")
-          if aig_axs:
-              print(f"AigLrat must be 100% axiom-free, got: {sorted(aig_axs)}", file=sys.stderr)
-              sys.exit(1)
+          for zero_ax in ("aig_lrat", "dimacs_lrat"):
+              axs = parse_axioms(zero_ax)
+              if axs:
+                  print(f"{zero_ax} must be 100% axiom-free, got: {sorted(axs)}", file=sys.stderr)
+                  sys.exit(1)
 
           for validator_thm in ("alg_rules", "cert_val"):
               axs = parse_axioms(validator_thm)
@@ -257,6 +259,61 @@ jobs:
             vellvm/src/_build/default/ml/bin/cert-validator.bc \
             vellvm/src/_build/default/ml/bin/verified-opt-fallback \
             vellvm/src/_build/default/ml/bin/verified-opt-fallback.bc
+
+      - name: Standalone --check-lrat & Stage-3 (lrat ...) dual-compiler gate
+        run: |
+          python3 - \
+            vellvm/src/_build/default/ml/bin/cert-validator \
+            vellvm/src/_build/default/ml/bin/cert-validator.bc <<'PY'
+          import hashlib, pathlib, subprocess, sys, tempfile
+
+          bins = [sys.argv[1], sys.argv[2]]
+          cnf_ok = "c D-01 unsat sanity\np cnf 2 4\n1 2 0\n1 -2 0\n-1 2 0\n-1 -2 0\n"
+          lrat_ok = "5 1 0 1 2 0\n5 d 1 2 0\n6 -1 0 3 4 0\n7 0 5 6 0\n"
+          neg_cases = [
+              ("missing_empty", cnf_ok, "5 1 0 1 2 0\n"),
+              ("bad_hint", cnf_ok, "5 1 0 1 3 0\n6 -1 0 3 4 0\n7 0 5 6 0\n"),
+              ("sat_cnf", "p cnf 2 3\n1 2 0\n1 -2 0\n-1 2 0\n", lrat_ok),
+              ("zero_lit", "p cnf 1 2\n1 0 0\n-1 0\n", lrat_ok),
+              ("var_oob", "p cnf 1 2\n2 0\n-1 0\n", lrat_ok),
+              ("neg_rat_hint", cnf_ok, "5 1 0 1 -2 0\n7 0 5 0\n"),
+              ("bad_clause_count", "p cnf 2 3\n1 2 0\n1 -2 0\n-1 2 0\n-1 -2 0\n", lrat_ok),
+          ]
+          src_ll = "define i32 @id_add0(i32 noundef %x) {\nentry:\n  %r = add i32 %x, 0\n  ret i32 %r\n}\n"
+          tgt_ll = "define i32 @id_add0(i32 noundef %x) {\nentry:\n  ret i32 %x\n}\n"
+          sh = hashlib.sha256(src_ll.encode()).hexdigest()
+          th = hashlib.sha256(tgt_ll.encode()).hexdigest()
+          cert_tpl = (
+              '(cert-v1\n  (fn "id_add0")\n  (src-sha256 ' + sh + ')\n  (tgt-sha256 ' + th + ')\n'
+              '  (blocks (block (src-bb "entry") (tgt-bb "entry") (kind entry)\n'
+              '    (ub-assumptions (param-noundef "%x" 32)) (value-equivs) (mem-invariants)))\n'
+              '  (return (scalar-refines (width 32) (src (binop add 32 (flags 0 0 0 0) (var "%x" 32) (bv 32 0))) (tgt (var "%x" 32)) (smt-verified false)))\n'
+              '  {extra})\n'
+          )
+          with tempfile.TemporaryDirectory() as td:
+              p = pathlib.Path(td)
+              (p / "ok.cnf").write_text(cnf_ok, encoding="utf-8")
+              (p / "ok.lrat").write_text(lrat_ok, encoding="utf-8")
+              (p / "src.ll").write_text(src_ll, encoding="utf-8")
+              (p / "tgt.ll").write_text(tgt_ll, encoding="utf-8")
+              (p / "ok.cert").write_text(cert_tpl.format(extra="(lrat (add 1 (1) (1)) (del (1)))"), encoding="utf-8")
+              (p / "bad_empty_lrat.cert").write_text(cert_tpl.format(extra="(lrat)"), encoding="utf-8")
+              (p / "bad_step_lrat.cert").write_text(cert_tpl.format(extra="(lrat (add 0 () ()))"), encoding="utf-8")
+              for vb in bins:
+                  r = subprocess.run([vb, "--check-lrat", "--cnf", str(p / "ok.cnf"), "--lrat", str(p / "ok.lrat")], capture_output=True, text=True)
+                  assert r.returncode == 0, f"{vb} ok --check-lrat rc={r.returncode}: {r.stderr}"
+                  for name, c_txt, l_txt in neg_cases:
+                      (p / "n.cnf").write_text(c_txt, encoding="utf-8")
+                      (p / "n.lrat").write_text(l_txt, encoding="utf-8")
+                      rn = subprocess.run([vb, "--check-lrat", "--cnf", str(p / "n.cnf"), "--lrat", str(p / "n.lrat")], capture_output=True, text=True)
+                      assert rn.returncode == 4, f"{vb} {name} expected rc=4, got {rn.returncode}: {rn.stderr}"
+                  rs = subprocess.run([vb, "--src", str(p / "src.ll"), "--tgt", str(p / "tgt.ll"), "--cert", str(p / "ok.cert")], capture_output=True, text=True)
+                  assert rs.returncode == 0, f"{vb} Stage3 lrat ok rc={rs.returncode}: {rs.stderr}"
+                  for bad_c in ("bad_empty_lrat.cert", "bad_step_lrat.cert"):
+                      rb = subprocess.run([vb, "--src", str(p / "src.ll"), "--tgt", str(p / "tgt.ll"), "--cert", str(p / bad_c)], capture_output=True, text=True)
+                      assert rb.returncode == 4, f"{vb} {bad_c} expected rc=4, got {rb.returncode}: {rb.stderr}"
+          print("Standalone --check-lrat & Stage-3 (lrat ...) dual-compiler gate OK.")
+          PY
 
       - name: Package & upload verified Rocq/OCaml validator & fallback binaries
         run: |

@@ -4,7 +4,7 @@
    See /LICENSE in the repository root for details. *)
 
 let usage =
-  "usage: cert-validator --src <src.ll> --tgt <tgt.ll> --cert <fn.cert> | --check-merge --orig <orig.ll> --merged <merged.ll> [--slice-cert <fn> <src.ll> <opt_fast.ll> <cert> | --slice-safe <fn> <src.ll> <opt_safe.ll>]*"
+  "usage: cert-validator --src <src.ll> --tgt <tgt.ll> --cert <fn.cert> | --check-merge --orig <orig.ll> --merged <merged.ll> [--slice-cert <fn> <src.ll> <opt_fast.ll> <cert> | --slice-safe <fn> <src.ll> <opt_safe.ll>]* | --check-lrat --cnf <formula.cnf> --lrat <proof.lrat>"
 
 let max_input_bytes = 67108864
 
@@ -61,9 +61,23 @@ let rec parse_merge orig merged certs safes = function
   | ("--orig" | "--merged" | "--slice-cert" | "--slice-safe") :: _ -> die 2 ("missing option argument (" ^ usage ^ ")")
   | a :: _ -> die 2 (Stdlib.Printf.sprintf "unknown argument '%s' (%s)" a usage)
 
+let rec parse_lrat cnf lrat = function
+  | [] -> (cnf, lrat)
+  | "--cnf" :: v :: tl -> if cnf <> None then die 2 "duplicate --cnf" else parse_lrat (Some v) lrat tl
+  | "--lrat" :: v :: tl -> if lrat <> None then die 2 "duplicate --lrat" else parse_lrat cnf (Some v) tl
+  | ("--cnf" | "--lrat") :: [] -> die 2 ("missing option argument (" ^ usage ^ ")")
+  | a :: _ -> die 2 (Stdlib.Printf.sprintf "unknown argument '%s' (%s)" a usage)
+
 let run () =
   let argv = match Stdlib.Array.to_list Stdlib.Sys.argv with _ :: tl -> tl | [] -> [] in
   match argv with
+  | "--check-lrat" :: rest ->
+      let cnf_opt, lrat_opt = parse_lrat None None rest in
+      let cnf_p = match cnf_opt with Some p -> p | None -> die 2 ("missing --cnf (" ^ usage ^ ")") in
+      let lrat_p = match lrat_opt with Some p -> p | None -> die 2 ("missing --lrat (" ^ usage ^ ")") in
+      let cnf_s = Camlcoq.coqstring_of_camlstring (read_cert_file cnf_p) in
+      let lrat_s = Camlcoq.coqstring_of_camlstring (read_cert_file lrat_p) in
+      check_result (CertFormat.validate_dimacs_lrat_str cnf_s lrat_s)
   | "--check-merge" :: rest ->
       let orig_opt, merged_opt, raw_certs, raw_safes = parse_merge None None [] [] rest in
       let orig_p = match orig_opt with Some p -> p | None -> die 2 ("missing --orig (" ^ usage ^ ")") in

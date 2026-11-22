@@ -113,8 +113,8 @@
 ../../passes/McfgExport.v
 ../../passes/ModuleMerge.v
 
-../../validator/CertFormat.v
 ../../validator/AigLrat.v
+../../validator/CertFormat.v
 ../../validator/AlgRules.v
 ../../validator/CertValidator.v
 ../../validator/CheckAssumptions.v

@@ -14860,7 +14860,7 @@ Definition check_cert_defn
   (src_tenv tgt_tenv : list (ident * typ))
   (src_defn tgt_defn : definition typ (CFG.cfg typ))
   (cert : proof_certificate) : bool :=
-  check_cert_defn_with_lrat src_tenv tgt_tenv src_defn tgt_defn cert None.
+  check_cert_defn_with_lrat src_tenv tgt_tenv src_defn tgt_defn cert (pc_lrat_proof cert).
 
 
 (** *** 5.7 Top-Level Per-Function Translation Validator Soundness ([0 Admitted]) *)
@@ -15118,7 +15118,7 @@ Theorem check_cert_defn_sound :
       (tfmap (typ_to_dtyp tgt_tenv) tgt_defn).
 Proof.
   intros Pa src_tenv tgt_tenv src_defn tgt_defn cert Hchk.
-  exact (check_cert_defn_with_lrat_sound src_tenv tgt_tenv src_defn tgt_defn cert None Hchk).
+  exact (check_cert_defn_with_lrat_sound src_tenv tgt_tenv src_defn tgt_defn cert (pc_lrat_proof cert) Hchk).
 Qed.
 
 
@@ -15181,7 +15181,7 @@ Definition validate_mcfg_with_cert_lrat
 Definition validate_mcfg_with_cert
   (src_m tgt_m : CFG.mcfg typ)
   (cert : proof_certificate) : string + unit :=
-  validate_mcfg_with_cert_lrat src_m tgt_m cert None.
+  validate_mcfg_with_cert_lrat src_m tgt_m cert (pc_lrat_proof cert).
 
 Definition validate_tle_pair_with_cert
   (src_tle tgt_tle : toplevel_entities typ (block typ * list (block typ)))
@@ -15255,7 +15255,7 @@ Theorem validate_mcfg_with_cert_sound :
         (tfmap (typ_to_dtyp (m_type_defs tgt_m)) tgt_defn).
 Proof.
   intros Pa src_m tgt_m cert Hval.
-  exact (validate_mcfg_with_cert_lrat_sound src_m tgt_m cert None Hval).
+  exact (validate_mcfg_with_cert_lrat_sound src_m tgt_m cert (pc_lrat_proof cert) Hval).
 Qed.
 
 Theorem validate_tle_pair_with_cert_str_sound :

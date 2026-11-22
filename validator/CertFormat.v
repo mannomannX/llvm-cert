@@ -52,6 +52,9 @@ From Vellvm Require Import
   Semantics.Attributes
   Semantics.IntrinsicsDefinitions.
 
+From CertValidator Require Import
+  AigLrat.
+
 Unset Implicit Arguments.
 Unset Strict Implicit.
 Set Default Goal Selector "!".
@@ -280,6 +283,7 @@ Record proof_certificate : Set :=
     pc_loop_invariants : list loop_cutpoint_invariant;
     pc_alias_witnesses : list alias_witness;
     pc_return_obligation : return_obligation;
+    pc_lrat_proof : option (list lrat_step);
   }.
 
 (** ** 2. Structural Boolean Comparators & Reflection Lemmas for [cert_expr] *)
@@ -2144,6 +2148,117 @@ Proof.
     + exact (parse_return_obligation_wf _ _ Hr).
 Qed.
 
+Definition parse_pos_str (s : string) : option positive :=
+  match parse_canonical_N s with
+  | Some (Npos p) => Some p
+  | _ => None
+  end.
+
+Definition parse_signed_lit_str (s : string) : option lit :=
+  match s with
+  | String c rest =>
+      if Nat.eqb (nat_of_ascii c) 45 then
+        match parse_pos_str rest with
+        | Some p => Some (Z.neg p)
+        | None => None
+        end
+      else
+        match parse_pos_str s with
+        | Some p => Some (Z.pos p)
+        | None => None
+        end
+  | EmptyString => None
+  end.
+
+Definition parse_pos_sexp (sx : sexp) : string + positive :=
+  match sx with
+  | SAtom s =>
+      match parse_pos_str s with
+      | Some p => inr p
+      | None => inl "expected canonical positive integer in LRAT section"
+      end
+  | _ => inl "expected positive integer atom in LRAT section"
+  end.
+
+Definition parse_lit_sexp (sx : sexp) : string + lit :=
+  match sx with
+  | SAtom s =>
+      match parse_signed_lit_str s with
+      | Some l => inr l
+      | None => inl "expected non-zero canonical literal in LRAT section"
+      end
+  | _ => inl "expected literal atom in LRAT section"
+  end.
+
+Definition parse_lrat_step_sexp (sx : sexp) : string + lrat_step :=
+  match sx with
+  | SList [SAtom tag; cid_sx; SList lit_sxs; SList hint_sxs] =>
+      if String.eqb tag "add" then
+        match parse_pos_sexp cid_sx,
+              map_parse_list parse_lit_sexp lit_sxs,
+              map_parse_list parse_pos_sexp hint_sxs with
+        | inr cid, inr cl, inr hints => inr (LRAT_Add cid cl hints)
+        | inl err, _, _ => inl err
+        | _, inl err, _ => inl err
+        | _, _, inl err => inl err
+        end
+      else inl "unknown LRAT step tag"
+  | SList [SAtom tag; SList cid_sxs] =>
+      if String.eqb tag "del" then
+        match map_parse_list parse_pos_sexp cid_sxs with
+        | inr cids => inr (LRAT_Del cids)
+        | inl err => inl err
+        end
+      else inl "unknown LRAT step tag"
+  | _ => inl "malformed LRAT step S-expression"
+  end.
+
+Definition is_lrat_section_sexp (sx : sexp) : bool :=
+  match sx with
+  | SList (SAtom tag :: _) => String.eqb tag "lrat"
+  | _ => false
+  end.
+
+Definition parse_optional_tail_with_lrat (tail : list sexp)
+  : string + (list loop_cutpoint_invariant * list alias_witness *
+              return_obligation * option (list lrat_step)) :=
+  match rev_tr tail with
+  | last_sx :: rev_prefix =>
+      if is_lrat_section_sexp last_sx then
+        match parse_optional_tail (rev_tr rev_prefix),
+              parse_nonempty_tagged_section "lrat" parse_lrat_step_sexp last_sx with
+        | inr (lcis, aws, ro), inr pf => inr (lcis, aws, ro, Some pf)
+        | inl err, _ => inl err
+        | _, inl err => inl err
+        end
+      else
+        match parse_optional_tail tail with
+        | inr (lcis, aws, ro) => inr (lcis, aws, ro, None)
+        | inl err => inl err
+        end
+  | [] => inl "missing return section in cert-v1"
+  end.
+
+Lemma parse_optional_tail_with_lrat_wf : forall tail lcis aws ro opt_pf,
+  parse_optional_tail_with_lrat tail = inr (lcis, aws, ro, opt_pf) ->
+  forallb wf_loop_cutpoint_invariant lcis = true /\
+  forallb wf_alias_witness aws = true /\
+  wf_return_obligation ro = true.
+Proof.
+  intros tail lcis aws ro opt_pf H.
+  unfold parse_optional_tail_with_lrat in H.
+  destruct (rev_tr tail) as [| last_sx rev_prefix]; [discriminate H |].
+  destruct (is_lrat_section_sexp last_sx).
+  - destruct (parse_optional_tail (rev_tr rev_prefix)) as [| [[ls ws] r0]] eqn:Ht;
+      [discriminate H |].
+    destruct (parse_nonempty_tagged_section "lrat" parse_lrat_step_sexp last_sx)
+      as [| pf]; [discriminate H |].
+    inversion H; subst; exact (parse_optional_tail_wf _ _ _ _ Ht).
+  - destruct (parse_optional_tail tail) as [| [[ls ws] r0]] eqn:Ht;
+      [discriminate H |].
+    inversion H; subst; exact (parse_optional_tail_wf _ _ _ _ Ht).
+Qed.
+
 Definition parse_cert_sexp (root : sexp) : string + proof_certificate :=
   match root with
   | SList (SAtom schema_tag :: fn_sx :: sh_sx :: th_sx :: blks_sx :: tail) =>
@@ -2152,9 +2267,9 @@ Definition parse_cert_sexp (root : sexp) : string + proof_certificate :=
               parse_tagged_sha256_sexp "src-sha256" sh_sx,
               parse_tagged_sha256_sexp "tgt-sha256" th_sx,
               parse_tagged_section_list "blocks" parse_block_cert_sexp blks_sx,
-              parse_optional_tail tail with
-        | inr fn_nm, inr sh, inr th, inr blks, inr (lcis, aws, ro) =>
-            inr (mk_proof_certificate fn_nm sh th blks lcis aws ro)
+              parse_optional_tail_with_lrat tail with
+        | inr fn_nm, inr sh, inr th, inr blks, inr (lcis, aws, ro, opt_pf) =>
+            inr (mk_proof_certificate fn_nm sh th blks lcis aws ro opt_pf)
         | inl err, _, _, _, _ => inl err
         | _, inl err, _, _, _ => inl err
         | _, _, inl err, _, _ => inl err
@@ -2182,8 +2297,9 @@ Proof.
   destruct (parse_tagged_sha256_sexp "tgt-sha256" th_sx) as [| th] eqn:Hth; [discriminate |].
   destruct (parse_tagged_section_list "blocks" parse_block_cert_sexp blks_sx)
     as [| blks] eqn:Hblks; [discriminate |].
-  destruct (parse_optional_tail tail) as [| [[lcis aws] ro]] eqn:Htail; [discriminate |].
-  pose proof (parse_optional_tail_wf _ _ _ _ Htail) as (Hlcis & Haws & Hro).
+  destruct (parse_optional_tail_with_lrat tail) as [| [[[lcis aws] ro] opt_pf]] eqn:Htail;
+    [discriminate |].
+  pose proof (parse_optional_tail_with_lrat_wf _ _ _ _ _ Htail) as (Hlcis & Haws & Hro).
   inversion H; subst; unfold wf_proof_certificate; cbn.
   rewrite (parse_tagged_nonempty_str_ok _ _ _ Hfn),
           (parse_tagged_sha256_ok _ _ _ Hsh),
@@ -3598,3 +3714,234 @@ Definition mcfg_identified_typs_defined (M : CFG.mcfg typ) : bool :=
   forallb (global_identified_defined env) (m_globals M) &&
   forallb (decl_identified_defined env) (m_declarations M) &&
   forallb (defn_identified_defined env) (m_definitions M).
+
+(** ** 7. Tail-Recursive DIMACS CNF & Standard ASCII LRAT Parsers ([D-01]) *)
+
+Fixpoint split_lines_acc (cur_rev : list ascii) (acc : list string) (cs : list ascii)
+  {struct cs} : list string :=
+  match cs with
+  | [] =>
+      let last_ln := rev_chars_to_str_acc EmptyString cur_rev in
+      rev_tr (last_ln :: acc)
+  | c :: rest =>
+      let n := nat_of_ascii c in
+      if Nat.eqb n 10 then
+        let ln := rev_chars_to_str_acc EmptyString cur_rev in
+        split_lines_acc [] (ln :: acc) rest
+      else if Nat.eqb n 13 then
+        split_lines_acc cur_rev acc rest
+      else
+        split_lines_acc (c :: cur_rev) acc rest
+  end.
+
+Definition split_lines (s : string) : list string :=
+  split_lines_acc [] [] (str_to_chars s).
+
+Definition is_line_ws (c : ascii) : bool :=
+  let n := nat_of_ascii c in
+  Nat.eqb n 32 || Nat.eqb n 9 || Nat.eqb n 11 || Nat.eqb n 12.
+
+Fixpoint split_ws_tokens_acc (cur_opt : option (list ascii)) (acc : list string)
+                             (cs : list ascii) {struct cs} : list string :=
+  match cs with
+  | [] =>
+      match cur_opt with
+      | None => rev_tr acc
+      | Some rev_cs => rev_tr (rev_chars_to_str_acc EmptyString rev_cs :: acc)
+      end
+  | c :: rest =>
+      if is_line_ws c then
+        match cur_opt with
+        | None => split_ws_tokens_acc None acc rest
+        | Some rev_cs =>
+            split_ws_tokens_acc None (rev_chars_to_str_acc EmptyString rev_cs :: acc) rest
+        end
+      else
+        match cur_opt with
+        | None => split_ws_tokens_acc (Some [c]) acc rest
+        | Some rev_cs => split_ws_tokens_acc (Some (c :: rev_cs)) acc rest
+        end
+  end.
+
+Definition split_ws_tokens (s : string) : list string :=
+  split_ws_tokens_acc None [] (str_to_chars s).
+
+Definition is_comment_toks (toks : list string) : bool :=
+  match toks with
+  | [] => true
+  | t :: _ =>
+      match t with
+      | String c _ => Nat.eqb (nat_of_ascii c) 99
+      | EmptyString => false
+      end
+  end.
+
+Fixpoint find_dimacs_header (lines : list string) {struct lines}
+  : string + (N * N * list string) :=
+  match lines with
+  | [] => inl "missing 'p cnf <vars> <clauses>' header in DIMACS CNF"
+  | ln :: rest =>
+      let toks := split_ws_tokens ln in
+      if is_comment_toks toks then
+        find_dimacs_header rest
+      else
+        match toks with
+        | [p_tok; cnf_tok; nv_s; nc_s] =>
+            if String.eqb p_tok "p" && String.eqb cnf_tok "cnf" then
+              match parse_canonical_N nv_s, parse_canonical_N nc_s with
+              | Some nv, Some nc => inr (nv, nc, rest)
+              | _, _ => inl "invalid variable or clause count in DIMACS header"
+              end
+            else inl "expected 'p cnf <vars> <clauses>' header before clauses"
+        | _ => inl "malformed 'p cnf <vars> <clauses>' DIMACS header"
+        end
+  end.
+
+Fixpoint parse_dimacs_line_toks
+  (max_var : N) (next_cid : positive) (cur_rev : list lit) (acc_rev : cnf)
+  (toks : list string) {struct toks}
+  : string + (positive * list lit * cnf) :=
+  match toks with
+  | [] => inr (next_cid, cur_rev, acc_rev)
+  | tok :: rest =>
+      if String.eqb tok "0" then
+        parse_dimacs_line_toks max_var (Pos.succ next_cid) []
+          ((next_cid, rev_tr cur_rev) :: acc_rev) rest
+      else
+        match parse_signed_lit_str tok with
+        | Some (Zpos v) =>
+            if (N.pos v <=? max_var)%N then
+              parse_dimacs_line_toks max_var next_cid (Z.pos v :: cur_rev) acc_rev rest
+            else inl "DIMACS literal exceeds declared num_vars bound"
+        | Some (Zneg v) =>
+            if (N.pos v <=? max_var)%N then
+              parse_dimacs_line_toks max_var next_cid (Z.neg v :: cur_rev) acc_rev rest
+            else inl "DIMACS literal exceeds declared num_vars bound"
+        | _ => inl "invalid literal token in DIMACS CNF"
+        end
+  end.
+
+Fixpoint parse_dimacs_lines
+  (max_var expected_clauses : N)
+  (next_cid : positive) (cur_rev : list lit) (acc_rev : cnf)
+  (lines : list string) {struct lines} : string + cnf :=
+  match lines with
+  | [] =>
+      match cur_rev with
+      | _ :: _ => inl "unterminated clause without trailing 0 in DIMACS CNF"
+      | [] =>
+          if N.eqb (N.of_nat (List.length acc_rev)) expected_clauses then
+            inr (rev_tr acc_rev)
+          else inl "DIMACS clause count does not match 'p cnf' header"
+      end
+  | ln :: rest =>
+      let toks := split_ws_tokens ln in
+      if is_comment_toks toks then
+        parse_dimacs_lines max_var expected_clauses next_cid cur_rev acc_rev rest
+      else
+        match parse_dimacs_line_toks max_var next_cid cur_rev acc_rev toks with
+        | inl err => inl err
+        | inr (next_cid', cur_rev', acc_rev') =>
+            parse_dimacs_lines max_var expected_clauses next_cid' cur_rev' acc_rev' rest
+        end
+  end.
+
+Definition parse_dimacs_cnf (input : string) : string + cnf :=
+  match find_dimacs_header (split_lines input) with
+  | inl err => inl err
+  | inr (nv, nc, rest) => parse_dimacs_lines nv nc 1%positive [] [] rest
+  end.
+
+Fixpoint parse_lrat_lits_to_zero (acc_rev : list lit) (toks : list string) {struct toks}
+  : string + (list lit * list string) :=
+  match toks with
+  | [] => inl "missing 0 terminator after LRAT literals"
+  | tok :: rest =>
+      if String.eqb tok "0" then inr (rev_tr acc_rev, rest)
+      else
+        match parse_signed_lit_str tok with
+        | Some l => parse_lrat_lits_to_zero (l :: acc_rev) rest
+        | None => inl "invalid literal in ASCII LRAT line"
+        end
+  end.
+
+Fixpoint parse_lrat_pos_to_end (acc_rev : list positive) (toks : list string) {struct toks}
+  : string + list positive :=
+  match toks with
+  | [] => inl "missing trailing 0 terminator in ASCII LRAT line"
+  | [tok] =>
+      if String.eqb tok "0" then inr (rev_tr acc_rev)
+      else inl "expected trailing 0 terminator in ASCII LRAT line"
+  | tok :: rest =>
+      match parse_pos_str tok with
+      | Some p => parse_lrat_pos_to_end (p :: acc_rev) rest
+      | None => inl "invalid or non-positive clause hint ID in ASCII LRAT line"
+      end
+  end.
+
+Definition parse_ascii_lrat_line (toks : list string) : string + lrat_step :=
+  match toks with
+  | [] => inl "empty LRAT line"
+  | cid_s :: rest =>
+      match parse_pos_str cid_s, rest with
+      | Some cid, tag_s :: rest2 =>
+          if String.eqb tag_s "d" then
+            match parse_lrat_pos_to_end [] rest2 with
+            | inr cids => inr (LRAT_Del cids)
+            | inl err => inl err
+            end
+          else
+            match parse_lrat_lits_to_zero [] rest with
+            | inl err => inl err
+            | inr (cl, hint_toks) =>
+                match parse_lrat_pos_to_end [] hint_toks with
+                | inr hints => inr (LRAT_Add cid cl hints)
+                | inl err => inl err
+                end
+            end
+      | _, _ => inl "malformed ASCII LRAT proof line"
+      end
+  end.
+
+Fixpoint parse_ascii_lrat_lines (acc_rev : list lrat_step) (lines : list string)
+  {struct lines} : string + list lrat_step :=
+  match lines with
+  | [] => inr (rev_tr acc_rev)
+  | ln :: rest =>
+      let toks := split_ws_tokens ln in
+      if is_comment_toks toks then
+        parse_ascii_lrat_lines acc_rev rest
+      else
+        match parse_ascii_lrat_line toks with
+        | inl err => inl err
+        | inr step => parse_ascii_lrat_lines (step :: acc_rev) rest
+        end
+  end.
+
+Definition parse_ascii_lrat (input : string) : string + list lrat_step :=
+  parse_ascii_lrat_lines [] (split_lines input).
+
+Definition validate_dimacs_lrat_str (cnf_str lrat_str : string) : string + unit :=
+  match parse_dimacs_cnf cnf_str, parse_ascii_lrat lrat_str with
+  | inr f, inr pf =>
+      if check_lrat_unsat f pf then inr tt
+      else inl "LRAT UNSAT proof verification failed"
+  | inl err, _ => inl err
+  | _, inl err => inl err
+  end.
+
+Theorem validate_dimacs_lrat_str_sound :
+  forall cnf_str lrat_str,
+    validate_dimacs_lrat_str cnf_str lrat_str = inr tt ->
+    exists f pf,
+      parse_dimacs_cnf cnf_str = inr f /\
+      parse_ascii_lrat lrat_str = inr pf /\
+      forall assign : positive -> bool, eval_cnf assign f = false.
+Proof.
+  intros cnf_str lrat_str H.
+  unfold validate_dimacs_lrat_str in H.
+  destruct (parse_dimacs_cnf cnf_str) as [| f] eqn:Ef; [discriminate H |].
+  destruct (parse_ascii_lrat lrat_str) as [| pf] eqn:Ep; [discriminate H |].
+  destruct (check_lrat_unsat f pf) eqn:Hchk; [| discriminate H].
+  exists f, pf; split; [exact Ef | split; [exact Ep | exact (check_lrat_unsat_sound f pf Hchk)]].
+Qed.
