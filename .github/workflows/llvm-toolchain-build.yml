@@ -101,6 +101,7 @@ jobs:
         run: |
           ninja -C build \
             clang \
+            clang-resource-headers \
             opt \
             lld \
             llc \
@@ -114,10 +115,26 @@ jobs:
         run: |
           mkdir -p dist/llvm-cert-sdk/bin
           for bin in clang opt lld llc llvm-as llvm-dis llvm-extract llvm-objdump; do
-            cp -a "build/bin/$bin" dist/llvm-cert-sdk/bin/
+            cp -L "build/bin/$bin" "dist/llvm-cert-sdk/bin/$bin"
             strip --strip-unneeded "dist/llvm-cert-sdk/bin/$bin" || true
           done
           ln -sf lld dist/llvm-cert-sdk/bin/ld.lld
+          if [ -d build/lib/clang ]; then
+            mkdir -p dist/llvm-cert-sdk/lib
+            cp -rL build/lib/clang dist/llvm-cert-sdk/lib/
+          fi
+          for b in clang opt lld ld.lld llc llvm-as llvm-dis llvm-extract llvm-objdump; do
+            test -f "dist/llvm-cert-sdk/bin/$b" && test -x "dist/llvm-cert-sdk/bin/$b"
+          done
+          dist/llvm-cert-sdk/bin/clang --version
+          dist/llvm-cert-sdk/bin/opt --version
+          dist/llvm-cert-sdk/bin/llc --version
+          dist/llvm-cert-sdk/bin/ld.lld --version
+          for triple in aarch64-unknown-none-elf riscv64-unknown-none-elf; do
+            printf '#include <stdint.h>\nint32_t smoke(int32_t x) { return x + 1; }\n' | \
+              dist/llvm-cert-sdk/bin/clang --target="$triple" -ffreestanding -x c - -S -emit-llvm -o - | \
+              grep -q '@smoke'
+          done
           cp LICENSE LICENSE-LLVM.TXT dist/llvm-cert-sdk/
           tar -C dist -I 'zstd -19 -T0' -cf llvm-cert-sdk-23.1.5-linux-x86_64.tar.zst llvm-cert-sdk
 
