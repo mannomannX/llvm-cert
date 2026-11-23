@@ -16,7 +16,8 @@ pub use fp_literals::{
 };
 pub use split_merge::{
     DeclRecord, FunctionManifestEntry, GlobalRecord, ModuleManifest, SplitOutput, TypeDefRecord,
-    merge_module, split_module, split_module_for_vellvm, validate_target_datalayout,
+    align_slice_prototype, merge_module, split_module, split_module_for_vellvm,
+    validate_target_datalayout,
 };
 pub use vellvm_sanitize::{
     FastPathEligibility, SliceRole, check_fast_path_eligibility, is_verified_vellvm_intrinsic,
@@ -479,6 +480,80 @@ attributes #0 = { nounwind }
         assert!(merged.contains("define dso_local void @eh_runner()"));
         assert!(merged.contains("define dso_local ptr @addr_taker()"));
         assert!(merged.contains("define dso_local i32 @label_owner()"));
+    }
+
+    #[test]
+    fn align_slice_prototype_restores_safe_and_o2_contract() {
+        let src_safe = r#"target datalayout = "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128"
+target triple = "aarch64-unknown-linux-gnu"
+
+define dso_local i64 @pack_sensor_u64(i32 %_llv_a0, i32 %_llv_a1) noinline nounwind {
+entry:
+  %hi = zext i32 %_llv_a0 to i64
+  %sh = shl nuw i64 %hi, 32
+  %lo = zext i32 %_llv_a1 to i64
+  %r = or disjoint i64 %sh, %lo
+  ret i64 %r
+}
+"#;
+        let tgt_o2 = r#"target datalayout = "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128"
+target triple = "aarch64-unknown-linux-gnu"
+
+declare i32 @llvm.smin.i32(i32, i32) #1
+
+define dso_local noundef i64 @pack_sensor_u64(i32 noundef %0, i32 noundef %1) local_unnamed_addr #0 {
+entry:
+  %hi = zext i32 %0 to i64
+  %sh = shl nuw i64 %hi, 32
+  %lo = zext i32 %1 to i64
+  %r = or disjoint i64 %sh, %lo
+  ret i64 %r
+}
+
+attributes #0 = { mustprogress nofree norecurse nosync willreturn memory(none) "target-cpu"="generic" }
+attributes #1 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }
+"#;
+        let aligned = align_slice_prototype(src_safe, tgt_o2).unwrap_or_default();
+        assert!(
+            aligned.contains(
+                "define dso_local i64 @pack_sensor_u64(i32 %0, i32 %1) noinline nounwind {"
+            )
+        );
+        assert!(!aligned.contains("local_unnamed_addr"));
+        assert!(!aligned.contains("memory(none)\n"));
+        assert!(!aligned.contains("mustprogress"));
+        assert!(!aligned.contains("noundef"));
+        assert!(aligned.contains("declare i32 @llvm.smin.i32(i32, i32)"));
+        assert!(aligned.contains("%sh = shl nuw i64 %hi, 32"));
+
+        let src_attrs = r#"target datalayout = "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128"
+
+define i32 @helper_scale_i32(i32 noundef %a) #0 {
+entry:
+  ret i32 %a
+}
+
+attributes #0 = { noinline nounwind optnone }
+"#;
+        let tgt_stripped = r#"target datalayout = "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128"
+
+define noundef i32 @helper_scale_i32(i32 noundef %0) local_unnamed_addr #0 {
+entry:
+  ret i32 %0
+}
+
+attributes #0 = { mustprogress nofree norecurse nosync willreturn memory(none) }
+"#;
+        let aligned_attrs = align_slice_prototype(src_attrs, tgt_stripped).unwrap_or_default();
+        assert!(aligned_attrs.contains("define i32 @helper_scale_i32(i32 noundef %0) #0 {"));
+        assert!(aligned_attrs.contains("attributes #0 = { noinline nounwind optnone }"));
+        assert!(!aligned_attrs.contains("willreturn"));
+
+        let wrong_fn = tgt_stripped.replace("@helper_scale_i32", "@other_fn");
+        assert!(align_slice_prototype(src_attrs, &wrong_fn).is_err());
+
+        let multi_src = format!("{src_safe}\n{src_attrs}");
+        assert!(align_slice_prototype(&multi_src, tgt_o2).is_err());
     }
 
     trait ResultTestExt<T> {

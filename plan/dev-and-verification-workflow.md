@@ -25,14 +25,17 @@ Because `LLVMCert` runs on Windows while Rocq `9.1` / Vellvm / OCaml `4.14` depe
 1. **Always mount the repository read-only (`-v D:\LLVMCert:/src:ro`)** and copy source directories (`vellvm`, `passes`, `validator`, `scripts`, `LICENSE`) into container-local `/work`.
    - Prevents `.vo`, `.glob`, `.aux`, `_build`, and `RocqMakefile` build artifacts from polluting the host git working tree.
    - Avoids slow Windows NTFS bind-mount compilation I/O.
-2. **Incremental vs. Full Builds:**
+2. **Incremental vs. Full Builds & Multi-Error Full-File Diagnostics:**
    - `rocq compile` halts at the first error within a single `.v` file.
-   - When iterating on one file, compile that target incrementally instead of rebuilding all theories:
+   - To collect **all** failing proof/command chunks across an entire `.v` file in one pass without modifying any source file on disk (closing broken proofs strictly inside the transient in-memory `rocq top` session), run [`scripts/rocq_onepass_diag.py`](../scripts/rocq_onepass_diag.py) after upstream dependencies are built:
+     ```bash
+     opam exec -- python3 -u /work/scripts/rocq_onepass_diag.py /work/vellvm/src /work/validator/AlgRules.v
+     ```
+   - Once diagnostics pass cleanly, compile the real `.vo` target incrementally (or with `make ... -k -j2` across independent modules):
      ```bash
      make -C vellvm/src RocqMakefile
      make -C vellvm/src --no-print-directory -f RocqMakefile TIMED=1 -j2 <path/to/File.vo>
      ```
-   - Use `make ... -k -j2` to build all independent `.v` modules in parallel without stopping on the first unrelated failure.
 3. **Always finish with a full 3-stage Docker verification** before pushing Rocq/OCaml changes (never rely solely on incremental single-file checks at handoff).
 
 ### Full Local Docker Verification Sequence

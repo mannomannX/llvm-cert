@@ -8870,3 +8870,357 @@ Proof.
   rewrite map_app; exact (mm_Forall_app _ _ _ Hcert_leaf Hsafe_list).
 Qed.
 
+
+(** * 10. Composed Safe-Path -> Fast-Path [--slice-safe-cert] Verification *)
+
+Fixpoint mm_lookup_composed_mid_def
+  (fid : function_id)
+  (safe_cert_slices :
+    list (string *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ))))
+  : option (definition dtyp (CFG.cfg dtyp)) :=
+  match safe_cert_slices with
+  | [] => None
+  | (fn_str, _, m_tle, _) :: rest =>
+      if raw_id_eqb (Name (mm_strip_leading_at fn_str)) fid then
+        match m_definitions (mm_norm_mcfg (mm_tle_to_dtyp_mcfg m_tle)) with
+        | [df_mid] => Some df_mid
+        | _ => None
+        end
+      else
+        mm_lookup_composed_mid_def fid rest
+  end.
+
+Definition mm_build_mid_defs
+  (defs_orig : list (definition dtyp (CFG.cfg dtyp)))
+  (safe_cert_slices :
+    list (string *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ))))
+  : list (definition dtyp (CFG.cfg dtyp)) :=
+  List.map
+    (fun df_orig =>
+       match mm_lookup_composed_mid_def (dc_name (df_prototype df_orig)) safe_cert_slices with
+       | Some df_mid =>
+           {| df_prototype := df_prototype df_orig;
+              df_args      := df_args df_mid;
+              df_instrs    := df_instrs df_mid |}
+       | None => df_orig
+       end)
+    defs_orig.
+
+Definition mm_build_mid_mcfg
+  (n_orig : CFG.mcfg dtyp)
+  (safe_cert_slices :
+    list (string *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ))))
+  : CFG.mcfg dtyp :=
+  {| m_name         := m_name n_orig;
+     m_target       := m_target n_orig;
+     m_datalayout   := m_datalayout n_orig;
+     m_type_defs    := m_type_defs n_orig;
+     m_globals      := m_globals n_orig;
+     m_declarations := m_declarations n_orig;
+     m_definitions  := mm_build_mid_defs (m_definitions n_orig) safe_cert_slices |}.
+
+Definition mm_composed_stage1_slices
+  (safe_cert_slices :
+    list (string *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ))))
+  : list (string *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ))) :=
+  List.map (fun '(fn_str, s_tle, m_tle, _) => (fn_str, s_tle, m_tle)) safe_cert_slices.
+
+Definition mm_composed_stage2_slices
+  (safe_cert_slices :
+    list (string *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ))))
+  : list (string *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ))) :=
+  List.map (fun '(fn_str, _, m_tle, f_tle) => (fn_str, m_tle, f_tle)) safe_cert_slices.
+
+(** Two-stage Safe-Path -> Fast-Path composed [--check-merge] boolean checker
+    handling [--slice-cert], [--slice-safe], and [--slice-safe-cert] uniformly. *)
+Definition check_module_merge_certified_tle_composed
+  (orig_tle merged_tle : toplevel_entities typ (block typ * list (block typ)))
+  (cert_slices safe_slices :
+    list (string *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ))))
+  (safe_cert_slices :
+    list (string *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ))))
+  : bool :=
+  match safe_cert_slices with
+  | [] => check_module_merge_certified_tle orig_tle merged_tle cert_slices safe_slices
+  | _ :: _ =>
+      let stage1_only := mm_composed_stage1_slices safe_cert_slices in
+      let stage2_fast := mm_composed_stage2_slices safe_cert_slices in
+      let all_safe := safe_slices ++ stage1_only in
+      let n_orig := mm_norm_mcfg (mm_tle_to_dtyp_mcfg orig_tle) in
+      let n_mid := mm_build_mid_mcfg n_orig safe_cert_slices in
+      let n_merged := mm_norm_mcfg (mm_tle_to_dtyp_mcfg merged_tle) in
+      let s1_dtyp := List.map mm_tle_slice_to_norm_dtyp stage1_only in
+      let s2_dtyp :=
+        List.map mm_tle_slice_to_norm_dtyp (cert_slices ++ safe_slices ++ stage2_fast)
+      in
+      check_all_safe_slices_tle all_safe &&
+      check_flex_module_merge n_orig n_mid s1_dtyp &&
+      if check_flex_module_merge n_mid n_merged s2_dtyp then
+        true
+      else
+        match mm_safe_export_mcfg orig_tle with
+        | None => false
+        | Some m_exp_orig =>
+            let n_exp := mm_norm_mcfg m_exp_orig in
+            let wm_slices :=
+              mm_zip_safe_defs n_orig n_exp (m_definitions n_orig) (m_definitions n_exp)
+            in
+            check_flex_module_merge n_mid n_merged (s2_dtyp ++ wm_slices)
+        end
+  end.
+
+(** Diagnostic CLI entrypoint extracted to OCaml ([Extract.v], [cert_validator.ml]). *)
+Definition validate_module_merge_certified_tle_composed
+  (orig_tle merged_tle : toplevel_entities typ (block typ * list (block typ)))
+  (cert_slices safe_slices :
+    list (string *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ))))
+  (safe_cert_slices :
+    list (string *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ))))
+  : string + unit :=
+  match safe_cert_slices with
+  | [] => validate_module_merge_certified_tle orig_tle merged_tle cert_slices safe_slices
+  | _ :: _ =>
+      let stage1_only := mm_composed_stage1_slices safe_cert_slices in
+      let stage2_fast := mm_composed_stage2_slices safe_cert_slices in
+      let all_safe := safe_slices ++ stage1_only in
+      match validate_all_safe_slices_tle all_safe with
+      | inl err => inl err
+      | inr tt =>
+          let n_orig := mm_norm_mcfg (mm_tle_to_dtyp_mcfg orig_tle) in
+          let n_mid := mm_build_mid_mcfg n_orig safe_cert_slices in
+          let n_merged := mm_norm_mcfg (mm_tle_to_dtyp_mcfg merged_tle) in
+          let s1_dtyp := List.map mm_tle_slice_to_norm_dtyp stage1_only in
+          let s2_dtyp :=
+            List.map mm_tle_slice_to_norm_dtyp (cert_slices ++ safe_slices ++ stage2_fast)
+          in
+          match validate_flex_module_merge n_orig n_mid s1_dtyp with
+          | inl err1 => inl err1
+          | inr tt =>
+              match validate_flex_module_merge n_mid n_merged s2_dtyp with
+              | inr tt => inr tt
+              | inl err2 =>
+                  match mm_safe_export_mcfg orig_tle with
+                  | None => inl err2
+                  | Some m_exp_orig =>
+                      let n_exp := mm_norm_mcfg m_exp_orig in
+                      let wm_slices :=
+                        mm_zip_safe_defs n_orig n_exp (m_definitions n_orig) (m_definitions n_exp)
+                      in
+                      validate_flex_module_merge n_mid n_merged (s2_dtyp ++ wm_slices)
+                  end
+              end
+          end
+      end
+  end.
+
+Theorem validate_module_merge_certified_tle_composed_ok_iff
+  (orig_tle merged_tle : toplevel_entities typ (block typ * list (block typ)))
+  (cert_slices safe_slices :
+    list (string *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ))))
+  (safe_cert_slices :
+    list (string *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ)))) :
+  validate_module_merge_certified_tle_composed
+    orig_tle merged_tle cert_slices safe_slices safe_cert_slices = inr tt <->
+  check_module_merge_certified_tle_composed
+    orig_tle merged_tle cert_slices safe_slices safe_cert_slices = true.
+Proof.
+  destruct safe_cert_slices as [| p rest];
+    [exact (validate_module_merge_certified_tle_ok_iff orig_tle merged_tle cert_slices safe_slices) |].
+  unfold validate_module_merge_certified_tle_composed, check_module_merge_certified_tle_composed;
+    cbv zeta.
+  set (stage1_only := mm_composed_stage1_slices (p :: rest)).
+  set (stage2_fast := mm_composed_stage2_slices (p :: rest)).
+  set (all_safe := safe_slices ++ stage1_only).
+  set (n_orig := mm_norm_mcfg (mm_tle_to_dtyp_mcfg orig_tle)).
+  set (n_mid := mm_build_mid_mcfg n_orig (p :: rest)).
+  set (n_merged := mm_norm_mcfg (mm_tle_to_dtyp_mcfg merged_tle)).
+  set (s1_dtyp := List.map mm_tle_slice_to_norm_dtyp stage1_only).
+  set (s2_dtyp := List.map mm_tle_slice_to_norm_dtyp (cert_slices ++ safe_slices ++ stage2_fast)).
+  destruct (validate_all_safe_slices_tle all_safe) as [err | []] eqn:Esafe.
+  - assert (Hsf : check_all_safe_slices_tle all_safe = false).
+    { destruct (check_all_safe_slices_tle all_safe) eqn:Ec; [| reflexivity].
+      apply validate_all_safe_slices_tle_ok_iff in Ec; congruence. }
+    rewrite Hsf; cbn [andb]; split; intros H; discriminate H.
+  - assert (Hst : check_all_safe_slices_tle all_safe = true)
+      by (apply validate_all_safe_slices_tle_ok_iff, Esafe).
+    rewrite Hst; cbn [andb].
+    destruct (validate_flex_module_merge n_orig n_mid s1_dtyp) as [err1 | []] eqn:E1.
+    + assert (H1f : check_flex_module_merge n_orig n_mid s1_dtyp = false).
+      { destruct (check_flex_module_merge n_orig n_mid s1_dtyp) eqn:Ec; [| reflexivity].
+        apply validate_flex_module_merge_ok_iff in Ec; congruence. }
+      rewrite H1f; cbn [andb]; split; intros H; discriminate H.
+    + assert (H1t : check_flex_module_merge n_orig n_mid s1_dtyp = true)
+        by (apply validate_flex_module_merge_ok_iff, E1).
+      rewrite H1t; cbn [andb].
+      destruct (validate_flex_module_merge n_mid n_merged s2_dtyp) as [err2 | []] eqn:E2.
+      * assert (H2f : check_flex_module_merge n_mid n_merged s2_dtyp = false).
+        { destruct (check_flex_module_merge n_mid n_merged s2_dtyp) eqn:Ec; [| reflexivity].
+          apply validate_flex_module_merge_ok_iff in Ec; congruence. }
+        rewrite H2f.
+        destruct (mm_safe_export_mcfg orig_tle) as [m_exp_orig |];
+          [apply validate_flex_module_merge_ok_iff | split; intros H; discriminate H].
+      * assert (H2t : check_flex_module_merge n_mid n_merged s2_dtyp = true)
+          by (apply validate_flex_module_merge_ok_iff, E2).
+        rewrite H2t; split; intros _; reflexivity.
+Qed.
+
+(** End-to-End Soundness Theorem for Composed [--slice-safe-cert] Module Merging. *)
+Theorem validate_module_merge_certified_tle_composed_refines
+  {IP : IPtr} {IPT : @IPtrTheory IP} {IPWB : IPtrWellBehaved IP}
+  (orig_tle merged_tle : toplevel_entities typ (block typ * list (block typ)))
+  (cert_slices safe_slices :
+    list (string *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ))))
+  (safe_cert_slices :
+    list (string *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ)) *
+          toplevel_entities typ (block typ * list (block typ))))
+  (Hval :
+     validate_module_merge_certified_tle_composed
+       orig_tle merged_tle cert_slices safe_slices safe_cert_slices = inr tt)
+  (Hcert :
+     Forall (@slice_value_refines IP IPT)
+       (List.map mm_tle_slice_to_norm_dtyp cert_slices))
+  (Hsafe_slices :
+     forall fn_str s_tle t_tle,
+       (In (fn_str, s_tle, t_tle) safe_slices \/
+        exists f_tle, In (fn_str, s_tle, t_tle, f_tle) safe_cert_slices) ->
+       check_safe_slice_tle s_tle t_tle = true ->
+       @slice_value_refines IP IPT (mm_tle_slice_to_norm_dtyp (fn_str, s_tle, t_tle)))
+  (Hstage2_cert :
+     Forall (@slice_value_refines IP IPT)
+       (List.map mm_tle_slice_to_norm_dtyp (mm_composed_stage2_slices safe_cert_slices)))
+  (Hwm_slices :
+     forall m_exp_orig,
+       mm_safe_export_mcfg orig_tle = Some m_exp_orig ->
+       Forall (@slice_value_refines IP IPT)
+         (mm_zip_safe_defs
+            (mm_norm_mcfg (mm_tle_to_dtyp_mcfg orig_tle))
+            (mm_norm_mcfg m_exp_orig)
+            (m_definitions (mm_norm_mcfg (mm_tle_to_dtyp_mcfg orig_tle)))
+            (m_definitions (mm_norm_mcfg m_exp_orig))))
+  (Hexp_orig_sound :
+     forall r_tle M_opt exp_tle,
+       r_tle = McfgExport.resolve_for_opt_tle orig_tle ->
+       M_opt = Pipeline.optimize_mcfg_typ (CFG.mcfg_of_tle r_tle) ->
+       McfgExport.export_mcfg_with_tle r_tle M_opt = inr exp_tle ->
+       @prog_refines IP IPT M_opt (mm_tle_to_dtyp_mcfg exp_tle)) :
+  (@prog_refines IP IPT (mm_tle_to_dtyp_mcfg orig_tle)
+     (mm_norm_mcfg (mm_tle_to_dtyp_mcfg orig_tle)) /\
+   (exists n_mid,
+      @prog_value_draw_refines IP IPT
+        (mm_norm_mcfg (mm_tle_to_dtyp_mcfg orig_tle)) n_mid /\
+      @prog_value_draw_refines IP IPT
+        n_mid (mm_norm_mcfg (mm_tle_to_dtyp_mcfg merged_tle))) /\
+   @prog_refines IP IPT
+     (mm_norm_mcfg (mm_tle_to_dtyp_mcfg merged_tle))
+     (mm_tle_to_dtyp_mcfg merged_tle))
+  \/
+  (cert_slices = [] /\
+   safe_slices = [] /\
+   safe_cert_slices = [] /\
+   @prog_refines IP IPT
+     (convert_types (CFG.mcfg_of_tle (McfgExport.resolve_for_opt_tle orig_tle)))
+     (mm_tle_to_dtyp_mcfg merged_tle)).
+Proof.
+  destruct safe_cert_slices as [| p rest].
+  - cbn [validate_module_merge_certified_tle_composed] in Hval.
+    assert (Hsafe0 :
+      forall fn_str s_tle t_tle,
+        In (fn_str, s_tle, t_tle) safe_slices ->
+        check_safe_slice_tle s_tle t_tle = true ->
+        @slice_value_refines IP IPT (mm_tle_slice_to_norm_dtyp (fn_str, s_tle, t_tle)))
+      by (intros fn s t Hin; exact (Hsafe_slices fn s t (or_introl Hin))).
+    destruct (@validate_module_merge_certified_tle_refines IP IPT IPWB
+                orig_tle merged_tle cert_slices safe_slices
+                Hval Hcert Hsafe0 Hwm_slices Hexp_orig_sound)
+      as [(Hfwd & Hvd & Hbwd) | (Hc & Hs & Hwm)].
+    + left; refine (conj Hfwd (conj _ Hbwd)).
+      exists (mm_norm_mcfg (mm_tle_to_dtyp_mcfg orig_tle)).
+      split; [apply prog_value_draw_refines_refl | exact Hvd].
+    + right; exact (conj Hc (conj Hs (conj Logic.eq_refl Hwm))).
+  - apply validate_module_merge_certified_tle_composed_ok_iff in Hval.
+    unfold check_module_merge_certified_tle_composed in Hval; cbv zeta in Hval.
+    apply Bool.andb_true_iff in Hval as [Hband Hstage2].
+    apply Bool.andb_true_iff in Hband as [Hall_safe Hstage1].
+    apply check_all_safe_slices_tle_Forall in Hall_safe.
+    set (stage1_only := mm_composed_stage1_slices (p :: rest)) in *.
+    set (stage2_fast := mm_composed_stage2_slices (p :: rest)) in *.
+    set (n_orig := mm_norm_mcfg (mm_tle_to_dtyp_mcfg orig_tle)) in *.
+    set (n_mid := mm_build_mid_mcfg n_orig (p :: rest)) in *.
+    set (n_merged := mm_norm_mcfg (mm_tle_to_dtyp_mcfg merged_tle)) in *.
+    assert (Hsafes_all :
+      Forall (@slice_value_refines IP IPT)
+        (List.map mm_tle_slice_to_norm_dtyp (safe_slices ++ stage1_only))).
+    { rewrite Forall_forall in Hall_safe |- *.
+      intros entry Hin.
+      apply in_map_iff in Hin as [[[fn_str s_tle] t_tle] [<- Hin_s]].
+      pose proof (Hall_safe (fn_str, s_tle, t_tle) Hin_s) as Hchk_s.
+      apply in_app_iff in Hin_s as [Hin_sf | Hin_st1].
+      - exact (Hsafe_slices fn_str s_tle t_tle (or_introl Hin_sf) Hchk_s).
+      - unfold stage1_only, mm_composed_stage1_slices in Hin_st1.
+        apply in_map_iff in Hin_st1 as [[[[fn0 s0] m0] f0] [Heq Hin_p]].
+        inversion Heq; subst fn0 s0 m0.
+        exact (Hsafe_slices fn_str s_tle t_tle (or_intror (ex_intro _ f0 Hin_p)) Hchk_s). }
+    rewrite map_app, Forall_app in Hsafes_all.
+    destruct Hsafes_all as [Hsafes_s Hsafes_st1].
+    pose proof (@check_flex_module_merge_value_refines IP IPT
+                  n_orig n_mid (List.map mm_tle_slice_to_norm_dtyp stage1_only)
+                  Hstage1 Hsafes_st1) as Hmid1.
+    assert (Hs2 :
+      Forall (@slice_value_refines IP IPT)
+        (List.map mm_tle_slice_to_norm_dtyp (cert_slices ++ safe_slices ++ stage2_fast))).
+    { rewrite !map_app; apply mm_Forall_app;
+        [exact Hcert | apply mm_Forall_app; [exact Hsafes_s | exact Hstage2_cert]]. }
+    destruct (check_flex_module_merge n_mid n_merged
+                (List.map mm_tle_slice_to_norm_dtyp (cert_slices ++ safe_slices ++ stage2_fast)))
+      eqn:E2.
+    + pose proof (@check_flex_module_merge_value_refines IP IPT
+                    n_mid n_merged
+                    (List.map mm_tle_slice_to_norm_dtyp (cert_slices ++ safe_slices ++ stage2_fast))
+                    E2 Hs2) as Hmid2.
+      left; split; [apply mm_norm_mcfg_refines_fwd | split; [exists n_mid; exact (conj Hmid1 Hmid2) | apply mm_norm_mcfg_refines_bwd]].
+    + destruct (mm_safe_export_mcfg orig_tle) as [m_exp_orig |]; [| discriminate Hstage2].
+      pose proof (@check_flex_module_merge_value_refines IP IPT
+                    n_mid n_merged _ Hstage2
+                    (mm_Forall_app _ _ _ Hs2 (Hwm_slices m_exp_orig Logic.eq_refl))) as Hmid2.
+      left; split; [apply mm_norm_mcfg_refines_fwd | split; [exists n_mid; exact (conj Hmid1 Hmid2) | apply mm_norm_mcfg_refines_bwd]].
+Qed.
+
+

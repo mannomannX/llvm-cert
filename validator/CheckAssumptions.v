@@ -30,6 +30,7 @@ Check @CertPasses.Pipeline.optimize_mcfg_I2F_model_refine.
 Check @CertPasses.ModuleMerge.validate_module_merge_parsed_I2F_model_refine.
 Check @CertPasses.ModuleMerge.validate_module_merge_tle_refines.
 Check @CertPasses.ModuleMerge.validate_module_merge_certified_tle_refines.
+Check @CertPasses.ModuleMerge.validate_module_merge_certified_tle_composed_refines.
 Check @CertValidator.AigLrat.check_lrat_unsat_sound.
 Check @CertValidator.AigLrat.blast_refinement_cex_unsat_sound.
 Check @CertValidator.AlgRules.check_expr_refines_sound.

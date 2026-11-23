@@ -4,7 +4,7 @@
    See /LICENSE in the repository root for details. *)
 
 let usage =
-  "usage: cert-validator --src <src.ll> --tgt <tgt.ll> --cert <fn.cert> | --check-merge --orig <orig.ll> --merged <merged.ll> [--slice-cert <fn> <src.ll> <opt_fast.ll> <cert> | --slice-safe <fn> <src.ll> <opt_safe.ll>]* | --check-lrat --cnf <formula.cnf> --lrat <proof.lrat>"
+  "usage: cert-validator --src <src.ll> --tgt <tgt.ll> --cert <fn.cert> | --check-merge --orig <orig.ll> --merged <merged.ll> [--slice-cert <fn> <src.ll> <opt_fast.ll> <cert> | --slice-safe <fn> <src.ll> <opt_safe.ll> | --slice-safe-cert <fn> <src.ll> <mid_safe.ll> <opt_fast.ll> <cert>]* | --check-lrat --cnf <formula.cnf> --lrat <proof.lrat>"
 
 let max_input_bytes = 67108864
 
@@ -47,18 +47,21 @@ let rec parse_tv src tgt cert = function
   | ("--src" | "--tgt" | "--cert") :: [] -> die 2 ("missing option argument (" ^ usage ^ ")")
   | a :: _ -> die 2 (Stdlib.Printf.sprintf "unknown argument '%s' (%s)" a usage)
 
-let rec parse_merge orig merged certs safes = function
-  | [] -> (orig, merged, Stdlib.List.rev certs, Stdlib.List.rev safes)
-  | "--orig" :: v :: tl -> if orig <> None then die 2 "duplicate --orig" else parse_merge (Some v) merged certs safes tl
-  | "--merged" :: v :: tl -> if merged <> None then die 2 "duplicate --merged" else parse_merge orig (Some v) certs safes tl
+let rec parse_merge orig merged certs safes safe_certs = function
+  | [] -> (orig, merged, Stdlib.List.rev certs, Stdlib.List.rev safes, Stdlib.List.rev safe_certs)
+  | "--orig" :: v :: tl -> if orig <> None then die 2 "duplicate --orig" else parse_merge (Some v) merged certs safes safe_certs tl
+  | "--merged" :: v :: tl -> if merged <> None then die 2 "duplicate --merged" else parse_merge orig (Some v) certs safes safe_certs tl
   | "--slice-cert" :: fn :: s :: t :: c :: tl ->
       if fn = "" then die 2 ("empty slice function name (" ^ usage ^ ")");
-      parse_merge orig merged ((fn, s, t, c) :: certs) safes tl
+      parse_merge orig merged ((fn, s, t, c) :: certs) safes safe_certs tl
   | "--slice-safe" :: fn :: s :: t :: tl ->
       if fn = "" then die 2 ("empty slice function name (" ^ usage ^ ")");
-      parse_merge orig merged certs ((fn, s, t) :: safes) tl
-  | "--slice" :: _ -> die 2 ("unauthenticated --slice is forbidden; use --slice-cert or --slice-safe (" ^ usage ^ ")")
-  | ("--orig" | "--merged" | "--slice-cert" | "--slice-safe") :: _ -> die 2 ("missing option argument (" ^ usage ^ ")")
+      parse_merge orig merged certs ((fn, s, t) :: safes) safe_certs tl
+  | "--slice-safe-cert" :: fn :: s :: m :: t :: c :: tl ->
+      if fn = "" then die 2 ("empty slice function name (" ^ usage ^ ")");
+      parse_merge orig merged certs safes ((fn, s, m, t, c) :: safe_certs) tl
+  | "--slice" :: _ -> die 2 ("unauthenticated --slice is forbidden; use --slice-cert, --slice-safe, or --slice-safe-cert (" ^ usage ^ ")")
+  | ("--orig" | "--merged" | "--slice-cert" | "--slice-safe" | "--slice-safe-cert") :: _ -> die 2 ("missing option argument (" ^ usage ^ ")")
   | a :: _ -> die 2 (Stdlib.Printf.sprintf "unknown argument '%s' (%s)" a usage)
 
 let rec parse_lrat cnf lrat = function
@@ -79,18 +82,20 @@ let run () =
       let lrat_s = Camlcoq.coqstring_of_camlstring (read_cert_file lrat_p) in
       check_result (CertFormat.validate_dimacs_lrat_str cnf_s lrat_s)
   | "--check-merge" :: rest ->
-      let orig_opt, merged_opt, raw_certs, raw_safes = parse_merge None None [] [] rest in
+      let orig_opt, merged_opt, raw_certs, raw_safes, raw_sc = parse_merge None None [] [] [] rest in
       let orig_p = match orig_opt with Some p -> p | None -> die 2 ("missing --orig (" ^ usage ^ ")") in
       let merged_p = match merged_opt with Some p -> p | None -> die 2 ("missing --merged (" ^ usage ^ ")") in
       let orig_tle = parse_ll orig_p in
       let merged_tle = parse_ll merged_p in
+      let check_cert s_tle t_tle cp =
+        check_result (CertValidator.validate_tle_pair_with_cert_str s_tle t_tle (Camlcoq.coqstring_of_camlstring (read_cert_file cp)))
+      in
       let cert_slices =
         Stdlib.List.map
           (fun (fn, sp, tp, cp) ->
             let s_tle = parse_ll sp in
             let t_tle = parse_ll tp in
-            let cert_str = Camlcoq.coqstring_of_camlstring (read_cert_file cp) in
-            check_result (CertValidator.validate_tle_pair_with_cert_str s_tle t_tle cert_str);
+            check_cert s_tle t_tle cp;
             ((Camlcoq.coqstring_of_camlstring fn, s_tle), t_tle))
           raw_certs
       in
@@ -99,7 +104,16 @@ let run () =
           (fun (fn, sp, tp) -> ((Camlcoq.coqstring_of_camlstring fn, parse_ll sp), parse_ll tp))
           raw_safes
       in
-      check_result (ModuleMerge.validate_module_merge_certified_tle orig_tle merged_tle cert_slices safe_slices)
+      let safe_cert_slices =
+        Stdlib.List.map
+          (fun (fn, sp, mp, tp, cp) ->
+            let m_tle = parse_ll mp in
+            let t_tle = parse_ll tp in
+            check_cert m_tle t_tle cp;
+            (((Camlcoq.coqstring_of_camlstring fn, parse_ll sp), m_tle), t_tle))
+          raw_sc
+      in
+      check_result (ModuleMerge.validate_module_merge_certified_tle_composed orig_tle merged_tle cert_slices safe_slices safe_cert_slices)
   | _ ->
       let src_opt, tgt_opt, cert_opt = parse_tv None None None argv in
       let src_p = match src_opt with Some p -> p | None -> die 2 ("missing --src (" ^ usage ^ ")") in

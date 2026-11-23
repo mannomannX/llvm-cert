@@ -312,6 +312,48 @@ pub fn split_module_for_vellvm(module_ir: &str) -> Result<SplitOutput, BridgeErr
     Ok(out)
 }
 
+/// Aligns an optimized single-function slice (`tgt_slice_ir`, e.g., `opt -O2` output) back to the
+/// exact prototype, linkage, return/parameter attributes, and metadata contract of `src_slice_ir`
+/// while preserving `tgt_slice_ir`'s body, SSA parameter names, and synthesized declarations.
+pub fn align_slice_prototype(
+    src_slice_ir: &str,
+    tgt_slice_ir: &str,
+) -> Result<String, BridgeError> {
+    let src_parsed = parse_raw_module(src_slice_ir)?;
+    if src_parsed.manifest.functions.len() != 1 {
+        return Err(BridgeError::MalformedModule {
+            detail: format!(
+                "align-proto requires single-function source slice, found {}",
+                src_parsed.manifest.functions.len()
+            ),
+        });
+    }
+    let Some(src_fn) = src_parsed.manifest.functions.first() else {
+        return Err(BridgeError::MalformedModule {
+            detail: "align-proto missing source function definition".to_owned(),
+        });
+    };
+
+    let tgt_parsed = parse_raw_module(tgt_slice_ir)?;
+    let src_key = canonical_llvm_ident_key(&src_fn.name);
+    if !tgt_parsed
+        .raw_functions
+        .iter()
+        .any(|rf| rf.name == src_fn.name || canonical_llvm_ident_key(&rf.name) == src_key)
+    {
+        return Err(BridgeError::MalformedModule {
+            detail: format!(
+                "align-proto target slice contains no matching definition for `@{}`",
+                src_fn.name
+            ),
+        });
+    }
+
+    let mut slices = BTreeMap::new();
+    slices.insert(src_fn.name.clone(), tgt_slice_ir.to_owned());
+    merge_module(&src_parsed.manifest, &slices)
+}
+
 /// Recombines verified per-function slices (`<fn>.opt_fast.ll` or `<fn>.opt_safe.ll`) with the
 /// original `ModuleManifest`, restoring original `input.ll` function headers/attributes (`F-19`),
 /// stripping unverified `-O2` alias metadata (`F-19`), supporting non-splittable/whole-module

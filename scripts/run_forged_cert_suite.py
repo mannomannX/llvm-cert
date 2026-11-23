@@ -931,6 +931,83 @@ def build_suite_cases() -> list[SuiteCase]:
         )
     )
 
+    def prep_pos_check_merge_composed_safe_cert(
+        wd: pathlib.Path, vbin: pathlib.Path, fbin: pathlib.Path
+    ) -> PreparedInvocation:
+        g_src = (
+            "define i32 @g(i32 %y) {\n"
+            "entry:\n"
+            "  %slot = alloca i32, align 4\n"
+            "  store i32 %y, ptr %slot, align 4\n"
+            "  %loaded = load i32, ptr %slot, align 4\n"
+            "  %sum = add i32 %loaded, 7\n"
+            "  ret i32 %sum\n"
+            "}\n"
+        )
+        g_src_p = wd / "g_src.ll"
+        g_mid_p = wd / "g_mid_safe.ll"
+        g_fast_p = wd / "g_opt_fast.ll"
+        g_cert_p = wd / "g.cert"
+        orig_p = wd / "orig.ll"
+        merged_p = wd / "merged.ll"
+        g_src_p.write_text(g_src, encoding="utf-8", newline="\n")
+
+        safe_gen = run_process(
+            [str(fbin), "--pass", "pipeline", "-o", str(g_mid_p), str(g_src_p)],
+            DEFAULT_TIMEOUT_SEC,
+        )
+        if safe_gen.timed_out or safe_gen.returncode != 0:
+            raise RuntimeError(
+                f"verified-opt-fallback failed on g_src.ll "
+                f"(rc={safe_gen.returncode}): {safe_gen.stderr.strip()}"
+            )
+        g_mid = g_mid_p.read_text(encoding="utf-8")
+        rhs_var = "%loaded" if "add i32 %loaded, 7" in g_mid else "%y"
+        g_fast = g_mid.replace(f"add i32 {rhs_var}, 7", f"add i32 7, {rhs_var}")
+        if g_fast == g_mid:
+            raise RuntimeError(f"unexpected verified-opt-fallback output for @g:\n{g_mid}")
+        g_fast_p.write_text(g_fast, encoding="utf-8", newline="\n")
+        cert_bytes = build_cert_v1(
+            "g",
+            g_mid,
+            g_fast,
+            scalar_refines_sexp(
+                32,
+                '(binop add 32 (flags 0 0 0 0) (var "%y" 32) (bv 32 7))',
+                '(binop add 32 (flags 0 0 0 0) (bv 32 7) (var "%y" 32))',
+            ),
+        )
+        g_cert_p.write_bytes(cert_bytes)
+        orig_p.write_text(g_src, encoding="utf-8", newline="\n")
+        merged_p.write_text(g_fast, encoding="utf-8", newline="\n")
+        return PreparedInvocation(
+            argv=[
+                str(vbin),
+                "--check-merge",
+                "--orig",
+                str(orig_p),
+                "--merged",
+                str(merged_p),
+                "--slice-safe-cert",
+                "g",
+                str(g_src_p),
+                str(g_mid_p),
+                str(g_fast_p),
+                str(g_cert_p),
+            ],
+            cert_bytes_for_grammar_check=cert_bytes,
+        )
+
+    cases.append(
+        SuiteCase(
+            name="pos_check_merge_composed_safe_cert",
+            expect_accept=True,
+            description="--check-merge --slice-safe-cert composed Safe-Path -> Fast-Path acceptance",
+            prepare=prep_pos_check_merge_composed_safe_cert,
+            expect_cert_parse_ok=True,
+        )
+    )
+
     # ---- B. Adversarial Forged-Certificate, Soundness & DoS Rejection Cases ----
 
     def prep_neg_wrong_const(
@@ -1690,6 +1767,153 @@ def build_suite_cases() -> list[SuiteCase]:
             expect_accept=False,
             description="extern_weak global linkage rejected by ModuleMerge (F-33)",
             prepare=prep_neg_merge_extern_weak_injection,
+        )
+    )
+
+    def prep_neg_merge_composed_forged_mid_safe(
+        wd: pathlib.Path, vbin: pathlib.Path, fbin: pathlib.Path
+    ) -> PreparedInvocation:
+        g_src = (
+            "define i32 @g(i32 %y) {\n"
+            "entry:\n"
+            "  %slot = alloca i32, align 4\n"
+            "  store i32 %y, ptr %slot, align 4\n"
+            "  %loaded = load i32, ptr %slot, align 4\n"
+            "  %sum = add i32 %loaded, 7\n"
+            "  ret i32 %sum\n"
+            "}\n"
+        )
+        g_src_p = wd / "g_src.ll"
+        g_real_mid_p = wd / "g_real_mid.ll"
+        g_mid_p = wd / "g_mid_tampered.ll"
+        g_fast_p = wd / "g_fast.ll"
+        g_cert_p = wd / "g.cert"
+        orig_p = wd / "orig.ll"
+        merged_p = wd / "merged.ll"
+        g_src_p.write_text(g_src, encoding="utf-8", newline="\n")
+
+        safe_gen = run_process(
+            [str(fbin), "--pass", "pipeline", "-o", str(g_real_mid_p), str(g_src_p)],
+            DEFAULT_TIMEOUT_SEC,
+        )
+        if safe_gen.timed_out or safe_gen.returncode != 0:
+            raise RuntimeError(f"verified-opt-fallback failed: {safe_gen.stderr.strip()}")
+        g_real_mid = g_real_mid_p.read_text(encoding="utf-8")
+        rhs_var = "%loaded" if "add i32 %loaded, 7" in g_real_mid else "%y"
+        g_mid_tampered = g_real_mid.replace(f"add i32 {rhs_var}, 7", f"add i32 {rhs_var}, 99")
+        g_fast = g_real_mid.replace(f"add i32 {rhs_var}, 7", f"add i32 99, {rhs_var}")
+        g_mid_p.write_text(g_mid_tampered, encoding="utf-8", newline="\n")
+        g_fast_p.write_text(g_fast, encoding="utf-8", newline="\n")
+        cert_bytes = build_cert_v1(
+            "g",
+            g_mid_tampered,
+            g_fast,
+            scalar_refines_sexp(
+                32,
+                '(binop add 32 (flags 0 0 0 0) (var "%y" 32) (bv 32 99))',
+                '(binop add 32 (flags 0 0 0 0) (bv 32 99) (var "%y" 32))',
+            ),
+        )
+        g_cert_p.write_bytes(cert_bytes)
+        orig_p.write_text(g_src, encoding="utf-8", newline="\n")
+        merged_p.write_text(g_fast, encoding="utf-8", newline="\n")
+        return PreparedInvocation(
+            argv=[
+                str(vbin),
+                "--check-merge",
+                "--orig",
+                str(orig_p),
+                "--merged",
+                str(merged_p),
+                "--slice-safe-cert",
+                "g",
+                str(g_src_p),
+                str(g_mid_p),
+                str(g_fast_p),
+                str(g_cert_p),
+            ],
+            cert_bytes_for_grammar_check=cert_bytes,
+        )
+
+    cases.append(
+        SuiteCase(
+            name="neg_merge_composed_forged_mid_safe",
+            expect_accept=False,
+            description="tampered mid_safe.ll in --slice-safe-cert rejected by Safe-Path replay",
+            prepare=prep_neg_merge_composed_forged_mid_safe,
+            expect_cert_parse_ok=True,
+        )
+    )
+
+    def prep_neg_merge_composed_forged_cert(
+        wd: pathlib.Path, vbin: pathlib.Path, fbin: pathlib.Path
+    ) -> PreparedInvocation:
+        g_src = (
+            "define i32 @g(i32 %y) {\n"
+            "entry:\n"
+            "  %slot = alloca i32, align 4\n"
+            "  store i32 %y, ptr %slot, align 4\n"
+            "  %loaded = load i32, ptr %slot, align 4\n"
+            "  %sum = add i32 %loaded, 7\n"
+            "  ret i32 %sum\n"
+            "}\n"
+        )
+        g_src_p = wd / "g_src.ll"
+        g_mid_p = wd / "g_mid_safe.ll"
+        g_fast_p = wd / "g_fast_forged.ll"
+        g_cert_p = wd / "g_forged.cert"
+        orig_p = wd / "orig.ll"
+        merged_p = wd / "merged.ll"
+        g_src_p.write_text(g_src, encoding="utf-8", newline="\n")
+
+        safe_gen = run_process(
+            [str(fbin), "--pass", "pipeline", "-o", str(g_mid_p), str(g_src_p)],
+            DEFAULT_TIMEOUT_SEC,
+        )
+        if safe_gen.timed_out or safe_gen.returncode != 0:
+            raise RuntimeError(f"verified-opt-fallback failed: {safe_gen.stderr.strip()}")
+        g_mid = g_mid_p.read_text(encoding="utf-8")
+        rhs_var = "%loaded" if "add i32 %loaded, 7" in g_mid else "%y"
+        g_fast_forged = g_mid.replace(f"add i32 {rhs_var}, 7", f"add i32 {rhs_var}, 99")
+        g_fast_p.write_text(g_fast_forged, encoding="utf-8", newline="\n")
+        cert_bytes = build_cert_v1(
+            "g",
+            g_mid,
+            g_fast_forged,
+            scalar_refines_sexp(
+                32,
+                '(binop add 32 (flags 0 0 0 0) (var "%y" 32) (bv 32 7))',
+                '(binop add 32 (flags 0 0 0 0) (var "%y" 32) (bv 32 99))',
+            ),
+        )
+        g_cert_p.write_bytes(cert_bytes)
+        orig_p.write_text(g_src, encoding="utf-8", newline="\n")
+        merged_p.write_text(g_fast_forged, encoding="utf-8", newline="\n")
+        return PreparedInvocation(
+            argv=[
+                str(vbin),
+                "--check-merge",
+                "--orig",
+                str(orig_p),
+                "--merged",
+                str(merged_p),
+                "--slice-safe-cert",
+                "g",
+                str(g_src_p),
+                str(g_mid_p),
+                str(g_fast_p),
+                str(g_cert_p),
+            ],
+            cert_bytes_for_grammar_check=cert_bytes,
+        )
+
+    cases.append(
+        SuiteCase(
+            name="neg_merge_composed_forged_cert",
+            expect_accept=False,
+            description="unsound Stage-2 cert in --slice-safe-cert rejected by CertValidator kernel",
+            prepare=prep_neg_merge_composed_forged_cert,
+            expect_cert_parse_ok=True,
         )
     )
 

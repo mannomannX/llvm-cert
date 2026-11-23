@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
 use ir_bridge::{
-    BridgeError, FastPathEligibility, ModuleManifest, SliceRole, check_fast_path_eligibility,
-    merge_module, sanitize_for_vellvm, split_module_for_vellvm,
+    BridgeError, FastPathEligibility, ModuleManifest, SliceRole, align_slice_prototype,
+    check_fast_path_eligibility, merge_module, sanitize_for_vellvm, split_module_for_vellvm,
 };
 
 fn main() -> ExitCode {
@@ -32,6 +32,7 @@ fn run_cli() -> Result<(), BridgeError> {
         "check-eligibility" => cmd_check_eligibility(rest),
         "split" => cmd_split(rest),
         "merge" => cmd_merge(rest),
+        "align-proto" => cmd_align_proto(rest),
         "--help" | "-h" | "help" => {
             print_usage();
             Ok(())
@@ -169,6 +170,65 @@ fn cmd_split(args: &[String]) -> Result<(), BridgeError> {
         write_utf8(&slice_path, slice_ir)?;
     }
     Ok(())
+}
+
+fn cmd_align_proto(args: &[String]) -> Result<(), BridgeError> {
+    let mut src_path: Option<PathBuf> = None;
+    let mut tgt_path: Option<PathBuf> = None;
+    let mut out_path: Option<PathBuf> = None;
+
+    let mut i = 0_usize;
+    while let Some(arg) = args.get(i) {
+        match arg.as_str() {
+            "--src" => {
+                let val = args
+                    .get(i + 1)
+                    .ok_or_else(|| BridgeError::MalformedModule {
+                        detail: "missing path after `--src`".to_owned(),
+                    })?;
+                src_path = Some(PathBuf::from(val));
+                i += 2;
+            }
+            "--tgt" => {
+                let val = args
+                    .get(i + 1)
+                    .ok_or_else(|| BridgeError::MalformedModule {
+                        detail: "missing path after `--tgt`".to_owned(),
+                    })?;
+                tgt_path = Some(PathBuf::from(val));
+                i += 2;
+            }
+            "-o" | "--output" => {
+                let val = args
+                    .get(i + 1)
+                    .ok_or_else(|| BridgeError::MalformedModule {
+                        detail: "missing path after `-o`".to_owned(),
+                    })?;
+                out_path = Some(PathBuf::from(val));
+                i += 2;
+            }
+            other => {
+                return Err(BridgeError::MalformedModule {
+                    detail: format!("unexpected argument `{other}` in `align-proto`"),
+                });
+            }
+        }
+    }
+
+    let s_path = src_path.ok_or_else(|| BridgeError::MalformedModule {
+        detail: "usage: ir-bridge align-proto --src <src.ll> --tgt <tgt.ll> -o <out.ll>".to_owned(),
+    })?;
+    let t_path = tgt_path.ok_or_else(|| BridgeError::MalformedModule {
+        detail: "usage: ir-bridge align-proto --src <src.ll> --tgt <tgt.ll> -o <out.ll>".to_owned(),
+    })?;
+    let o_path = out_path.ok_or_else(|| BridgeError::MalformedModule {
+        detail: "usage: ir-bridge align-proto --src <src.ll> --tgt <tgt.ll> -o <out.ll>".to_owned(),
+    })?;
+
+    let src_ir = read_utf8(&s_path)?;
+    let tgt_ir = read_utf8(&t_path)?;
+    let aligned = align_slice_prototype(&src_ir, &tgt_ir)?;
+    write_utf8(&o_path, &aligned)
 }
 
 fn cmd_merge(args: &[String]) -> Result<(), BridgeError> {
@@ -334,6 +394,7 @@ USAGE:
   ir-bridge to-vellvm <input.ll> [-o <output.ll>] [--role source|target-fast]
   ir-bridge check-eligibility <opt_fast.ll>
   ir-bridge split <module.ll> --out-dir <dir>
-  ir-bridge merge --manifest <manifest.json> --slices-dir <dir> -o <merged.ll> [--verify-with <opt>]"
+  ir-bridge merge --manifest <manifest.json> --slices-dir <dir> -o <merged.ll> [--verify-with <opt>]
+  ir-bridge align-proto --src <src.ll> --tgt <tgt.ll> -o <out.ll>"
     );
 }

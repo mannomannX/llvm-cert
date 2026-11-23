@@ -153,6 +153,10 @@ Class SizeofTheory {S : Sizeof} : Prop :=
     forall sz t,
       store_size_dtyp (DTYPE_Array true sz t) = (sz * store_size_dtyp t)%N;
 
+    bit_sizeof_dtyp_vector :
+    forall sz t,
+      bit_sizeof_dtyp (DTYPE_Array true sz t) = (sz * bit_sizeof_dtyp t)%N;
+
     store_size_dtyp_i8 :
     store_size_dtyp (DTYPE_Base (DTYPE_I 8)) = 1%N;
 
