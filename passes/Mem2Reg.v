@@ -11874,7 +11874,7 @@ Section MemoryAndSerialization.
       apply interp_mcfg_model_bind. }
     eapply refine_prov_obs_eq;
       [reflexivity
-      | symmetry; rewrite (eq_itree_bind_congr_l EexpR), Eqit.bind_bind; reflexivity
+      | symmetry; rewrite (eq_itree_bind_congr_l EexpR), !Eqit.bind_bind; reflexivity
       |]; clear EexpR.
     eapply refine_prov_tau_star_r;
       [apply tau_star_bind, (tau_star_mcfg_lread_some sv_reg _ σ2 sf2_mid fstk2 g Hlk_sv) |].
@@ -11885,8 +11885,12 @@ Section MemoryAndSerialization.
       [reflexivity
       | symmetry;
         rewrite (interp_mcfg_model_obs_eq _ _ _ (extract_element_singleton_zero_eq (DVALUE_Base db'))),
-                interp_mcfg_model_ret, !Eqit.bind_ret_l,
-                (interp_cfg_exc_obs_eq ctx2 _ _ _ (bind_unit_ret_r _));
+                interp_mcfg_model_ret, Eqit.bind_ret_l;
+        cbn beta iota;
+        rewrite Eqit.bind_ret_l;
+        cbn beta iota;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+        rewrite (interp_cfg_exc_obs_eq ctx2 _ _ _ (bind_unit_ret_r (lwrite st_reg (DVALUE_Base db'))));
         reflexivity
       |].
     eapply refine_prov_tau_star_r;
@@ -11955,7 +11959,7 @@ Section MemoryAndSerialization.
             (fun _ => denote_instr (IId st_reg, INSTR_Op (mk_store_ext_exp dt sv_reg), []) va2))
          (σ2, ((sf2, fstk2), g))).
   Proof using.
-    set (k_ext := denote_instr (IId st_reg, INSTR_Op (mk_store_ext_exp dt sv_reg), []) va2).
+    set (k_ext := denote_instr (Pa := @ParamsV IP IPT) (IId st_reg, INSTR_Op (mk_store_ext_exp dt sv_reg), []) va2).
     assert (Er_sv :
               interp_cfg_exc ctx2
                 (ITree.bind
@@ -11974,7 +11978,7 @@ Section MemoryAndSerialization.
                          (ITree.bind (lwrite sv_reg uv) (fun _ => k_ext))
                          s2''
                    end)).
-    { cbn [denote_instr].
+    { cbn [denote_instr ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       rewrite (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)).
       rewrite interp_cfg_exc_bind.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
@@ -12286,7 +12290,7 @@ Section MemoryAndSerialization.
     set (sf2_mid := upd_local_sf sf2 (Maps.add lv_reg (DVALUE_Array true [DVALUE_Base (gs_db gs)]) (stack_vars sf2))).
     assert (Hlk_lv : Maps.lookup lv_reg (stack_vars sf2_mid) = Some (DVALUE_Array true [DVALUE_Base (gs_db gs)]))
       by (cbn [sf2_mid upd_local_sf stack_vars Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity).
-    set (k_cast := denote_instr (IId dst, INSTR_Op (mk_load_cast_exp (gs_dt gs) lv_reg), []) va2).
+    set (k_cast := denote_instr (Pa := @ParamsV IP IPT) (IId dst, INSTR_Op (mk_load_cast_exp (gs_dt gs) lv_reg), []) va2).
     assert (Er_lv :
               interp_cfg_exc ctx2
                 (ITree.bind (denote_instr (IId lv_reg, INSTR_Op (mk_load_vec_exp (gs_dt gs) cur_reg), []) va2)
@@ -12308,7 +12312,7 @@ Section MemoryAndSerialization.
                             | inr _ => interp_cfg_exc ctx2 k_cast s2'''
                             end)
                    end)).
-    { cbn [denote_instr].
+    { cbn [denote_instr ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       rewrite (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)).
       rewrite interp_cfg_exc_bind.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
@@ -12333,7 +12337,7 @@ Section MemoryAndSerialization.
       apply interp_mcfg_model_bind. }
     eapply refine_prov_obs_eq;
       [reflexivity
-      | symmetry; rewrite (eq_itree_bind_congr_l Elv_m), Eqit.bind_bind; reflexivity
+      | symmetry; rewrite (eq_itree_bind_congr_l Elv_m), !Eqit.bind_bind; reflexivity
       |]; clear Elv_m.
     eapply refine_prov_tau_star_r;
       [apply tau_star_bind, (tau_star_mcfg_lread_some cur_reg _ σ2 sf2 fstk2 g Hlk_cur) |].
@@ -12342,7 +12346,12 @@ Section MemoryAndSerialization.
     cbn beta iota.
     eapply refine_prov_obs_eq;
       [reflexivity
-      | symmetry; rewrite interp_mcfg_model_ret, !Eqit.bind_ret_l; reflexivity
+      | symmetry;
+        rewrite interp_mcfg_model_ret, Eqit.bind_ret_l;
+        cbn beta iota;
+        rewrite Eqit.bind_ret_l;
+        cbn beta iota;
+        reflexivity
       |].
     eapply refine_prov_tau_star_r;
       [apply tau_star_bind, tau_star_cfg_exc_lwrite |].
@@ -16424,7 +16433,7 @@ Section MemoryAndSerialization.
           set (st_reg := fresh_name "mst" (p :: sv_reg :: avoid)) in *.
           destruct (rewrite_code_for_slot p dt st_reg (st_reg :: sv_reg :: avoid) rest)
             as [[rest' er] av'] eqn:E.
-          inversion Hrw; subst; cbn; rewrite !app_nil_r, Him_ba; cbn.
+          inversion Hrw; subst; cbn; rewrite ?app_nil_r, Him_ba; cbn.
           exact (IH _ _ rest' end_reg avoid' Hrest_ba E).
         * destruct (rewrite_code_for_slot p dt cur_reg avoid rest) as [[rest' er] av'] eqn:E.
           inversion Hrw; subst; cbn; rewrite Him_ba; cbn.
@@ -16715,9 +16724,9 @@ Section MemoryAndSerialization.
         assert (Hdst_av0 : In dst avoid0) by (apply Hdst_av0_fn; left; reflexivity).
         assert (Hcur_ne_dst : cur_reg <> dst) by (intros ->; exact (Hcur_nin0 Hdst_av0)).
         assert (Hlv_ne_p : p <> lv_reg)
-          by (intros <-; exact (fresh_name_not_in "mlv" (p :: cur_reg :: avoid) (or_introl Logic.eq_refl))).
+          by (intros Heq; exact (fresh_name_not_in "mlv" (p :: cur_reg :: avoid) (or_introl Heq))).
         assert (Hlv_ne_cur : cur_reg <> lv_reg)
-          by (intros <-; exact (fresh_name_not_in "mlv" (p :: cur_reg :: avoid) (or_intror (or_introl Logic.eq_refl)))).
+          by (intros Heq; exact (fresh_name_not_in "mlv" (p :: cur_reg :: avoid) (or_intror (or_introl Heq)))).
         assert (Hlv_nin0 : ~ In lv_reg avoid0)
           by (intros Hin0; exact (fresh_name_not_in "mlv" (p :: cur_reg :: avoid) (or_intror (or_intror (Hinc_av _ Hin0))))).
         assert (Hdst_nsafe : ~ In dst safe_no_p).
@@ -16729,7 +16738,7 @@ Section MemoryAndSerialization.
             discriminate Hbad. }
         assert (Hlv_nsafe : ~ In lv_reg safe_no_p)
           by (intros Hin_s; exact (Hlv_nin0 (Hsafe_av0 lv_reg Hin_s))).
-        unfold denote_code; cbn [loop_monad].
+        unfold denote_code; cbn [loop_monad ExtLib.Structures.Monad.bind Monad_itree].
         eapply refine_prov_obs_eq;
           [reflexivity
           | apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
@@ -16753,7 +16762,7 @@ Section MemoryAndSerialization.
           assert (Hsafe1 : safe_locals_env P_unprom safe_no_p
                              (Maps.add dst dv_ld
                                 (Maps.add lv_reg (DVALUE_Array true [DVALUE_Base (gs_db gs)]) (stack_vars sf2))))
-            by (apply safe_locals_env_add_other, safe_locals_env_add_other; assumption).
+            by (apply safe_locals_env_add_other; [assumption | apply safe_locals_env_add_other; assumption]).
           assert (Hvars1 : forall x, In x avoid0 -> x <> p ->
                              Maps.lookup x (Maps.add dst dv_ld (stack_vars sf1)) =
                              Maps.lookup x
@@ -16797,7 +16806,7 @@ Section MemoryAndSerialization.
             - apply (Hval_av0_fn x (or_introl Logic.eq_refl)); cbn [m2r_code_entry_uses full_instr_uses full_texp_uses snd];
                 apply in_app_iff; left; apply in_app_iff; left; exact Hx.
             - intros ->; exact (Hnin_p_val Hx). }
-          unfold denote_code; cbn [loop_monad].
+          unfold denote_code; cbn [loop_monad ExtLib.Structures.Monad.bind Monad_itree].
           eapply refine_prov_obs_eq;
             [reflexivity
             | apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
@@ -16816,7 +16825,7 @@ Section MemoryAndSerialization.
              assert (Hsafe1 : safe_locals_env P_unprom safe_no_p
                                 (Maps.add st_reg (DVALUE_Base db')
                                    (Maps.add sv_reg (DVALUE_Array true [DVALUE_Base db']) (stack_vars sf2))))
-               by (apply safe_locals_env_add_other, safe_locals_env_add_other; assumption).
+               by (apply safe_locals_env_add_other; [assumption | apply safe_locals_env_add_other; assumption]).
              assert (Hvars1 : forall x, In x avoid0 -> x <> p ->
                                 Maps.lookup x (stack_vars sf1) =
                                 Maps.lookup x
@@ -18716,9 +18725,9 @@ Section MemoryAndSerialization.
           assert (Hdst_av0 : In dst avoid0) by (apply Hdst_av0_fn; left; reflexivity).
           assert (Hcur_ne_dst : cur_reg <> dst) by (intros ->; exact (Hcur_nin0 Hdst_av0)).
           assert (Hlv_ne_p : p <> lv_reg)
-            by (intros <-; exact (fresh_name_not_in "mlv" (p :: cur_reg :: avoid) (or_introl Logic.eq_refl))).
+            by (intros Heq; exact (fresh_name_not_in "mlv" (p :: cur_reg :: avoid) (or_introl Heq))).
           assert (Hlv_ne_cur : cur_reg <> lv_reg)
-            by (intros <-; exact (fresh_name_not_in "mlv" (p :: cur_reg :: avoid) (or_intror (or_introl Logic.eq_refl)))).
+            by (intros Heq; exact (fresh_name_not_in "mlv" (p :: cur_reg :: avoid) (or_intror (or_introl Heq)))).
           assert (Hlv_nin0 : ~ In lv_reg avoid0)
             by (intros Hin0; exact (fresh_name_not_in "mlv" (p :: cur_reg :: avoid) (or_intror (or_intror (Hinc_av _ Hin0))))).
           assert (Hdst_nsafe : ~ In dst safe_no_p).
@@ -18730,7 +18739,7 @@ Section MemoryAndSerialization.
               discriminate Hbad. }
           assert (Hlv_nsafe : ~ In lv_reg safe_no_p)
             by (intros Hin_s; exact (Hlv_nin0 (Hsafe_av0 lv_reg Hin_s))).
-          unfold denote_code; cbn [loop_monad].
+          unfold denote_code; cbn [loop_monad ExtLib.Structures.Monad.bind Monad_itree].
           eapply s1_cps_obs_eq;
             [reflexivity
             | apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
@@ -18755,7 +18764,7 @@ Section MemoryAndSerialization.
             assert (Hsafe1 : safe_locals_env P_unprom safe_no_p
                                (Maps.add dst dv_ld
                                   (Maps.add lv_reg (DVALUE_Array true [DVALUE_Base (gs_db gs)]) (stack_vars sf2))))
-              by (apply safe_locals_env_add_other, safe_locals_env_add_other; assumption).
+              by (apply safe_locals_env_add_other; [assumption | apply safe_locals_env_add_other; assumption]).
             assert (Hvars1 : forall x, In x avoid0 -> x <> p ->
                                Maps.lookup x (Maps.add dst dv_ld (stack_vars sf1)) =
                                Maps.lookup x
@@ -18799,7 +18808,7 @@ Section MemoryAndSerialization.
               - apply (Hval_av0_fn x (or_introl Logic.eq_refl)); cbn [m2r_code_entry_uses full_instr_uses full_texp_uses snd];
                   apply in_app_iff; left; apply in_app_iff; left; exact Hx.
               - intros ->; exact (Hnin_p_val Hx). }
-            unfold denote_code; cbn [loop_monad].
+            unfold denote_code; cbn [loop_monad ExtLib.Structures.Monad.bind Monad_itree].
             eapply s1_cps_obs_eq;
               [reflexivity
               | apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
@@ -18819,7 +18828,7 @@ Section MemoryAndSerialization.
                assert (Hsafe1 : safe_locals_env P_unprom safe_no_p
                                   (Maps.add st_reg (DVALUE_Base db')
                                      (Maps.add sv_reg (DVALUE_Array true [DVALUE_Base db']) (stack_vars sf2))))
-                 by (apply safe_locals_env_add_other, safe_locals_env_add_other; assumption).
+                 by (apply safe_locals_env_add_other; [assumption | apply safe_locals_env_add_other; assumption]).
                assert (Hvars1 : forall x, In x avoid0 -> x <> p ->
                                   Maps.lookup x (stack_vars sf1) =
                                   Maps.lookup x
