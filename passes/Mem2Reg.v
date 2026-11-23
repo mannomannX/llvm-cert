@@ -278,25 +278,31 @@ Definition m2r_module_interproc_safe (M : CFG.mcfg dtyp) : bool :=
 
 (** ** Stage 1: Single-Slot SSA Promotion *)
 
-(** Exact SSA replacement expressions for promoted [Store] and [Load] sites:
-    - [mk_store_val_exp] evaluates [val_exp] at [Some dt] and checks base-value
-      well-formedness via [dvalue_to_dvalue_base] (matching [Store]'s [FailureE]
-      behavior on aggregate values without prematurely deserializing dead stores).
-    - [mk_load_val_exp] serializes the current SSA register at [dt] and runs
-      [memory_bytes_to_dvalue] at [dt], matching [Load] byte-for-byte across all
-      scalar integer, pointer, and floating-point types. *)
-Definition mk_store_val_exp (dt : dtyp) (val_exp : exp dtyp) : exp dtyp :=
+(** Exact flat LLVM-23-valid SSA replacement expressions for promoted [Store] and [Load] sites:
+    - [mk_store_vec_exp] + [mk_store_ext_exp] evaluate [val_exp] at [Some dt] and check
+      base-value well-formedness via [dvalue_to_dvalue_base] without nesting an instruction
+      operator inside another instruction.
+    - [mk_load_vec_exp] + [mk_load_cast_exp] construct a local [<1 x dt>] vector via
+      [insertelement] and bitcast it to [dt] to deserialize through [memory_bytes_to_dvalue]
+      without embedding local SSA names inside constant vector syntax. *)
+Definition mk_store_vec_exp (dt : dtyp) (val_exp : exp dtyp) : exp dtyp :=
   let vec_ty := DTYPE_Array true 1%N dt in
   let i1_ty := DTYPE_Base (DTYPE_I 1) in
-  OP_ExtractElement
-    (vec_ty,
-     OP_InsertElement (vec_ty, EXP_Poison) (dt, val_exp) (i1_ty, EXP_Bool false))
-    (i1_ty, EXP_Bool false).
+  OP_InsertElement (vec_ty, EXP_Poison) (dt, val_exp) (i1_ty, EXP_Bool false).
 
-Definition mk_load_val_exp (dt : dtyp) (cur_reg : local_id) : exp dtyp :=
+Definition mk_store_ext_exp (dt : dtyp) (vec_reg : local_id) : exp dtyp :=
   let vec_ty := DTYPE_Array true 1%N dt in
-  OP_Conversion CONV_Bitcast vec_ty
-    (EXP_Vector [(dt, EXP_Ident (ID_Local cur_reg))]) dt.
+  let i1_ty := DTYPE_Base (DTYPE_I 1) in
+  OP_ExtractElement (vec_ty, EXP_Ident (ID_Local vec_reg)) (i1_ty, EXP_Bool false).
+
+Definition mk_load_vec_exp (dt : dtyp) (cur_reg : local_id) : exp dtyp :=
+  let vec_ty := DTYPE_Array true 1%N dt in
+  let i1_ty := DTYPE_Base (DTYPE_I 1) in
+  OP_InsertElement (vec_ty, EXP_Poison) (dt, EXP_Ident (ID_Local cur_reg)) (i1_ty, EXP_Bool false).
+
+Definition mk_load_cast_exp (dt : dtyp) (vec_reg : local_id) : exp dtyp :=
+  let vec_ty := DTYPE_Array true 1%N dt in
+  OP_Conversion CONV_Bitcast vec_ty (EXP_Ident (ID_Local vec_reg)) dt.
 
 Fixpoint is_non_volatile_non_atomic_anns {T : Set} (anns : list (annotation T)) : bool :=
   match anns with
@@ -395,17 +401,21 @@ Fixpoint rewrite_code_for_slot
   | im :: rest =>
       match is_promotable_load_of p dt im with
       | Some dst =>
+          let lv_reg := fresh_name "mlv" (p :: cur_reg :: avoid) in
           let '(rest', end_reg, avoid') :=
-            rewrite_code_for_slot p dt cur_reg avoid rest in
-          ((IId dst, INSTR_Op (mk_load_val_exp dt cur_reg), []) :: rest',
+            rewrite_code_for_slot p dt cur_reg (lv_reg :: avoid) rest in
+          ((IId lv_reg, INSTR_Op (mk_load_vec_exp dt cur_reg), []) ::
+           (IId dst, INSTR_Op (mk_load_cast_exp dt lv_reg), []) :: rest',
            end_reg, avoid')
       | None =>
           match is_promotable_store_of p dt im with
           | Some val_exp =>
-              let st_reg := fresh_name "m2r_st" avoid in
+              let sv_reg := fresh_name "msv" (p :: avoid) in
+              let st_reg := fresh_name "mst" (p :: sv_reg :: avoid) in
               let '(rest', end_reg, avoid') :=
-                rewrite_code_for_slot p dt st_reg (st_reg :: avoid) rest in
-              ((IId st_reg, INSTR_Op (mk_store_val_exp dt val_exp), []) :: rest',
+                rewrite_code_for_slot p dt st_reg (st_reg :: sv_reg :: avoid) rest in
+              ((IId sv_reg, INSTR_Op (mk_store_vec_exp dt val_exp), []) ::
+               (IId st_reg, INSTR_Op (mk_store_ext_exp dt sv_reg), []) :: rest',
                end_reg, avoid')
           | None =>
               let '(rest', end_reg, avoid') :=
@@ -7119,17 +7129,24 @@ Section MemoryAndSerialization.
       cbn [rewrite_code_for_slot] in Hrw.
     - inversion Hrw; subst; split; [apply incl_refl | exact Hcur].
     - destruct (is_promotable_load_of p dt im) as [dst |].
-      + destruct (rewrite_code_for_slot p dt cur_reg avoid rest) as [[rest' er] av'] eqn:E.
-        inversion Hrw; subst; eapply IH; eassumption.
+      + set (lv_reg := fresh_name "mlv" (p :: cur_reg :: avoid)) in *.
+        destruct (rewrite_code_for_slot p dt cur_reg (lv_reg :: avoid) rest) as [[rest' er] av'] eqn:E.
+        inversion Hrw; subst.
+        assert (Hinc1 : incl avoid0 (lv_reg :: avoid)) by (intros z Hz; right; apply Hinc, Hz).
+        destruct (IH cur_reg (lv_reg :: avoid) rest' end_reg avoid' E Hinc1 Hcur) as [Hav Her].
+        split; [intros z Hz; apply Hav; right; exact Hz | exact Her].
       + destruct (is_promotable_store_of p dt im) as [val_exp |].
-        * set (st_reg := fresh_name "m2r_st" avoid) in *.
-          destruct (rewrite_code_for_slot p dt st_reg (st_reg :: avoid) rest) as [[rest' er] av'] eqn:E.
+        * set (sv_reg := fresh_name "msv" (p :: avoid)) in *.
+          set (st_reg := fresh_name "mst" (p :: sv_reg :: avoid)) in *.
+          destruct (rewrite_code_for_slot p dt st_reg (st_reg :: sv_reg :: avoid) rest) as [[rest' er] av'] eqn:E.
           inversion Hrw; subst.
           assert (Hst : ~ In st_reg avoid0).
-          { intros Hin0; exact (fresh_name_not_in "m2r_st" avoid (Hinc _ Hin0)). }
-          assert (Hinc1 : incl avoid0 (st_reg :: avoid)) by (intros z Hz; right; apply Hinc, Hz).
-          destruct (IH st_reg (st_reg :: avoid) rest' end_reg avoid' E Hinc1 Hst) as [Hav Her].
-          split; [intros z Hz; apply Hav; right; exact Hz | exact Her].
+          { intros Hin0; exact (fresh_name_not_in "mst" (p :: sv_reg :: avoid)
+                                   (or_intror (or_intror (Hinc _ Hin0)))). }
+          assert (Hinc1 : incl avoid0 (st_reg :: sv_reg :: avoid))
+            by (intros z Hz; right; right; apply Hinc, Hz).
+          destruct (IH st_reg (st_reg :: sv_reg :: avoid) rest' end_reg avoid' E Hinc1 Hst) as [Hav Her].
+          split; [intros z Hz; apply Hav; right; right; exact Hz | exact Her].
         * destruct (rewrite_code_for_slot p dt cur_reg avoid rest) as [[rest' er] av'] eqn:E.
           inversion Hrw; subst; eapply IH; eassumption.
   Qed.
@@ -11455,7 +11472,7 @@ Section MemoryAndSerialization.
                  (conj Logic.eq_refl (conj Logic.eq_refl (conj Heq' Hfs')))))).
   Qed.
 
-  (** *** Promoted [init_op], [mk_store_val_exp], and [mk_load_val_exp] Simulations *)
+  (** *** Promoted [init_op], [mk_store_vec_exp]/[mk_store_ext_exp], and [mk_load_vec_exp]/[mk_load_cast_exp] Simulations *)
 
   Lemma denote_init_copy_poison_exc_r {R1 : Type}
     (ctx2 : IntMap (@function_denotation (@ParamsV IP IPT)))
@@ -11601,22 +11618,22 @@ Section MemoryAndSerialization.
     apply eqit_Vis; intros [].
   Qed.
 
-  Lemma denote_mk_store_val_exp_eq (dt : dtyp) (val_exp : exp dtyp) :
-    @denote_exp (@ParamsV IP IPT) None (mk_store_val_exp dt val_exp) ≅
+  Lemma denote_mk_store_vec_exp_eq (dt : dtyp) (val_exp : exp dtyp) :
+    @denote_exp (@ParamsV IP IPT) None (mk_store_vec_exp dt val_exp) ≅
     ITree.bind (denote_exp (Some dt) val_exp)
       (fun v =>
          match v with
-         | DVALUE_Base db => Ret (DVALUE_Base db)
+         | DVALUE_Base db => Ret (DVALUE_Array true [DVALUE_Base db])
          | _ => raise "dvalue_to_dvalue_base: non-base dvalue"
          end).
   Proof using.
-    unfold mk_store_val_exp; cbn [denote_exp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+    unfold mk_store_vec_exp; cbn [denote_exp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     rewrite !Eqit.bind_ret_l, !Eqit.bind_bind.
     eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
     intros [db | pk flds | vec elts] _ <-.
     - cbn [dvalue_to_dvalue_base EOU_monad ExtLib.Structures.Monad.ret EOU_to_itree ExtLib.Structures.Monad.bind Monad_itree].
       rewrite !Eqit.bind_ret_l, ?Eqit.bind_bind, ?Eqit.bind_ret_l.
-      unfold insert_element, extract_element, dvalue_to_Z, VellvmIntegers.signed, VellvmIntegers.zero;
+      unfold insert_element, dvalue_to_Z, VellvmIntegers.signed, VellvmIntegers.zero;
         rewrite ?(@Integers.signed_zero 1);
         try change (N.to_nat 1%N) with 1%nat;
         try change (Pos.to_nat 1%positive) with 1%nat;
@@ -11632,25 +11649,64 @@ Section MemoryAndSerialization.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
   Qed.
 
-  Lemma denote_mk_load_val_exp_eq (dt : dtyp) (cur_reg : local_id) :
-    @denote_exp (@ParamsV IP IPT) None (mk_load_val_exp dt cur_reg) ≅
-    ITree.bind (lread cur_reg)
-      (fun v => convert CONV_Bitcast (DTYPE_Array true 1%N dt) (DVALUE_Array true [v]) dt).
+  Lemma denote_mk_store_ext_exp_eq (dt : dtyp) (vec_reg : local_id) :
+    @denote_exp (@ParamsV IP IPT) None (mk_store_ext_exp dt vec_reg) ≅
+    ITree.bind (lread vec_reg)
+      (fun vec =>
+         EOU_to_itree
+           (extract_element vec (DVALUE_Base (DVALUE_I 1 VellvmIntegers.zero)))).
   Proof using.
-    unfold mk_load_val_exp; cbn [denote_exp lookup_id map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-    rewrite !Eqit.bind_bind.
+    unfold mk_store_ext_exp;
+      cbn [denote_exp lookup_id ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
-    intros v _ <-; rewrite !Eqit.bind_ret_l; reflexivity.
+    intros vec _ <-; rewrite !Eqit.bind_ret_l; reflexivity.
+  Qed.
+
+  Lemma extract_element_singleton_zero_eq (v : @dvalue (@ParamsV IP IPT)) :
+    EOU_to_itree (E := @MCFGEtop (@ParamsV IP IPT))
+      (extract_element (DVALUE_Array true [v]) (DVALUE_Base (DVALUE_I 1 VellvmIntegers.zero))) ≅
+    Ret v.
+  Proof using.
+    unfold extract_element, dvalue_to_Z, VellvmIntegers.signed, VellvmIntegers.zero;
+      rewrite ?(@Integers.signed_zero 1);
+      try change (Pos.to_nat 1%positive) with 1%nat;
+      cbn;
+      try change (Pos.to_nat 1%positive) with 1%nat;
+      cbn;
+      rewrite ?Eqit.bind_ret_l; reflexivity.
+  Qed.
+
+  Lemma denote_mk_load_vec_exp_eq (dt : dtyp) (cur_reg : local_id) :
+    @denote_exp (@ParamsV IP IPT) None (mk_load_vec_exp dt cur_reg) ≅
+    ITree.bind (lread cur_reg)
+      (fun v =>
+         match v with
+         | DVALUE_Base db => Ret (DVALUE_Array true [DVALUE_Base db])
+         | _ => raise "dvalue_to_dvalue_base: non-base dvalue"
+         end).
+  Proof using.
+    exact (denote_mk_store_vec_exp_eq dt (EXP_Ident (ID_Local cur_reg))).
+  Qed.
+
+  Lemma denote_mk_load_cast_exp_eq (dt : dtyp) (vec_reg : local_id) :
+    @denote_exp (@ParamsV IP IPT) None (mk_load_cast_exp dt vec_reg) ≅
+    ITree.bind (lread vec_reg)
+      (fun v => convert CONV_Bitcast (DTYPE_Array true 1%N dt) v dt).
+  Proof using.
+    unfold mk_load_cast_exp;
+      cbn [denote_exp lookup_id ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+    reflexivity.
   Qed.
 
   #[local] Lemma denote_mk_store_val_exp_nonbase_sim
     (ctx1 ctx2 : IntMap (@function_denotation (@ParamsV IP IPT)))
     (RExc : list N -> FusedS -> FusedS -> @exc (@ParamsV IP IPT) -> @exc (@ParamsV IP IPT) -> Prop)
-    (st_reg : local_id) (dt : dtyp) (fs0 : @Framestack (@ParamsV IP IPT))
+    (sv_reg st_reg : local_id) (dt : dtyp) (fs0 : @Framestack (@ParamsV IP IPT))
     (U P_unprom : list N) (gs : ghost_slot) (G : list ghost_slot)
     (σ1 σ2 : state)
     (sf1 sf2 : @stack_frame (@ParamsV IP IPT)) (fstk1 fstk2 : stack)
     (g : @global_env (@ParamsV IP IPT))
+    (k_succ : @dvalue (@ParamsV IP IPT) -> @CFGtop (@ParamsV IP IPT) unit)
     (v_bad : @dvalue (@ParamsV IP IPT))
     (Hdt : gs_dt gs = dt)
     (Hsc : is_scalar_dtyp dt = true)
@@ -11662,7 +11718,9 @@ Section MemoryAndSerialization.
               U' = U /\ r1 = tt /\ r2 = tt /\
               dvalue_to_memory_bytes dt (DVALUE_Base db') None = raise_ret bs' /\
               s1' = (σ1', ((sf1, fstk1), g)) /\
-              s2' = (σ2, ((upd_local_sf sf2 (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2)),
+              s2' = (σ2, ((upd_local_sf sf2
+                             (Maps.add st_reg (DVALUE_Base db')
+                                (Maps.add sv_reg (DVALUE_Array true [DVALUE_Base db']) (stack_vars sf2))),
                            fstk2), g)) /\
               stage1_mem_inv U P_unprom (gs_set_val gs db' bs' :: G) σ1' σ2 /\
               top_frame_prom_from fs0 (gs_set_val gs db' bs') G (state_memory_stack σ2)))
@@ -11679,8 +11737,7 @@ Section MemoryAndSerialization.
               (fun '(s2'', res) =>
                  match res with
                  | inl ex => Ret (s2'', inl ex)
-                 | inr uv =>
-                     interp_cfg_exc ctx2 (ITree.bind (lwrite st_reg uv) (fun _ => Ret tt)) s2''
+                 | inr uv => interp_cfg_exc ctx2 (k_succ uv) s2''
                  end))).
   Proof using.
     subst dt.
@@ -11713,10 +11770,12 @@ Section MemoryAndSerialization.
       split; [exact Logic.I | intros [] [] _].
   Qed.
 
-  #[local] Lemma denote_mk_store_val_exp_base_sim
+  #[local] Lemma denote_mk_store_pair_base_sim
     (ctx1 ctx2 : IntMap (@function_denotation (@ParamsV IP IPT)))
     (RExc : list N -> FusedS -> FusedS -> @exc (@ParamsV IP IPT) -> @exc (@ParamsV IP IPT) -> Prop)
-    (st_reg : local_id) (dt : dtyp) (fs0 : @Framestack (@ParamsV IP IPT))
+    (sv_reg st_reg : local_id) (dt : dtyp)
+    (va2 : option (@ptr ProvenanceV (@PointerV IP)))
+    (fs0 : @Framestack (@ParamsV IP IPT))
     (U P_unprom : list N) (gs : ghost_slot) (G : list ghost_slot)
     (σ1 σ2 : state)
     (sf1 sf2 : @stack_frame (@ParamsV IP IPT)) (fstk1 fstk2 : stack)
@@ -11732,7 +11791,9 @@ Section MemoryAndSerialization.
               U' = U /\ r1 = tt /\ r2 = tt /\
               dvalue_to_memory_bytes dt (DVALUE_Base db'0) None = raise_ret bs' /\
               s1' = (σ1', ((sf1, fstk1), g)) /\
-              s2' = (σ2, ((upd_local_sf sf2 (Maps.add st_reg (DVALUE_Base db'0) (stack_vars sf2)),
+              s2' = (σ2, ((upd_local_sf sf2
+                             (Maps.add st_reg (DVALUE_Base db'0)
+                                (Maps.add sv_reg (DVALUE_Array true [DVALUE_Base db'0]) (stack_vars sf2))),
                            fstk2), g)) /\
               stage1_mem_inv U P_unprom (gs_set_val gs db'0 bs' :: G) σ1' σ2 /\
               top_frame_prom_from fs0 (gs_set_val gs db'0 bs') G (state_memory_stack σ2)))
@@ -11741,28 +11802,44 @@ Section MemoryAndSerialization.
          (store (Pa := @ParamsV IP IPT) dt (DVALUE_Base (DVALUE_Pointer (gs_pt gs))) (DVALUE_Base db'))
          (σ1, ((sf1, fstk1), g)))
       (ITree.bind
-         (interp_mcfg_model (Ret (DVALUE_Base db')) (σ2, ((sf2, fstk2), g)))
+         (interp_mcfg_model (Ret (DVALUE_Array true [DVALUE_Base db'])) (σ2, ((sf2, fstk2), g)))
          (fun '(s2', x) =>
             ITree.bind (Ret (s2', inr x))
               (fun '(s2'', res) =>
                  match res with
                  | inl ex => Ret (s2'', inl ex)
                  | inr uv =>
-                     interp_cfg_exc ctx2 (ITree.bind (lwrite st_reg uv) (fun _ => Ret tt)) s2''
+                     interp_cfg_exc ctx2
+                       (ITree.bind (lwrite sv_reg uv)
+                          (fun _ => denote_instr (IId st_reg, INSTR_Op (mk_store_ext_exp dt sv_reg), []) va2))
+                       s2''
                  end))).
   Proof using.
+    set (sf2_mid := upd_local_sf sf2 (Maps.add sv_reg (DVALUE_Array true [DVALUE_Base db']) (stack_vars sf2))).
+    assert (Hlk_sv : Maps.lookup sv_reg (stack_vars sf2_mid) = Some (DVALUE_Array true [DVALUE_Base db']))
+      by (cbn [sf2_mid upd_local_sf stack_vars Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity).
     assert (Er_ok :
               ITree.bind
-                (interp_mcfg_model (Ret (DVALUE_Base db')) (σ2, ((sf2, fstk2), g)))
+                (interp_mcfg_model (Ret (DVALUE_Array true [DVALUE_Base db'])) (σ2, ((sf2, fstk2), g)))
                 (fun '(s2', x) =>
                    ITree.bind (Ret (s2', inr x))
                      (fun '(s2'', res) =>
                         match res with
                         | inl ex => Ret (s2'', inl ex)
                         | inr uv =>
-                            interp_cfg_exc ctx2 (ITree.bind (lwrite st_reg uv) (fun _ => Ret tt)) s2''
+                            interp_cfg_exc ctx2
+                              (ITree.bind (lwrite sv_reg uv)
+                                 (fun _ => denote_instr (IId st_reg, INSTR_Op (mk_store_ext_exp dt sv_reg), []) va2))
+                              s2''
                         end)) ≅
-              interp_cfg_exc ctx2 (lwrite st_reg (DVALUE_Base db')) (σ2, ((sf2, fstk2), g))).
+              ITree.bind
+                (interp_cfg_exc ctx2 (lwrite sv_reg (DVALUE_Array true [DVALUE_Base db'])) (σ2, ((sf2, fstk2), g)))
+                (fun '(s2''', res2) =>
+                   match res2 with
+                   | inl ex => Ret (s2''', inl ex)
+                   | inr _ =>
+                       interp_cfg_exc ctx2 (denote_instr (IId st_reg, INSTR_Op (mk_store_ext_exp dt sv_reg), []) va2) s2'''
+                   end)).
     { etransitivity.
       { match goal with
         | |- ITree.bind _ ?k ≅ _ =>
@@ -11770,9 +11847,48 @@ Section MemoryAndSerialization.
               [apply interp_mcfg_model_ret | intros [s2' x] _ <-; reflexivity]
         end. }
       rewrite !Eqit.bind_ret_l.
-      apply interp_cfg_exc_obs_eq, bind_unit_ret_r. }
+      apply interp_cfg_exc_bind. }
     eapply refine_prov_obs_eq;
       [reflexivity | symmetry; exact Er_ok |]; clear Er_ok.
+    eapply refine_prov_tau_star_r;
+      [apply tau_star_bind, tau_star_cfg_exc_lwrite |].
+    eapply refine_prov_obs_eq;
+      [reflexivity | symmetry; apply Eqit.bind_ret_l |].
+    cbn beta iota; fold sf2_mid.
+    cbn [denote_instr].
+    eapply refine_prov_obs_eq;
+      [reflexivity | symmetry; apply interp_cfg_exc_bind |].
+    eapply refine_prov_tau_expand;
+      [apply tau_expand_refl | apply tau_expand_bind_l, tau_expand_exc_withCall_denote_exp |].
+    unfold mcfg_inr_exc.
+    assert (EexpR :
+              interp_mcfg_model (denote_exp None (mk_store_ext_exp dt sv_reg))
+                (σ2, ((sf2_mid, fstk2), g)) ≅
+              ITree.bind (interp_mcfg_model (lread sv_reg) (σ2, ((sf2_mid, fstk2), g)))
+                (fun '(s2', vec) =>
+                   interp_mcfg_model
+                     (EOU_to_itree
+                        (extract_element vec (DVALUE_Base (DVALUE_I 1 VellvmIntegers.zero))))
+                     s2')).
+    { rewrite (interp_mcfg_model_obs_eq _ _ _ (denote_mk_store_ext_exp_eq dt sv_reg)).
+      apply interp_mcfg_model_bind. }
+    eapply refine_prov_obs_eq;
+      [reflexivity
+      | symmetry; rewrite (eq_itree_bind_congr_l EexpR), Eqit.bind_bind; reflexivity
+      |]; clear EexpR.
+    eapply refine_prov_tau_star_r;
+      [apply tau_star_bind, (tau_star_mcfg_lread_some sv_reg _ σ2 sf2_mid fstk2 g Hlk_sv) |].
+    eapply refine_prov_obs_eq;
+      [reflexivity | symmetry; apply Eqit.bind_ret_l |].
+    cbn beta iota.
+    eapply refine_prov_obs_eq;
+      [reflexivity
+      | symmetry;
+        rewrite (interp_mcfg_model_obs_eq _ _ _ (extract_element_singleton_zero_eq (DVALUE_Base db'))),
+                interp_mcfg_model_ret, !Eqit.bind_ret_l,
+                (interp_cfg_exc_obs_eq ctx2 _ _ _ (bind_unit_ret_r _));
+        reflexivity
+      |].
     eapply refine_prov_tau_star_r;
       [apply tau_star_cfg_exc_lwrite |].
     subst dt.
@@ -11782,7 +11898,7 @@ Section MemoryAndSerialization.
       [apply Eqit.bind_ret_r
       | apply (Eqit.bind_ret_l (σ2, tt)
                  (fun _ =>
-                    Ret ((σ2, ((upd_local_sf sf2 (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2)),
+                    Ret ((σ2, ((upd_local_sf sf2_mid (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2_mid)),
                                 fstk2), g)),
                          inr tt))) |].
     eapply PassCommon.refine_prov_bind;
@@ -11794,10 +11910,10 @@ Section MemoryAndSerialization.
              (conj Hser' (conj Logic.eq_refl (conj Logic.eq_refl (conj Hinv' Htf'))))))).
   Qed.
 
-  Lemma denote_mk_store_val_exp_exc_sim
+  Lemma denote_mk_store_pair_exc_sim
     (ctx1 ctx2 : IntMap (@function_denotation (@ParamsV IP IPT)))
     (RExc : list N -> FusedS -> FusedS -> @exc (@ParamsV IP IPT) -> @exc (@ParamsV IP IPT) -> Prop)
-    (vid : int_ast) (p st_reg : local_id) (dt : dtyp) (val_exp : exp dtyp)
+    (vid : int_ast) (p sv_reg st_reg : local_id) (dt : dtyp) (val_exp : exp dtyp)
     (anns_st : list (annotation dtyp)) (md_st : list (metadata dtyp))
     (va1 va2 : option (@ptr ProvenanceV (@PointerV IP)))
     (fs0 : @Framestack (@ParamsV IP IPT))
@@ -11820,7 +11936,9 @@ Section MemoryAndSerialization.
               U' = U /\ r1 = tt /\ r2 = tt /\
               dvalue_to_memory_bytes dt (DVALUE_Base db') None = raise_ret bs' /\
               s1' = (σ1', ((sf1, fstk1), g)) /\
-              s2' = (σ2, ((upd_local_sf sf2 (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2)),
+              s2' = (σ2, ((upd_local_sf sf2
+                             (Maps.add st_reg (DVALUE_Base db')
+                                (Maps.add sv_reg (DVALUE_Array true [DVALUE_Base db']) (stack_vars sf2))),
                            fstk2), g)) /\
               stage1_mem_inv U P_unprom (gs_set_val gs db' bs' :: G) σ1' σ2 /\
               top_frame_prom_from fs0 (gs_set_val gs db' bs') G (state_memory_stack σ2)))
@@ -11832,31 +11950,61 @@ Section MemoryAndSerialization.
              md_st) va1)
          (σ1, ((sf1, fstk1), g)))
       (interp_cfg_exc ctx2
-         (denote_instr (IId st_reg, INSTR_Op (mk_store_val_exp dt val_exp), []) va2)
+         (ITree.bind
+            (denote_instr (IId sv_reg, INSTR_Op (mk_store_vec_exp dt val_exp), []) va2)
+            (fun _ => denote_instr (IId st_reg, INSTR_Op (mk_store_ext_exp dt sv_reg), []) va2))
          (σ2, ((sf2, fstk2), g))).
   Proof using.
+    set (k_ext := denote_instr (IId st_reg, INSTR_Op (mk_store_ext_exp dt sv_reg), []) va2).
+    assert (Er_sv :
+              interp_cfg_exc ctx2
+                (ITree.bind
+                   (denote_instr (IId sv_reg, INSTR_Op (mk_store_vec_exp dt val_exp), []) va2)
+                   (fun _ => k_ext))
+                (σ2, ((sf2, fstk2), g)) ≅
+              ITree.bind
+                (interp_cfg_exc ctx2
+                   (denote_exp' None (mk_store_vec_exp dt val_exp))
+                   (σ2, ((sf2, fstk2), g)))
+                (fun '(s2'', res) =>
+                   match res with
+                   | inl ex => Ret (s2'', inl ex)
+                   | inr uv =>
+                       interp_cfg_exc ctx2
+                         (ITree.bind (lwrite sv_reg uv) (fun _ => k_ext))
+                         s2''
+                   end)).
+    { cbn [denote_instr].
+      rewrite (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)).
+      rewrite interp_cfg_exc_bind.
+      eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
+      intros [s2'' [ex | uv]] _ <-; [reflexivity |].
+      apply interp_cfg_exc_obs_eq.
+      rewrite Eqit.bind_bind.
+      eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
+      intros [] [] _; rewrite Eqit.bind_ret_l; reflexivity. }
     cbn [denote_instr].
     eapply refine_prov_obs_eq;
-      [symmetry; apply interp_cfg_exc_bind | symmetry; apply interp_cfg_exc_bind |].
+      [symmetry; apply interp_cfg_exc_bind | symmetry; exact Er_sv |]; clear Er_sv.
     eapply refine_prov_tau_expand;
       [apply tau_expand_bind_l, tau_expand_exc_withCall_denote_exp
       | apply tau_expand_bind_l, tau_expand_exc_withCall_denote_exp |].
     unfold mcfg_inr_exc.
     assert (EexpR :
-              interp_mcfg_model (denote_exp None (mk_store_val_exp dt val_exp))
+              interp_mcfg_model (denote_exp None (mk_store_vec_exp dt val_exp))
                 (σ2, ((sf2, fstk2), g)) ≅
               ITree.bind (interp_mcfg_model (denote_exp (Some dt) val_exp) (σ2, ((sf2, fstk2), g)))
                 (fun '(s2', v) =>
                    interp_mcfg_model
                      (match v with
-                      | DVALUE_Base db => Ret (DVALUE_Base db)
+                      | DVALUE_Base db => Ret (DVALUE_Array true [DVALUE_Base db])
                       | _ => raise "dvalue_to_dvalue_base: non-base dvalue"
                       end) s2')).
-    { rewrite (interp_mcfg_model_obs_eq _ _ _ (denote_mk_store_val_exp_eq dt val_exp)).
+    { rewrite (interp_mcfg_model_obs_eq _ _ _ (denote_mk_store_vec_exp_eq dt val_exp)).
       apply interp_mcfg_model_bind. }
     assert (Er_init :
               ITree.bind
-                (interp_mcfg_model (denote_exp None (mk_store_val_exp dt val_exp))
+                (interp_mcfg_model (denote_exp None (mk_store_vec_exp dt val_exp))
                    (σ2, ((sf2, fstk2), g)))
                 (fun r =>
                    ITree.bind (let '(s2', x) := r in Ret (s2', inr x))
@@ -11864,14 +12012,14 @@ Section MemoryAndSerialization.
                         match res with
                         | inl ex => Ret (s2'', inl ex)
                         | inr uv =>
-                            interp_cfg_exc ctx2 (ITree.bind (lwrite st_reg uv) (fun _ => Ret tt)) s2''
+                            interp_cfg_exc ctx2 (ITree.bind (lwrite sv_reg uv) (fun _ => k_ext)) s2''
                         end)) ≅
               ITree.bind (interp_mcfg_model (denote_exp (Some dt) val_exp) (σ2, ((sf2, fstk2), g)))
                 (fun '(s2'0, v) =>
                    ITree.bind
                      (interp_mcfg_model
                         (match v with
-                         | DVALUE_Base db => Ret (DVALUE_Base db)
+                         | DVALUE_Base db => Ret (DVALUE_Array true [DVALUE_Base db])
                          | _ => raise "dvalue_to_dvalue_base: non-base dvalue"
                          end) s2'0)
                      (fun '(s2', x) =>
@@ -11880,7 +12028,7 @@ Section MemoryAndSerialization.
                              match res with
                              | inl ex => Ret (s2'', inl ex)
                              | inr uv =>
-                                 interp_cfg_exc ctx2 (ITree.bind (lwrite st_reg uv) (fun _ => Ret tt)) s2''
+                                 interp_cfg_exc ctx2 (ITree.bind (lwrite sv_reg uv) (fun _ => k_ext)) s2''
                              end)))).
     { rewrite (eq_itree_bind_congr_l EexpR), Eqit.bind_bind.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
@@ -11933,12 +12081,14 @@ Section MemoryAndSerialization.
         [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ Est_l) | reflexivity |];
         clear Est_l.
       destruct v1 as [db' | pk flds | vec elts].
-      + exact (denote_mk_store_val_exp_base_sim ctx1 ctx2 RExc st_reg dt fs0 U P_unprom gs G
+      + exact (denote_mk_store_pair_base_sim ctx1 ctx2 RExc sv_reg st_reg dt va2 fs0 U P_unprom gs G
                  σ1 σ2 sf1 sf2 fstk1 fstk2 g db' Hdt Hinv Htf).
-      + exact (denote_mk_store_val_exp_nonbase_sim ctx1 ctx2 RExc st_reg dt fs0 U P_unprom gs G
-                 σ1 σ2 sf1 sf2 fstk1 fstk2 g (DVALUE_Struct pk flds) Hdt Hsc (ltac:(intros ? ?; discriminate))).
-      + exact (denote_mk_store_val_exp_nonbase_sim ctx1 ctx2 RExc st_reg dt fs0 U P_unprom gs G
-                 σ1 σ2 sf1 sf2 fstk1 fstk2 g (DVALUE_Array vec elts) Hdt Hsc (ltac:(intros ? ?; discriminate))).
+      + exact (denote_mk_store_val_exp_nonbase_sim ctx1 ctx2 RExc sv_reg st_reg dt fs0 U P_unprom gs G
+                 σ1 σ2 sf1 sf2 fstk1 fstk2 g (fun uv => ITree.bind (lwrite sv_reg uv) (fun _ => k_ext))
+                 (DVALUE_Struct pk flds) Hdt Hsc (ltac:(intros ? ?; discriminate))).
+      + exact (denote_mk_store_val_exp_nonbase_sim ctx1 ctx2 RExc sv_reg st_reg dt fs0 U P_unprom gs G
+                 σ1 σ2 sf1 sf2 fstk1 fstk2 g (fun uv => ITree.bind (lwrite sv_reg uv) (fun _ => k_ext))
+                 (DVALUE_Array vec elts) Hdt Hsc (ltac:(intros ? ?; discriminate))).
     - rewrite Hal_ub; cbn [EOU_to_itree].
       eapply refine_prov_obs_eq;
         [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (raiseUB_bind_eq _ _)) | reflexivity |].
@@ -12088,10 +12238,10 @@ Section MemoryAndSerialization.
           exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl)))).
   Qed.
 
-  Lemma denote_mk_load_val_exp_exc_sim
+  Lemma denote_mk_load_pair_exc_sim
     (ctx1 ctx2 : IntMap (@function_denotation (@ParamsV IP IPT)))
     (RExc : list N -> FusedS -> FusedS -> @exc (@ParamsV IP IPT) -> @exc (@ParamsV IP IPT) -> Prop)
-    (dst p cur_reg : local_id) (dt : dtyp)
+    (dst p lv_reg cur_reg : local_id) (dt : dtyp)
     (anns_ld : list (annotation dtyp)) (md_ld : list (metadata dtyp))
     (va1 va2 : option (@ptr ProvenanceV (@PointerV IP)))
     (U P_unprom : list N) (gs : ghost_slot) (G : list ghost_slot)
@@ -12110,7 +12260,10 @@ Section MemoryAndSerialization.
             exists dv_ld,
               U' = U /\ r1 = tt /\ r2 = tt /\
               s1' = (σ1, ((upd_local_sf sf1 (Maps.add dst dv_ld (stack_vars sf1)), fstk1), g)) /\
-              s2' = (σ2, ((upd_local_sf sf2 (Maps.add dst dv_ld (stack_vars sf2)), fstk2), g))))
+              s2' = (σ2, ((upd_local_sf sf2
+                             (Maps.add dst dv_ld
+                                (Maps.add lv_reg (DVALUE_Array true [DVALUE_Base (gs_db gs)]) (stack_vars sf2))),
+                           fstk2), g))))
       U
       (interp_cfg_exc ctx1
          (denote_instr
@@ -12119,7 +12272,9 @@ Section MemoryAndSerialization.
              md_ld) va1)
          (σ1, ((sf1, fstk1), g)))
       (interp_cfg_exc ctx2
-         (denote_instr (IId dst, INSTR_Op (mk_load_val_exp dt cur_reg), []) va2)
+         (ITree.bind
+            (denote_instr (IId lv_reg, INSTR_Op (mk_load_vec_exp dt cur_reg), []) va2)
+            (fun _ => denote_instr (IId dst, INSTR_Op (mk_load_cast_exp dt lv_reg), []) va2))
          (σ2, ((sf2, fstk2), g))).
   Proof using.
     destruct (is_debug_or_file_md_props md_ld Hmd)
@@ -12128,6 +12283,72 @@ Section MemoryAndSerialization.
     rewrite Forall_forall in Hall.
     destruct (Hall gs (or_introl Logic.eq_refl)) as [(_ & _ & _ & Hser & _) _].
     subst dt.
+    set (sf2_mid := upd_local_sf sf2 (Maps.add lv_reg (DVALUE_Array true [DVALUE_Base (gs_db gs)]) (stack_vars sf2))).
+    assert (Hlk_lv : Maps.lookup lv_reg (stack_vars sf2_mid) = Some (DVALUE_Array true [DVALUE_Base (gs_db gs)]))
+      by (cbn [sf2_mid upd_local_sf stack_vars Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity).
+    set (k_cast := denote_instr (IId dst, INSTR_Op (mk_load_cast_exp (gs_dt gs) lv_reg), []) va2).
+    assert (Er_lv :
+              interp_cfg_exc ctx2
+                (ITree.bind (denote_instr (IId lv_reg, INSTR_Op (mk_load_vec_exp (gs_dt gs) cur_reg), []) va2)
+                   (fun _ => k_cast))
+                (σ2, ((sf2, fstk2), g)) ≅
+              ITree.bind
+                (interp_cfg_exc ctx2
+                   (denote_exp' None (mk_load_vec_exp (gs_dt gs) cur_reg))
+                   (σ2, ((sf2, fstk2), g)))
+                (fun '(s2'', res) =>
+                   match res with
+                   | inl ex => Ret (s2'', inl ex)
+                   | inr uv =>
+                       ITree.bind
+                         (interp_cfg_exc ctx2 (lwrite lv_reg uv) s2'')
+                         (fun '(s2''', res2) =>
+                            match res2 with
+                            | inl ex => Ret (s2''', inl ex)
+                            | inr _ => interp_cfg_exc ctx2 k_cast s2'''
+                            end)
+                   end)).
+    { cbn [denote_instr].
+      rewrite (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)).
+      rewrite interp_cfg_exc_bind.
+      eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
+      intros [s2'' [ex | uv]] _ <-; [reflexivity |].
+      rewrite (interp_cfg_exc_obs_eq ctx2 _ _ _ (eq_itree_bind_congr_l (bind_unit_ret_r (lwrite lv_reg uv)))).
+      apply interp_cfg_exc_bind. }
+    eapply refine_prov_obs_eq;
+      [reflexivity | symmetry; exact Er_lv |]; clear Er_lv.
+    eapply refine_prov_tau_expand;
+      [apply tau_expand_refl | apply tau_expand_bind_l, tau_expand_exc_withCall_denote_exp |].
+    unfold mcfg_inr_exc.
+    assert (Elv_m :
+              interp_mcfg_model (denote_exp None (mk_load_vec_exp (gs_dt gs) cur_reg)) (σ2, ((sf2, fstk2), g)) ≅
+              ITree.bind (interp_mcfg_model (lread cur_reg) (σ2, ((sf2, fstk2), g)))
+                (fun '(s2', v) =>
+                   interp_mcfg_model
+                     (match v with
+                      | DVALUE_Base db => Ret (DVALUE_Array true [DVALUE_Base db])
+                      | _ => raise "dvalue_to_dvalue_base: non-base dvalue"
+                      end) s2')).
+    { rewrite (interp_mcfg_model_obs_eq _ _ _ (denote_mk_load_vec_exp_eq (gs_dt gs) cur_reg)).
+      apply interp_mcfg_model_bind. }
+    eapply refine_prov_obs_eq;
+      [reflexivity
+      | symmetry; rewrite (eq_itree_bind_congr_l Elv_m), Eqit.bind_bind; reflexivity
+      |]; clear Elv_m.
+    eapply refine_prov_tau_star_r;
+      [apply tau_star_bind, (tau_star_mcfg_lread_some cur_reg _ σ2 sf2 fstk2 g Hlk_cur) |].
+    eapply refine_prov_obs_eq;
+      [reflexivity | symmetry; apply Eqit.bind_ret_l |].
+    cbn beta iota.
+    eapply refine_prov_obs_eq;
+      [reflexivity
+      | symmetry; rewrite interp_mcfg_model_ret, !Eqit.bind_ret_l; reflexivity
+      |].
+    eapply refine_prov_tau_star_r;
+      [apply tau_star_bind, tau_star_cfg_exc_lwrite |].
+    eapply refine_prov_obs_eq;
+      [reflexivity | symmetry; apply Eqit.bind_ret_l |].
+    cbn beta iota; fold sf2_mid; unfold k_cast.
     cbn [denote_instr].
     eapply refine_prov_obs_eq;
       [symmetry; apply interp_cfg_exc_bind | symmetry; apply interp_cfg_exc_bind |].
@@ -12136,19 +12357,18 @@ Section MemoryAndSerialization.
       | apply tau_expand_bind_l, tau_expand_exc_withCall_denote_exp |].
     unfold mcfg_inr_exc; cbn [denote_exp lookup_id].
     assert (EexpR :
-              interp_mcfg_model (denote_exp None (mk_load_val_exp (gs_dt gs) cur_reg))
-                (σ2, ((sf2, fstk2), g)) ≅
-              ITree.bind (interp_mcfg_model (lread cur_reg) (σ2, ((sf2, fstk2), g)))
+              interp_mcfg_model (denote_exp None (mk_load_cast_exp (gs_dt gs) lv_reg))
+                (σ2, ((sf2_mid, fstk2), g)) ≅
+              ITree.bind (interp_mcfg_model (lread lv_reg) (σ2, ((sf2_mid, fstk2), g)))
                 (fun '(s2', v) =>
                    interp_mcfg_model
-                     (convert CONV_Bitcast (DTYPE_Array true 1%N (gs_dt gs))
-                        (DVALUE_Array true [v]) (gs_dt gs)) s2')).
-    { rewrite (interp_mcfg_model_obs_eq _ _ _ (denote_mk_load_val_exp_eq (gs_dt gs) cur_reg)).
+                     (convert CONV_Bitcast (DTYPE_Array true 1%N (gs_dt gs)) v (gs_dt gs)) s2')).
+    { rewrite (interp_mcfg_model_obs_eq _ _ _ (denote_mk_load_cast_exp_eq (gs_dt gs) lv_reg)).
       apply interp_mcfg_model_bind. }
     assert (Er_init :
               ITree.bind
-                (interp_mcfg_model (denote_exp None (mk_load_val_exp (gs_dt gs) cur_reg))
-                   (σ2, ((sf2, fstk2), g)))
+                (interp_mcfg_model (denote_exp None (mk_load_cast_exp (gs_dt gs) lv_reg))
+                   (σ2, ((sf2_mid, fstk2), g)))
                 (fun r =>
                    ITree.bind (let '(s2', x) := r in Ret (s2', inr x))
                      (fun '(s2'', res) =>
@@ -12157,12 +12377,11 @@ Section MemoryAndSerialization.
                         | inr uv =>
                             interp_cfg_exc ctx2 (ITree.bind (lwrite dst uv) (fun _ => Ret tt)) s2''
                         end)) ≅
-              ITree.bind (interp_mcfg_model (lread cur_reg) (σ2, ((sf2, fstk2), g)))
+              ITree.bind (interp_mcfg_model (lread lv_reg) (σ2, ((sf2_mid, fstk2), g)))
                 (fun '(s2'0, v) =>
                    ITree.bind
                      (interp_mcfg_model
-                        (convert CONV_Bitcast (DTYPE_Array true 1%N (gs_dt gs))
-                           (DVALUE_Array true [v]) (gs_dt gs)) s2'0)
+                        (convert CONV_Bitcast (DTYPE_Array true 1%N (gs_dt gs)) v (gs_dt gs)) s2'0)
                      (fun '(s2', x) =>
                         ITree.bind (Ret (s2', inr x))
                           (fun '(s2'', res) =>
@@ -12183,7 +12402,7 @@ Section MemoryAndSerialization.
     eapply refine_prov_tau_star_l;
       [apply tau_star_bind, (tau_star_mcfg_lread_some p _ σ1 sf1 fstk1 g Hlk_p) |].
     eapply refine_prov_tau_star_r;
-      [apply tau_star_bind, (tau_star_mcfg_lread_some cur_reg _ σ2 sf2 fstk2 g Hlk_cur) |].
+      [apply tau_star_bind, (tau_star_mcfg_lread_some lv_reg _ σ2 sf2_mid fstk2 g Hlk_lv) |].
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
     cbn beta iota.
@@ -12233,7 +12452,7 @@ Section MemoryAndSerialization.
         [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ Eld_l) | reflexivity |];
         clear Eld_l.
       exact (denote_mk_load_val_exp_ok_sim ctx1 ctx2 RExc dst U P_unprom gs G
-               σ1 σ2 sf1 sf2 fstk1 fstk2 g Hinv).
+               σ1 σ2 sf1 sf2_mid fstk1 fstk2 g Hinv).
     - rewrite Hal_ub; cbn [EOU_to_itree].
       eapply refine_prov_obs_eq;
         [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (raiseUB_bind_eq _ _)) | reflexivity |].
@@ -16192,16 +16411,20 @@ Section MemoryAndSerialization.
     - inversion Hrw; subst; reflexivity.
     - apply app_eq_nil in Hba as [Him_ba Hrest_ba].
       destruct (is_promotable_load_of p dt (iid, ins, md)) as [dst |].
-      + destruct (rewrite_code_for_slot p dt cur_reg avoid rest) as [[rest' er] av'] eqn:E.
-        inversion Hrw; subst; cbn; exact (IH cur_reg avoid rest' end_reg avoid' Hrest_ba E).
+      + set (lv_reg := fresh_name "mlv" (p :: cur_reg :: avoid)) in *.
+        destruct (rewrite_code_for_slot p dt cur_reg (lv_reg :: avoid) rest) as [[rest' er] av'] eqn:E.
+        inversion Hrw; subst; cbn; rewrite ?app_nil_r.
+        exact (IH cur_reg (lv_reg :: avoid) rest' end_reg avoid' Hrest_ba E).
       + destruct (is_promotable_store_of p dt (iid, ins, md)) as [val_exp |] eqn:Est.
         * destruct (is_promotable_store_of_inv p dt (iid, ins, md) val_exp Est)
             as (_ & vid & anns_st & md_st & Heq_im & _).
           inversion Heq_im; subst iid ins md; clear Heq_im.
           cbn in Him_ba; rewrite !app_nil_r in Him_ba.
-          destruct (rewrite_code_for_slot p dt (fresh_name "m2r_st" avoid)
-                      (fresh_name "m2r_st" avoid :: avoid) rest) as [[rest' er] av'] eqn:E.
-          inversion Hrw; subst; cbn; rewrite Him_ba; cbn.
+          set (sv_reg := fresh_name "msv" (p :: avoid)) in *.
+          set (st_reg := fresh_name "mst" (p :: sv_reg :: avoid)) in *.
+          destruct (rewrite_code_for_slot p dt st_reg (st_reg :: sv_reg :: avoid) rest)
+            as [[rest' er] av'] eqn:E.
+          inversion Hrw; subst; cbn; rewrite !app_nil_r, Him_ba; cbn.
           exact (IH _ _ rest' end_reg avoid' Hrest_ba E).
         * destruct (rewrite_code_for_slot p dt cur_reg avoid rest) as [[rest' er] av'] eqn:E.
           inversion Hrw; subst; cbn; rewrite Him_ba; cbn.
@@ -16483,13 +16706,20 @@ Section MemoryAndSerialization.
         by (rewrite <- app_assoc; exact Hsplit).
       unfold check_code_entry_for_slot in Hchk_im.
       destruct (is_promotable_load_of p dt im) as [dst |] eqn:Eld.
-      + destruct (rewrite_code_for_slot p dt cur_reg avoid rest) as [[rest' er] av'] eqn:Erest.
+      + set (lv_reg := fresh_name "mlv" (p :: cur_reg :: avoid)) in *.
+        destruct (rewrite_code_for_slot p dt cur_reg (lv_reg :: avoid) rest) as [[rest' er] av'] eqn:Erest.
         inversion Hrw; subst cd' end_reg avoid'; clear Hrw.
         pose proof (Hdefs_av0 im dst (or_introl Logic.eq_refl)) as Hdst_av0_fn.
         destruct (is_promotable_load_of_inv p dt im dst Eld)
           as (Hdst_ne_p & anns_ld & md_ld & -> & _ & Hmd_ld).
         assert (Hdst_av0 : In dst avoid0) by (apply Hdst_av0_fn; left; reflexivity).
         assert (Hcur_ne_dst : cur_reg <> dst) by (intros ->; exact (Hcur_nin0 Hdst_av0)).
+        assert (Hlv_ne_p : p <> lv_reg)
+          by (intros <-; exact (fresh_name_not_in "mlv" (p :: cur_reg :: avoid) (or_introl Logic.eq_refl))).
+        assert (Hlv_ne_cur : cur_reg <> lv_reg)
+          by (intros <-; exact (fresh_name_not_in "mlv" (p :: cur_reg :: avoid) (or_intror (or_introl Logic.eq_refl)))).
+        assert (Hlv_nin0 : ~ In lv_reg avoid0)
+          by (intros Hin0; exact (fresh_name_not_in "mlv" (p :: cur_reg :: avoid) (or_intror (or_intror (Hinc_av _ Hin0))))).
         assert (Hdst_nsafe : ~ In dst safe_no_p).
         { intros Hin_s.
           destruct (unique_alloca_code_def_is_alloca fargs bks dst Hnd_bks (Hsub dst Hin_s)
@@ -16497,39 +16727,67 @@ Section MemoryAndSerialization.
                       (INSTR_Load dt (DTYPE_Base DTYPE_Pointer, EXP_Ident (ID_Local p)) anns_ld)
                       md_ld (rest ++ post_c) Hbk Hsplit) as (? & ? & Hbad);
             discriminate Hbad. }
+        assert (Hlv_nsafe : ~ In lv_reg safe_no_p)
+          by (intros Hin_s; exact (Hlv_nin0 (Hsafe_av0 lv_reg Hin_s))).
         unfold denote_code; cbn [loop_monad].
+        eapply refine_prov_obs_eq;
+          [reflexivity
+          | apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
         eapply refine_cfg_exc_bind.
-        * exact (denote_mk_load_val_exp_exc_sim ctx1 ctx2 RExc dst p cur_reg dt anns_ld md_ld
+        * exact (denote_mk_load_pair_exc_sim ctx1 ctx2 RExc dst p lv_reg cur_reg dt anns_ld md_ld
                    va1 va2 U P_unprom gs G σ1 σ2 sf1 sf2 fstk1 fstk2 g
                    Hdt Hsc Hmd_ld Hlk_p Hlk_cur Hinv).
         * intros U1 s1_m _ s2_m _ _ (dv_ld & -> & _ & _ & -> & ->).
           assert (Hlk_p1 : Maps.lookup p (Maps.add dst dv_ld (stack_vars sf1)) =
-                           Some (DVALUE_Base (DVALUE_Pointer (gs_pt gs)))).
-          { cbn [Maps.lookup Maps.add Map_rmap]; rewrite RMF.F.add_neq_o by (intros ->; exact (Hdst_ne_p Logic.eq_refl)); exact Hlk_p. }
-          assert (Hlk_cur1 : Maps.lookup cur_reg (Maps.add dst dv_ld (stack_vars sf2)) =
-                             Some (DVALUE_Base (gs_db gs))).
-          { cbn [Maps.lookup Maps.add Map_rmap]; rewrite RMF.F.add_neq_o by (intros Heq'; exact (Hcur_ne_dst (Logic.eq_sym Heq'))); exact Hlk_cur. }
-          assert (Hsafe1 : safe_locals_env P_unprom safe_no_p (Maps.add dst dv_ld (stack_vars sf2)))
-            by (apply safe_locals_env_add_other; assumption).
+                           Some (DVALUE_Base (DVALUE_Pointer (gs_pt gs))))
+            by (cbn [Maps.lookup Maps.add Map_rmap]; rewrite RMF.F.add_neq_o by (intros ->; exact (Hdst_ne_p Logic.eq_refl)); exact Hlk_p).
+          assert (Hlk_cur1 : Maps.lookup cur_reg
+                               (Maps.add dst dv_ld
+                                  (Maps.add lv_reg (DVALUE_Array true [DVALUE_Base (gs_db gs)]) (stack_vars sf2))) =
+                             Some (DVALUE_Base (gs_db gs)))
+            by (cbn [Maps.lookup Maps.add Map_rmap];
+                rewrite !RMF.F.add_neq_o
+                  by (first [intros Heq'; exact (Hcur_ne_dst (Logic.eq_sym Heq'))
+                            | intros Heq'; exact (Hlv_ne_cur (Logic.eq_sym Heq'))]);
+                exact Hlk_cur).
+          assert (Hsafe1 : safe_locals_env P_unprom safe_no_p
+                             (Maps.add dst dv_ld
+                                (Maps.add lv_reg (DVALUE_Array true [DVALUE_Base (gs_db gs)]) (stack_vars sf2))))
+            by (apply safe_locals_env_add_other, safe_locals_env_add_other; assumption).
           assert (Hvars1 : forall x, In x avoid0 -> x <> p ->
                              Maps.lookup x (Maps.add dst dv_ld (stack_vars sf1)) =
-                             Maps.lookup x (Maps.add dst dv_ld (stack_vars sf2))).
+                             Maps.lookup x
+                               (Maps.add dst dv_ld
+                                  (Maps.add lv_reg (DVALUE_Array true [DVALUE_Base (gs_db gs)]) (stack_vars sf2)))).
           { intros x Hx Hne; cbn [Maps.lookup Maps.add Map_rmap]; destruct (raw_id_eqb x dst) eqn:Exd; [apply raw_id_eqb_spec in Exd; subst x | apply raw_id_eqb_neq in Exd; rename Exd into Hxd];
-              [rewrite !RMF.F.add_eq_o by reflexivity; reflexivity | rewrite !RMF.F.add_neq_o by (intros Heq'; exact (Hxd (Logic.eq_sym Heq'))); exact (Hvars x Hx Hne)]. }
-          exact (IH (pre_c ++ [_]) cur_reg avoid rest' er av' U P_unprom gs σ1 σ2
+              [rewrite !RMF.F.add_eq_o by reflexivity; reflexivity
+              | rewrite !RMF.F.add_neq_o
+                  by (first [intros Heq'; exact (Hxd (Logic.eq_sym Heq'))
+                            | intros ->; exact (Hlv_nin0 Hx)]);
+                exact (Hvars x Hx Hne)]. }
+          assert (Hinc_av1 : incl avoid0 (lv_reg :: avoid))
+            by (intros z Hz; right; exact (Hinc_av z Hz)).
+          exact (IH (pre_c ++ [_]) cur_reg (lv_reg :: avoid) rest' er av' U P_unprom gs σ1 σ2
                    (upd_local_sf sf1 (Maps.add dst dv_ld (stack_vars sf1)))
-                   (upd_local_sf sf2 (Maps.add dst dv_ld (stack_vars sf2)))
+                   (upd_local_sf sf2
+                      (Maps.add dst dv_ld
+                         (Maps.add lv_reg (DVALUE_Array true [DVALUE_Base (gs_db gs)]) (stack_vars sf2))))
                    Hsplit_rest Huses_rest Hdefs_rest Hp_nd_rest Hchk_rest Erest
-                   Hinc_av Hcur_nin0 Hdt Hlk_p1 Hlk_cur1 Hinv Htf Hgenv Hsafe1 Hvars1).
+                   Hinc_av1 Hcur_nin0 Hdt Hlk_p1 Hlk_cur1 Hinv Htf Hgenv Hsafe1 Hvars1).
       + destruct (is_promotable_store_of p dt im) as [val_exp |] eqn:Est.
-        * set (st_reg := fresh_name "m2r_st" avoid) in *.
-          destruct (rewrite_code_for_slot p dt st_reg (st_reg :: avoid) rest) as [[rest' er] av'] eqn:Erest.
+        * set (sv_reg := fresh_name "msv" (p :: avoid)) in *.
+          set (st_reg := fresh_name "mst" (p :: sv_reg :: avoid)) in *.
+          destruct (rewrite_code_for_slot p dt st_reg (st_reg :: sv_reg :: avoid) rest) as [[rest' er] av'] eqn:Erest.
           inversion Hrw; subst cd' end_reg avoid'; clear Hrw.
           pose proof (Huses_av0 im) as Hval_av0_fn.
           destruct (is_promotable_store_of_inv p dt im val_exp Est)
             as (Hnin_p_val & vid & anns_st & md_st & -> & _ & _).
+          assert (Hsv_nin0 : ~ In sv_reg avoid0)
+            by (intros Hin0; exact (fresh_name_not_in "msv" (p :: avoid) (or_intror (Hinc_av _ Hin0)))).
           assert (Hst_nin0 : ~ In st_reg avoid0)
-            by (intros Hin0; exact (fresh_name_not_in "m2r_st" avoid (Hinc_av _ Hin0))).
+            by (intros Hin0; exact (fresh_name_not_in "mst" (p :: sv_reg :: avoid) (or_intror (or_intror (Hinc_av _ Hin0))))).
+          assert (Hsv_nsafe : ~ In sv_reg safe_no_p)
+            by (intros Hin_s; exact (Hsv_nin0 (Hsafe_av0 sv_reg Hin_s))).
           assert (Hst_nsafe : ~ In st_reg safe_no_p)
             by (intros Hin_s; exact (Hst_nin0 (Hsafe_av0 st_reg Hin_s))).
           assert (Hval_vars : forall x,
@@ -16540,27 +16798,40 @@ Section MemoryAndSerialization.
                 apply in_app_iff; left; apply in_app_iff; left; exact Hx.
             - intros ->; exact (Hnin_p_val Hx). }
           unfold denote_code; cbn [loop_monad].
+          eapply refine_prov_obs_eq;
+            [reflexivity
+            | apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
           eapply refine_cfg_exc_bind.
-          -- exact (denote_mk_store_val_exp_exc_sim ctx1 ctx2 RExc vid p st_reg dt val_exp
+          -- exact (denote_mk_store_pair_exc_sim ctx1 ctx2 RExc vid p sv_reg st_reg dt val_exp
                       anns_st md_st va1 va2 fs0 U P_unprom gs G σ1 σ2 sf1 sf2 fstk1 fstk2 g
                       Hdt Hsc Hlk_p Hinv Htf Hval_vars).
           -- intros U1 s1_m _ s2_m _ _ (db' & bs' & σ1' & -> & _ & _ & _ & -> & -> & Hinv1 & Htf1).
-             assert (Hinc_av1 : incl avoid0 (st_reg :: avoid))
-               by (intros z Hz; right; exact (Hinc_av z Hz)).
-             assert (Hlk_st : Maps.lookup st_reg (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2)) =
+             assert (Hinc_av1 : incl avoid0 (st_reg :: sv_reg :: avoid))
+               by (intros z Hz; right; right; exact (Hinc_av z Hz)).
+             assert (Hlk_st : Maps.lookup st_reg
+                                (Maps.add st_reg (DVALUE_Base db')
+                                   (Maps.add sv_reg (DVALUE_Array true [DVALUE_Base db']) (stack_vars sf2))) =
                               Some (DVALUE_Base (gs_db (gs_set_val gs db' bs'))))
                by (cbn [gs_db gs_set_val Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity).
              assert (Hsafe1 : safe_locals_env P_unprom safe_no_p
-                                (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2)))
-               by (apply safe_locals_env_add_other; assumption).
+                                (Maps.add st_reg (DVALUE_Base db')
+                                   (Maps.add sv_reg (DVALUE_Array true [DVALUE_Base db']) (stack_vars sf2))))
+               by (apply safe_locals_env_add_other, safe_locals_env_add_other; assumption).
              assert (Hvars1 : forall x, In x avoid0 -> x <> p ->
                                 Maps.lookup x (stack_vars sf1) =
-                                Maps.lookup x (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2))).
-             { intros x Hx Hne; cbn [Maps.lookup Maps.add Map_rmap]; rewrite RMF.F.add_neq_o by (intros ->; exact (Hst_nin0 Hx));
-                 exact (Hvars x Hx Hne). }
-             exact (IH (pre_c ++ [_]) st_reg (st_reg :: avoid) rest' er av'
+                                Maps.lookup x
+                                  (Maps.add st_reg (DVALUE_Base db')
+                                     (Maps.add sv_reg (DVALUE_Array true [DVALUE_Base db']) (stack_vars sf2)))).
+             { intros x Hx Hne; cbn [Maps.lookup Maps.add Map_rmap];
+               rewrite !RMF.F.add_neq_o
+                 by (first [intros ->; exact (Hst_nin0 Hx)
+                           | intros ->; exact (Hsv_nin0 Hx)]);
+               exact (Hvars x Hx Hne). }
+             exact (IH (pre_c ++ [_]) st_reg (st_reg :: sv_reg :: avoid) rest' er av'
                       U P_unprom (gs_set_val gs db' bs') σ1' σ2 sf1
-                      (upd_local_sf sf2 (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2)))
+                      (upd_local_sf sf2
+                         (Maps.add st_reg (DVALUE_Base db')
+                            (Maps.add sv_reg (DVALUE_Array true [DVALUE_Base db']) (stack_vars sf2))))
                       Hsplit_rest Huses_rest Hdefs_rest Hp_nd_rest Hchk_rest Erest
                       Hinc_av1 Hst_nin0 Hdt Hlk_p Hlk_st Hinv1 Htf1 Hgenv Hsafe1 Hvars1).
         * destruct (rewrite_code_for_slot p dt cur_reg avoid rest) as [[rest' er] av'] eqn:Erest.
@@ -18436,13 +18707,20 @@ Section MemoryAndSerialization.
           by (rewrite <- app_assoc; exact Hsplit).
         unfold check_code_entry_for_slot in Hchk_im.
         destruct (is_promotable_load_of p dt im) as [dst |] eqn:Eld.
-        + destruct (rewrite_code_for_slot p dt cur_reg avoid rest) as [[rest' er] av'] eqn:Erest.
+        + set (lv_reg := fresh_name "mlv" (p :: cur_reg :: avoid)) in *.
+          destruct (rewrite_code_for_slot p dt cur_reg (lv_reg :: avoid) rest) as [[rest' er] av'] eqn:Erest.
           inversion Hrw; subst cd' end_reg avoid'; clear Hrw.
           pose proof (Hdefs_av0 im dst (or_introl Logic.eq_refl)) as Hdst_av0_fn.
           destruct (is_promotable_load_of_inv p dt im dst Eld)
             as (Hdst_ne_p & anns_ld & md_ld & -> & _ & Hmd_ld).
           assert (Hdst_av0 : In dst avoid0) by (apply Hdst_av0_fn; left; reflexivity).
           assert (Hcur_ne_dst : cur_reg <> dst) by (intros ->; exact (Hcur_nin0 Hdst_av0)).
+          assert (Hlv_ne_p : p <> lv_reg)
+            by (intros <-; exact (fresh_name_not_in "mlv" (p :: cur_reg :: avoid) (or_introl Logic.eq_refl))).
+          assert (Hlv_ne_cur : cur_reg <> lv_reg)
+            by (intros <-; exact (fresh_name_not_in "mlv" (p :: cur_reg :: avoid) (or_intror (or_introl Logic.eq_refl)))).
+          assert (Hlv_nin0 : ~ In lv_reg avoid0)
+            by (intros Hin0; exact (fresh_name_not_in "mlv" (p :: cur_reg :: avoid) (or_intror (or_intror (Hinc_av _ Hin0))))).
           assert (Hdst_nsafe : ~ In dst safe_no_p).
           { intros Hin_s.
             destruct (unique_alloca_code_def_is_alloca fargs bks dst Hnd_bks (Hsub dst Hin_s)
@@ -18450,41 +18728,68 @@ Section MemoryAndSerialization.
                         (INSTR_Load dt (DTYPE_Base DTYPE_Pointer, EXP_Ident (ID_Local p)) anns_ld)
                         md_ld (rest ++ post_c) Hbk Hsplit) as (? & ? & Hbad);
               discriminate Hbad. }
+          assert (Hlv_nsafe : ~ In lv_reg safe_no_p)
+            by (intros Hin_s; exact (Hlv_nin0 (Hsafe_av0 lv_reg Hin_s))).
           unfold denote_code; cbn [loop_monad].
+          eapply s1_cps_obs_eq;
+            [reflexivity
+            | apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
           eapply s1_cps_cfg_exc_bind.
           * apply refine_prov_to_s1_cps.
-            exact (denote_mk_load_val_exp_exc_sim ctx1 ctx2 RExc dst p cur_reg dt anns_ld md_ld
+            exact (denote_mk_load_pair_exc_sim ctx1 ctx2 RExc dst p lv_reg cur_reg dt anns_ld md_ld
                      va1 va2 U P_unprom gs G σ1 σ2 sf1 sf2 fstk1 fstk2 g0
                      Hdt Hsc Hmd_ld Hlk_p Hlk_cur Hinv).
           * intros U1 s1_m _ s2_m _ _ (dv_ld & -> & _ & _ & -> & ->).
             assert (Hlk_p1 : Maps.lookup p (Maps.add dst dv_ld (stack_vars sf1)) =
                              Some (DVALUE_Base (DVALUE_Pointer (gs_pt gs))))
               by (cbn [Maps.lookup Maps.add Map_rmap]; rewrite RMF.F.add_neq_o by (intros ->; exact (Hdst_ne_p Logic.eq_refl)); exact Hlk_p).
-            assert (Hlk_cur1 : Maps.lookup cur_reg (Maps.add dst dv_ld (stack_vars sf2)) =
+            assert (Hlk_cur1 : Maps.lookup cur_reg
+                                 (Maps.add dst dv_ld
+                                    (Maps.add lv_reg (DVALUE_Array true [DVALUE_Base (gs_db gs)]) (stack_vars sf2))) =
                                Some (DVALUE_Base (gs_db gs)))
-              by (cbn [Maps.lookup Maps.add Map_rmap]; rewrite RMF.F.add_neq_o by (intros Heq'; exact (Hcur_ne_dst (Logic.eq_sym Heq'))); exact Hlk_cur).
-            assert (Hsafe1 : safe_locals_env P_unprom safe_no_p (Maps.add dst dv_ld (stack_vars sf2)))
-              by (apply safe_locals_env_add_other; assumption).
+              by (cbn [Maps.lookup Maps.add Map_rmap];
+                  rewrite !RMF.F.add_neq_o
+                    by (first [intros Heq'; exact (Hcur_ne_dst (Logic.eq_sym Heq'))
+                              | intros Heq'; exact (Hlv_ne_cur (Logic.eq_sym Heq'))]);
+                  exact Hlk_cur).
+            assert (Hsafe1 : safe_locals_env P_unprom safe_no_p
+                               (Maps.add dst dv_ld
+                                  (Maps.add lv_reg (DVALUE_Array true [DVALUE_Base (gs_db gs)]) (stack_vars sf2))))
+              by (apply safe_locals_env_add_other, safe_locals_env_add_other; assumption).
             assert (Hvars1 : forall x, In x avoid0 -> x <> p ->
                                Maps.lookup x (Maps.add dst dv_ld (stack_vars sf1)) =
-                               Maps.lookup x (Maps.add dst dv_ld (stack_vars sf2))).
+                               Maps.lookup x
+                                 (Maps.add dst dv_ld
+                                    (Maps.add lv_reg (DVALUE_Array true [DVALUE_Base (gs_db gs)]) (stack_vars sf2)))).
             { intros x Hx Hne; cbn [Maps.lookup Maps.add Map_rmap]; destruct (raw_id_eqb x dst) eqn:Exd; [apply raw_id_eqb_spec in Exd; subst x | apply raw_id_eqb_neq in Exd; rename Exd into Hxd];
                 [rewrite !RMF.F.add_eq_o by reflexivity; reflexivity
-                | rewrite !RMF.F.add_neq_o by (intros Heq'; exact (Hxd (Logic.eq_sym Heq'))); exact (Hvars x Hx Hne)]. }
-            exact (IH (pre_c ++ [_]) cur_reg avoid rest' er av' U P_unprom gs σ1 σ2
+                | rewrite !RMF.F.add_neq_o
+                    by (first [intros Heq'; exact (Hxd (Logic.eq_sym Heq'))
+                              | intros ->; exact (Hlv_nin0 Hx)]);
+                  exact (Hvars x Hx Hne)]. }
+            assert (Hinc_av1 : incl avoid0 (lv_reg :: avoid))
+              by (intros z Hz; right; exact (Hinc_av z Hz)).
+            exact (IH (pre_c ++ [_]) cur_reg (lv_reg :: avoid) rest' er av' U P_unprom gs σ1 σ2
                      (upd_local_sf sf1 (Maps.add dst dv_ld (stack_vars sf1)))
-                     (upd_local_sf sf2 (Maps.add dst dv_ld (stack_vars sf2)))
+                     (upd_local_sf sf2
+                        (Maps.add dst dv_ld
+                           (Maps.add lv_reg (DVALUE_Array true [DVALUE_Base (gs_db gs)]) (stack_vars sf2))))
                      Hsplit_rest Huses_rest Hdefs_rest Hp_nd_rest Hchk_rest Erest
-                     Hinc_av Hcur_nin0 HRExc Hdt Hlk_p1 Hlk_cur1 Hinv Htf Hgenv Hsafe1 Hvars1).
+                     Hinc_av1 Hcur_nin0 HRExc Hdt Hlk_p1 Hlk_cur1 Hinv Htf Hgenv Hsafe1 Hvars1).
         + destruct (is_promotable_store_of p dt im) as [val_exp |] eqn:Est.
-          * set (st_reg := fresh_name "m2r_st" avoid) in *.
-            destruct (rewrite_code_for_slot p dt st_reg (st_reg :: avoid) rest) as [[rest' er] av'] eqn:Erest.
+          * set (sv_reg := fresh_name "msv" (p :: avoid)) in *.
+            set (st_reg := fresh_name "mst" (p :: sv_reg :: avoid)) in *.
+            destruct (rewrite_code_for_slot p dt st_reg (st_reg :: sv_reg :: avoid) rest) as [[rest' er] av'] eqn:Erest.
             inversion Hrw; subst cd' end_reg avoid'; clear Hrw.
             pose proof (Huses_av0 im) as Hval_av0_fn.
             destruct (is_promotable_store_of_inv p dt im val_exp Est)
               as (Hnin_p_val & vid & anns_st & md_st & -> & _ & _).
+            assert (Hsv_nin0 : ~ In sv_reg avoid0)
+              by (intros Hin0; exact (fresh_name_not_in "msv" (p :: avoid) (or_intror (Hinc_av _ Hin0)))).
             assert (Hst_nin0 : ~ In st_reg avoid0)
-              by (intros Hin0; exact (fresh_name_not_in "m2r_st" avoid (Hinc_av _ Hin0))).
+              by (intros Hin0; exact (fresh_name_not_in "mst" (p :: sv_reg :: avoid) (or_intror (or_intror (Hinc_av _ Hin0))))).
+            assert (Hsv_nsafe : ~ In sv_reg safe_no_p)
+              by (intros Hin_s; exact (Hsv_nin0 (Hsafe_av0 sv_reg Hin_s))).
             assert (Hst_nsafe : ~ In st_reg safe_no_p)
               by (intros Hin_s; exact (Hst_nin0 (Hsafe_av0 st_reg Hin_s))).
             assert (Hval_vars : forall x,
@@ -18495,28 +18800,41 @@ Section MemoryAndSerialization.
                   apply in_app_iff; left; apply in_app_iff; left; exact Hx.
               - intros ->; exact (Hnin_p_val Hx). }
             unfold denote_code; cbn [loop_monad].
+            eapply s1_cps_obs_eq;
+              [reflexivity
+              | apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
             eapply s1_cps_cfg_exc_bind.
             -- apply refine_prov_to_s1_cps.
-               exact (denote_mk_store_val_exp_exc_sim ctx1 ctx2 RExc vid p st_reg dt val_exp
+               exact (denote_mk_store_pair_exc_sim ctx1 ctx2 RExc vid p sv_reg st_reg dt val_exp
                         anns_st md_st va1 va2 fs0 U P_unprom gs G σ1 σ2 sf1 sf2 fstk1 fstk2 g0
                         Hdt Hsc Hlk_p Hinv Htf Hval_vars).
             -- intros U1 s1_m _ s2_m _ _ (db' & bs' & σ1' & -> & _ & _ & _ & -> & -> & Hinv1 & Htf1).
-               assert (Hinc_av1 : incl avoid0 (st_reg :: avoid))
-                 by (intros z Hz; right; exact (Hinc_av z Hz)).
-               assert (Hlk_st : Maps.lookup st_reg (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2)) =
+               assert (Hinc_av1 : incl avoid0 (st_reg :: sv_reg :: avoid))
+                 by (intros z Hz; right; right; exact (Hinc_av z Hz)).
+               assert (Hlk_st : Maps.lookup st_reg
+                                  (Maps.add st_reg (DVALUE_Base db')
+                                     (Maps.add sv_reg (DVALUE_Array true [DVALUE_Base db']) (stack_vars sf2))) =
                                 Some (DVALUE_Base (gs_db (gs_set_val gs db' bs'))))
                  by (cbn [gs_db gs_set_val Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity).
                assert (Hsafe1 : safe_locals_env P_unprom safe_no_p
-                                  (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2)))
-                 by (apply safe_locals_env_add_other; assumption).
+                                  (Maps.add st_reg (DVALUE_Base db')
+                                     (Maps.add sv_reg (DVALUE_Array true [DVALUE_Base db']) (stack_vars sf2))))
+                 by (apply safe_locals_env_add_other, safe_locals_env_add_other; assumption).
                assert (Hvars1 : forall x, In x avoid0 -> x <> p ->
                                   Maps.lookup x (stack_vars sf1) =
-                                  Maps.lookup x (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2))).
-               { intros x Hx Hne; cbn [Maps.lookup Maps.add Map_rmap]; rewrite RMF.F.add_neq_o by (intros ->; exact (Hst_nin0 Hx));
-                   exact (Hvars x Hx Hne). }
-               exact (IH (pre_c ++ [_]) st_reg (st_reg :: avoid) rest' er av'
+                                  Maps.lookup x
+                                    (Maps.add st_reg (DVALUE_Base db')
+                                       (Maps.add sv_reg (DVALUE_Array true [DVALUE_Base db']) (stack_vars sf2)))).
+               { intros x Hx Hne; cbn [Maps.lookup Maps.add Map_rmap];
+                 rewrite !RMF.F.add_neq_o
+                   by (first [intros ->; exact (Hst_nin0 Hx)
+                             | intros ->; exact (Hsv_nin0 Hx)]);
+                 exact (Hvars x Hx Hne). }
+               exact (IH (pre_c ++ [_]) st_reg (st_reg :: sv_reg :: avoid) rest' er av'
                         U P_unprom (gs_set_val gs db' bs') σ1' σ2 sf1
-                        (upd_local_sf sf2 (Maps.add st_reg (DVALUE_Base db') (stack_vars sf2)))
+                        (upd_local_sf sf2
+                           (Maps.add st_reg (DVALUE_Base db')
+                              (Maps.add sv_reg (DVALUE_Array true [DVALUE_Base db']) (stack_vars sf2))))
                         Hsplit_rest Huses_rest Hdefs_rest Hp_nd_rest Hchk_rest Erest
                         Hinc_av1 Hst_nin0 HRExc Hdt Hlk_p Hlk_st Hinv1 Htf1 Hgenv Hsafe1 Hvars1).
           * destruct (rewrite_code_for_slot p dt cur_reg avoid rest) as [[rest' er] av'] eqn:Erest.

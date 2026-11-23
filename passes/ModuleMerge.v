@@ -3412,15 +3412,18 @@ Section SafePathSlices.
     - injection Hrw as <- _ _; reflexivity.
     - cbn [forallb] in Hnc; apply Bool.andb_true_iff in Hnc as [Him Hrest].
       destruct (Mem2Reg.is_promotable_load_of p dt im) as [dst |].
-      + destruct (Mem2Reg.rewrite_code_for_slot p dt cur_reg avoid rest) as [[r' er] av'] eqn:Er.
+      + set (lv_reg := PassCommon.fresh_name "mlv"%string (p :: cur_reg :: avoid)) in *.
+        destruct (Mem2Reg.rewrite_code_for_slot p dt cur_reg (lv_reg :: avoid) rest)
+          as [[r' er] av'] eqn:Er.
         injection Hrw as <- _ _; cbn [forallb mm_code_entry_no_call fst snd].
-        exact (IH cur_reg avoid r' er av' Hrest Er).
+        exact (IH cur_reg (lv_reg :: avoid) r' er av' Hrest Er).
       + destruct (Mem2Reg.is_promotable_store_of p dt im) as [val_e |].
-        * set (st_reg := PassCommon.fresh_name "m2r_st"%string avoid) in *.
-          destruct (Mem2Reg.rewrite_code_for_slot p dt st_reg (st_reg :: avoid) rest)
+        * set (sv_reg := PassCommon.fresh_name "msv"%string (p :: avoid)) in *.
+          set (st_reg := PassCommon.fresh_name "mst"%string (p :: sv_reg :: avoid)) in *.
+          destruct (Mem2Reg.rewrite_code_for_slot p dt st_reg (st_reg :: sv_reg :: avoid) rest)
             as [[r' er] av'] eqn:Er.
           injection Hrw as <- _ _; cbn [forallb mm_code_entry_no_call fst snd].
-          exact (IH st_reg (st_reg :: avoid) r' er av' Hrest Er).
+          exact (IH st_reg (st_reg :: sv_reg :: avoid) r' er av' Hrest Er).
         * destruct (Mem2Reg.rewrite_code_for_slot p dt cur_reg avoid rest) as [[r' er] av'] eqn:Er.
           injection Hrw as <- _ _; cbn [forallb]; rewrite Him.
           exact (IH cur_reg avoid r' er av' Hrest Er).
