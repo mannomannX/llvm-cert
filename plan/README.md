@@ -1,7 +1,7 @@
 # Master Plan & Roadmap (`cert-llvm`)
 
 **Target Baseline:** LLVM `23.1.5` (`llvmorg-23.1.5`, released 2026-11-03) + Vellvm (`main` on Rocq `9.1`)  
-**Last Updated:** 2026-11-22
+**Last Updated:** 2026-11-23
 
 ---
 
@@ -11,12 +11,13 @@
 | :--- | :--- | :--- | :--- |
 | **Phase 1: Repository Setup & Minimal Build** | Weeks 1–2 | **Completed** | **100%** (1.1, 1.1b, 1.1c, 1.2 LLVM 23.1.5 SDK & Rocq 9.1 CI, and 1.3 Rust `ir-bridge` Done) |
 | **Phase 2: Verified Fallback Core (Rocq)** | Months 1–3 | **Completed** | **100%** (2.1a, 2.1b, 2.2 5 Rocq passes + `Pipeline.v`, 2.3 `verified-opt-fallback` CLI + `ir-bridge` hardening, & `F-37` vector poison Done) |
-| **Phase 3: Verified Translation Validator** | Months 3–6 | **Completed** | **100%** (3.1 `cert-v1` + `Z3` `QF_BV` engine, 3.2 Rocq `cert-validator` `34,917` LOC, & 3.3 loop cut-points / 64-bit GEP / SROA slot forwarding Done) |
-| **Phase 4: Orchestration, Backend Check & Audit** | Months 6–9 | **Completed** | **100%** (4.1a `cert-llvm` + `runtime/`, 4.1b Rocq [`ModuleMerge.v`](../passes/ModuleMerge.v) `8,869` LOC, 4.2 `cert-backend-check`, & 4.3 Ed25519 `.proof.json` Done) |
-| **Phase 5: Two-Stage Hardening & Assurance** | Continuous | **Completed** | **100%** ([`CheckAssumptions.v`](../validator/CheckAssumptions.v) `0` custom axioms [`AigLrat` closed; 5 upstream Vellvm 3.0 classical axioms gated in `rocq-ci.yml` Run `44586271407`], [`run_forged_cert_suite.py`](../scripts/run_forged_cert_suite.py) 28/28 + Wycheproof, 4-Persona Red-Team `68/68` + `22/22` `resolved`, & Stage B `cert-qual-suite` Done) |
-| **Phase 6: E2E Provability, Stage 4b LRAT & OCaml Assurance** | Post-v1 | **In Progress** | **6.0 & 6.3a Done** (`post-v1-roadmap.md`, `ocamlopt` vs. `ocamlc` dual-build + `200+` mutation gate & CI artifact export; **6.1, 6.2, 6.3b, 6.4 Planned**) |
-| **Phase 7: 32-Bit Targets (`ILP32`, `RV32`, `Thumb-2`/`A32`)** | Post-v1 | **Planned** | Shared `ILP32` parameterization (~2.5k–3.5k LOC) -> `RISCV32` (~0.8k–1.2k LOC) -> `ARM Thumb-2` / `A32` (~3.5k–5.0k LOC) |
-| **Phase 8: Deep Rocq Closure (`volatile`, `.bc`, `Sail`/`ASL`)** | Post-v1 | **Planned** | Observable `volatile`/MMIO & verified `runtime/` -> Rocq `.bc` codec -> Sail/ASL ELF validator & fallback codegen |
+| **Phase 3: Verified Translation Validator** | Months 3–6 | **Completed** | **100%** (3.1 `cert-v1` + `Z3` `QF_BV` engine, 3.2 Rocq `cert-validator` `779+` `Qed.` theorems, & 3.3 loop cut-points / 64-bit GEP / SROA slot forwarding Done) |
+| **Phase 4: Orchestration, Backend Check & Audit** | Months 6–9 | **Completed** | **100%** (4.1a `cert-llvm` + `runtime/`, 4.1b Rocq [`ModuleMerge.v`](../passes/ModuleMerge.v), 4.2 `cert-backend-check`, & 4.3 Ed25519 `.proof.json` Done) |
+| **Phase 5: Two-Stage Hardening & Assurance** | Continuous | **Completed** | **100%** ([`CheckAssumptions.v`](../validator/CheckAssumptions.v) `0` custom axioms [`AigLrat` closed; 5 upstream Vellvm 3.0 classical axioms gated], [`run_forged_cert_suite.py`](../scripts/run_forged_cert_suite.py) 34/34 + Wycheproof, 4-Persona Red-Team `68/68` + `22/22` `resolved`, & Stage B `cert-qual-suite` Done) |
+| **Phase 6: E2E Provability, Stage 4b LRAT & OCaml Assurance** | Post-v1 | **In Progress** | **6.0, 6.1, 6.2, 6.3a, 6.4a Done** (Wave 2 live E2E `8/8` `mc` & `4/7` `full`, Stage 3/4b LRAT, dual-compiler `34/34` forged + `230/230` mutation gate, `--require-mc-validated`); **6.4b ISA-QEMU Fuzzing Next**; **6.3b & 6.4c Planned** |
+| **Phase 8.3a: Hybrid Rocq ELF/MC Validator *(Pulled Forward)*** | Post-v1 | **Next *(After 6.4b)*** | **Closes Stage 4b TCB:** Rust backend emits `.mc.cert` + LRAT; public Rocq checker (`Elf64Spec.v`, `McFormat.v`, `Rv64Sem.v`, `A64CoreSem.v`, `McValidator.v`) proves `ELF .text ≡ merged.ll` (`8/8` `mc` vertical slice) |
+| **Phase 7: 32-Bit Targets (`ILP32`, `RV32`, `Thumb-2`/`A32`)** | Post-v1 | **Planned *(After 8.3a)*** | Shared `ILP32` parameterization (~2.5k–3.5k LOC) -> `RISCV32` (~0.8k–1.2k LOC) -> `ARM Thumb-2` / `A32` (~3.5k–5.0k LOC), inheriting `.mc.cert` / `McValidator.v` |
+| **Phase 8 (Remaining): Deep Rocq Closure (`volatile`, `.bc`, `8.3b`)** | Post-v1 | **Planned** | Observable `volatile`/MMIO & verified `runtime/` (`8.1`) -> Rocq `.bc` codec (`8.2`) -> optional minimal fallback codegen evaluated as commercial add-on (`8.3b`) |
 | **Phase 9: Regulatory TQK, Concept Assessment & Frontends** | Post-v1 | **Planned** | `ISO 26262-8` Concept Assessment/`TQK`, Stage-1 `SuperTest`/`FLS` traceability -> formal `C`/`MIR` TV |
 
 ---
@@ -38,6 +39,8 @@ flowchart TD
     Safe --> Backend
     Backend --> Out["Verified Binary + Signed Audit Report (.proof.json)"]
 ```
+
+> **Current Assurance Boundary (After Wave 2):** Stage 2–3 IR refinement (`input.ll -> merged.ll`), module-merge composition (`ModuleMerge.v`), and Stage 4b `--check-lrat` SAT/UNSAT discharge (`AigLrat.v`) are formally proven in Rocq (`0 Admitted`, `0` custom axioms). The Rust ELF64 parser, A64/RV64 decoders, symbolic executor, and bit-blasting encoder in `cert-backend-check` remain outside the Rocq kernel today; closing that final link via `cert-validator --check-mc` is the exact scope of pulled-forward **Phase 8.3a**.
 
 1. **Stage 1 — Frontend (Clean Unoptimized IR):** `clang` or `rustc` compiles customer code with `-O0 -Xclang -disable-O0-optnone` into clean, unoptimized LLVM 23 IR (`input.ll`).
 2. **Stage 2 — Fast-Path (Unmodified LLVM 23 `-O2`):** Upstream `opt` optimizes `input.ll` at full speed into `opt_fast.ll`.
@@ -62,7 +65,7 @@ flowchart TD
 | **AI Proof Pipeline** | LLM Agents + `rocq-lsp` / `rocq top` | Automated proof synthesis & repair loop against the Rocq typechecker for Vellvm lemmas and validator rules | Internal Tooling |
 
 See:
-- [`post-v1-roadmap.md`](./post-v1-roadmap.md) — Post-v1 phases (`6–9`: E2E provability, Stage 4b LRAT TCB closure, `ILP32`/`RV32`/`ARM Thumb-2`, Sail/ASL ELF backend & regulatory qualification).
+- [`post-v1-roadmap.md`](./post-v1-roadmap.md) — Post-v1 phases (**Weg A**: Phase `6.4b` ISA-QEMU fuzzing -> Phase `8.3a` Hybrid Rocq ELF/MC validator -> Phase `7` `ILP32`/`RV32`/`ARM Thumb-2` -> Phases `8.1`/`8.2`/`8.3b`/`9`).
 - [`ocaml-validator-qualification.md`](./ocaml-validator-qualification.md) — `ISO 26262-8 §11` qualification evidence for OCaml `cert-validator` / `verified-opt-fallback`.
 - [`licensing-and-boundaries.md`](./licensing-and-boundaries.md) — Mandatory commercial license isolation & subprocess boundaries.
 - [`business-model-and-ip-strategy.md`](./business-model-and-ip-strategy.md) — CompCert-style Dual-License & Open-Core 2-repository split (`llvm-cert` + private `llvm-cert-enterprise`).

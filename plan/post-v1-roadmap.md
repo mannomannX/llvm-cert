@@ -1,83 +1,92 @@
 # Post-v1 Roadmap (`cert-llvm` Phases 6–9)
 
-**Baseline:** Phases 1–5 Complete ([`README.md`](./README.md); green `Rocq 9.1 Formal Verification & Extraction CI` Run `44586271407` at commit `fbae024`, `Fast Quality, License & Integrity Gate` Run `45075220822`)  
-**Last Updated:** 2026-11-22
+**Baseline:** Phases 1–5 Complete ([`README.md`](./README.md)); Wave 1–2 Live E2E Active (`rocq-ci.yml` Run `45237979180` at commit `c370e27`, `quality-gate.yml` Run `45237976937`, cross-repo `live-e2e.yml` Run `45240825208`: `8/8 (100.0%)` `mc` & `4/7 (57.1%)` `full` `fast_path_rocq_validated` + `mc_validated` on `aarch64` & `riscv64`, `EXACT (ocamlopt==ocamlc)`, `3-WAY MATCH` QEMU, `0` unproven IR optimizations)  
+**Last Updated:** 2026-11-23
 
-This roadmap defines the complete multi-phase plan closing remaining end-to-end verification, toolchain assurance, 32-bit target, deep Rocq formalization, and regulatory qualification gaps beyond the v1 Middle-End baseline.
+This roadmap defines the complete multi-phase plan closing remaining end-to-end verification, backend TCB closure, toolchain assurance, 32-bit targets, deep Rocq formalization, and regulatory qualification gaps beyond the v1 Middle-End baseline.
 
 ---
 
-## Overview & Dependencies
+## Overview & Dependencies (**Weg A Execution Order**)
 
 ```mermaid
 flowchart LR
-    P6["Phase 6: E2E Provability, Stage 4b LRAT Closure & OCaml Assurance"] --> P7["Phase 7: 32-Bit Targets (ILP32, RISCV32, Thumb-2/A32)"]
-    P6 --> P8["Phase 8: Deep Rocq Closure (volatile, .bc Codec, Sail/ASL ELF Backend)"]
-    P6 --> P9["Phase 9: Regulatory TQK, Concept Assessment & Frontend Verification"]
-    P7 --> P9
-    P8 --> P9
+    P6["Phase 6: 6.1, 6.2, 6.3a, 6.4a Done;\n6.4b ISA-QEMU Fuzzing Next"] --> P83a["Phase 8.3a (Pulled Forward):\nHybrid Rocq ELF/MC Validator\n(RV64 -> AArch64)"]
+    P83a --> P7["Phase 7: 32-Bit Targets\n(ILP32, RV32, Thumb-2/A32)"]
+    P83a --> P8rest["Phase 8.1 / 8.2 / 8.3b\n(volatile, .bc, Opt. Fallback Codegen)"]
+    P7 --> P9["Phase 9: Regulatory TQK,\nConcept Assessment & Frontends"]
+    P8rest --> P9
 ```
 
 | Phase | Scope | Key Risk / TCB Closed | Dependency |
 | :--- | :--- | :--- | :--- |
-| **Phase 6** | Cross-repo E2E harness, Stage 3/4b LRAT discharge, OCaml dual-compiler/mutation assurance, strict `McValidated` controls | Separates real LLVM `23.1.5` `-O2` telemetry; removes unchecked `Z3` from Stage 4b; qualifies `ocamlopt` output; caps `ConstrainedBackendPinned` | Builds directly on v1 artifacts |
-| **Phase 7** | `ILP32` core parameterization, `RISCV32` (`RV32IMAC`/`RV32GC`), `ARM Thumb-2` (`Cortex-M`/`R`) & optional `A32` | Unlocks 32-bit safety microcontrollers (`ELFCLASS32`, `SHT_REL`/`SHT_RELA`, 64-bit freestanding builtins) | Phase 6.1 harness |
-| **Phase 8** | Rocq `volatile`/MMIO ITree semantics, verified `runtime/` builtins, Rocq `.bc` codec, Sail/ASL ELF validator + fallback codegen | Eliminates `llc`, `ld.lld`, Menhir/Ocamllex, text `ir-bridge`, and runtime C from the TCB | Phase 6.2 LRAT pipeline |
-| **Phase 9** | Tool Qualification Kit (`TQK`), Concept Assessment, Stage-1 frontend traceability/formal validation, long-term Rust extraction evaluation | Audit-ready `ISO 26262-8` (`TCL3`/`ASIL D`), `IEC 61508` (`T3`/`SIL 3/4`), and `DO-178C`/`DO-330` compliance | Phase 6 (+ Phase 8 for `DAL A` OCV replacement) |
+| **Phase 6** | **6.1, 6.2, 6.3a, 6.4a Done** (`live-e2e.yml`, LRAT Stage 3/4b, dual-compiler `34/34` forged + `230/230` mutation gate, `--require-mc-validated`); **6.4b** ISA-vs-QEMU fuzzing next; **6.3b** (`bisect_ppx`) & **6.4c** (Wave 3 `7/7` `full`) planned | Separates real LLVM `23.1.5` `-O2` telemetry; eliminates unchecked `Z3` UNSAT verdicts; qualifies `ocamlopt` output; hardens Rust ISA decoders before `8.3a` | Builds directly on v1 artifacts |
+| **Phase 8.3a *(Pulled Forward)*** | **Hybrid Rocq ELF-to-IR Backend Validator (`cert-validator --check-mc`)**: `RV64IM+RVC` (`sail-riscv` reference) -> `AArch64` Core (`~4–8k` LOC vertical slice) | **Closes the last backend TCB gap:** removes ELF parser, A64/RV64 decoder, symbolic executor, and bit-blaster from the correctness TCB | Phase `6.2` LRAT + `6.4b` ISA fuzzing |
+| **Phase 7** | `ILP32` core parameterization, `RISCV32` (`RV32IMAC`/`RV32GC`), `ARM Thumb-2` (`Cortex-M`/`R`) & optional `A32` | Unlocks 32-bit safety microcontrollers (`ELFCLASS32`, `SHT_REL`/`SHT_RELA`, 64-bit freestanding builtins) directly inheriting the `.mc.cert` + `McValidator.v` architecture | Phase `8.3a` vertical slice |
+| **Phase 8 (Remaining)** | **8.1** Rocq `volatile`/MMIO ITree + verified `runtime/`, **8.2** Rocq `.bc` codec, **8.3b** optional minimal fallback codegen (commercial/private add-on evaluation) | Eliminates Menhir/Ocamllex, text `ir-bridge`, runtime C, and optionally `llc`/`ld.lld` fallback paths | Phase `8.3a` |
+| **Phase 9** | Tool Qualification Kit (`TQK`), Concept Assessment, Stage-1 frontend traceability/formal validation, long-term Rust extraction evaluation | Audit-ready `ISO 26262-8` (`TCL3`/`ASIL D`), `IEC 61508` (`T3`/`SIL 3/4`), and `DO-178C`/`DO-330` compliance | Phase 6 + Phase `8.3a` (+ `8.3b` for `DAL A` OCV replacement) |
 
 ---
 
 ## Phase 6 — End-to-End Provability, Stage 4b TCB Closure & OCaml Validator Qualification
 
-### 6.1 Cross-Repo Real-Toolchain E2E Verification Harness (`llvm-cert-enterprise`)
-- **Goal:** Replace isolated CI mocks with a reproducible end-to-end pipeline exercising the real prebuilt `LLVM 23.1.5` SDK (`llvm-cert-sdk-23.1.5-linux-x86_64`) alongside the real Rocq-extracted `llvm-cert-rocq-tools-linux-x86_64` binaries (`cert-validator`, `verified-opt-fallback`).
-- **Pipeline Exercised:**
-  `Customer C -> clang 23 -O0 -> opt 23 -O2 -> cert-z3-engine -> cert-validator / verified-opt-fallback -> llc / ld.lld -> cert-backend-check -> .proof.json -> qemu-aarch64 / qemu-riscv64`
-- **Deliverables & Acceptance Criteria:**
-  - Dedicated CI/integration job downloading both release/CI artifacts and executing the embedded C corpus + differential kernels end-to-end.
-  - Emits empirical telemetry for real `-O2` workloads: `Fast-Path %` vs. `Safe-Path %`, `McValidated %` vs. `ConstrainedBackendPinned %`, end-to-end compilation latency, and bit-exact `qemu-aarch64` / `qemu-riscv64` digest parity against `clang -O0`.
+### 6.1 Cross-Repo Real-Toolchain E2E Verification Harness (`llvm-cert-enterprise`) *(Done)*
+- **Outcome:** Live 8-binary pipeline (`clang 23` -> `opt 23 -O2` -> private SMT witness engine -> `cert-validator` / `verified-opt-fallback` -> `llc`/`ld.lld` -> `cert-backend-check` -> `.proof.json` -> `qemu-aarch64` / `qemu-riscv64`) verified in `live-e2e.yml` Run `45240825208`:
+  - `e2e_corpus_mc.c` (`-O2`): **8/8 (100.0%)** `fast_path_rocq_validated` and **8/8 (100.0%)** `mc_validated` on both `aarch64` and `riscv64`, `EXACT (ocamlopt==ocamlc)`, `3-WAY MATCH` QEMU, `0` unproven IR optimizations.
+  - `e2e_corpus_full.c` (`-O2`): **4/7 (57.1%)** `fast_path_rocq_validated` (`@voter_median3_i32`, `@helper_scale_i32`, `@saturating_add_u32`, `@pack_sensor_u64`) and **4/7 (57.1%)** `mc_validated`, strict `--require-mc-validated` fail-closed rejection verified, `EXACT (ocamlopt==ocamlc)`, `3-WAY MATCH` QEMU.
 
-### 6.2 Eliminate Unchecked `Z3` from Stage 4b & Wire External LRAT Proofs in Stage 3
-- **Current Gap:** While Stage 3 uses `cert-validator` in Rocq, `CertValidator.check_cert_defn` currently passes `None` for `opt_pf` (relying on built-in algebraic rules + bounded DPLL), and Stage 4b `cert-backend-check` Tier 3 (`symbolic.rs`) still trusts raw `Z3` `Unsat` verdicts directly without Rocq proof checking.
-- **Work Packages:**
-  1. **Rocq LRAT Parser & Stage 3 Wiring (`validator/`):** Implement total fail-closed `parse_lrat` in `validator/CertFormat.v`, wire optional `(lrat ...)` witness blocks into `CertValidator.validate_tle_pair_with_cert_str`, and add a minimal CLI mode (`--check-lrat` / `--check-bv-lrat`) in `vellvm/src/ml/bin/cert_validator.ml` while remaining strictly within the `750` LOC handwritten OCaml TCB budget.
-  2. **Stage 4b LRAT Proof Discharge (`llvm-cert-enterprise/crates/cert-backend-check`):** Upgrade Tier 3 (`symbolic.rs`) so bit-vector equivalence queries generate or check machine-verifiable UNSAT LRAT certificates via `AigLrat.check_lrat_unsat` (`"Closed under the global context"`), lowering `Z3` to `TD1 -> TCL1` in the backend as well.
-- **Acceptance Criteria:** Zero paths in `cert-llvm` depend on trusting an unchecked `Z3` `Unsat` verdict for correctness claims; negative malformed/forged LRAT regression tests pass cleanly.
+### 6.2 Eliminate Unchecked `Z3` from Stage 4b & Wire External LRAT Proofs in Stage 3 *(Done)*
+- **Outcome:** Implemented total fail-closed DIMACS/LRAT verification (`validator/CertFormat.v`, `validator/AigLrat.v` `"Closed under the global context"`, CLI `--check-lrat` and Stage-3 `(lrat ...)` witness blocks within the `728/750` LOC handwritten OCaml TCB budget). Upgraded Stage 4b Tier 3 (`cert-backend-check`) to emit and verify machine-checkable UNSAT LRAT certificates via `cert-validator --check-lrat`. Zero paths rely on unchecked `Z3` `Unsat` verdicts.
 
 ### 6.3 OCaml Validator Toolchain Assurance (`ISO 26262-8 §11`)
 Detailed technical baseline documented in [`ocaml-validator-qualification.md`](./ocaml-validator-qualification.md).
 - **6.3a Dual-Compiler Parity, Certificate Mutation Suite & Artifact Packaging *(Done)*:**
-  - Pin OCaml `4.14.x` switch; enable `(modes native byte_complete)` in [`vellvm/src/ml/bin/dune`](../vellvm/src/ml/bin/dune) to build both `ocamlopt` native binaries and standalone `ocamlc` bytecode binaries (`cert-validator` / `cert-validator.bc` and `verified-opt-fallback` / `verified-opt-fallback.bc`).
-  - Run deterministic dual-compiler parity (`28/28` forged-cert cases + `verified-opt-fallback` byte-exact IR determinism) and `>= 200` deterministic `.cert`/IR mutations (`scripts/run_cert_mutation_suite.py`, `100%` kill rate, `0` crashes/timeouts, `100%` native-vs.-bytecode exit-code equality) inside `rocq-ci.yml`.
-  - Publish `llvm-cert-rocq-tools-linux-x86_64.tar.zst` with `SHA256SUMS.txt` and `TOOLCHAIN.txt`.
+  - Pinned OCaml `4.14.x`; `(modes native byte_complete)` builds both `ocamlopt` native and `ocamlc` bytecode binaries (`cert-validator` / `cert-validator.bc` and `verified-opt-fallback` / `verified-opt-fallback.bc`).
+  - `34/34` forged-certificate cases (`run_forged_cert_suite.py`), `230/230` deterministic `.cert`/IR mutations (`100%` kill rate, `0` crashes/timeouts, `100%` native-vs.-bytecode parity), and `5/5` byte-identical `verified-opt-fallback` IR parity green in `rocq-ci.yml` Run `45237979180` and published to release `e2e-bundle-2026-11-22`.
 - **6.3b Coverage Measurement & Pre-Release Bug Screening *(Planned)*:**
-  - Add a separate non-release instrumentation build profile (`bisect_ppx`) measuring branch coverage of `cert-validator` across the forged-cert + mutation + E2E suites.
-  - Maintain a pre-release `ocamlopt` x86_64 bug-tracker screening checklist and archive it alongside each tagged release manifest.
+  - Add a separate non-release instrumentation build profile (`bisect_ppx`) measuring branch coverage of `cert-validator` across forged-cert, mutation, and E2E suites.
+  - Maintain a pre-release `ocamlopt` x86_64 bug-tracker screening checklist archived alongside each tagged release manifest.
 
-### 6.4 Backend `McValidated` Coverage & Strict `ASIL D` Controls
-- **Work Packages:**
-  1. Add `--require-mc-validated` strict CLI gate in `cert-llvm`, failing closed whenever any function drops to `ConstrainedBackendPinned`.
-  2. Codify the two-tier `Safety Manual` rule: `McValidated` functions carry machine-checked IR-to-MC proof evidence in `.proof.json`; `ConstrainedBackendPinned` functions require explicit user-level back-to-back/target OCV testing per `ISO 26262-6 §9`.
-  3. Extend `cert-backend-check` symbolic equivalence (`symbolic.rs`) with loop cutpoints and structured call-summary reasoning to raise `McValidated` coverage on real embedded firmware containing loops and helper calls.
-- **Acceptance Criteria:** `--require-mc-validated` enforced in CI on acyclic safety kernels and documented in TQK; structured loop kernels promoted from `ConstrainedBackendPinned` to `McValidated`.
+### 6.4 Backend Hardening, `McValidated` Coverage & Strict `ASIL D` Controls
+- **6.4a Strict `--require-mc-validated` CLI Gate *(Done)*:**
+  - Enforced in live CI (`live-e2e.yml`), accepting acyclic `mc` kernels (`8/8`) and failing closed with zero partial outputs when any function falls back to `ConstrainedBackendPinned`.
+- **6.4b Randomized ISA-Semantics Differential Fuzzing (`cert-backend-check` vs. QEMU) *(Next — Weg A Step 1)*:**
+  - **Goal:** Provide an immediate high-leverage safety net against instruction-decoder, flag-mask (e.g., `E-30`), and bit-width bugs in the Rust backend before Phase `8.3a` replaces the Rust checker with a Rocq proof gate.
+  - **Deliverable:** Randomized valid-instruction / small-DAG generator in private `cert-qual-suite` comparing `cert-backend-check`'s decoded A64 & RV64 symbolic/concrete step semantics instruction-for-instruction against live `qemu-aarch64` and `qemu-riscv64` execution across randomized inputs and edge values (`0`, `-1`, `INT_MIN`, `INT_MAX`).
+- **6.4c Structured Loops, SROA Stack Frames & Helper Calls (`Wave 3`) + `Safety Manual` *(Planned)*:**
+  - Extend Fast-Path and backend cutpoint/call-summary reasoning to promote `@sroa_filter_step_i32`, `@checksum_loop_u32`, and `@composed_ctrl_i32` (`7/7` on `e2e_corpus_full.c`) and codify the two-tier `Safety Manual` rule (`McValidated` machine-checked evidence vs. `ConstrainedBackendPinned` target OCV per `ISO 26262-6 §9`).
 
 ---
 
-## Phase 7 — 32-Bit Embedded Targets (`ILP32`, `RISCV32`, `ARM Thumb-2` / `A32`)
+## Phase 8.3a *(Pulled Forward Ahead of Phase 7)* — Hybrid Rocq ELF-to-IR Backend Validator (`cert-validator --check-mc`)
 
-Architectural feasibility rests on `{IP : IPtr} {IPT : IPtrTheory}` genericity (~80–85% of pass/validator Rocq logic already width-parametric).
+- **Honest TCB Gap Today:** Stage 2–3 IR translation validation (`CertValidator.v`, `ModuleMerge.v`) and Stage 4b `--check-lrat` SAT/UNSAT discharge (`AigLrat.v`) are formally proven in Rocq (`0 Admitted`). However, the ~`11.4k` LOC Rust ELF64 parser, A64/RV64 decoders, symbolic executor, and Tseitin bit-blaster in `cert-backend-check` remain unverified TCB code: `--check-lrat` proves only that an emitted CNF is UNSAT, not that the CNF faithfully represents `merged.ll` vs. the ELF `.text` machine instructions. Closing this link is required before claiming *"Rocq-proven from input IR down to ELF machine code."*
+- **"Public Lock, Private Key-Maker" Split (`~4,000–8,000` LOC vertical slice):**
+  - **Private Key-Maker (`llvm-cert-enterprise`):** `cert-backend-check` remains an untrusted witness generator emitting canonical `.mc.cert` files (ELF slice metadata, relocation/privilege checks, CFG cutpoints, register/stack-slot mappings, and LRAT proofs).
+  - **Public Lock (`llvm-cert/validator/`):** New pure Rocq modules — `Elf64Spec.v` (bounds/relocation/symbol-slice validator), `McFormat.v` (`.mc.cert` parser & contract checks), `Rv64Sem.v`, `A64CoreSem.v`, and `McValidator.v` — verify `(merged.ll, out.o, .mc.cert)` end-to-end against Vellvm semantics using the existing zero-axiom `AigLrat.blast_refinement_cex_unsat_sound`, exposed via `cert-validator --check-mc` within the `750` LOC handwritten OCaml TCB budget.
+- **Concrete Incremental Milestones:**
+  1. **M1 — `RV64IM` + `RVC` Vertical Slice:** `Elf64Spec.v` + `McFormat.v` + `Rv64Sem.v` (aligned and cross-checked against official `sail-riscv` Rocq semantics) + `McValidator.v`, achieving **8/8 (100%)** end-to-end Rocq-proven IR-to-ELF validation on `e2e_corpus_mc.c` for `riscv64-unknown-none-elf`.
+  2. **M2 — `AArch64` Core Vertical Slice:** `A64CoreSem.v` (~40–50 bare-metal integer, branch, NZCV flag, and fixed-frame load/store instructions validated instruction-by-instruction via `6.4b` QEMU differential fuzzing + official ISA test vectors, keeping a clean alignment path to ARM ASL / Isla models), achieving **8/8 (100%)** end-to-end Rocq-proven IR-to-ELF validation on `e2e_corpus_mc.c` for `aarch64-unknown-none-elf`.
+  3. **M3 — Stack Frames, Loops & Calls:** Extend `.mc.cert` and `McValidator.v` alongside Phase `6.4c` (Wave 3) for stack-frame invariants, loop cutpoints, and verified call summaries.
+- **Acceptance Criteria:** `0 Admitted`, `0` custom axioms, dual-compiler `ocamlopt == ocamlc` parity, adversarial forged-ELF / wrong-relocation / tampered-opcode rejection suite (`run_forged_mc_suite.py`), completely removing `cert-backend-check` from the correctness TCB for `McValidated` functions.
+
+---
+
+## Phase 7 — 32-Bit Embedded Targets (`ILP32`, `RISCV32`, `ARM Thumb-2` / `A32`) *(After `8.3a`)*
+
+Scheduled directly *after* Phase `8.3a` so 32-bit targets inherit the `.mc.cert` + `McValidator.v` backend-proof architecture cleanly on day one instead of retrofitting 4 architectures later. Architectural feasibility rests on `{IP : IPtr} {IPT : IPtrTheory}` genericity (~80–85% of pass/validator Rocq logic already width-parametric).
 
 ### 7.1 Shared `ILP32` Foundation (~2,500–3,500 LOC)
-- **Rocq Semantics & Validators:** Parameterize `Sizeof.v` (`ptr_bytes ∈ {4, 8}`, `DTYPE_Pointer`/`DTYPE_Iptr` width `32` vs. `64`, `i64:64` ABI alignment matching both `RV32` and `AAPCS32`), instantiate `IP32Bit` in `IPtrFinite.v`, parameterize `SizeofV`/`ParamsV.v` & `Theory/I2F/`, generalize `wrap_ptr64` in `CertValidator.v`, and instantiate 32-bit soundness theorems in `ModuleMerge.v`.
+- **Rocq Semantics & Validators:** Parameterize `Sizeof.v` (`ptr_bytes ∈ {4, 8}`, `DTYPE_Pointer`/`DTYPE_Iptr` width `32` vs. `64`, `i64:64` ABI alignment matching both `RV32` and `AAPCS32`), instantiate `IP32Bit` in `IPtrFinite.v`, parameterize `SizeofV`/`ParamsV.v` & `Theory/I2F/`, generalize `wrap_ptr64` in `CertValidator.v`, and instantiate 32-bit soundness theorems in `ModuleMerge.v` plus `ELFCLASS32` support in `Elf64Spec.v` / `ElfSpec.v`.
 - **SMT, ELF32 & Runtime:**
-  - Make pointer and GEP index widths DataLayout-driven in `cert-z3-engine` (`ir_model.rs`, `smt.rs`).
+  - Make pointer and GEP index widths DataLayout-driven in the private SMT witness engine.
   - Add `ELFCLASS32` parsing plus both `SHT_REL` and `SHT_RELA` handling in `cert-backend-check/src/elf.rs`.
   - Implement CERT-C/MISRA-compliant 64-bit freestanding runtime builtins (`__udivdi3`, `__umoddi3`, `__ashldi3`, `__lshrdi3`, `__aeabi_*`) in `runtime/` and allowlist them in `APPROVED_CERT_RUNTIME_BUILTINS`.
   - Enable validated `ilp32` triples in `cert-llvm/src/safety_profile.rs`.
 
 ### 7.2 `RISCV32` (`RV32IMAC` / `RV32GC`, ~800–1,200 LOC)
 - **Compiler Base:** Reuse existing `llvm/lib/Target/RISCV` (`clang`, `llc`, `ld.lld` already support RV32).
-- **Decoder, Symbolic Check & Testing:** Extend `riscv64.rs` / `symbolic.rs` for `XLEN = 32`, `lw`/`sw` spills, RVC differences (`funct3 = 001` quadrant `01` `c.jal` writing `ra` vs. RV64 `c.addiw`; `c.flw`/`c.fsw` vs. `c.ld`/`c.sd`), `ilp32` ABI (`16B` `sp`, `a0` `sret`, register pairs for `i64`), `mc_exec`, and `qemu-riscv32`.
+- **Decoder, Symbolic Check & Testing:** Extend `riscv64.rs` / `symbolic.rs` (and `Rv32Sem.v`) for `XLEN = 32`, `lw`/`sw` spills, RVC differences (`funct3 = 001` quadrant `01` `c.jal` writing `ra` vs. RV64 `c.addiw`; `c.flw`/`c.fsw` vs. `c.ld`/`c.sd`), `ilp32` ABI (`16B` `sp`, `a0` `sret`, register pairs for `i64`), `mc_exec`, and `qemu-riscv32`.
 
 ### 7.3 `ARM Thumb-2` (`Cortex-M4/M7/M33/R52`, ~3,500–5,000 LOC) & Optional `A32` (+1,200–1,800 LOC)
 - **Upstream Target Restore:** Re-import `llvm/lib/Target/ARM` and `clang/lib/Basic/Targets/ARM*` from pinned `llvmorg-23.1.5` (`392dfff97d29b59d77e5cac6d4b6ef2585fe7117`, committed with `[allow-upstream-patch]`).
@@ -86,9 +95,9 @@ Architectural feasibility rests on `{IP : IPtr} {IPT : IPtrTheory}` genericity (
 
 ---
 
-## Phase 8 — Deep Formal Closure in Rocq (Eliminating Remaining `llc`/`ld.lld`/Surface TCB)
+## Phase 8 *(Remaining Deep Formal Closure: `8.1`, `8.2`, Optional `8.3b`)*
 
-Moves residual Zone A/B components (`llc`, `ld.lld`, `llvm_parser`, `ir-bridge`, `runtime/`) out of the TCB without rewriting LLVM C++.
+Moves residual Zone A/B components (`llvm_parser`, `ir-bridge`, `runtime/`, and optionally `llc`/`ld.lld` fallback) out of the TCB without rewriting LLVM C++.
 
 ### 8.1 `volatile`/MMIO & Runtime Builtins in Rocq (~2,000–4,000 LOC)
 - **Observable `volatile` / MMIO Semantics (~1k–2k LOC):** Extend `LLVMEvents.v` / `Denotation.v` so `ANN_volatile` loads/stores emit ordered observable ITree events, proving that neither passes nor translation validation reorder, coalesce, or drop hardware register accesses.
@@ -97,10 +106,9 @@ Moves residual Zone A/B components (`llc`, `ld.lld`, `llvm_parser`, `ir-bridge`,
 ### 8.2 Verified LLVM Bitcode (`.bc`) Reader/Writer in Rocq (~3,000–5,000 LOC)
 - Implement a total, Rocq-verified LLVM bitcode reader/writer analogous to `CertFormat.v`, eliminating the unverified Menhir/Ocamllex textual surface parser (`llvm_parser.mly`/`llvm_lexer.mll`) and text `ir-bridge` parsing/printing from Zone A.
 
-### 8.3 Rocq ELF-to-IR Backend Validator (`Sail`/`ASL`) + Minimal Rocq Fallback Codegen (~20,000–30,000 LOC)
-- **Architecture:** Convert `cert-backend-check` into an untrusted witness generator emitting `.mc.cert` (stack-slot mappings, register assignments, cutpoints, and LRAT proofs).
-- **In-Rocq ELF Checker:** Verify linked ELF64/ELF32 `.text` + relocation invariants directly against official manufacturer-backed Rocq ISA semantics (`Sail`/`ASL` for AArch64 and `sail-riscv` for RISC-V) using `AigLrat.v`, proving `ELF_MachineCode ⊑ Vellvm_IR`.
-- **Minimal Verified Fallback Codegen (~8k–12k LOC):** Provide a simple, predictable Rocq `MCFG -> AArch64/RISC-V` fallback code generator for the ~2–5% of functions failing `.mc.cert` synthesis, removing `llc` and `ld.lld` completely from the correctness TCB (and unlocking `DO-178C DAL A` without target OCV for `McValidated` binaries).
+### 8.3b Optional Minimal Verified Fallback Codegen (~8,000–12,000 LOC, Commercial Add-On Evaluation)
+- **Role:** Provide a simple, predictable `MCFG -> AArch64/RISC-V` fallback code generator only for the ~2–5% of functions failing `.mc.cert` synthesis under `8.3a`, removing `llc` and `ld.lld` completely even on complex fallback paths (and unlocking `DO-178C DAL A` without target OCV).
+- **Open-Core IP Guardrail:** Unlike pure proof *checkers* (`cert-validator`, `McValidator.v`) — which are useless to copycats without the private witness engine — a standalone verified code generator would turn `clang -O0 -> verified-opt-fallback -> verified-codegen` into a self-contained open-source compiler clone. Keep `8.3b` deferred and evaluate housing its generator/emission logic as a private commercial Enterprise module rather than publishing turnkey codegen directly in the public repo.
 
 ---
 
