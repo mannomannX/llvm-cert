@@ -3455,11 +3455,31 @@ Fixpoint expr_srange (e : cert_expr) : Z * Z :=
           else def
       | _ => def
       end
-  | CE_Select w' _ t f =>
+  | CE_Select w' c t f =>
       let '(lot, hit) := expr_srange t in
       let '(lof, hif) := expr_srange f in
       if Pos.eqb (cert_expr_bit_width t) w' && Pos.eqb (cert_expr_bit_width f) w' then
-        (Z.min lot lof, Z.max hit hif)
+        match c with
+        | CE_ICmp pr false wcmp l r =>
+            if Pos.eqb wcmp w' &&
+               Pos.eqb (cert_expr_bit_width l) w' &&
+               Pos.eqb (cert_expr_bit_width r) w' then
+              let '(lol, hil) := expr_srange l in
+              let '(lor, hir) := expr_srange r in
+              match pr with
+              | CIP_Slt | CIP_Sle =>
+                  if cert_expr_eqb l t && cert_expr_eqb r f then (Z.min lol lor, Z.min hil hir)
+                  else if cert_expr_eqb r t && cert_expr_eqb l f then (Z.max lol lor, Z.max hil hir)
+                  else (Z.min lot lof, Z.max hit hif)
+              | CIP_Sgt | CIP_Sge =>
+                  if cert_expr_eqb l t && cert_expr_eqb r f then (Z.max lol lor, Z.max hil hir)
+                  else if cert_expr_eqb r t && cert_expr_eqb l f then (Z.min lol lor, Z.min hil hir)
+                  else (Z.min lot lof, Z.max hit hif)
+              | _ => (Z.min lot lof, Z.max hit hif)
+              end
+            else (Z.min lot lof, Z.max hit hif)
+        | _ => (Z.min lot lof, Z.max hit hif)
+        end
       else def
   | _ => def
   end.
@@ -3664,13 +3684,70 @@ Proof.
     pose proof (eval_cert_expr_ret_wf_scalar f [] penv [] foracle vf Htf Ef) as Hwvf;
       rewrite Hwf in Hwvf.
     destruct Hwvc as [-> | [ic ->]]; [cbn in Hev; discriminate Hev |].
-    cbn in Hev; destruct (@Integers.unsigned 1 ic =? 1)%Z eqn:Econd.
-    + destruct Hwvt as [-> | [it ->]]; [discriminate Hev |].
-      apply alg_ret_dvalue_I_inj in Hev; subst i.
-      pose proof (IHt w' penv foracle it Hwtb Htt Hpt Et) as Hrt; lia.
-    + destruct Hwvf as [-> | [ifv ->]]; [discriminate Hev |].
-      apply alg_ret_dvalue_I_inj in Hev; subst i.
-      pose proof (IHf w' penv foracle ifv Hwf Htf Hpf Ef) as Hrf; lia.
+    cbn [bind ret EOU_monad] in Hev.
+    pose proof (IHt w' penv foracle) as IHt'.
+    pose proof (IHf w' penv foracle) as IHf'.
+    assert (Hbase :
+      let lo := Z.min lot lof in
+      let hi := Z.max hit hif in
+      (lo <= @Integers.signed w' i <= hi)%Z).
+    { cbn zeta; cbn [eval_select eval_select_base_dvalue ret EOU_monad] in Hev;
+      destruct (@Integers.unsigned 1 ic =? 1)%Z.
+      - destruct Hwvt as [-> | [it ->]]; [discriminate Hev |].
+        apply alg_ret_dvalue_I_inj in Hev; subst i.
+        pose proof (IHt' it Hwtb Htt Hpt Et) as Hrt; lia.
+      - destruct Hwvf as [-> | [ifv ->]]; [discriminate Hev |].
+        apply alg_ret_dvalue_I_inj in Hev; subst i.
+        pose proof (IHf' ifv Hwf Htf Hpf Ef) as Hrf; lia. }
+    destruct c as [| | | | pr ss_c wcmp l r | | | |]; try exact Hbase.
+    destruct ss_c; [exact Hbase |].
+    destruct (Pos.eqb wcmp w' && Pos.eqb (cert_expr_bit_width l) w' && Pos.eqb (cert_expr_bit_width r) w') eqn:Hwc_mm;
+      [| exact Hbase].
+    rewrite !andb_true_iff in Hwc_mm; destruct Hwc_mm as [[Hwcmp Hwl_w] Hwr_w].
+    apply Pos.eqb_eq in Hwcmp; apply Pos.eqb_eq in Hwl_w; apply Pos.eqb_eq in Hwr_w; subst wcmp.
+    destruct (expr_srange l) as [lol hil] eqn:Erl0; destruct (expr_srange r) as [lor hir] eqn:Err0.
+    destruct pr; try exact Hbase;
+      [ destruct (cert_expr_eqb l t && cert_expr_eqb r f) eqn:Em1;
+        [| destruct (cert_expr_eqb r t && cert_expr_eqb l f) eqn:Em2; [| exact Hbase]]
+      | destruct (cert_expr_eqb l t && cert_expr_eqb r f) eqn:Em1;
+        [| destruct (cert_expr_eqb r t && cert_expr_eqb l f) eqn:Em2; [| exact Hbase]]
+      | destruct (cert_expr_eqb l t && cert_expr_eqb r f) eqn:Em1;
+        [| destruct (cert_expr_eqb r t && cert_expr_eqb l f) eqn:Em2; [| exact Hbase]]
+      | destruct (cert_expr_eqb l t && cert_expr_eqb r f) eqn:Em1;
+        [| destruct (cert_expr_eqb r t && cert_expr_eqb l f) eqn:Em2; [| exact Hbase]] ].
+    all: try (apply andb_true_iff in Em1 as [Eeq1 Eeq2]; apply cert_expr_eqb_eq in Eeq1; apply cert_expr_eqb_eq in Eeq2; subst t f).
+    all: try (apply andb_true_iff in Em2 as [Eeq1 Eeq2]; apply cert_expr_eqb_eq in Eeq1; apply cert_expr_eqb_eq in Eeq2; subst t f).
+    all: rewrite ?Erl0, ?Err0 in *.
+    all: cbn [eval_cert_expr] in Ec.
+    all: first [ rewrite Et in Ec; cbn [eou_bind] in Ec; rewrite Ef in Ec
+               | rewrite Ef in Ec; cbn [eou_bind] in Ec; rewrite Et in Ec ];
+         cbn [eou_bind] in Ec.
+    all: destruct Hwvt as [-> | [iv_t ->]]; destruct Hwvf as [-> | [iv_f ->]];
+         [cbn in Ec; discriminate Ec
+         |cbn in Ec; discriminate Ec
+         |cbn in Ec; discriminate Ec
+         |].
+    all: unfold eval_icmp in Ec; rewrite eval_icmp_base_same_width in Ec.
+    all: unfold cert_to_icmp, eval_int_icmp, Integers.cmp in Ec; cbn in Ec.
+    all: repeat match type of Ec with
+         | context [@Integers.lt ?sz ?a ?b] =>
+             let Hlt := fresh "Elt" in destruct (@Integers.lt sz a b) eqn:Hlt
+         end;
+         cbn [negb] in Ec;
+         try discriminate Ec;
+         apply alg_ret_dvalue_I_inj in Ec; subst ic;
+         cbn [eval_select eval_select_base_dvalue ret EOU_monad] in Hev;
+         rewrite ?(@Integers.unsigned_one 1%positive), ?(@Integers.unsigned_zero 1%positive) in Hev;
+         cbn in Hev; apply alg_ret_dvalue_I_inj in Hev; subst i.
+    all: repeat match goal with
+         | H : @Integers.lt _ _ _ = _ |- _ =>
+             unfold Integers.lt in H;
+             destruct (Rocqlib.zlt _ _); [try discriminate H | try discriminate H]; clear H
+         end.
+    all: pose proof (IHt' iv_t Hwtb Htt Hpt Et) as Hrt;
+         pose proof (IHf' iv_f Hwf Htf Hpf Ef) as Hrf;
+         rewrite ?Erl0, ?Err0 in Ert, Erf; inversion Ert; inversion Erf; subst;
+         lia.
   - cbn [expr_srange]; exact (@Integers.signed_range w' i).
   - cbn [expr_srange]; exact (@Integers.signed_range (cert_expr_bit_width body) i).
 Qed.

@@ -1917,6 +1917,131 @@ def build_suite_cases() -> list[SuiteCase]:
         )
     )
 
+    def prep_neg_intrinsic_uadd_sat_vs_usub_sat(
+        wd: pathlib.Path, vbin: pathlib.Path, _fbin: pathlib.Path
+    ) -> PreparedInvocation:
+        src = (
+            "declare i32 @llvm.uadd.sat.i32(i32, i32)\n"
+            "define i32 @f(i32 %x, i32 %y) {\n"
+            "entry:\n"
+            "  %r = call i32 @llvm.uadd.sat.i32(i32 %x, i32 %y)\n"
+            "  ret i32 %r\n"
+            "}\n"
+        )
+        tgt = (
+            "declare i32 @llvm.usub.sat.i32(i32, i32)\n"
+            "define i32 @f(i32 %x, i32 %y) {\n"
+            "entry:\n"
+            "  %r = call i32 @llvm.usub.sat.i32(i32 %x, i32 %y)\n"
+            "  ret i32 %r\n"
+            "}\n"
+        )
+        uadd_sexp = (
+            '(select 32 (icmp ult 0 32 (binop add 32 (flags 0 0 0 0) (var "%x" 32) (var "%y" 32)) (var "%x" 32)) '
+            '(bv 32 4294967295) '
+            '(binop add 32 (flags 0 0 0 0) (var "%x" 32) (var "%y" 32)))'
+        )
+        usub_sexp = (
+            '(select 32 (icmp ult 0 32 (var "%x" 32) (var "%y" 32)) '
+            '(bv 32 0) '
+            '(binop sub 32 (flags 0 0 0 0) (var "%x" 32) (var "%y" 32)))'
+        )
+        cert = build_cert_v1("f", src, tgt, scalar_refines_sexp(32, uadd_sexp, usub_sexp))
+        return write_tv_files(wd, vbin, src, tgt, cert)
+
+    cases.append(
+        SuiteCase(
+            name="neg_intrinsic_uadd_sat_vs_usub_sat",
+            expect_accept=False,
+            description="forged uadd.sat -> usub.sat intrinsic TV claim rejected by kernel",
+            prepare=prep_neg_intrinsic_uadd_sat_vs_usub_sat,
+            expect_cert_parse_ok=True,
+        )
+    )
+
+    def prep_neg_annotated_intrinsic_call_rejected(
+        wd: pathlib.Path, vbin: pathlib.Path, _fbin: pathlib.Path
+    ) -> PreparedInvocation:
+        src = (
+            "declare i32 @llvm.abs.i32(i32, i1 immarg)\n"
+            "define i32 @f(i32 %x) {\n"
+            "entry:\n"
+            "  %r = call i32 @llvm.abs.i32(i32 %x, i1 false)\n"
+            "  ret i32 %r\n"
+            "}\n"
+        )
+        tgt = (
+            "declare i32 @llvm.abs.i32(i32, i1 immarg)\n"
+            "define i32 @f(i32 %x) {\n"
+            "entry:\n"
+            "  %r = call noundef i32 @llvm.abs.i32(i32 noundef %x, i1 false), !range !0\n"
+            "  ret i32 %r\n"
+            "}\n"
+            "!0 = !{i32 0, i32 2147483647}\n"
+        )
+        abs_sexp = (
+            '(select 32 (icmp slt 0 32 (var "%x" 32) (bv 32 0)) '
+            '(binop sub 32 (flags 0 0 0 0) (bv 32 0) (var "%x" 32)) '
+            '(var "%x" 32))'
+        )
+        cert = build_cert_v1("f", src, tgt, scalar_refines_sexp(32, abs_sexp, abs_sexp))
+        return write_tv_files(wd, vbin, src, tgt, cert)
+
+    cases.append(
+        SuiteCase(
+            name="neg_annotated_intrinsic_call_rejected",
+            expect_accept=False,
+            description="intrinsic call site carrying noundef/!range metadata rejected on fast-path",
+            prepare=prep_neg_annotated_intrinsic_call_rejected,
+            expect_cert_parse_ok=True,
+        )
+    )
+
+    def prep_neg_merge_non_intrinsic_declare_vs_smin(
+        wd: pathlib.Path, vbin: pathlib.Path, _fbin: pathlib.Path
+    ) -> PreparedInvocation:
+        orig_ll = (
+            "declare i32 @llvm.fake.helper.i32(i32, i32)\n"
+            "define i32 @f(i32 %x, i32 %y) {\n"
+            "entry:\n"
+            "  %r = call i32 @llvm.fake.helper.i32(i32 %x, i32 %y)\n"
+            "  ret i32 %r\n"
+            "}\n"
+        )
+        merged_ll = (
+            "declare i32 @llvm.smin.i32(i32, i32)\n"
+            "define i32 @f(i32 %x, i32 %y) {\n"
+            "entry:\n"
+            "  %r = call i32 @llvm.smin.i32(i32 %x, i32 %y)\n"
+            "  ret i32 %r\n"
+            "}\n"
+        )
+        orig_p = wd / "orig.ll"
+        merged_p = wd / "merged.ll"
+        orig_p.write_text(orig_ll, encoding="utf-8", newline="\n")
+        merged_p.write_text(merged_ll, encoding="utf-8", newline="\n")
+        return PreparedInvocation(
+            argv=[
+                str(vbin),
+                "--check-merge",
+                "--orig",
+                str(orig_p),
+                "--merged",
+                str(merged_p),
+            ],
+            cert_bytes_for_grammar_check=None,
+        )
+
+    cases.append(
+        SuiteCase(
+            name="neg_merge_non_intrinsic_declare_vs_smin",
+            expect_accept=False,
+            description="forged non-intrinsic @llvm.* declaration vs @llvm.smin.i32 rejected by --check-merge",
+            prepare=prep_neg_merge_non_intrinsic_declare_vs_smin,
+            expect_cert_parse_ok=None,
+        )
+    )
+
     return cases
 
 

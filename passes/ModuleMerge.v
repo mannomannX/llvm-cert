@@ -1979,18 +1979,36 @@ Fixpoint check_defs_merge
   | _, _ => false
   end.
 
+(** True when declaration [d] names a built-in Vellvm LLVM intrinsic, which
+    [TopLevel.allocate_declaration] skips (zero heap/address effect) and
+    [Libraries.library_functions] never binds as an external library symbol. *)
+Definition is_defined_intrinsic_decl (d : declaration dtyp) : bool :=
+  match lookup_intrinsic_declaration (dc_name d) with
+  | Some _ => true
+  | None => false
+  end.
+
+Definition non_intrinsic_decls (ds : list (declaration dtyp)) : list (declaration dtyp) :=
+  List.filter (fun d => negb (is_defined_intrinsic_decl d)) ds.
+
 (** Decidable boolean module-merge checker closing F-19, F-24, F-33, and F-47. *)
 Definition check_module_merge
   (m_orig m_merged : CFG.mcfg dtyp)
   (verified_slices : list (function_id * CFG.mcfg dtyp * CFG.mcfg dtyp)) : bool :=
   mm_list_eqb mm_global_eqb (m_globals m_merged) (m_globals m_orig) &&
   forallb global_no_extern_weak (m_globals m_orig) &&
-  mm_list_eqb mm_declaration_eqb (m_declarations m_merged) (m_declarations m_orig) &&
+  mm_list_eqb mm_declaration_eqb
+    (non_intrinsic_decls (m_declarations m_merged))
+    (non_intrinsic_decls (m_declarations m_orig)) &&
   forallb decl_no_extern_weak (m_declarations m_orig) &&
+  forallb decl_no_extern_weak (m_declarations m_merged) &&
   forallb (fun d => decl_no_extern_weak (df_prototype d)) (m_definitions m_orig) &&
   mm_nodup_raw_ids
     (List.map dc_name
        (m_declarations m_orig ++ List.map df_prototype (m_definitions m_orig))) &&
+  mm_nodup_raw_ids
+    (List.map dc_name
+       (m_declarations m_merged ++ List.map df_prototype (m_definitions m_merged))) &&
   mm_list_eqb mm_block_addr_eqb
     (nodup block_address_eq_dec (mcfg_block_addresses m_merged))
     (nodup block_address_eq_dec (mcfg_block_addresses m_orig)) &&
@@ -2028,16 +2046,24 @@ Definition validate_module_merge
     inl "validate_module_merge: m_globals layout or alignment mismatch"%string
   else if negb (forallb global_no_extern_weak (m_globals m_orig)) then
     inl "validate_module_merge: extern_weak global linkage is unsupported"%string
-  else if negb (mm_list_eqb mm_declaration_eqb (m_declarations m_merged) (m_declarations m_orig)) then
+  else if negb (mm_list_eqb mm_declaration_eqb
+                  (non_intrinsic_decls (m_declarations m_merged))
+                  (non_intrinsic_decls (m_declarations m_orig))) then
     inl "validate_module_merge: m_declarations symbol table mismatch"%string
   else if negb (forallb decl_no_extern_weak (m_declarations m_orig)) then
     inl "validate_module_merge: extern_weak declaration linkage is unsupported"%string
+  else if negb (forallb decl_no_extern_weak (m_declarations m_merged)) then
+    inl "validate_module_merge: extern_weak synthesized declaration linkage is unsupported"%string
   else if negb (forallb (fun d => decl_no_extern_weak (df_prototype d)) (m_definitions m_orig)) then
     inl "validate_module_merge: extern_weak definition linkage is unsupported"%string
   else if negb (mm_nodup_raw_ids
                   (List.map dc_name
                      (m_declarations m_orig ++ List.map df_prototype (m_definitions m_orig)))) then
     inl "validate_module_merge: duplicate function symbol in declarations/definitions"%string
+  else if negb (mm_nodup_raw_ids
+                  (List.map dc_name
+                     (m_declarations m_merged ++ List.map df_prototype (m_definitions m_merged)))) then
+    inl "validate_module_merge: duplicate function symbol in merged declarations/definitions"%string
   else if negb (mm_list_eqb mm_block_addr_eqb
                   (nodup block_address_eq_dec (mcfg_block_addresses m_merged))
                   (nodup block_address_eq_dec (mcfg_block_addresses m_orig))) then
@@ -2077,15 +2103,23 @@ Proof.
     cbn [negb andb]; [| split; discriminate].
   destruct (forallb global_no_extern_weak (m_globals m_orig));
     cbn [negb andb]; [| split; discriminate].
-  destruct (mm_list_eqb mm_declaration_eqb (m_declarations m_merged) (m_declarations m_orig));
+  destruct (mm_list_eqb mm_declaration_eqb
+              (non_intrinsic_decls (m_declarations m_merged))
+              (non_intrinsic_decls (m_declarations m_orig)));
     cbn [negb andb]; [| split; discriminate].
   destruct (forallb decl_no_extern_weak (m_declarations m_orig));
+    cbn [negb andb]; [| split; discriminate].
+  destruct (forallb decl_no_extern_weak (m_declarations m_merged));
     cbn [negb andb]; [| split; discriminate].
   destruct (forallb (fun d => decl_no_extern_weak (df_prototype d)) (m_definitions m_orig));
     cbn [negb andb]; [| split; discriminate].
   destruct (mm_nodup_raw_ids
               (List.map dc_name
                  (m_declarations m_orig ++ List.map df_prototype (m_definitions m_orig))));
+    cbn [negb andb]; [| split; discriminate].
+  destruct (mm_nodup_raw_ids
+              (List.map dc_name
+                 (m_declarations m_merged ++ List.map df_prototype (m_definitions m_merged))));
     cbn [negb andb]; [| split; discriminate].
   destruct (mm_list_eqb mm_block_addr_eqb
               (nodup block_address_eq_dec (mcfg_block_addresses m_merged))
@@ -2225,7 +2259,7 @@ Theorem check_module_merge_globals_eq
   m_globals m_merged = m_globals m_orig.
 Proof.
   unfold check_module_merge; rewrite !Bool.andb_true_iff.
-  intros [[[[[[[H _] _] _] _] _] _] _].
+  intros [[[[[[[[[H _] _] _] _] _] _] _] _] _].
   exact (proj1 (mm_list_eqb_eq _ mm_global_eqb_eq _ _) H).
 Qed.
 
@@ -2236,7 +2270,7 @@ Theorem check_module_merge_globals_no_extern_weak
   Forall (fun g => g_linkage g <> Some LINKAGE_Extern_weak) (m_globals m_orig).
 Proof.
   unfold check_module_merge; rewrite !Bool.andb_true_iff.
-  intros [[[[[[[_ H] _] _] _] _] _] _].
+  intros [[[[[[[[[_ H] _] _] _] _] _] _] _] _].
   apply Forall_forall; intros g Hg.
   rewrite forallb_forall in H; apply opt_linkage_no_extern_weak_spec, (H g Hg).
 Qed.
@@ -2245,10 +2279,11 @@ Theorem check_module_merge_declarations_eq
   (m_orig m_merged : CFG.mcfg dtyp)
   (verified_slices : list (function_id * CFG.mcfg dtyp * CFG.mcfg dtyp)) :
   check_module_merge m_orig m_merged verified_slices = true ->
-  m_declarations m_merged = m_declarations m_orig.
+  non_intrinsic_decls (m_declarations m_merged) =
+  non_intrinsic_decls (m_declarations m_orig).
 Proof.
   unfold check_module_merge; rewrite !Bool.andb_true_iff.
-  intros [[[[[[_ H] _] _] _] _] _].
+  intros (((((((((_ & _) & H) & _) & _) & _) & _) & _) & _) & _).
   exact (proj1 (mm_list_eqb_eq _ mm_declaration_eqb_eq _ _) H).
 Qed.
 
@@ -2260,7 +2295,7 @@ Theorem check_module_merge_declarations_no_extern_weak
   Forall (fun df => dc_linkage (df_prototype df) <> Some LINKAGE_Extern_weak) (m_definitions m_orig).
 Proof.
   unfold check_module_merge; rewrite !Bool.andb_true_iff.
-  intros [[[[[[[_ _] _] Hd] Hdf] _] _] _].
+  intros (((((((((_ & _) & _) & Hd) & _) & Hdf) & _) & _) & _) & _).
   split; apply Forall_forall.
   - intros d Hin; rewrite forallb_forall in Hd; apply opt_linkage_no_extern_weak_spec, (Hd d Hin).
   - intros df Hin; rewrite forallb_forall in Hdf; apply opt_linkage_no_extern_weak_spec, (Hdf df Hin).
@@ -2273,7 +2308,7 @@ Theorem check_module_merge_symbol_nodup
   NoDup (List.map dc_name (m_declarations m_orig ++ List.map df_prototype (m_definitions m_orig))).
 Proof.
   unfold check_module_merge; rewrite !Bool.andb_true_iff.
-  intros [[[_ Hnd] _] _].
+  intros (((((((((_ & _) & _) & _) & _) & _) & Hnd) & _) & _) & _).
   exact (proj1 (mm_nodup_raw_ids_spec _) Hnd).
 Qed.
 
@@ -2285,20 +2320,8 @@ Theorem check_module_merge_block_addresses_eq
   nodup block_address_eq_dec (mcfg_block_addresses m_orig).
 Proof.
   unfold check_module_merge; rewrite !Bool.andb_true_iff.
-  intros [[_ Hba] _].
-  exact (proj1 (mm_list_eqb_eq _ mm_block_addr_eqb_eq _ _) Hba).
-Qed.
-
-Theorem check_module_merge_defs_Forall2
-  (m_orig m_merged : CFG.mcfg dtyp)
-  (verified_slices : list (function_id * CFG.mcfg dtyp * CFG.mcfg dtyp)) :
-  check_module_merge m_orig m_merged verified_slices = true ->
-  Forall2 (defn_pair_provenance verified_slices)
-    (m_definitions m_orig) (m_definitions m_merged).
-Proof.
-  unfold check_module_merge; rewrite !Bool.andb_true_iff.
-  intros [_ Hdefs].
-  exact (check_defs_merge_Forall2 verified_slices _ _ Hdefs).
+  intros (((((((((_ & _) & _) & _) & _) & _) & _) & _) & H) & _).
+  exact (proj1 (mm_list_eqb_eq _ mm_block_addr_eqb_eq _ _) H).
 Qed.
 
 Theorem check_module_merge_prototypes_eq
@@ -2309,8 +2332,93 @@ Theorem check_module_merge_prototypes_eq
   List.map df_prototype (m_definitions m_orig).
 Proof.
   unfold check_module_merge; rewrite !Bool.andb_true_iff.
-  intros [_ Hdefs].
-  exact (check_defs_merge_prototypes_eq verified_slices _ _ Hdefs).
+  intros (((((((((_ & _) & _) & _) & _) & _) & _) & _) & _) & H).
+  exact (check_defs_merge_prototypes_eq verified_slices _ _ H).
+Qed.
+
+Theorem check_module_merge_defs_Forall2
+  (m_orig m_merged : CFG.mcfg dtyp)
+  (verified_slices : list (function_id * CFG.mcfg dtyp * CFG.mcfg dtyp)) :
+  check_module_merge m_orig m_merged verified_slices = true ->
+  Forall2 (defn_pair_provenance verified_slices) (m_definitions m_orig) (m_definitions m_merged).
+Proof.
+  unfold check_module_merge; rewrite !Bool.andb_true_iff.
+  intros (((((((((_ & _) & _) & _) & _) & _) & _) & _) & _) & H).
+  exact (check_defs_merge_Forall2 verified_slices _ _ H).
+Qed.
+
+Lemma allocate_declarations_non_intrinsic_eqit {Pa : Params} :
+  forall ds,
+    @allocate_declarations Pa ds ≅
+    @allocate_declarations Pa (non_intrinsic_decls ds).
+Proof.
+  induction ds as [| d rest IH];
+    cbn [non_intrinsic_decls List.filter allocate_declarations loop_monad];
+    [reflexivity |].
+  unfold allocate_declaration at 1, is_defined_intrinsic_decl.
+  destruct (lookup_intrinsic_declaration (dc_name d)) eqn:Elk; cbn [negb].
+  - etransitivity; [apply (Eqit.bind_ret_l tt (fun _ => loop_monad allocate_declaration rest)) | exact IH].
+  - cbn [allocate_declarations loop_monad].
+    unfold allocate_declaration at 2; rewrite Elk.
+    unfold allocate_declarations, non_intrinsic_decls in IH.
+    eapply Eqit.eqit_bind; [reflexivity | intros []; exact IH].
+Qed.
+
+Lemma build_global_environment_non_intrinsic_eqit {Pa : Params} (M1 M2 : CFG.mcfg dtyp) :
+  non_intrinsic_decls (m_declarations M1) = non_intrinsic_decls (m_declarations M2) ->
+  List.map df_prototype (m_definitions M1) = List.map df_prototype (m_definitions M2) ->
+  nodup block_address_eq_dec (mcfg_block_addresses M1) =
+  nodup block_address_eq_dec (mcfg_block_addresses M2) ->
+  m_globals M1 = m_globals M2 ->
+  @build_global_environment Pa M1 ≅ @build_global_environment Pa M2.
+Proof.
+  intros Hdecl Hpr Hba Hg.
+  unfold build_global_environment.
+  assert (Hall :
+    forall ds1 ds2 : list (declaration dtyp),
+      non_intrinsic_decls ds1 = non_intrinsic_decls ds2 ->
+      @allocate_declarations Pa ds1 ≅ @allocate_declarations Pa ds2).
+  { intros ds1 ds2 Hd.
+    rewrite (allocate_declarations_non_intrinsic_eqit ds1),
+            (allocate_declarations_non_intrinsic_eqit ds2), Hd; reflexivity. }
+  assert (Hni_app :
+    non_intrinsic_decls (m_declarations M1 ++ List.map df_prototype (m_definitions M1)) =
+    non_intrinsic_decls (m_declarations M2 ++ List.map df_prototype (m_definitions M2))).
+  { unfold non_intrinsic_decls in *; rewrite !filter_app, Hpr, Hdecl; reflexivity. }
+  rewrite (Hall _ _ Hni_app), Hba, Hg; reflexivity.
+Qed.
+
+Lemma lookup_intrinsic_puts_putchar_none :
+  lookup_intrinsic_declaration (Name "puts") = None /\
+  lookup_intrinsic_declaration (Name "putchar") = None.
+Proof.
+  vm_compute; split; reflexivity.
+Qed.
+
+Lemma library_functions_non_intrinsic_eq {Pa : Params} :
+  forall ds,
+    @library_functions Pa ds = @library_functions Pa (non_intrinsic_decls ds).
+Proof.
+  intros ds; unfold library_functions, _LIBRARIES; cbn [filter].
+  destruct lookup_intrinsic_puts_putchar_none as [Hputs Hputc].
+  assert (Hex :
+    forall n,
+      (n = Name "puts" \/ n = Name "putchar") ->
+      existsb (fun s => Rocqlib.proj_sumbool (Syntax.AstLib.RawIDOrd.eq_dec s n))
+        (List.map (@dc_name dtyp) ds) =
+      existsb (fun s => Rocqlib.proj_sumbool (Syntax.AstLib.RawIDOrd.eq_dec s n))
+        (List.map (@dc_name dtyp) (non_intrinsic_decls ds))).
+  { intros n Hn; induction ds as [| d rest IH];
+      cbn [non_intrinsic_decls List.filter List.map existsb]; [reflexivity |].
+    destruct (is_defined_intrinsic_decl d) eqn:Hid; cbn [negb existsb].
+    - destruct (Syntax.AstLib.RawIDOrd.eq_dec (dc_name d) n) as [Heq | Hne]; cbn [orb];
+        [| exact IH].
+      exfalso; unfold is_defined_intrinsic_decl in Hid.
+      rewrite Heq in Hid; destruct Hn as [-> | ->];
+        [rewrite Hputs in Hid | rewrite Hputc in Hid]; discriminate Hid.
+    - cbn [List.map existsb]; rewrite IH; reflexivity. }
+  rewrite (Hex (Name "puts") (or_introl eq_refl)),
+          (Hex (Name "putchar") (or_intror eq_refl)); reflexivity.
 Qed.
 
 Theorem check_module_merge_build_global_environment_eq
@@ -2318,14 +2426,13 @@ Theorem check_module_merge_build_global_environment_eq
   (m_orig m_merged : CFG.mcfg dtyp)
   (verified_slices : list (function_id * CFG.mcfg dtyp * CFG.mcfg dtyp))
   (Hchk : check_module_merge m_orig m_merged verified_slices = true) :
-  @build_global_environment Pa m_merged = @build_global_environment Pa m_orig.
+  @build_global_environment Pa m_merged ≅ @build_global_environment Pa m_orig.
 Proof.
-  unfold build_global_environment.
-  rewrite (check_module_merge_declarations_eq m_orig m_merged verified_slices Hchk),
-          (check_module_merge_prototypes_eq m_orig m_merged verified_slices Hchk),
-          (check_module_merge_block_addresses_eq m_orig m_merged verified_slices Hchk),
-          (check_module_merge_globals_eq m_orig m_merged verified_slices Hchk).
-  reflexivity.
+  apply build_global_environment_non_intrinsic_eqit.
+  - exact (check_module_merge_declarations_eq m_orig m_merged verified_slices Hchk).
+  - exact (check_module_merge_prototypes_eq m_orig m_merged verified_slices Hchk).
+  - exact (check_module_merge_block_addresses_eq m_orig m_merged verified_slices Hchk).
+  - exact (check_module_merge_globals_eq m_orig m_merged verified_slices Hchk).
 Qed.
 
 
@@ -2409,9 +2516,10 @@ Section CompositionalLinking.
 
   Lemma module_defs_cfg_sim_refines
     (M1 M2 : CFG.mcfg dtyp)
-    (Hbg : @build_global_environment (@ParamsV IP IPT) M2 =
-           @build_global_environment (@ParamsV IP IPT) M1)
-    (Hdecls : m_declarations M2 = m_declarations M1)
+    (Hbg : @build_global_environment (@ParamsV IP IPT) M1 ≅
+           @build_global_environment (@ParamsV IP IPT) M2)
+    (Hdecls : non_intrinsic_decls (m_declarations M2) =
+              non_intrinsic_decls (m_declarations M1))
     (Hdefs : Forall2
                (fun d1 d2 =>
                   df_prototype d2 = df_prototype d1 /\
@@ -2432,9 +2540,17 @@ Section CompositionalLinking.
       [intros _ _ [s1 r1] [s2 r2] _ (_ & _ & _ & _ & <-); reflexivity | ..].
     { unfold init_fused_state, fused_state_match; repeat split; try reflexivity; constructor. }
     apply mcfg_stack_sim_interp_intrinsics.
-    unfold denote_vellvm; rewrite Hbg, Hdecls.
-    eapply gen_stack_sim_bind;
-      [apply mcfg_stack_sim_refl_diag; constructor |].
+    unfold denote_vellvm.
+    assert (Hlibs_eq :
+      library_functions (m_declarations M2) = library_functions (m_declarations M1)).
+    { rewrite (library_functions_non_intrinsic_eq (m_declarations M2)),
+              (library_functions_non_intrinsic_eq (m_declarations M1)), Hdecls;
+        reflexivity. }
+    rewrite Hlibs_eq.
+    eapply gen_stack_sim_bind.
+    { eapply gen_stack_sim_obs_eq;
+        [reflexivity | exact Hbg
+         | apply mcfg_stack_sim_refl_diag; constructor]. }
     intros stk1 e1 e2 [] _ (_ & <- & _).
     eapply gen_stack_sim_bind;
       [apply (map_monad_address_defs_stack_sim _ _ Hdefs) |].
@@ -2600,7 +2716,7 @@ Section CompositionalLinking.
     @prog_refines IP IPT m_orig m_merged.
   Proof using.
     apply module_defs_cfg_sim_refines.
-    - exact (check_module_merge_build_global_environment_eq m_orig m_merged verified_slices Hchk).
+    - symmetry; exact (check_module_merge_build_global_environment_eq m_orig m_merged verified_slices Hchk).
     - exact (check_module_merge_declarations_eq m_orig m_merged verified_slices Hchk).
     - pose proof (check_module_merge_defs_Forall2 m_orig m_merged verified_slices Hchk) as Hprov.
       induction Hprov as [| df_orig df_merged r1 r2 (Hpr & Har & Hdisj) _ IH];
@@ -2627,24 +2743,47 @@ Section CompositionalLinking.
     (Hslices : Forall slice_ruttc_refines verified_slices) :
     @prog_refines IP IPT m_orig m_merged.
   Proof using.
-    apply module_defs_ruttc_refines.
-    - exact (check_module_merge_build_global_environment_eq m_orig m_merged verified_slices Hchk).
-    - exact (check_module_merge_declarations_eq m_orig m_merged verified_slices Hchk).
-    - pose proof (check_module_merge_defs_Forall2 m_orig m_merged verified_slices Hchk) as Hprov.
-      induction Hprov as [| df_orig df_merged r1 r2 (Hpr & Har & Hdisj) _ IH];
-        [constructor | constructor; [| exact IH]].
-      refine (conj Hpr (conj Har _)).
-      intros va.
-      destruct Hdisj as [-> | (fid & m_src & m_tgt & df_src & df_tgt & Hin & Hsw)].
-      + apply refine_cfg_refl.
-      + rewrite Forall_forall in Hslices.
-        pose proof (Hslices (fid, m_src, m_tgt) Hin df_src df_tgt
-                      (sw_src_defs _ _ _ _ _ _ _ Hsw)
-                      (sw_tgt_defs _ _ _ _ _ _ _ Hsw)
-                      va) as Hsim.
-        rewrite (sw_src_instrs _ _ _ _ _ _ _ Hsw),
-                (sw_tgt_instrs _ _ _ _ _ _ _ Hsw) in Hsim.
-        exact Hsim.
+    pose proof (check_module_merge_globals_eq m_orig m_merged verified_slices Hchk) as Hglob.
+    pose proof (check_module_merge_declarations_eq m_orig m_merged verified_slices Hchk) as Hdecl.
+    pose proof (check_module_merge_prototypes_eq m_orig m_merged verified_slices Hchk) as Hpr.
+    pose proof (check_module_merge_block_addresses_eq m_orig m_merged verified_slices Hchk) as Hba.
+    set (m_mid :=
+      {| m_name         := m_name m_merged;
+         m_target       := m_target m_merged;
+         m_datalayout   := m_datalayout m_merged;
+         m_type_defs    := m_type_defs m_merged;
+         m_globals      := m_globals m_merged;
+         m_declarations := m_declarations m_orig;
+         m_definitions  := m_definitions m_merged |}).
+    eapply prog_refines_trans with (M2 := m_mid).
+    - apply module_defs_ruttc_refines.
+      + unfold build_global_environment.
+        change (mcfg_block_addresses m_mid) with (mcfg_block_addresses m_merged).
+        cbn [m_declarations m_definitions m_globals m_mid].
+        rewrite Hpr, Hba, Hglob; reflexivity.
+      + reflexivity.
+      + cbn [m_definitions m_mid].
+        pose proof (check_module_merge_defs_Forall2 m_orig m_merged verified_slices Hchk) as Hprov.
+        eapply Forall2_impl; [| exact Hprov].
+        intros df_orig df_merged (Hpr1 & Har1 & Hdisj).
+        refine (conj Hpr1 (conj Har1 _)).
+        intros va; destruct Hdisj as [-> | (fid & m_src & m_tgt & df_src & df_tgt & Hin & Hsw)].
+        * apply refine_cfg_refl.
+        * rewrite Forall_forall in Hslices.
+          pose proof (Hslices (fid, m_src, m_tgt) Hin df_src df_tgt
+                        (sw_src_defs _ _ _ _ _ _ _ Hsw)
+                        (sw_tgt_defs _ _ _ _ _ _ _ Hsw)
+                        va) as Hsim.
+          rewrite (sw_src_instrs _ _ _ _ _ _ _ Hsw),
+                  (sw_tgt_instrs _ _ _ _ _ _ _ Hsw) in Hsim.
+          exact Hsim.
+    - apply module_defs_cfg_sim_refines.
+      + apply build_global_environment_non_intrinsic_eqit; cbn; try reflexivity.
+        symmetry; exact Hdecl.
+      + exact Hdecl.
+      + clear; induction (m_definitions m_merged) as [| d r IH]; constructor; [| exact IH].
+        refine (conj Logic.eq_refl (conj Logic.eq_refl _)).
+        intros env va _; apply SCCP.denote_cfg_refl_sim.
   Qed.
 
   Corollary validate_module_merge_refines
@@ -2854,7 +2993,8 @@ Section SafePathSlices.
     split; [exact Hba |].
     intros M_host pre post proto Hdefs.
     apply module_defs_cfg_sim_refines.
-    - exact (build_global_env_splice_eq M_host pre post proto fargs c1 c2 Hdefs Hba).
+    - rewrite (build_global_env_splice_eq M_host pre post proto fargs c1 c2 Hdefs Hba);
+        reflexivity.
     - reflexivity.
     - rewrite Hdefs; cbn [m_definitions].
       assert (Hrefl : forall ds,
@@ -2937,6 +3077,8 @@ Section SafePathSlices.
   Proof using.
     pose proof (check_module_merge_globals_eq m_orig m_merged verified_slices Hchk) as Hglob.
     pose proof (check_module_merge_declarations_eq m_orig m_merged verified_slices Hchk) as Hdecl.
+    pose proof (check_module_merge_block_addresses_eq m_orig m_merged verified_slices Hchk) as Hba.
+    pose proof (check_module_merge_prototypes_eq m_orig m_merged verified_slices Hchk) as Hpr.
     pose proof (check_module_merge_defs_Forall2 m_orig m_merged verified_slices Hchk) as Hprov.
     assert (Hstep :
       forall pre r_orig r_merged,
@@ -2958,7 +3100,7 @@ Section SafePathSlices.
              m_definitions  := pre ++ r_merged |}).
     { intros pre r_orig; revert pre.
       induction r_orig as [| d1 r1 IH]; intros pre [| d2 r2] HF;
-        inversion HF as [| ? ? ? ? (Hpr & Har & Hdisj) HF_tl]; subst.
+        inversion HF as [| ? ? ? ? (Hpr_i & Har & Hdisj) HF_tl]; subst.
       - apply prog_refines_refl.
       - destruct Hdisj as [-> | (fid & m_src & m_tgt & df_src & df_tgt & Hin & Hsw)].
         + change (pre ++ d1 :: r1) with (pre ++ [d1] ++ r1).
@@ -2981,7 +3123,7 @@ Section SafePathSlices.
                     df_instrs    := df_instrs df_tgt |}).
           { destruct d2; cbn in *.
             rewrite (sw_src_args _ _ _ _ _ _ _ Hsw), (sw_tgt_instrs _ _ _ _ _ _ _ Hsw),
-                    <- Har, <- Hpr; reflexivity. }
+                    <- Har, <- Hpr_i; reflexivity. }
           eapply prog_refines_trans.
           * eapply (Hsplice _ pre r1 (df_prototype d1)).
             cbn [m_definitions]; rewrite <- Hd1; reflexivity.
@@ -2992,11 +3134,17 @@ Section SafePathSlices.
             rewrite !app_assoc; exact (IH (pre ++ [d2]) r2 HF_tl). }
     eapply prog_refines_trans.
     - destruct m_orig; exact (Hstep [] _ _ Hprov).
-    - cbn [app]; intros ret_typ entry args U.
-      unfold run_mcfg_model, denote_vellvm.
-      rewrite <- Hglob, <- Hdecl.
-      unfold build_global_environment, mcfg_block_addresses; cbn.
-      apply refine_prov_refl; intros; reflexivity.
+    - cbn [app].
+      apply module_defs_cfg_sim_refines.
+      + apply build_global_environment_non_intrinsic_eqit; cbn.
+        * symmetry; exact Hdecl.
+        * reflexivity.
+        * unfold mcfg_block_addresses; cbn; rewrite Hglob; reflexivity.
+        * symmetry; exact Hglob.
+      + cbn; exact Hdecl.
+      + cbn; clear; induction (m_definitions m_merged) as [| d r IH]; constructor; [| exact IH].
+        refine (conj Logic.eq_refl (conj Logic.eq_refl _)).
+        intros env va _; apply SCCP.denote_cfg_refl_sim.
   Qed.
 
   (** ** Proof that [Pipeline.optimize_mcfg] on a Safe Single-Function Slice
@@ -7689,8 +7837,9 @@ Section ValueDrawRefinement.
   (** General Whole-Module Lifter for Value-Refinement & Relational-[DrawE] ([F-59]). *)
   Theorem module_defs_vdraw_refines (allow_call : bool)
     (M1 M2 : CFG.mcfg dtyp)
-    (Hbg : @build_global_environment PaV M2 = @build_global_environment PaV M1)
-    (Hdecls : m_declarations M2 = m_declarations M1)
+    (Hbg : @build_global_environment PaV M1 ≅ @build_global_environment PaV M2)
+    (Hdecls : non_intrinsic_decls (m_declarations M2) =
+              non_intrinsic_decls (m_declarations M1))
     (Hdefs : Forall2 (defn_pair_vdraw_spec allow_call) (m_definitions M1) (m_definitions M2)) :
     prog_value_draw_refines M1 M2.
   Proof using.
@@ -7704,9 +7853,17 @@ Section ValueDrawRefinement.
       [intros _ _ [s1 r1] [s2 r2] _ (_ & _ & _ & _ & Hmr); exact Hmr | ..].
     { unfold init_fused_state, fused_state_match; repeat split; try reflexivity; constructor. }
     apply mcfg_vdraw_sim_interp_intrinsics.
-    unfold denote_vellvm; rewrite Hbg, Hdecls.
-    eapply vds_sim_bind;
-      [apply mcfg_stack_to_vdraw_sim, mcfg_stack_sim_refl_diag; constructor |].
+    unfold denote_vellvm.
+    assert (Hlibs_eq :
+      library_functions (m_declarations M2) = library_functions (m_declarations M1)).
+    { rewrite (library_functions_non_intrinsic_eq (m_declarations M2)),
+              (library_functions_non_intrinsic_eq (m_declarations M1)), Hdecls;
+        reflexivity. }
+    rewrite Hlibs_eq.
+    eapply vds_sim_bind.
+    { eapply vds_sim_obs_eq;
+        [symmetry; exact Hbg | reflexivity
+         | apply mcfg_stack_to_vdraw_sim, mcfg_stack_sim_refl_diag; constructor]. }
     intros stk1 e1 e2 [] _ (_ & <- & _).
     eapply vds_sim_bind;
       [exact (map_monad_address_defs_vdraw_sim allow_call _ _ Hdefs stk1 e1 e1) |].
@@ -7806,12 +7963,18 @@ Section ValueDrawRefinement.
     (verified_slices : list (function_id * CFG.mcfg dtyp * CFG.mcfg dtyp)) : bool :=
     mm_list_eqb mm_global_eqb (m_globals m_merged) (m_globals m_orig) &&
     forallb global_no_extern_weak (m_globals m_orig) &&
-    mm_list_eqb mm_declaration_eqb (m_declarations m_merged) (m_declarations m_orig) &&
+    mm_list_eqb mm_declaration_eqb
+      (non_intrinsic_decls (m_declarations m_merged))
+      (non_intrinsic_decls (m_declarations m_orig)) &&
     forallb decl_no_extern_weak (m_declarations m_orig) &&
+    forallb decl_no_extern_weak (m_declarations m_merged) &&
     forallb (fun d => decl_no_extern_weak (df_prototype d)) (m_definitions m_orig) &&
     mm_nodup_raw_ids
       (List.map dc_name
          (m_declarations m_orig ++ List.map df_prototype (m_definitions m_orig))) &&
+    mm_nodup_raw_ids
+      (List.map dc_name
+         (m_declarations m_merged ++ List.map df_prototype (m_definitions m_merged))) &&
     mm_list_eqb mm_block_addr_eqb
       (nodup block_address_eq_dec (mcfg_block_addresses m_merged))
       (nodup block_address_eq_dec (mcfg_block_addresses m_orig)) &&
@@ -7825,12 +7988,12 @@ Section ValueDrawRefinement.
   Proof using.
     unfold check_module_merge, check_flex_module_merge.
     rewrite !Bool.andb_true_iff.
-    intros [[[[[[[H1 H2] H3] H4] H5] H6] H7] H8].
+    intros [[[[[[[[[H1 H2] H3] H4] H5] H6] H7] H8] H9] H10].
     repeat split; try assumption.
-    clear H1 H2 H3 H4 H5 H6 H7; revert H8; generalize (m_definitions m_merged) as defs2;
-      induction (m_definitions m_orig) as [| d1 r1 IH]; intros [| d2 r2] H8;
-      cbn in *; try exact H8.
-    apply Bool.andb_true_iff in H8 as [Hhd Htl].
+    clear H1 H2 H3 H4 H5 H6 H7 H8 H9; revert H10; generalize (m_definitions m_merged) as defs2;
+      induction (m_definitions m_orig) as [| d1 r1 IH]; intros [| d2 r2] H10;
+      cbn in *; try exact H10.
+    apply Bool.andb_true_iff in H10 as [Hhd Htl].
     apply Bool.andb_true_iff; split; [| exact (IH r2 Htl)].
     unfold check_defn_pair, check_flex_defn_pair in *.
     rewrite !Bool.andb_true_iff in *; destruct Hhd as [[Hp Ha] Hd].
@@ -7874,10 +8037,10 @@ Section ValueDrawRefinement.
     (m_orig m_merged : CFG.mcfg dtyp)
     (verified_slices : list (function_id * CFG.mcfg dtyp * CFG.mcfg dtyp))
     (Hchk : check_flex_module_merge m_orig m_merged verified_slices = true) :
-    @build_global_environment PaV m_merged = @build_global_environment PaV m_orig.
+    @build_global_environment PaV m_orig ≅ @build_global_environment PaV m_merged.
   Proof using.
     unfold check_flex_module_merge in Hchk; rewrite !Bool.andb_true_iff in Hchk.
-    destruct Hchk as [[[[[[[Hg _] Hdecl] _] _] _] Hba] Hdefs].
+    destruct Hchk as [[[[[[[[[Hg _] Hdecl] _] _] _] _] _] Hba] Hdefs].
     apply (mm_list_eqb_eq _ mm_global_eqb_eq) in Hg.
     apply (mm_list_eqb_eq _ mm_declaration_eqb_eq) in Hdecl.
     apply (mm_list_eqb_eq _ mm_block_addr_eqb_eq) in Hba.
@@ -7886,7 +8049,7 @@ Section ValueDrawRefinement.
                                List.map df_prototype (m_definitions m_orig)).
     { induction HF as [| d1 d2 r1 r2 [Hp _] _ IH]; cbn [List.map];
         [reflexivity | rewrite Hp, IH; reflexivity]. }
-    unfold build_global_environment; rewrite Hdecl, Hpr, Hba, Hg; reflexivity.
+    apply build_global_environment_non_intrinsic_eqit; symmetry; assumption.
   Qed.
 
   (** Open-world per-slice value-refinement & relational-[DrawE] contract
@@ -7964,7 +8127,7 @@ Section ValueDrawRefinement.
     apply (module_defs_vdraw_refines true m_orig m_merged).
     - exact (check_flex_module_merge_build_global_environment_eq m_orig m_merged verified_slices Hchk).
     - unfold check_flex_module_merge in Hchk; rewrite !Bool.andb_true_iff in Hchk.
-      destruct Hchk as [[[[[[_ Hdecl] _] _] _] _] _].
+      destruct Hchk as [[[[[[[[_ Hdecl] _] _] _] _] _] _] _].
       exact (proj1 (mm_list_eqb_eq _ mm_declaration_eqb_eq _ _) Hdecl).
     - unfold check_flex_module_merge in Hchk; rewrite !Bool.andb_true_iff in Hchk.
       destruct Hchk as [_ Hdefs].
@@ -8029,7 +8192,7 @@ Section ValueDrawRefinement.
     apply (module_defs_vdraw_refines false m_orig m_merged).
     - exact (check_flex_module_merge_build_global_environment_eq m_orig m_merged verified_slices Hchk).
     - unfold check_flex_module_merge in Hchk; rewrite !Bool.andb_true_iff in Hchk.
-      destruct Hchk as [[[[[[_ Hdecl] _] _] _] _] _].
+      destruct Hchk as [[[[[[[[_ Hdecl] _] _] _] _] _] _] _].
       exact (proj1 (mm_list_eqb_eq _ mm_declaration_eqb_eq _ _) Hdecl).
     - unfold check_flex_module_merge in Hchk; rewrite !Bool.andb_true_iff in Hchk.
       destruct Hchk as [_ Hdefs].
@@ -8449,16 +8612,24 @@ Definition validate_flex_module_merge
     inl "validate_module_merge_certified_tle: m_globals layout or alignment mismatch"%string
   else if negb (forallb global_no_extern_weak (m_globals m_orig)) then
     inl "validate_module_merge_certified_tle: extern_weak global linkage is unsupported"%string
-  else if negb (mm_list_eqb mm_declaration_eqb (m_declarations m_merged) (m_declarations m_orig)) then
+  else if negb (mm_list_eqb mm_declaration_eqb
+                  (non_intrinsic_decls (m_declarations m_merged))
+                  (non_intrinsic_decls (m_declarations m_orig))) then
     inl "validate_module_merge_certified_tle: m_declarations symbol table mismatch"%string
   else if negb (forallb decl_no_extern_weak (m_declarations m_orig)) then
     inl "validate_module_merge_certified_tle: extern_weak declaration linkage is unsupported"%string
+  else if negb (forallb decl_no_extern_weak (m_declarations m_merged)) then
+    inl "validate_module_merge_certified_tle: extern_weak synthesized declaration linkage is unsupported"%string
   else if negb (forallb (fun d => decl_no_extern_weak (df_prototype d)) (m_definitions m_orig)) then
     inl "validate_module_merge_certified_tle: extern_weak definition linkage is unsupported"%string
   else if negb (mm_nodup_raw_ids
                   (List.map dc_name
                      (m_declarations m_orig ++ List.map df_prototype (m_definitions m_orig)))) then
     inl "validate_module_merge_certified_tle: duplicate function symbol in declarations/definitions"%string
+  else if negb (mm_nodup_raw_ids
+                  (List.map dc_name
+                     (m_declarations m_merged ++ List.map df_prototype (m_definitions m_merged)))) then
+    inl "validate_module_merge_certified_tle: duplicate function symbol in merged declarations/definitions"%string
   else if negb (mm_list_eqb mm_block_addr_eqb
                   (nodup block_address_eq_dec (mcfg_block_addresses m_merged))
                   (nodup block_address_eq_dec (mcfg_block_addresses m_orig))) then
@@ -8498,15 +8669,23 @@ Proof.
     cbn [negb andb]; [| split; intros H; discriminate H].
   destruct (forallb global_no_extern_weak (m_globals m_orig));
     cbn [negb andb]; [| split; intros H; discriminate H].
-  destruct (mm_list_eqb mm_declaration_eqb (m_declarations m_merged) (m_declarations m_orig));
+  destruct (mm_list_eqb mm_declaration_eqb
+              (non_intrinsic_decls (m_declarations m_merged))
+              (non_intrinsic_decls (m_declarations m_orig)));
     cbn [negb andb]; [| split; intros H; discriminate H].
   destruct (forallb decl_no_extern_weak (m_declarations m_orig));
+    cbn [negb andb]; [| split; intros H; discriminate H].
+  destruct (forallb decl_no_extern_weak (m_declarations m_merged));
     cbn [negb andb]; [| split; intros H; discriminate H].
   destruct (forallb (fun d => decl_no_extern_weak (df_prototype d)) (m_definitions m_orig));
     cbn [negb andb]; [| split; intros H; discriminate H].
   destruct (mm_nodup_raw_ids
               (List.map dc_name
                  (m_declarations m_orig ++ List.map df_prototype (m_definitions m_orig))));
+    cbn [negb andb]; [| split; intros H; discriminate H].
+  destruct (mm_nodup_raw_ids
+              (List.map dc_name
+                 (m_declarations m_merged ++ List.map df_prototype (m_definitions m_merged))));
     cbn [negb andb]; [| split; intros H; discriminate H].
   destruct (mm_list_eqb mm_block_addr_eqb
               (nodup block_address_eq_dec (mcfg_block_addresses m_merged))
