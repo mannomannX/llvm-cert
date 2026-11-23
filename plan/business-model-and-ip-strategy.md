@@ -25,11 +25,11 @@ A license file stops honest enterprises, **not** bad-faith clones. To keep **99%
 flowchart LR
     subgraph PublicRepo["Public Repo: mannomannX/llvm-cert\n(Unlimited Free GitHub Actions: 4 vCPU / 16 GB RAM)"]
         LLVM["LLVM 23.1.5 Minimal Base\n(C++ build: ~90% of CI compute)"]
-        Rocq["Vellvm + Rocq Proofs\ncert-validator ('The Lock': IR .cert,\nLRAT, & Phase 8.3a ELF/MC --check-mc) +\nverified-opt-fallback (~9% of CI compute)"]
+        Rocq["Vellvm + Rocq Proofs\ncert-validator ('The Lock': IR .cert,\nLRAT, & Phase 8.3a ET_REL + linked ELF --check-mc)\n+ verified-opt-fallback (~9% of CI compute)"]
     end
 
     subgraph PrivateRepo["Private Repo: mannomannX/llvm-cert-enterprise\n(Fits easily in 2,000 free private CI min/month)"]
-        Gen["Proprietary SMT & Backend Witness Engines\n('The Key-Maker': loop/vector/alias + ELF/MC CFG,\nregister/stack matching, bit-blaster & LRAT search)"]
+        Gen["Proprietary SMT & Backend Witness Engines\n('The Key-Maker': loop/vector/alias + ELF/MC CFG,\nregister/stack matching, bit-blaster, LRAT search,\n& optional certifying 8.3b fallback)"]
         Orch["cert-llvm Production Rust Driver\n(Drop-in clang/rustc wrapper, ISA-QEMU fuzzing,\ncaching, license-key verification)"]
         QKit["Signed .proof.json Authority &\nISO 26262 / DO-178C Qualification Kit"]
     end
@@ -41,7 +41,7 @@ flowchart LR
 1. **Checking Proofs Is Public ("The Lock"); Finding Proofs Is Private ("The Key-Maker"):**
    - Both the Stage-3 IR proof checker (`cert-validator`) and the Stage-4b ELF/MC proof checker (`Phase 8.3a --check-mc`: `Elf64Spec.v`, `McFormat.v`, `Rv64Sem.v`, `A64CoreSem.v`, `McValidator.v`) belong in the public repo — they are compact, mathematically transparent, and heavy Rocq ISA builds run on free public CI runners; safety assessors *want* to inspect their soundness theorems!
    - However, `cert-validator` **only verifies certificates (`.cert`, LRAT, `.mc.cert`); it does not generate them**. Without the private Rust + SMT **IR & Backend Witness Generators** (loop-unrolling witness synthesis, alias-analysis hints, vectorization equivalence, and backend CFG/register/stack-frame reconstruction, Tseitin bit-blasting, and CDCL LRAT proof search), a clone achieves **0% `-O2` Fast-Path acceptance** and **0% `McValidated` backend proofs**.
-   - **Open-Core Guardrail for Optional Fallback Codegen (`Phase 8.3b`):** Unlike proof *checkers*, a standalone verified fallback code generator (`MCFG -> ELF`) would make `clang -O0 -> verified-opt-fallback -> verified-codegen` a functional turnkey mini-CompCert if published openly. Therefore, `Phase 8.3b` must remain separated from `8.3a` and be evaluated as a commercial/private Enterprise module rather than automatically shipped in the public repo.
+   - **Open-Core Guardrail for Optional Fallback Codegen (`Phase 8.3b`):** Unlike proof *checkers*, a standalone verified fallback code generator (`MCFG -> ELF`) would make `clang -O0 -> verified-opt-fallback -> verified-codegen` a functional turnkey mini-CompCert if published openly, while a *private* Rocq codegen proof would be harder for external assessors to inspect. Instead, `Phase 8.3b` pairs a `llc -O0` retry with an optional compact private **certifying** Rust fallback (`~1.5–3k` LOC) that co-emits `.mc.cert` directly during lowering so the **public** `Phase 8.3a` `cert-validator --check-mc` validates 100% of both Fast-Path and Fallback functions uniformly on the final linked ELF (`0` private proof code, `0` leaked codegen).
 2. **CI Compute Asymmetry (Free GitHub Actions Leverage):**
    - Compiling LLVM 23 C++ (`clang`, `opt`, `lld`) and typechecking Rocq `.v` files (including ISA semantics) consume **~99% of build time and RAM**. Keeping them in the public `llvm-cert` repository unlocks **unlimited free GitHub Actions minutes** on public runners (`ubuntu-latest`: 4 vCPU, **16 GB RAM** — faster and larger than a 12 GB VPS) and free GitHub Releases artifact hosting.
    - The private `mannomannX/llvm-cert-enterprise` repository (`D:\LLVMCert-Enterprise`) contains **only lightweight Rust code** (`cert-llvm` CLI, SMT/ELF witness generators, ISA-QEMU differential fuzzers, cryptographic `.proof.json` signer) that downloads prebuilt LLVM + Rocq binaries from `llvm-cert` Releases and compiles in **< 30 seconds**, staying well within GitHub's free private runner quota.
