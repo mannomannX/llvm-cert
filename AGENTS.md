@@ -18,4 +18,6 @@ All AI coding agents operating in this repository MUST follow these rules withou
    - Never trigger full LLVM or full 87-file Vellvm rebuilds on single-file edits; compile single targets incrementally and run full builds only at phase/group milestones.
    - Never create auto-mutating formatting/tagging scripts; all CI gates are strictly read-only.
    - Always run `python scripts/verify_repo_integrity.py` before finishing any task.
+6. **Workflow Runbook ([`plan/dev-and-verification-workflow.md`](./plan/dev-and-verification-workflow.md)):**
+   - Follow this runbook for Docker Rocq `9.1` builds (`/src:ro` -> `/work`, `rocq check -o`), manual `rocq-ci.yml` triggers on `main`, release-bundle LF checksums, and keeping `Discussion.md` untouched.
 

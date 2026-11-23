@@ -69,6 +69,7 @@ See:
 - [`code-quality-and-ci.md`](./code-quality-and-ci.md) — "MISRA-Grade" Rust, Mathematical Rocq, CERT C / MISRA C, Minimal-OCaml (`<= 750 LOC`), and optimized multi-tier CI (`mold`, `cargo-nextest`, `Swatinem/rust-cache`, `ccache`).
 - [`rocq-proof-strategies.md`](./rocq-proof-strategies.md) — Fast-compute Rocq 9.1 & Vellvm 3.0 proof playbook (`[PS-01]`..`[PS-08]`).
 - [`hardening-and-assurance-strategy.md`](./hardening-and-assurance-strategy.md) — Two-stage, 4-layer security, soundness, forged-certificate, and QEMU differential assurance strategy.
+- [`dev-and-verification-workflow.md`](./dev-and-verification-workflow.md) — Day-to-day development, local Docker Rocq `9.1` verification, CI trigger rules, and release-bundle runbook.
 - [`feedback.csv`](./feedback.csv) — Structured agent audit & findings ledger (`F-XX`).
 
 ---
