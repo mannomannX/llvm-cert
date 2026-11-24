@@ -117,4 +117,8 @@
 ../../validator/CertFormat.v
 ../../validator/AlgRules.v
 ../../validator/CertValidator.v
+../../validator/Elf64Spec.v
+../../validator/Rv64Sem.v
+../../validator/McFormat.v
+../../validator/McValidator.v
 ../../validator/CheckAssumptions.v

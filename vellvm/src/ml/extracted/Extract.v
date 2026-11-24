@@ -42,7 +42,11 @@ From CertValidator Require
      CertFormat
      AigLrat
      AlgRules
-     CertValidator.
+     CertValidator
+     Elf64Spec
+     Rv64Sem
+     McFormat
+     McValidator.
 
 Set Extraction AccessOpaque.
 
@@ -157,4 +161,6 @@ Separate Extraction ExtrOcamlIntConv TopLevel AstLib ParserHelper ShowAST ReprAS
   AigLrat.check_lrat_unsat
   AlgRules.check_expr_refines AlgRules.check_expr_refines_with_lrat
   CertValidator.check_cert_cfg CertValidator.check_cert_cfg_with_lrat CertValidator.check_cert_defn
-  CertValidator.validate_mcfg_with_cert CertValidator.validate_tle_pair_with_cert CertValidator.validate_tle_pair_with_cert_str (* QCVellvm *).
+  CertValidator.validate_mcfg_with_cert CertValidator.validate_tle_pair_with_cert CertValidator.validate_tle_pair_with_cert_str
+  Elf64Spec.elf64_extract_func McFormat.parse_mc_cert Rv64Sem.decode_rv64_bytes
+  McValidator.validate_mc_tle_with_cert_str McValidator.emit_mc_dimacs_cnf_str (* QCVellvm *).

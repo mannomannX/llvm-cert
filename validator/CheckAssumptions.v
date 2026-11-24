@@ -23,7 +23,11 @@ From CertValidator Require
   CertFormat
   AigLrat
   AlgRules
-  CertValidator.
+  CertValidator
+  Elf64Spec
+  Rv64Sem
+  McFormat
+  McValidator.
 
 Check @CertPasses.Pipeline.optimize_mcfg_refines_IPZ.
 Check @CertPasses.Pipeline.optimize_mcfg_I2F_model_refine.
@@ -38,3 +42,8 @@ Check @CertValidator.AlgRules.check_expr_refines_with_lrat_sound.
 Check @CertValidator.CertFormat.validate_dimacs_lrat_str_sound.
 Check @CertValidator.CertValidator.validate_mcfg_with_cert_sound.
 Check @CertValidator.CertValidator.validate_tle_pair_with_cert_str_sound.
+Check @CertValidator.Elf64Spec.elf64_extract_func_sound.
+Check @CertValidator.McFormat.parse_mc_cert_wf.
+Check @CertValidator.Rv64Sem.summarize_rv64_dag_wf.
+Check @CertValidator.Rv64Sem.summarize_rv64_dag_sound.
+Check @CertValidator.McValidator.validate_mc_tle_with_cert_str_sound.

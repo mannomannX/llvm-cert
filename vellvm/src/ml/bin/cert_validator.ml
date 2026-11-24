@@ -4,7 +4,7 @@
    See /LICENSE in the repository root for details. *)
 
 let usage =
-  "usage: cert-validator --src <src.ll> --tgt <tgt.ll> --cert <fn.cert> | --check-merge --orig <orig.ll> --merged <merged.ll> [--slice-cert <fn> <src.ll> <opt_fast.ll> <cert> | --slice-safe <fn> <src.ll> <opt_safe.ll> | --slice-safe-cert <fn> <src.ll> <mid_safe.ll> <opt_fast.ll> <cert>]* | --check-lrat --cnf <formula.cnf> --lrat <proof.lrat>"
+  "usage: cert-validator --src <src.ll> --tgt <tgt.ll> --cert <fn.cert> | --check-mc --ir <ir.ll> --elf <bin> --cert <fn.mc.cert> | --check-merge --orig <orig.ll> --merged <merged.ll> [--slice-cert <fn> <src.ll> <opt_fast.ll> <cert> | --slice-safe <fn> <src.ll> <opt_safe.ll> | --slice-safe-cert <fn> <src.ll> <mid_safe.ll> <opt_fast.ll> <cert>]* | --check-lrat --cnf <formula.cnf> --lrat <proof.lrat>"
 
 let max_input_bytes = 67108864
 
@@ -64,6 +64,8 @@ let rec parse_merge orig merged certs safes safe_certs = function
   | ("--orig" | "--merged" | "--slice-cert" | "--slice-safe" | "--slice-safe-cert") :: _ -> die 2 ("missing option argument (" ^ usage ^ ")")
   | a :: _ -> die 2 (Stdlib.Printf.sprintf "unknown argument '%s' (%s)" a usage)
 
+let req flag = function Some p -> p | None -> die 2 ("missing " ^ flag ^ " (" ^ usage ^ ")")
+
 let rec parse_lrat cnf lrat = function
   | [] -> (cnf, lrat)
   | "--cnf" :: v :: tl -> if cnf <> None then die 2 "duplicate --cnf" else parse_lrat (Some v) lrat tl
@@ -71,22 +73,35 @@ let rec parse_lrat cnf lrat = function
   | ("--cnf" | "--lrat") :: [] -> die 2 ("missing option argument (" ^ usage ^ ")")
   | a :: _ -> die 2 (Stdlib.Printf.sprintf "unknown argument '%s' (%s)" a usage)
 
+let rec parse_mc ir elf cert = function
+  | [] -> (ir, elf, cert)
+  | "--ir" :: v :: tl -> if ir <> None then die 2 "duplicate --ir" else parse_mc (Some v) elf cert tl
+  | "--elf" :: v :: tl -> if elf <> None then die 2 "duplicate --elf" else parse_mc ir (Some v) cert tl
+  | "--cert" :: v :: tl -> if cert <> None then die 2 "duplicate --cert" else parse_mc ir elf (Some v) tl
+  | ("--ir" | "--elf" | "--cert") :: [] -> die 2 ("missing option argument (" ^ usage ^ ")")
+  | a :: _ -> die 2 (Stdlib.Printf.sprintf "unknown argument '%s' (%s)" a usage)
+
 let run () =
   let argv = match Stdlib.Array.to_list Stdlib.Sys.argv with _ :: tl -> tl | [] -> [] in
   match argv with
   | "--check-lrat" :: rest ->
       let cnf_opt, lrat_opt = parse_lrat None None rest in
-      let cnf_p = match cnf_opt with Some p -> p | None -> die 2 ("missing --cnf (" ^ usage ^ ")") in
-      let lrat_p = match lrat_opt with Some p -> p | None -> die 2 ("missing --lrat (" ^ usage ^ ")") in
-      let cnf_s = Camlcoq.coqstring_of_camlstring (read_cert_file cnf_p) in
-      let lrat_s = Camlcoq.coqstring_of_camlstring (read_cert_file lrat_p) in
+      let cnf_s = Camlcoq.coqstring_of_camlstring (read_cert_file (req "--cnf" cnf_opt)) in
+      let lrat_s = Camlcoq.coqstring_of_camlstring (read_cert_file (req "--lrat" lrat_opt)) in
       check_result (CertFormat.validate_dimacs_lrat_str cnf_s lrat_s)
+  | ("--check-mc" | "--emit-mc-cnf" as mode) :: rest ->
+      let ir_opt, elf_opt, cert_opt = parse_mc None None None rest in
+      let ir_tle = parse_ll (req "--ir" ir_opt) in
+      let elf_s = Camlcoq.coqstring_of_camlstring (read_cert_file (req "--elf" elf_opt)) in
+      let cert_s = Camlcoq.coqstring_of_camlstring (read_cert_file (req "--cert" cert_opt)) in
+      if mode = "--check-mc" then check_result (McValidator.validate_mc_tle_with_cert_str ir_tle elf_s cert_s)
+      else (match McValidator.emit_mc_dimacs_cnf_str ir_tle elf_s cert_s with
+        | Datatypes.Coq_inr s -> Stdlib.print_string (Camlcoq.camlstring_of_coqstring s)
+        | Datatypes.Coq_inl e -> die 4 ("rejected: " ^ Camlcoq.camlstring_of_coqstring e))
   | "--check-merge" :: rest ->
       let orig_opt, merged_opt, raw_certs, raw_safes, raw_sc = parse_merge None None [] [] [] rest in
-      let orig_p = match orig_opt with Some p -> p | None -> die 2 ("missing --orig (" ^ usage ^ ")") in
-      let merged_p = match merged_opt with Some p -> p | None -> die 2 ("missing --merged (" ^ usage ^ ")") in
-      let orig_tle = parse_ll orig_p in
-      let merged_tle = parse_ll merged_p in
+      let orig_tle = parse_ll (req "--orig" orig_opt) in
+      let merged_tle = parse_ll (req "--merged" merged_opt) in
       let check_cert s_tle t_tle cp =
         check_result (CertValidator.validate_tle_pair_with_cert_str s_tle t_tle (Camlcoq.coqstring_of_camlstring (read_cert_file cp)))
       in
@@ -116,12 +131,9 @@ let run () =
       check_result (ModuleMerge.validate_module_merge_certified_tle_composed orig_tle merged_tle cert_slices safe_slices safe_cert_slices)
   | _ ->
       let src_opt, tgt_opt, cert_opt = parse_tv None None None argv in
-      let src_p = match src_opt with Some p -> p | None -> die 2 ("missing --src (" ^ usage ^ ")") in
-      let tgt_p = match tgt_opt with Some p -> p | None -> die 2 ("missing --tgt (" ^ usage ^ ")") in
-      let cert_p = match cert_opt with Some p -> p | None -> die 2 ("missing --cert (" ^ usage ^ ")") in
-      let src_tle = parse_ll src_p in
-      let tgt_tle = parse_ll tgt_p in
-      let cert_str = Camlcoq.coqstring_of_camlstring (read_cert_file cert_p) in
+      let src_tle = parse_ll (req "--src" src_opt) in
+      let tgt_tle = parse_ll (req "--tgt" tgt_opt) in
+      let cert_str = Camlcoq.coqstring_of_camlstring (read_cert_file (req "--cert" cert_opt)) in
       check_result (CertValidator.validate_tle_pair_with_cert_str src_tle tgt_tle cert_str)
 
 let () =
