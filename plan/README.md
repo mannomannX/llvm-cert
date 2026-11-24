@@ -18,7 +18,7 @@
 | **Phase 8.3a: Hybrid Rocq ELF/MC Validator *(Pulled Forward)*** | Post-v1 | **In Progress (M1, M2 & M2b Done; M3 Next)** | **Closes Stage 4b TCB:** M1 `RV64IM+RVC` & M2 `AArch64` Core (`8/8` live `.o`+`.elf`, `32` pos + `35` adv, **Stage 1** QEMU oracle) + **M2b Stage 2** formal Sail oracles (**`298`** A64 + **`149`** RV64/RVC opcodes proven over $2^{64}/2^{128}/2^{192}$ via `isla_batch`+`Z3`, `8/8` mutations, **`1,447`** `armv9_sim` + **`3,065`** `sail_riscv_sim` cases, `0`-axiom div/rem bridge) Done; M3 (loops/stack/calls) next; Stage 3 in Phase 9 |
 | **Phase 7: 32-Bit Targets (`ILP32`, `RV32`, `Thumb-2`/`A32`)** | Post-v1 | **Planned *(After 8.3a)*** | Shared `ILP32` parameterization (~2.5k–3.5k LOC) -> `RISCV32` (~0.8k–1.2k LOC) -> `ARM Thumb-2` / `A32` (~3.5k–5.0k LOC), inheriting `.mc.cert` / `McValidator.v` |
 | **Phase 8 (Remaining): Deep Rocq Closure (`volatile`, `.bc`, `8.3b`)** | Post-v1 | **Planned** | Observable `volatile`/MMIO & verified `runtime/` (`8.1`) -> Rocq `.bc` codec (`8.2`) -> optional 2-tier private certifying fallback codegen (`llc -O0` retry + canonical `.mc.cert` emitter checked by public `8.3a`, `8.3b`) |
-| **Phase 9: Regulatory TQK, Concept Assessment & Frontends** | Post-v1 | **Planned** | `ISO 26262-8` Concept Assessment/`TQK`, Stage-1 `SuperTest`/`FLS` traceability -> formal `C`/`MIR` TV |
+| **Phase 9: Regulatory TQK, Concept Assessment & Frontends** | Post-v1 | **Planned** | `ISO 26262-8` Concept Assessment/`TQK`, Stage-1 `SuperTest`/`FLS` traceability -> formal `C`/`MIR` TV, & Stage-3 Sail Coq refinement |
 
 ---
 

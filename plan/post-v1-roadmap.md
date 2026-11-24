@@ -148,6 +148,13 @@ Moves residual Zone A/B components (`llvm_parser`, `ir-bridge`, `runtime/`, and 
 - Keep proven **OCaml extraction** throughout Concept Assessment and v1 qualification (proven CompCert/DO-178C audit precedent, decades-mature extractor, clean physical process isolation `TD1` between Rust orchestrator and OCaml checker).
 - Re-evaluate `rocq-rust-extraction` (compiled via a qualified Rust toolchain such as Ferrocene) only *after* v1 Concept Assessment once extractor maturity and arena/performance behavior on `AigLrat.v` match OCaml extraction without introducing new audit risk.
 
+### 9.4 Stage-3 Formal Sail ISA Refinement Bridges in Rocq (`AArch64` & `RISC-V`)
+- **Objective:** Close the Stage-2 external-toolchain (`isla_batch`/`Z3`) and concrete-opcode sampling gap directly inside the Rocq kernel with `0` LOC impact on the extracted OCaml TCB.
+- **Symmetric Non-Extracted Rocq Modules:**
+  - **`AArch64` (`A64SailRefinement.v`):** Prove $\text{decode\_a64\_word}(w) = \text{Some } i \implies \text{a64\_step}(i, s) = \text{sail\_arm\_step}(w, s)$ universally over all valid decoded 32-bit instruction bit-patterns and states against a sliced `rems-project/sail-arm` Coq export (`BSD-3-Clause-Clear`).
+  - **`RISC-V` (`Rv64SailRefinement.v`):** Prove $\text{decode\_rv64}(w) = \text{Some } i \implies \text{rv\_step}(i, s) = \text{sail\_riscv\_step}(w, s)$ universally over all valid decoded 16/32-bit instruction bit-patterns and states against the official `riscv/sail-riscv` Coq export (`BSD-2-Clause`).
+- Extend both refinement bridges as Phase `8.3a` M3 adds memory, stack-frame, and call instructions.
+
 ---
 
 ## Explicit Long-Term Architectural Boundaries
