@@ -54,15 +54,18 @@ A64_HALT_WORD = 0xFEE1DEAD
 # Cache Bootstrap (Downloads/Compiles Pinned External Artifacts When Missing)
 # ---------------------------------------------------------------------------
 
-ARMV8P5_NOTC_TOML = """# Auto-generated Isla config for ARMv8.5-A symbolic equivalence
-pc = "_PC"
-branch_address = "BranchTo"
-ifetch = "ReadMemory"
-read_exclusives = ["AArch64.ExclusiveMonitorsPass"]
-write_exclusives = ["AArch64.SetExclusiveMonitors"]
-translation_table_info = "AArch64.TranslationTableWalk"
-default_sizeof = 4
+ARMV8P5_NOTC_TOML = """# This is a config file for the Sail generated from ARM-ASL
 
+pc = "_PC"
+
+comment_prefixes = ["@", "//"]
+
+translation_function = "AArch64_TranslateAddress"
+
+in_program_order = ["sail_barrier"]
+
+# The assembler is used for assembling the code in litmus tests. We
+# assume it takes arguments like GNU as.
 [[toolchain]]
 name = "default"
 assembler = "true"
@@ -73,48 +76,188 @@ linker = "true"
 [mmu]
 page_table_base = "0x300000"
 page_size = "4096"
-s2_page_table_base = "0x300000"
+s2_page_table_base = "0x200000"
 s2_page_size = "4096"
 
+# This section contains the base address for loading the code for each
+# thread in a litmus test, and the stride which is the distance
+# between each thread in bytes. The overall range for thread memory is
+# the half-open range [base,top)
 [threads]
-base = "0x80100000"
-top = "0x80300000"
-stride = "0x10000"
+base = "0x400000"
+top = "0x500000"
+stride = "0x1000"
 
+# If we want to give symbolic addresses concrete values, then we start
+# with a base address and increment by stride for each new symbolic
+# address.
 [symbolic_addrs]
-base = "0x80310000"
-top = "0x80410000"
+base = "0x600000"
+top = "0x700000"
 stride = "0x10"
 
+[registers]
+ignore = [
+  "_PC",
+  "__PC_changed",
+  "SEE",
+  "__unconditional",
+  "__trickbox_enabled",
+  "__v81_implemented",
+  "__v82_implemented",
+  "__v83_implemented",
+  "__v84_implemented",
+  "__v85_implemented"
+]
+
+# These registers are set before any symbolic execution occurs
 [registers.defaults]
-"PSTATE.EL" = "#b00"
-"PSTATE.nRW" = "#b0"
-"PSTATE.SP" = "#b0"
-"PSTATE.D" = "#b0"
-"PSTATE.A" = "#b0"
-"PSTATE.I" = "#b0"
-"PSTATE.F" = "#b0"
-"PSTATE.SS" = "#b0"
-"PSTATE.IL" = "#b0"
-"PSTATE.UAO" = "#b0"
-"PSTATE.PAN" = "#b0"
-"PSTATE.TCO" = "#b0"
-"PSTATE.DIT" = "#b0"
-"SCTLR_EL1" = "#x0000000000000000"
-"SCTLR_EL2" = "#x0000000000000000"
-"SCTLR_EL3" = "#x0000000000000000"
-"TCR_EL1" = "#x0000000000000000"
 "__isla_vector_gpr" = false
+"__isla_continue_on_see" = true
+"__monomorphize_reads" = false
+"__monomorphize_writes" = false
+"VBAR_EL1" = "0x0000000000000000"
+"VBAR_EL2" = "0x0000000000000000"
+# Causes CNTCV to be incremented every cycle if bit 0 is 1
+"CNTCR" = "0x00000001"
+# SSAdvance?
+"MDSCR_EL1" = "0x00000000"
+"InGuardedPage" = false
+"__highest_el_aarch32" = false
+"__currentInstrLength" = 4
+"_PendingPhysicalSE" = false
+"__CNTControlBase" = "0x0000000000000"
+"HCR_EL2" = "0x0000000000000000"
+"TCR_EL1" = "0x0000000000000000"
+"TCR_EL2" = "0x0000000000000000"
+"TCR_EL3" = "0x00000000"
+"TLBHits" = 0
+"TLBMisses" = 0
+"CFG_RMR_AA64" = "0b1"
+"CFG_RVBAR" = "0x0000000010300000"
+"CFG_ID_AA64PFR0_EL1_MPAM" = "0x1"
+"CFG_ID_AA64PFR0_EL1_EL3" = "0x1"
+"CFG_ID_AA64PFR0_EL1_EL2" = "0x1"
+"CFG_ID_AA64PFR0_EL1_EL1" = "0x1"
+"CFG_ID_AA64PFR0_EL1_EL0" = "0x1"
+# Need to investigate BTI extension. Guard pages cause problems with
+# memory accesses.
 "__v81_implemented" = true
 "__v82_implemented" = false
 "__v83_implemented" = false
 "__v84_implemented" = false
 "__v85_implemented" = false
-"__highest_el_aarch32" = false
-"CFG_ID_AA64PFR0_EL1_EL0" = "#x1"
-"CFG_ID_AA64PFR0_EL1_EL1" = "#x1"
-"CFG_ID_AA64PFR0_EL1_EL2" = "#x1"
-"CFG_ID_AA64PFR0_EL1_EL3" = "#x1"
+"__unpred_tsize_aborts" = true
+# Trickbox has various features for debugging spec and running tests
+"__trickbox_enabled" = false
+"__tlb_enabled" = false
+"__syncAbortOnTTWNonCache" = true
+"__syncAbortOnTTWCache" = true
+"__syncAbortOnSoWrite" = true
+"__syncAbortOnSoRead" = true
+"__syncAbortOnReadNormNonCache" = true
+"__syncAbortOnReadNormCache" = true
+"__syncAbortOnPrefetch" = true
+"__syncAbortOnDeviceRead" = true
+"__support_52bit_pa" = true
+"__mte_implemented" = false
+"__mpam_has_hcr" = true
+"__vmid16_implemented" = true
+"__pan_implemented" = true
+"__fp16_implemented" = true
+"__dot_product_implemented" = true
+"__crc32_implemented" = true
+"__aa32_hpd_implemented" = true
+"__crypto_aes_implemented" = 2
+"__crypto_sha256_implemented" = true
+"__crypto_sha1_implemented" = true
+"__syncAbortOnWriteNormNonCache" = false
+"__syncAbortOnWriteNormCache" = false
+"__syncAbortOnDeviceWrite" = false
+"__mpam_implemented" = false
+"__crypto_sm4_implemented" = false
+"__crypto_sm3_implemented" = false
+"__crypto_sha512_implemented" = false
+"__crypto_sha3_implemented" = false
+"_GTEExtObsAccess" = "[0x0000; 256]"
+"_GTEExtObsAddress" = "[0x0000000000000000; 256]"
+"_GTEExtObsData" = "[0x0000000000000000; 256]"
+"_GTEExtObsResult" = "[0x0000000000000000; 256]"
+"_GTE_PPU_SizeEn" = "[0x00000000; 6]"
+"_GTE_PPU_Address" = "[0x0000000000000000; 6]"
+"_GTE_PPU_Access" = "[0x00000000; 6]"
+
+# These registers are set during symbolic execution by the special builtin "reset_registers"
+[registers.reset]
+# Bit 1 being unset allows unaligned accesses
+# Bit 26 being set allows cache-maintenance ops in EL0
+"SCTLR_EL1" = "0x0000000004000000"
+
+# A map from register names that may appear in litmus files to Sail
+# register names
+[registers.renames]
+"X0" = "R0"
+"X1" = "R1"
+"X2" = "R2"
+"X3" = "R3"
+"X4" = "R4"
+"X5" = "R5"
+"X6" = "R6"
+"X7" = "R7"
+"X8" = "R8"
+"X9" = "R9"
+"X10" = "R10"
+"X11" = "R11"
+"X12" = "R12"
+"X13" = "R13"
+"X14" = "R14"
+"X15" = "R15"
+"X16" = "R16"
+"X17" = "R17"
+"X18" = "R18"
+"X19" = "R19"
+"X20" = "R20"
+"X21" = "R21"
+"X22" = "R22"
+"X23" = "R23"
+"X24" = "R24"
+"X25" = "R25"
+"X26" = "R26"
+"X27" = "R27"
+"X28" = "R28"
+"X29" = "R29"
+"X30" = "R30"
+"W0" = "R0"
+"W1" = "R1"
+"W2" = "R2"
+"W3" = "R3"
+"W4" = "R4"
+"W5" = "R5"
+"W6" = "R6"
+"W7" = "R7"
+"W8" = "R8"
+"W9" = "R9"
+"W10" = "R10"
+"W11" = "R11"
+"W12" = "R12"
+"W13" = "R13"
+"W14" = "R14"
+"W15" = "R15"
+"W16" = "R16"
+"W17" = "R17"
+"W18" = "R18"
+"W19" = "R19"
+"W20" = "R20"
+"W21" = "R21"
+"W22" = "R22"
+"W23" = "R23"
+"W24" = "R24"
+"W25" = "R25"
+"W26" = "R26"
+"W27" = "R27"
+"W28" = "R28"
+"W29" = "R29"
+"W30" = "R30"
 """
 
 
@@ -222,18 +365,9 @@ def ensure_cache_ready(cache_dir: str, repo_root: str, bootstrap: bool) -> Dict[
 
     arm_ir = os.path.join(snaps, "armv8p5.ir")
     rv_ir = os.path.join(snaps, "riscv64.ir")
-    arm_toml = os.path.join(cache_dir, "armv8p5_notc.toml")
-    rv_toml = os.path.join(cache_dir, "riscv64_old_notc.toml")
     isla_batch = os.path.join(cache_dir, "isla_batch")
     armv9_sim = os.path.join(cache_dir, "sail-arm-9.3", "armv9_sim")
     rv_sim = os.path.join(cache_dir, "sail-riscv", "bin", "sail_riscv_sim")
-
-    if not os.path.exists(arm_toml):
-        with open(arm_toml, "w", encoding="utf-8", newline="\n") as f:
-            f.write(ARMV8P5_NOTC_TOML)
-    if not os.path.exists(rv_toml):
-        with open(rv_toml, "w", encoding="utf-8", newline="\n") as f:
-            f.write(RISCV64_OLD_NOTC_TOML)
 
     if bootstrap:
         if not os.path.exists(arm_ir):
@@ -341,8 +475,6 @@ def ensure_cache_ready(cache_dir: str, repo_root: str, bootstrap: bool) -> Dict[
     paths = {
         "arm_ir": arm_ir,
         "rv_ir": rv_ir,
-        "arm_toml": arm_toml,
-        "rv_toml": rv_toml,
         "isla_batch": isla_batch,
         "armv9_sim": armv9_sim,
         "rv_sim": rv_sim,
@@ -533,10 +665,9 @@ class Z3Client:
 class IslaBatchClient:
     def __init__(self, isla_bin: str, arch_ir: str, config_toml: str, threads: int = 2) -> None:
         self.proc = subprocess.Popen(
-            [isla_bin, "-T", str(threads), "-A", arch_ir, "-C", config_toml],
+            [isla_bin, "-T", str(threads), "--timeout", "30", "-A", arch_ir, "-C", config_toml],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
         )
@@ -1810,16 +1941,23 @@ def main(argv: Sequence[str]) -> int:
             rv64_sim_n = 0
 
             if not args.skip_smt:
-                for req in ("arm_ir", "arm_toml", "rv_ir", "rv_toml", "isla_batch"):
+                for req in ("arm_ir", "rv_ir", "isla_batch"):
                     if not os.path.exists(paths[req]):
                         raise RuntimeError(f"Missing cache artifact {paths[req]} (pass --bootstrap?)")
+
+                arm_toml = os.path.join(tmpdir, "armv8p5_notc.toml")
+                rv_toml = os.path.join(tmpdir, "riscv64_old_notc.toml")
+                with open(arm_toml, "w", encoding="utf-8", newline="\n") as f:
+                    f.write(ARMV8P5_NOTC_TOML)
+                with open(rv_toml, "w", encoding="utf-8", newline="\n") as f:
+                    f.write(RISCV64_OLD_NOTC_TOML)
 
                 # Phase 1: AArch64 2^64 / 2^128 / 2^192 per-instruction SMT equivalence
                 a64_ops = collect_a64_smt_opcodes()
                 a64_toks = [s1.le32(w).hex() for _, w in a64_ops]
                 print(f"[sail-smt] Extracting A64 Isla symbolic traces ({len(a64_ops)} opcodes)...", flush=True)
                 z3 = Z3Client()
-                isla_a64 = IslaBatchClient(paths["isla_batch"], paths["arm_ir"], paths["arm_toml"], args.threads)
+                isla_a64 = IslaBatchClient(paths["isla_batch"], paths["arm_ir"], arm_toml, args.threads)
                 try:
                     a64_traces = isla_a64.query_many(a64_toks)
                     print("[sail-smt] Verifying A64 SMT equivalence via Z3...", flush=True)
@@ -1843,7 +1981,7 @@ def main(argv: Sequence[str]) -> int:
                 rv_toks = [bs.hex() for _, _, bs in rv_ops]
                 print(f"[sail-smt] Extracting RV64/RVC Isla symbolic traces ({len(rv_ops)} opcodes)...", flush=True)
                 z3 = Z3Client()
-                isla_rv = IslaBatchClient(paths["isla_batch"], paths["rv_ir"], paths["rv_toml"], args.threads)
+                isla_rv = IslaBatchClient(paths["isla_batch"], paths["rv_ir"], rv_toml, args.threads)
                 try:
                     rv_traces = isla_rv.query_many(rv_toks)
                     print("[sail-smt] Verifying RV64/RVC SMT equivalence via Z3...", flush=True)
