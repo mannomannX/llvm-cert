@@ -14,6 +14,9 @@ on:
       - "passes/**"
       - "validator/**"
       - "scripts/run_forged_cert_suite.py"
+      - "scripts/run_forged_mc_suite.py"
+      - "scripts/run_isa_oracle_suite.py"
+      - "scripts/isa_oracle/**"
       - "scripts/run_cert_mutation_suite.py"
       - ".github/workflows/rocq-ci.yml"
 
@@ -145,12 +148,12 @@ jobs:
               opam exec -- rocq check -o -R rocq Vellvm -R ../../passes CertPasses -R ../../validator CertValidator \
                 Vellvm.Semantics.TopLevel Vellvm.Theory.Equational CertPasses.Pipeline CertPasses.McfgExport \
                 CertPasses.ModuleMerge CertValidator.CertValidator CertValidator.Elf64Spec \
-                CertValidator.McFormat CertValidator.Rv64Sem CertValidator.McValidator CertValidator.CheckAssumptions
+                CertValidator.McFormat CertValidator.Rv64Sem CertValidator.A64CoreSem CertValidator.McValidator CertValidator.CheckAssumptions
           else
             (ulimit -v 13107200 && exec opam exec -- rocq check -o -R rocq Vellvm -R ../../passes CertPasses -R ../../validator CertValidator \
               Vellvm.Semantics.TopLevel Vellvm.Theory.Equational CertPasses.Pipeline CertPasses.McfgExport \
               CertPasses.ModuleMerge CertValidator.CertValidator CertValidator.Elf64Spec \
-              CertValidator.McFormat CertValidator.Rv64Sem CertValidator.McValidator CertValidator.CheckAssumptions)
+              CertValidator.McFormat CertValidator.Rv64Sem CertValidator.A64CoreSem CertValidator.McValidator CertValidator.CheckAssumptions)
           fi
 
       - name: Layer-1 kernel Print Assumptions audit gate
@@ -161,7 +164,7 @@ jobs:
           Set Printing Width 10000.
           From Vellvm Require Theory.I2F.I2F_toplevel.
           From CertPasses Require Pipeline ModuleMerge.
-          From CertValidator Require CertFormat AigLrat AlgRules CertValidator Elf64Spec McFormat Rv64Sem McValidator.
+          From CertValidator Require CertFormat AigLrat AlgRules CertValidator Elf64Spec McFormat Rv64Sem A64CoreSem McValidator.
           Redirect "$PA_DIR/vellvm_i2f" Print Assumptions Vellvm.Theory.I2F.I2F_toplevel.model_refine.
           Redirect "$PA_DIR/pipeline" Print Assumptions CertPasses.Pipeline.optimize_mcfg_I2F_model_refine.
           Redirect "$PA_DIR/merge_i2f" Print Assumptions CertPasses.ModuleMerge.validate_module_merge_parsed_I2F_model_refine.
@@ -172,9 +175,11 @@ jobs:
           Redirect "$PA_DIR/elf64_extract" Print Assumptions CertValidator.Elf64Spec.elf64_extract_func_sound.
           Redirect "$PA_DIR/mc_format_wf" Print Assumptions CertValidator.McFormat.parse_mc_cert_wf.
           Redirect "$PA_DIR/rv64_dag_wf" Print Assumptions CertValidator.Rv64Sem.summarize_rv64_dag_wf.
+          Redirect "$PA_DIR/a64_dag_wf" Print Assumptions CertValidator.A64CoreSem.summarize_a64_dag_wf.
           Redirect "$PA_DIR/alg_rules" Print Assumptions CertValidator.AlgRules.check_expr_refines_with_lrat_sound.
           Redirect "$PA_DIR/cert_val" Print Assumptions CertValidator.CertValidator.validate_tle_pair_with_cert_str_sound.
           Redirect "$PA_DIR/rv64_dag_sound" Print Assumptions CertValidator.Rv64Sem.summarize_rv64_dag_sound.
+          Redirect "$PA_DIR/a64_dag_sound" Print Assumptions CertValidator.A64CoreSem.summarize_a64_dag_sound.
           Redirect "$PA_DIR/mc_val" Print Assumptions CertValidator.McValidator.validate_mc_tle_with_cert_str_sound.
           EOF
           (cd vellvm/src && opam exec -- rocq top -q -w none -R rocq Vellvm -R ../../passes CertPasses -R ../../validator CertValidator -batch -load-vernac-source "$PA_DIR/audit.v")
@@ -211,13 +216,13 @@ jobs:
               print(f"Unexpected upstream Vellvm 3.0 axioms: {sorted(vellvm_base - approved_vellvm3_classical)}", file=sys.stderr)
               sys.exit(1)
 
-          for zero_ax in ("aig_lrat", "dimacs_lrat", "elf64_extract", "mc_format_wf", "rv64_dag_wf"):
+          for zero_ax in ("aig_lrat", "dimacs_lrat", "elf64_extract", "mc_format_wf", "rv64_dag_wf", "a64_dag_wf"):
               axs = parse_axioms(zero_ax)
               if axs:
                   print(f"{zero_ax} must be 100% axiom-free, got: {sorted(axs)}", file=sys.stderr)
                   sys.exit(1)
 
-          for validator_thm in ("alg_rules", "cert_val", "rv64_dag_sound", "mc_val"):
+          for validator_thm in ("alg_rules", "cert_val", "rv64_dag_sound", "a64_dag_sound", "mc_val"):
               axs = parse_axioms(validator_thm)
               extra = axs - (vellvm_base - {"Eqdep.Eq_rect_eq.eq_rect_eq"})
               if extra:
@@ -253,6 +258,11 @@ jobs:
           grep -q "define i32 @smoke_add" "$TMP_OUT"
           rm -f "$TMP_IN" "$TMP_OUT"
 
+      - name: Install QEMU user-mode & CaDiCaL SAT/LRAT solver for ISA oracle and MC suites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qemu-user cadical
+
       - name: Layer-2 positive & adversarial forged-certificate gate on cert-validator
         run: |
           python3 scripts/run_forged_cert_suite.py \
@@ -261,6 +271,10 @@ jobs:
           python3 scripts/run_forged_mc_suite.py \
             vellvm/src/_build/default/ml/bin/cert-validator \
             vellvm/src/_build/default/ml/bin/cert-validator.bc
+
+      - name: Stage-1 Dual-Arch Extracted Rocq ISA Semantics Differential Oracle (vs QEMU)
+        run: |
+          opam exec -- python3 -u scripts/run_isa_oracle_suite.py
 
       - name: Dual-compiler (ocamlopt vs. ocamlc) & certificate mutation assurance gate
         run: |

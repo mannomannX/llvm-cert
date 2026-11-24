@@ -119,6 +119,7 @@
 ../../validator/CertValidator.v
 ../../validator/Elf64Spec.v
 ../../validator/Rv64Sem.v
+../../validator/A64CoreSem.v
 ../../validator/McFormat.v
 ../../validator/McValidator.v
 ../../validator/CheckAssumptions.v

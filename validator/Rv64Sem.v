@@ -2444,3 +2444,42 @@ Proof.
   exact (rv_init_state_agrees penv foracle arg_specs rf0 Hws Hm).
 Qed.
 
+(** ** 6. Concrete Extracted ISA Oracle Helpers (Layer-3 Differential Harness) *)
+
+Definition rv_regfile_of_list (regs : list N) : rv_regfile :=
+  fun r =>
+    match List.nth_error regs (N.to_nat r) with
+    | Some v => @Integers.repr 64%positive (Z.of_N v)
+    | None => @Integers.zero 64%positive
+    end.
+
+Definition rv_regfile_to_list_aux : nat -> nat -> rv_regfile -> list N :=
+  fix go idx count rf {struct count} :=
+    match count with
+    | O => []
+    | S count' =>
+        Z.to_N (@Integers.unsigned 64%positive (rv_read_reg (N.of_nat idx) rf))
+        :: go (S idx) count' rf
+    end.
+
+Definition rv_regfile_to_list (rf : rv_regfile) : list N :=
+  rv_regfile_to_list_aux 0%nat 32%nat rf.
+
+Definition rv_decode_bytes_ok (rvc : bool) (code : list N) : bool :=
+  match decode_rv64_bytes rvc code with
+  | inr _ => true
+  | inl _ => false
+  end.
+
+Definition rv_eval_bytes_concrete
+  (rvc : bool) (fuel : nat) (code : list N) (init_regs : list N)
+  : string + list N :=
+  match decode_rv64_bytes rvc code with
+  | inl err => inl err
+  | inr insts =>
+      match rv_exec fuel insts 0%N (rv_regfile_of_list init_regs) with
+      | None => inl "rv_exec returned None"
+      | Some rf_end => inr (rv_regfile_to_list rf_end)
+      end
+  end.
+

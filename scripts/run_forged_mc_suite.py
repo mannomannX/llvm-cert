@@ -4,13 +4,14 @@
 # or a separate LLVMCert Commercial Software License Agreement.
 # See /LICENSE in the repository root for details.
 """Self-contained Layer-2 positive and adversarial forged-ELF / forged-MC test suite
-for cert-validator --check-mc and --emit-mc-cnf (Phase 8.3a Milestone M1: RV64IM + RVC)."""
+for cert-validator --check-mc and --emit-mc-cnf (Phase 8.3a M1 RV64IM+RVC & M2 AArch64)."""
 
 from __future__ import annotations
 
 import argparse
 import os
 import re
+import shutil
 import struct
 import subprocess
 import sys
@@ -136,6 +137,124 @@ CORPUS_FUNCS = [
      "a99d33b5a5003305a0404d8d8280"),
     ("abs_diff_i64", 64, [("%0", 64, "none"), ("%1", 64, "none")],
      "63c5a5003385a54082800d8d8280"),
+]
+
+# Ground-truth LLVM IR emitted by clang-22 (--target=aarch64-unknown-none-elf
+# -O2 -fno-builtin -S -emit-llvm) for all 8 functions in e2e_corpus_mc.c.
+CORPUS_IR_A64 = """\
+target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32"
+target triple = "aarch64-unknown-none-elf"
+
+define dso_local noundef i32 @pid_clamp_i32(i32 noundef %0, i32 noundef %1, i32 noundef %2) local_unnamed_addr {
+  %4 = icmp sgt i32 %1, %2
+  %5 = icmp slt i32 %0, %1
+  %6 = or i1 %5, %4
+  %7 = tail call i32 @llvm.smin.i32(i32 %0, i32 %2)
+  %8 = select i1 %6, i32 %1, i32 %7
+  ret i32 %8
+}
+
+define dso_local i32 @deadband_i32(i32 noundef %0, i32 noundef %1) local_unnamed_addr {
+  %3 = tail call i32 @llvm.smax.i32(i32 %1, i32 0)
+  %4 = icmp sgt i32 %0, %3
+  br i1 %4, label %5, label %7
+
+5:
+  %6 = sub nsw i32 %0, %3
+  br label %12
+
+7:
+  %8 = sub nsw i32 0, %3
+  %9 = icmp slt i32 %0, %8
+  %10 = add i32 %3, %0
+  %11 = select i1 %9, i32 %10, i32 0
+  br label %12
+
+12:
+  %13 = phi i32 [ %6, %5 ], [ %11, %7 ]
+  ret i32 %13
+}
+
+define dso_local i32 @linear_interp_i32(i32 noundef %0, i32 noundef %1, i32 noundef %2) local_unnamed_addr {
+  %4 = sext i32 %1 to i64
+  %5 = sext i32 %0 to i64
+  %6 = sub nsw i64 %4, %5
+  %7 = sext i32 %2 to i64
+  %8 = mul nsw i64 %6, %7
+  %9 = sdiv i64 %8, 256
+  %10 = trunc i64 %9 to i32
+  %11 = add i32 %0, %10
+  ret i32 %11
+}
+
+define dso_local i32 @crc_step_u32(i32 noundef %0, i32 noundef %1) local_unnamed_addr {
+  %3 = and i32 %1, 255
+  %4 = xor i32 %3, %0
+  %5 = and i32 %4, 1
+  %6 = icmp eq i32 %5, 0
+  %7 = lshr i32 %4, 1
+  %8 = xor i32 %7, -306674912
+  %9 = select i1 %6, i32 %7, i32 %8
+  %10 = and i32 %9, 1
+  %11 = icmp eq i32 %10, 0
+  %12 = lshr i32 %9, 1
+  %13 = xor i32 %12, -306674912
+  %14 = select i1 %11, i32 %12, i32 %13
+  ret i32 %14
+}
+
+define dso_local i64 @pack_sensor_u64(i32 noundef %0, i32 noundef %1) local_unnamed_addr {
+  %3 = zext i32 %0 to i64
+  %4 = shl nuw i64 %3, 32
+  %5 = zext i32 %1 to i64
+  %6 = or disjoint i64 %4, %5
+  ret i64 %6
+}
+
+define dso_local noundef i32 @voter_median3_i32(i32 noundef %0, i32 noundef %1, i32 noundef %2) local_unnamed_addr {
+  %4 = tail call i32 @llvm.smax.i32(i32 %0, i32 %1)
+  %5 = tail call i32 @llvm.smin.i32(i32 %0, i32 %1)
+  %6 = icmp sgt i32 %4, %2
+  %7 = tail call i32 @llvm.smax.i32(i32 %5, i32 %2)
+  %8 = select i1 %6, i32 %7, i32 %4
+  ret i32 %8
+}
+
+define dso_local noundef i32 @saturating_add_u32(i32 noundef %0, i32 noundef %1) local_unnamed_addr {
+  %3 = tail call i32 @llvm.uadd.sat.i32(i32 %0, i32 %1)
+  ret i32 %3
+}
+
+define dso_local noundef i64 @abs_diff_i64(i64 noundef %0, i64 noundef %1) local_unnamed_addr {
+  %3 = icmp slt i64 %0, %1
+  %4 = sub i64 %0, %1
+  %5 = sub i64 %1, %0
+  %6 = select i1 %3, i64 %5, i64 %4
+  ret i64 %6
+}
+
+declare i32 @llvm.smax.i32(i32, i32)
+declare i32 @llvm.uadd.sat.i32(i32, i32)
+declare i32 @llvm.smin.i32(i32, i32)
+"""
+
+CORPUS_FUNCS_A64 = [
+    ("pid_clamp_i32", 32, [("%0", 32, "none"), ("%1", 32, "none"), ("%2", 32, "none")],
+     "1f00026b08b0821a3f00026b08d0417a20b0881ac0035fd6"),
+    ("deadband_i32", 32, [("%0", 32, "none"), ("%1", 32, "none")],
+     "287ca10a0900082b29b19f1a0800086b20d1881ac0035fd6"),
+    ("linear_interp_i32", 32, [("%0", 32, "none"), ("%1", 32, "none"), ("%2", 32, "none")],
+     "287c4093497c409308c120cb087d099b09fd03911f0100f12841889a0020488bc0035fd6"),
+    ("crc_step_u32", 32, [("%0", 32, "none"), ("%1", 32, "none")],
+     "291c0012086490522901004a08b7bd722a7d01533f0100724b01084a49018b1a2a7d01533f0100724801084a4001881ac0035fd6"),
+    ("pack_sensor_u64", 64, [("%0", 32, "none"), ("%1", 32, "none")],
+     "e803012a008100aac0035fd6"),
+    ("voter_median3_i32", 32, [("%0", 32, "none"), ("%1", 32, "none"), ("%2", 32, "none")],
+     "1f00016b08b0811a09c0811a1f01026b08c1821a3f01026b00c1891ac0035fd6"),
+    ("saturating_add_u32", 32, [("%0", 32, "none"), ("%1", 32, "none")],
+     "0800012b00319f5ac0035fd6"),
+    ("abs_diff_i64", 64, [("%0", 64, "none"), ("%1", 64, "none")],
+     "080001eb00c588dac0035fd6"),
 ]
 
 
@@ -404,6 +523,53 @@ def format_lrat_sexp(steps: List[Tuple[int, List[int], List[int]]]) -> str:
     )
 
 
+def solve_lrat_sexp(cnf_text: str, tmpdir: str) -> str:
+    """Prove CNF UNSAT and return canonical LRAT S-expression body (prefers CaDiCaL, falls back to Python CDCL)."""
+    cadical = shutil.which("cadical")
+    if cadical:
+        cnf_p = os.path.join(tmpdir, "solve.cnf")
+        lrat_p = os.path.join(tmpdir, "solve.lrat")
+        with open(cnf_p, "w", encoding="utf-8") as f:
+            f.write(cnf_text)
+        res = subprocess.run(
+            [cadical, "-q", "--lrat", "--no-binary", cnf_p, lrat_p],
+            text=True,
+            capture_output=True,
+        )
+        if res.returncode != 20:
+            raise RuntimeError(f"cadical expected UNSAT rc=20, got {res.returncode}: {res.stderr}")
+        adds: Dict[int, Tuple[List[str], List[int]]] = {}
+        empty_cid: Optional[int] = None
+        with open(lrat_p, "r", encoding="utf-8") as f:
+            for raw in f:
+                toks = raw.strip().split()
+                if not toks or (len(toks) >= 2 and toks[1] == "d"):
+                    continue
+                cid = int(toks[0])
+                z1 = toks.index("0", 1)
+                lits = toks[1:z1]
+                z2 = toks.index("0", z1 + 1)
+                hints = [int(x) for x in toks[z1 + 1 : z2]]
+                adds[cid] = (lits, hints)
+                if not lits and empty_cid is None:
+                    empty_cid = cid
+        if empty_cid is None:
+            raise RuntimeError("cadical LRAT missing empty clause")
+        needed = {empty_cid}
+        trimmed = []
+        for cid in sorted(adds.keys(), reverse=True):
+            if cid in needed:
+                lits, hints = adds[cid]
+                trimmed.append((cid, lits, hints))
+                needed.update(hints)
+        trimmed.reverse()
+        return " ".join(
+            f"(add {cid} ({' '.join(lits)}) ({' '.join(map(str, hints))}))"
+            for cid, lits, hints in trimmed
+        )
+    return format_lrat_sexp(solve_cdcl_lrat(cnf_text))
+
+
 def format_mc_cert(
     kind: str,
     fn: str,
@@ -411,10 +577,11 @@ def format_mc_cert(
     ret_width: int,
     args: List[Tuple[str, int, str]],
     lrat_s: Optional[str] = None,
+    arch: str = "rv64",
 ) -> str:
     args_s = " ".join(f'(arg "{r}" {w} {a})' for r, w, a in args)
     tail = f" (lrat {lrat_s})" if lrat_s is not None else ""
-    return f'(mc-cert-v1 (arch rv64) (elf-kind {kind}) (fn "{fn}") (rvc {rvc}) (ret-width {ret_width}) (args {args_s}){tail})'
+    return f'(mc-cert-v1 (arch {arch}) (elf-kind {kind}) (fn "{fn}") (rvc {rvc}) (ret-width {ret_width}) (args {args_s}){tail})'
 
 
 def build_elf64(
@@ -522,60 +689,103 @@ def run_cmd(cmd: List[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, text=True, capture_output=True)
 
 
+def emit_and_solve_lrat(
+    bin_path: str,
+    arch: str,
+    rvc: int,
+    ir_path: str,
+    elf_path: str,
+    fn: str,
+    rw: int,
+    args: List[Tuple[str, int, str]],
+    tmpdir: str,
+) -> Optional[str]:
+    bare_cert = os.path.join(tmpdir, f"bare_{arch}_{fn}.mc.cert")
+    with open(bare_cert, "w", encoding="utf-8") as f:
+        f.write(format_mc_cert("rel", fn, rvc, rw, args, arch=arch))
+    em = run_cmd([bin_path, "--emit-mc-cnf", "--ir", ir_path, "--elf", elf_path, "--cert", bare_cert])
+    if em.returncode != 0:
+        raise RuntimeError(f"--emit-mc-cnf failed ({arch}, {fn}): rc={em.returncode} err={em.stderr}")
+    if em.stdout.strip().startswith("c ALGEBRAIC_OK"):
+        return None
+    return solve_lrat_sexp(em.stdout, tmpdir)
+
+
 def run_live_corpus(
     bins: List[str],
     c_path: str,
     tmpdir: str,
-    lrat_cache: Dict[str, str],
+    lrat_cache: Dict[Tuple[str, str], Optional[str]],
 ) -> int:
     clang = "/usr/lib/llvm-22/bin/clang"
     lld = "/usr/lib/llvm-22/bin/ld.lld"
-    ll = os.path.join(tmpdir, "live.ll")
-    o_file = os.path.join(tmpdir, "live.o")
-    elf_file = os.path.join(tmpdir, "live.elf")
-    relax_o = os.path.join(tmpdir, "live_relax.o")
+    count = 0
+
+    # --- 1. Live RV64IM+RVC corpus ---
+    ll_rv = os.path.join(tmpdir, "live_rv64.ll")
+    o_rv = os.path.join(tmpdir, "live_rv64.o")
+    elf_rv = os.path.join(tmpdir, "live_rv64.elf")
+    relax_o = os.path.join(tmpdir, "live_rv64_relax.o")
     subprocess.run(
         [clang, "--target=riscv64-unknown-none-elf", "-march=rv64imc", "-mno-relax", "-mabi=lp64",
-         "-O2", "-fno-builtin", "-S", "-emit-llvm", c_path, "-o", ll],
+         "-O2", "-fno-builtin", "-S", "-emit-llvm", c_path, "-o", ll_rv],
         check=True,
     )
     subprocess.run(
         [clang, "--target=riscv64-unknown-none-elf", "-march=rv64imc", "-mno-relax", "-mabi=lp64",
-         "-O2", "-fno-builtin", "-c", c_path, "-o", o_file],
+         "-O2", "-fno-builtin", "-c", c_path, "-o", o_rv],
         check=True,
     )
-    subprocess.run([lld, "-m", "elf64lriscv", "--no-relax", "-e", "pid_clamp_i32", o_file, "-o", elf_file], check=True)
+    subprocess.run([lld, "-m", "elf64lriscv", "--no-relax", "-e", "pid_clamp_i32", o_rv, "-o", elf_rv], check=True)
     subprocess.run(
         [clang, "--target=riscv64-unknown-none-elf", "-march=rv64imc", "-mabi=lp64",
          "-O2", "-fno-builtin", "-c", c_path, "-o", relax_o],
         check=True,
     )
-
-    count = 0
     for fn, rw, args, _ in CORPUS_FUNCS:
-        if fn not in lrat_cache:
-            bare_cert = os.path.join(tmpdir, f"live_{fn}.bare.cert")
-            with open(bare_cert, "w", encoding="utf-8") as f:
-                f.write(format_mc_cert("rel", fn, 1, rw, args))
-            em = run_cmd([bins[0], "--emit-mc-cnf", "--ir", ll, "--elf", o_file, "--cert", bare_cert])
-            if em.returncode != 0:
-                raise RuntimeError(f"live --emit-mc-cnf failed for {fn}: {em.stderr}")
-            lrat_cache[fn] = format_lrat_sexp(solve_cdcl_lrat(em.stdout))
-        for kind, elf_path in [("rel", o_file), ("exec", elf_file)]:
-            cert_path = os.path.join(tmpdir, f"live_{fn}.{kind}.mc.cert")
-            with open(cert_path, "w", encoding="utf-8") as f:
-                f.write(format_mc_cert(kind, fn, 1, rw, args, lrat_cache[fn]))
+        key = ("rv64", fn)
+        if key not in lrat_cache:
+            lrat_cache[key] = emit_and_solve_lrat(bins[0], "rv64", 1, ll_rv, o_rv, fn, rw, args, tmpdir)
+        for kind, ep in [("rel", o_rv), ("exec", elf_rv)]:
+            cp = os.path.join(tmpdir, f"live_rv64_{fn}.{kind}.mc.cert")
+            with open(cp, "w", encoding="utf-8") as f:
+                f.write(format_mc_cert(kind, fn, 1, rw, args, lrat_cache[key], arch="rv64"))
             for b in bins:
-                res = run_cmd([b, "--check-mc", "--ir", ll, "--elf", elf_path, "--cert", cert_path])
+                res = run_cmd([b, "--check-mc", "--ir", ll_rv, "--elf", ep, "--cert", cp])
                 if res.returncode != 0:
-                    raise RuntimeError(f"live --check-mc failed ({b}, {fn}, {kind}): rc={res.returncode} {res.stderr}")
+                    raise RuntimeError(f"live rv64 --check-mc failed ({b}, {fn}, {kind}): rc={res.returncode} {res.stderr}")
             count += 1
-    # Ensure branched functions in live_relax.o are rejected with rc=4
-    rel_cert_pid = os.path.join(tmpdir, "live_pid_clamp_i32.rel.mc.cert")
+    rel_cert_pid = os.path.join(tmpdir, "live_rv64_pid_clamp_i32.rel.mc.cert")
     for b in bins:
-        rej = run_cmd([b, "--check-mc", "--ir", ll, "--elf", relax_o, "--cert", rel_cert_pid])
+        rej = run_cmd([b, "--check-mc", "--ir", ll_rv, "--elf", relax_o, "--cert", rel_cert_pid])
         if rej.returncode != 4:
-            raise RuntimeError(f"expected relax rejection rc=4 on live_relax.o ({b}), got {rej.returncode}")
+            raise RuntimeError(f"expected relax rejection rc=4 on live_rv64_relax.o ({b}), got {rej.returncode}")
+
+    # --- 2. Live AArch64 corpus ---
+    ll_a64 = os.path.join(tmpdir, "live_a64.ll")
+    o_a64 = os.path.join(tmpdir, "live_a64.o")
+    elf_a64 = os.path.join(tmpdir, "live_a64.elf")
+    subprocess.run(
+        [clang, "--target=aarch64-unknown-none-elf", "-O2", "-fno-builtin", "-S", "-emit-llvm", c_path, "-o", ll_a64],
+        check=True,
+    )
+    subprocess.run(
+        [clang, "--target=aarch64-unknown-none-elf", "-O2", "-fno-builtin", "-c", c_path, "-o", o_a64],
+        check=True,
+    )
+    subprocess.run([lld, "-m", "aarch64elf", "--entry=pid_clamp_i32", o_a64, "-o", elf_a64], check=True)
+    for fn, rw, args, _ in CORPUS_FUNCS_A64:
+        key = ("aarch64", fn)
+        lrat_cache[key] = emit_and_solve_lrat(bins[0], "aarch64", 0, ll_a64, o_a64, fn, rw, args, tmpdir)
+        for kind, ep in [("rel", o_a64), ("exec", elf_a64)]:
+            cp = os.path.join(tmpdir, f"live_a64_{fn}.{kind}.mc.cert")
+            with open(cp, "w", encoding="utf-8") as f:
+                f.write(format_mc_cert(kind, fn, 0, rw, args, lrat_cache[key], arch="aarch64"))
+            for b in bins:
+                res = run_cmd([b, "--check-mc", "--ir", ll_a64, "--elf", ep, "--cert", cp])
+                if res.returncode != 0:
+                    raise RuntimeError(f"live aarch64 --check-mc failed ({b}, {fn}, {kind}): rc={res.returncode} {res.stderr}")
+            count += 1
     return count
 
 
@@ -586,7 +796,7 @@ def main(argv: List[str]) -> int:
     default_bc = os.path.join(repo_root, "vellvm", "src", "_build", "default", "ml", "bin", "cert-validator.bc")
     parser.add_argument("cert_validator", nargs="?", default=default_native, help="Path to native cert-validator.")
     parser.add_argument("cert_validator_bc", nargs="?", default=default_bc, help="Path to bytecode cert-validator.bc.")
-    parser.add_argument("--live-corpus", metavar="C_FILE", help="Also compile and verify a live C corpus with clang-22/ld.lld.")
+    parser.add_argument("--live-corpus", metavar="C_FILE", help="Also compile and verify a live C corpus with clang-22/ld.lld (RV64 + AArch64).")
     ns = parser.parse_args(argv)
 
     bins = [ns.cert_validator, ns.cert_validator_bc]
@@ -597,69 +807,71 @@ def main(argv: List[str]) -> int:
 
     t_start = time.time()
     with tempfile.TemporaryDirectory(prefix="forged_mc_") as tmpdir:
-        ir_path = os.path.join(tmpdir, "corpus.ll")
-        with open(ir_path, "w", encoding="utf-8") as f:
+        ir_rv_path = os.path.join(tmpdir, "corpus_rv64.ll")
+        with open(ir_rv_path, "w", encoding="utf-8") as f:
             f.write(CORPUS_IR)
+        ir_a64_path = os.path.join(tmpdir, "corpus_a64.ll")
+        with open(ir_a64_path, "w", encoding="utf-8") as f:
+            f.write(CORPUS_IR_A64)
 
-        lrat_cache: Dict[str, str] = {}
+        lrat_cache: Dict[Tuple[str, str], Optional[str]] = {}
         pos_passed = 0
 
-        # 16 positive checks: 8 functions x (ET_REL + ET_EXEC), dual-verified native vs bytecode.
-        for fn, rw, args, hex_bytes in CORPUS_FUNCS:
-            code = bytes.fromhex(hex_bytes)
-            rel_elf = build_elf64(fn, code, e_type=1, e_flags=0x1)
-            exec_elf = build_elf64(fn, code, e_type=2, e_flags=0x1)
-            rel_path = os.path.join(tmpdir, f"{fn}.o")
-            exec_path = os.path.join(tmpdir, f"{fn}.elf")
-            with open(rel_path, "wb") as f:
-                f.write(rel_elf)
-            with open(exec_path, "wb") as f:
-                f.write(exec_elf)
+        # 32 positive checks: (8 RV64 + 8 AArch64) x (ET_REL + ET_EXEC), dual-verified native vs bytecode.
+        arch_suites = [
+            ("rv64", 243, 0x1, 1, ir_rv_path, CORPUS_FUNCS),
+            ("aarch64", 183, 0x0, 0, ir_a64_path, CORPUS_FUNCS_A64),
+        ]
+        for arch, e_mach, e_flg, rvc, ir_path, fn_list in arch_suites:
+            for fn, rw, args, hex_bytes in fn_list:
+                code = bytes.fromhex(hex_bytes)
+                rel_elf = build_elf64(fn, code, e_type=1, e_machine=e_mach, e_flags=e_flg)
+                exec_elf = build_elf64(fn, code, e_type=2, e_machine=e_mach, e_flags=e_flg)
+                rel_path = os.path.join(tmpdir, f"{arch}_{fn}.o")
+                exec_path = os.path.join(tmpdir, f"{arch}_{fn}.elf")
+                with open(rel_path, "wb") as f:
+                    f.write(rel_elf)
+                with open(exec_path, "wb") as f:
+                    f.write(exec_elf)
 
-            bare_cert = os.path.join(tmpdir, f"{fn}.bare.mc.cert")
-            with open(bare_cert, "w", encoding="utf-8") as f:
-                f.write(format_mc_cert("rel", fn, 1, rw, args))
+                t0 = time.time()
+                lrat_s = emit_and_solve_lrat(bins[0], arch, rvc, ir_path, rel_path, fn, rw, args, tmpdir)
+                lrat_cache[(arch, fn)] = lrat_s
+                solve_dt = time.time() - t0
 
-            em = run_cmd([bins[0], "--emit-mc-cnf", "--ir", ir_path, "--elf", rel_path, "--cert", bare_cert])
-            if em.returncode != 0:
-                print(f"FAIL --emit-mc-cnf {fn}: rc={em.returncode} err={em.stderr}", file=sys.stderr)
-                return 1
-
-            t0 = time.time()
-            if em.stdout.strip().startswith("c ALGEBRAIC_OK"):
-                lrat_cache[fn] = ""
-            else:
-                lrat_cache[fn] = format_lrat_sexp(solve_cdcl_lrat(em.stdout))
-            solve_dt = time.time() - t0
-
-            for kind, epath in [("rel", rel_path), ("exec", exec_path)]:
-                cert_path = os.path.join(tmpdir, f"{fn}.{kind}.mc.cert")
-                with open(cert_path, "w", encoding="utf-8") as f:
-                    f.write(format_mc_cert(kind, fn, 1, rw, args, lrat_cache[fn]))
-                rcs = []
-                for b in bins:
-                    r = run_cmd([b, "--check-mc", "--ir", ir_path, "--elf", epath, "--cert", cert_path])
-                    rcs.append((b, r.returncode, r.stderr.strip()))
-                if any(rc != 0 for _, rc, _ in rcs):
-                    print(f"FAIL positive {fn} ({kind}): {rcs}", file=sys.stderr)
-                    return 1
-                pos_passed += 1
-            print(f"PASS {fn} (rel+exec, native+bc, lrat solve {solve_dt:.2f}s)")
+                for kind, epath in [("rel", rel_path), ("exec", exec_path)]:
+                    cert_path = os.path.join(tmpdir, f"{arch}_{fn}.{kind}.mc.cert")
+                    with open(cert_path, "w", encoding="utf-8") as f:
+                        f.write(format_mc_cert(kind, fn, rvc, rw, args, lrat_s, arch=arch))
+                    rcs = []
+                    for b in bins:
+                        r = run_cmd([b, "--check-mc", "--ir", ir_path, "--elf", epath, "--cert", cert_path])
+                        rcs.append((b, r.returncode, r.stderr.strip()))
+                    if any(rc != 0 for _, rc, _ in rcs):
+                        print(f"FAIL positive {arch}/{fn} ({kind}): {rcs}", file=sys.stderr)
+                        return 1
+                    pos_passed += 1
+                print(f"PASS {arch}/{fn} (rel+exec, native+bc, prove {solve_dt:.2f}s)")
 
         # Adversarial forged-ELF / forged-MC rejection suite (all parity-checked native vs bytecode).
         pack_fn, pack_rw, pack_args, pack_hex = CORPUS_FUNCS[4]
         pack_code = bytes.fromhex(pack_hex)
-        pack_lrat = lrat_cache[pack_fn]
-        pack_cert_rel = format_mc_cert("rel", pack_fn, 1, pack_rw, pack_args, pack_lrat)
-        pack_cert_exec = format_mc_cert("exec", pack_fn, 1, pack_rw, pack_args, pack_lrat)
+        pack_lrat = lrat_cache[("rv64", pack_fn)]
+        pack_cert_rel = format_mc_cert("rel", pack_fn, 1, pack_rw, pack_args, pack_lrat, arch="rv64")
+        pack_cert_exec = format_mc_cert("exec", pack_fn, 1, pack_rw, pack_args, pack_lrat, arch="rv64")
 
         pid_fn, pid_rw, pid_args, pid_hex = CORPUS_FUNCS[0]
         pid_code = bytes.fromhex(pid_hex)
-        pid_lrat = lrat_cache[pid_fn]
-        pid_cert_rel = format_mc_cert("rel", pid_fn, 1, pid_rw, pid_args, pid_lrat)
+        pid_lrat = lrat_cache[("rv64", pid_fn)]
 
-        # Flip 1 bit in pack_sensor_u64 (slli a0, a0, 32 -> wrong code)
+        a64_pack_fn, a64_pack_rw, a64_pack_args, a64_pack_hex = CORPUS_FUNCS_A64[4]
+        a64_pack_code = bytes.fromhex(a64_pack_hex)
+        a64_pack_lrat = lrat_cache[("aarch64", a64_pack_fn)]
+        a64_pack_cert_rel = format_mc_cert("rel", a64_pack_fn, 0, a64_pack_rw, a64_pack_args, a64_pack_lrat, arch="aarch64")
+        a64_pack_cert_exec = format_mc_cert("exec", a64_pack_fn, 0, a64_pack_rw, a64_pack_args, a64_pack_lrat, arch="aarch64")
+
         flipped_pack = bytes([pack_code[0] ^ 0x01]) + pack_code[1:]
+        a64_flipped_pack = bytes([a64_pack_code[0] ^ 0x01]) + a64_pack_code[1:]
         # Single RV64 jalr ra, 0(zero) = 0x000080e7 followed by c.ret (0x8082)
         call_inst = bytes.fromhex("e78000008280")
         bad_call_ir = (
@@ -676,43 +888,80 @@ def main(argv: List[str]) -> int:
             f.write(bad_call_ir)
 
         adv_cases = [
-            ("bad_elf_magic", build_elf64(pack_fn, pack_code, magic=b"\x00ELF"), pack_cert_rel, ir_path),
-            ("bad_elf_class_32", build_elf64(pack_fn, pack_code, ei_class=1), pack_cert_rel, ir_path),
-            ("bad_elf_endian_be", build_elf64(pack_fn, pack_code, ei_data=2), pack_cert_rel, ir_path),
-            ("bad_elf_machine_x86", build_elf64(pack_fn, pack_code, e_machine=62), pack_cert_rel, ir_path),
-            ("et_rel_with_rela_relax", build_elf64(pack_fn, pack_code, relas=[(0, 51, 0)]), pack_cert_rel, ir_path),
-            ("et_rel_with_rela_branch", build_elf64(pack_fn, pack_code, relas=[(2, 16, 0)]), pack_cert_rel, ir_path),
-            ("truncated_elf_header", build_elf64(pack_fn, pack_code, truncate_to=48), pack_cert_rel, ir_path),
-            ("oob_symbol_slice", build_elf64(pack_fn, pack_code, sym_size_override=len(pack_code) + 4), pack_cert_rel, ir_path),
-            ("zero_size_symbol", build_elf64(pack_fn, pack_code, sym_size_override=0), pack_cert_rel, ir_path),
-            ("missing_symbol", build_elf64(pack_fn, pack_code, sym_name="other_fn"), pack_cert_rel, ir_path),
-            ("forged_elf_kind_exec_on_rel", build_elf64(pack_fn, pack_code, e_type=1), pack_cert_exec, ir_path),
+            ("bad_elf_magic", build_elf64(pack_fn, pack_code, magic=b"\x00ELF"), pack_cert_rel, ir_rv_path),
+            ("bad_elf_class_32", build_elf64(pack_fn, pack_code, ei_class=1), pack_cert_rel, ir_rv_path),
+            ("bad_elf_endian_be", build_elf64(pack_fn, pack_code, ei_data=2), pack_cert_rel, ir_rv_path),
+            ("bad_elf_machine_x86", build_elf64(pack_fn, pack_code, e_machine=62), pack_cert_rel, ir_rv_path),
+            ("et_rel_with_rela_relax", build_elf64(pack_fn, pack_code, relas=[(0, 51, 0)]), pack_cert_rel, ir_rv_path),
+            ("et_rel_with_rela_branch", build_elf64(pack_fn, pack_code, relas=[(2, 16, 0)]), pack_cert_rel, ir_rv_path),
+            ("truncated_elf_header", build_elf64(pack_fn, pack_code, truncate_to=48), pack_cert_rel, ir_rv_path),
+            ("oob_symbol_slice", build_elf64(pack_fn, pack_code, sym_size_override=len(pack_code) + 4), pack_cert_rel, ir_rv_path),
+            ("zero_size_symbol", build_elf64(pack_fn, pack_code, sym_size_override=0), pack_cert_rel, ir_rv_path),
+            ("missing_symbol", build_elf64(pack_fn, pack_code, sym_name="other_fn"), pack_cert_rel, ir_rv_path),
+            ("forged_elf_kind_exec_on_rel", build_elf64(pack_fn, pack_code, e_type=1), pack_cert_exec, ir_rv_path),
             ("forged_rvc0_on_rvc1_bytes",
              build_elf64(pack_fn, pack_code, e_flags=0),
-             format_mc_cert("rel", pack_fn, 0, pack_rw, pack_args, pack_lrat), ir_path),
+             format_mc_cert("rel", pack_fn, 0, pack_rw, pack_args, pack_lrat), ir_rv_path),
             ("forged_rvc_flag_mismatch",
              build_elf64(pack_fn, pack_code, e_flags=1),
-             format_mc_cert("rel", pack_fn, 0, pack_rw, pack_args, pack_lrat), ir_path),
+             format_mc_cert("rel", pack_fn, 0, pack_rw, pack_args, pack_lrat), ir_rv_path),
             ("wrong_abi_signext_vs_zeroext",
              build_elf64(pid_fn, pid_code),
-             format_mc_cert("rel", pid_fn, 1, pid_rw, [("%0", 32, "zeroext"), ("%1", 32, "signext"), ("%2", 32, "signext")], pid_lrat), ir_path),
+             format_mc_cert("rel", pid_fn, 1, pid_rw, [("%0", 32, "zeroext"), ("%1", 32, "signext"), ("%2", 32, "signext")], pid_lrat), ir_rv_path),
             ("wrong_abi_missing_attr",
              build_elf64(pid_fn, pid_code),
-             format_mc_cert("rel", pid_fn, 1, pid_rw, [("%0", 32, "none"), ("%1", 32, "signext"), ("%2", 32, "signext")], pid_lrat), ir_path),
+             format_mc_cert("rel", pid_fn, 1, pid_rw, [("%0", 32, "none"), ("%1", 32, "signext"), ("%2", 32, "signext")], pid_lrat), ir_rv_path),
             ("wrong_ret_width",
              build_elf64(pid_fn, pid_code),
-             format_mc_cert("rel", pid_fn, 1, 64, pid_args, pid_lrat), ir_path),
-            ("single_bit_inst_flip", build_elf64(pack_fn, flipped_pack), pack_cert_rel, ir_path),
+             format_mc_cert("rel", pid_fn, 1, 64, pid_args, pid_lrat), ir_rv_path),
+            ("single_bit_inst_flip", build_elf64(pack_fn, flipped_pack), pack_cert_rel, ir_rv_path),
             ("corrupted_lrat_empty_proof",
              build_elf64(pack_fn, pack_code),
-             format_mc_cert("rel", pack_fn, 1, pack_rw, pack_args, ""), ir_path),
+             format_mc_cert("rel", pack_fn, 1, pack_rw, pack_args, ""), ir_rv_path),
             ("corrupted_lrat_bad_hint",
              build_elf64(pack_fn, pack_code),
-             format_mc_cert("rel", pack_fn, 1, pack_rw, pack_args, "(add 999999 () (999998))"), ir_path),
-            ("unapproved_jalr_call_inst", build_elf64(pack_fn, call_inst), pack_cert_rel, ir_path),
+             format_mc_cert("rel", pack_fn, 1, pack_rw, pack_args, "(add 999999 () (999998))"), ir_rv_path),
+            ("unapproved_jalr_call_inst", build_elf64(pack_fn, call_inst), pack_cert_rel, ir_rv_path),
             ("unsupported_ir_ext_call",
              build_elf64("ext_caller", call_inst),
              format_mc_cert("rel", "ext_caller", 1, 32, [("%0", 32, "signext")], ""), bad_call_ir_path),
+            # AArch64 adversarial cases
+            ("a64_wrong_arch_rv64_on_a64_elf",
+             build_elf64(a64_pack_fn, a64_pack_code, e_machine=183, e_flags=0), pack_cert_rel, ir_a64_path),
+            ("a64_wrong_arch_a64_on_rv64_elf",
+             build_elf64(pack_fn, pack_code, e_machine=243, e_flags=1), a64_pack_cert_rel, ir_a64_path),
+            ("a64_forged_rvc1",
+             build_elf64(a64_pack_fn, a64_pack_code, e_machine=183, e_flags=0),
+             format_mc_cert("rel", a64_pack_fn, 1, a64_pack_rw, a64_pack_args, a64_pack_lrat, arch="aarch64"), ir_a64_path),
+            ("a64_forged_elf_kind_exec_on_rel",
+             build_elf64(a64_pack_fn, a64_pack_code, e_type=1, e_machine=183, e_flags=0), a64_pack_cert_exec, ir_a64_path),
+            ("a64_callee_saved_x19_clobber",
+             build_elf64(a64_pack_fn, bytes.fromhex("1300018be00313aac0035fd6"), e_machine=183, e_flags=0),
+             format_mc_cert("rel", a64_pack_fn, 0, a64_pack_rw, a64_pack_args, arch="aarch64"), ir_a64_path),
+            ("a64_single_bit_inst_flip",
+             build_elf64(a64_pack_fn, a64_flipped_pack, e_machine=183, e_flags=0), a64_pack_cert_rel, ir_a64_path),
+            ("a64_upper_bits_garbage_bug",
+             build_elf64(a64_pack_fn, bytes.fromhex("208000aac0035fd6"), e_machine=183, e_flags=0),
+             format_mc_cert("rel", a64_pack_fn, 0, a64_pack_rw, a64_pack_args, arch="aarch64"), ir_a64_path),
+            ("a64_missing_ret",
+             build_elf64(a64_pack_fn, a64_pack_code[:-4], e_machine=183, e_flags=0), a64_pack_cert_rel, ir_a64_path),
+            ("a64_unaligned_2byte_slice",
+             build_elf64(a64_pack_fn, a64_pack_code + b"\x00\x00", e_machine=183, e_flags=0), a64_pack_cert_rel, ir_a64_path),
+            ("a64_sp_access_add",
+             build_elf64(a64_pack_fn, bytes.fromhex("e0030091c0035fd6"), e_machine=183, e_flags=0),
+             format_mc_cert("rel", a64_pack_fn, 0, a64_pack_rw, a64_pack_args, arch="aarch64"), ir_a64_path),
+            ("a64_unmodeled_wfi_opcode",
+             build_elf64(a64_pack_fn, bytes.fromhex("7f2003d5c0035fd6"), e_machine=183, e_flags=0),
+             format_mc_cert("rel", a64_pack_fn, 0, a64_pack_rw, a64_pack_args, arch="aarch64"), ir_a64_path),
+            ("a64_corrupted_lrat_bad_hint",
+             build_elf64(a64_pack_fn, a64_pack_code, e_machine=183, e_flags=0),
+             format_mc_cert("rel", a64_pack_fn, 0, a64_pack_rw, a64_pack_args, "(add 999999 () (999998))", arch="aarch64"), ir_a64_path),
+            ("a64_swapped_args_pack",
+             build_elf64(a64_pack_fn, bytes.fromhex("e803002a008101aac0035fd6"), e_machine=183, e_flags=0),
+             format_mc_cert("rel", a64_pack_fn, 0, a64_pack_rw, a64_pack_args, arch="aarch64"), ir_a64_path),
+            ("a64_wrong_ret_width",
+             build_elf64(a64_pack_fn, a64_pack_code, e_machine=183, e_flags=0),
+             format_mc_cert("rel", a64_pack_fn, 0, 32, a64_pack_args, arch="aarch64"), ir_a64_path),
         ]
 
         for name, elf_bytes, cert_str, case_ir in adv_cases:
@@ -731,7 +980,7 @@ def main(argv: List[str]) -> int:
         live_count = 0
         if ns.live_corpus:
             live_count = run_live_corpus(bins, ns.live_corpus, tmpdir, lrat_cache)
-            print(f"PASS live corpus: {live_count} positive + relax rejection checks")
+            print(f"PASS dual-arch live corpus: {live_count} positive + relax rejection checks")
 
     dt = time.time() - t_start
     print(f"MC FORGED SUITE OK: {pos_passed} positive, {len(adv_cases)} adversarial ({dt:.2f}s)")

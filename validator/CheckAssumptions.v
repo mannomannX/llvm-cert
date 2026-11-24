@@ -26,6 +26,7 @@ From CertValidator Require
   CertValidator
   Elf64Spec
   Rv64Sem
+  A64CoreSem
   McFormat
   McValidator.
 
@@ -46,4 +47,7 @@ Check @CertValidator.Elf64Spec.elf64_extract_func_sound.
 Check @CertValidator.McFormat.parse_mc_cert_wf.
 Check @CertValidator.Rv64Sem.summarize_rv64_dag_wf.
 Check @CertValidator.Rv64Sem.summarize_rv64_dag_sound.
+Check @CertValidator.A64CoreSem.decode_a64_bytes_valid.
+Check @CertValidator.A64CoreSem.summarize_a64_dag_wf.
+Check @CertValidator.A64CoreSem.summarize_a64_dag_sound.
 Check @CertValidator.McValidator.validate_mc_tle_with_cert_str_sound.

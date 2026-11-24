@@ -45,6 +45,7 @@ From CertValidator Require
      CertValidator
      Elf64Spec
      Rv64Sem
+     A64CoreSem
      McFormat
      McValidator.
 
@@ -162,5 +163,8 @@ Separate Extraction ExtrOcamlIntConv TopLevel AstLib ParserHelper ShowAST ReprAS
   AlgRules.check_expr_refines AlgRules.check_expr_refines_with_lrat
   CertValidator.check_cert_cfg CertValidator.check_cert_cfg_with_lrat CertValidator.check_cert_defn
   CertValidator.validate_mcfg_with_cert CertValidator.validate_tle_pair_with_cert CertValidator.validate_tle_pair_with_cert_str
-  Elf64Spec.elf64_extract_func McFormat.parse_mc_cert Rv64Sem.decode_rv64_bytes
+  Elf64Spec.elf64_extract_func McFormat.parse_mc_cert
+  Rv64Sem.decode_rv64_bytes Rv64Sem.rv_eval_bytes_concrete Rv64Sem.rv_decode_bytes_ok
+  A64CoreSem.decode_a64_bytes A64CoreSem.a64_eval_bytes_concrete
+  A64CoreSem.a64_decode_word_ok A64CoreSem.a64_decode_bitmasks
   McValidator.validate_mc_tle_with_cert_str McValidator.emit_mc_dimacs_cnf_str (* QCVellvm *).
