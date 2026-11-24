@@ -1334,7 +1334,9 @@ def collect_rv64_smt_opcodes() -> List[Tuple[str, int, bytes]]:
     return uniq
 
 
-def run_smt_mutation_tests(z3: Z3Client, runner: s1.IsaOracleClient, isla_a64: IslaBatchClient, isla_rv: IslaBatchClient) -> None:
+def run_smt_mutation_tests(
+    z3: Z3Client, runner: s1.IsaOracleClient, isla: IslaBatchClient, target_arch: str
+) -> int:
     """Anti-vacuity self-tests: intentionally corrupted Rocq expressions MUST produce Z3 SAT counterexamples."""
     mut_specs = [
         ("A64_ADD_corrupt_rd", "a64", 0x91000C20, lambda r: {**r, "rd_expr": f"(bvadd {r['rd_expr']} (_ bv1 64))"}),
@@ -1346,14 +1348,16 @@ def run_smt_mutation_tests(z3: Z3Client, runner: s1.IsaOracleClient, isla_a64: I
         ("RV64_DIV_corrupt_quotient", "rv64", (0, bytes.fromhex("33c5c502")), lambda r: {**r, "rd_expr": f"(bvxor {r['rd_expr']} (_ bv1 64))"}),
         ("RV64_DIVW_swap_unsigned", "rv64", (0, bytes.fromhex("3bc5c502")), lambda r: {**r, "rd_expr": f"(bvor {r['rd_expr']} (_ bv1 64))"}),
     ]
-    for mname, arch, op_key, mutator in mut_specs:
+    selected = [spec for spec in mut_specs if spec[1] == target_arch]
+    assert selected, f"No mutation specs for target_arch={target_arch!r}"
+    for mname, arch, op_key, mutator in selected:
         if arch == "a64":
             w = op_key
             tok = s1.le32(w).hex()
             resp = runner.query(f"A64_SYM {w:08x}")
             assert resp.startswith("OK "), resp
             rocq = mutator(json.loads(resp[3:]))
-            traces, errs = isla_a64.query_many([tok])[tok]
+            traces, errs = isla.query_many([tok])[tok]
             assert not errs and traces
             failed = False
             try:
@@ -1371,7 +1375,7 @@ def run_smt_mutation_tests(z3: Z3Client, runner: s1.IsaOracleClient, isla_a64: I
             resp = runner.query(f"RV64_SYM {rvc} {tok}")
             assert resp.startswith("OK "), resp
             rocq = mutator(json.loads(resp[3:]))
-            traces, errs = isla_rv.query_many([tok])[tok]
+            traces, errs = isla.query_many([tok])[tok]
             assert not errs and traces
             failed = False
             try:
@@ -1383,7 +1387,8 @@ def run_smt_mutation_tests(z3: Z3Client, runner: s1.IsaOracleClient, isla_a64: I
                     raise
             if not failed:
                 raise AssertionError(f"Mutation test {mname} unexpectedly passed instead of catching mismatch!")
-    print(f"[sail-smt] Negative mutation self-tests: {len(mut_specs)}/{len(mut_specs)} counterexamples caught (`sat`)", flush=True)
+    print(f"[sail-smt] Negative mutation self-tests ({target_arch}): {len(selected)}/{len(selected)} counterexamples caught (`sat`)", flush=True)
+    return len(selected)
 
 
 # ---------------------------------------------------------------------------
@@ -1780,6 +1785,7 @@ def main(argv: Sequence[str]) -> int:
     ap = argparse.ArgumentParser(description="Stage-2 Official Sail Reference Oracle Verification Suite")
     ap.add_argument("--cache-dir", default="/sail-cache", help="Directory containing Sail/Isla cache")
     ap.add_argument("--bootstrap", action="store_true", help="Download/build missing pinned Sail & Isla artifacts")
+    ap.add_argument("--bootstrap-only", action="store_true", help="Only populate missing Sail/Isla cache artifacts and exit")
     ap.add_argument("--runner", default=None, help="Pre-built isa_oracle_runner binary")
     ap.add_argument("--skip-smt", action="store_true", help="Skip Part A Isla+Z3 SMT equivalence proofs")
     ap.add_argument("--skip-sim", action="store_true", help="Skip Part B Sail C-simulator concrete differential fuzzing")
@@ -1790,6 +1796,9 @@ def main(argv: Sequence[str]) -> int:
 
     repo_root = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
     paths = ensure_cache_ready(args.cache_dir, repo_root, args.bootstrap)
+    if args.bootstrap_only:
+        print(f"[bootstrap] Cache ready at {args.cache_dir}", flush=True)
+        return 0
 
     with tempfile.TemporaryDirectory(prefix="sail_oracle_") as tmpdir:
         runner_bin = args.runner if args.runner else s1.build_runner(repo_root, tmpdir)
@@ -1804,14 +1813,16 @@ def main(argv: Sequence[str]) -> int:
                 for req in ("arm_ir", "arm_toml", "rv_ir", "rv_toml", "isla_batch"):
                     if not os.path.exists(paths[req]):
                         raise RuntimeError(f"Missing cache artifact {paths[req]} (pass --bootstrap?)")
+
+                # Phase 1: AArch64 2^64 / 2^128 / 2^192 per-instruction SMT equivalence
+                a64_ops = collect_a64_smt_opcodes()
+                a64_toks = [s1.le32(w).hex() for _, w in a64_ops]
+                print(f"[sail-smt] Extracting A64 Isla symbolic traces ({len(a64_ops)} opcodes)...", flush=True)
                 z3 = Z3Client()
                 isla_a64 = IslaBatchClient(paths["isla_batch"], paths["arm_ir"], paths["arm_toml"], args.threads)
-                isla_rv = IslaBatchClient(paths["isla_batch"], paths["rv_ir"], paths["rv_toml"], args.threads)
                 try:
-                    # AArch64 2^64 / 2^128 / 2^192 per-instruction SMT equivalence
-                    a64_ops = collect_a64_smt_opcodes()
-                    a64_toks = [s1.le32(w).hex() for _, w in a64_ops]
                     a64_traces = isla_a64.query_many(a64_toks)
+                    print("[sail-smt] Verifying A64 SMT equivalence via Z3...", flush=True)
                     for (nm, w), tok in zip(a64_ops, a64_toks):
                         traces, errs = a64_traces[tok]
                         if errs:
@@ -1822,11 +1833,20 @@ def main(argv: Sequence[str]) -> int:
                         check_a64_opcode_smt(w, nm, json.loads(resp[3:]), traces, z3)
                         a64_smt_n += 1
                     print(f"[sail-smt] A64: {a64_smt_n} opcodes across all 20 constructors proven equivalent over 2^64/2^128/2^192 (unsat)", flush=True)
+                    run_smt_mutation_tests(z3, oracle, isla_a64, "a64")
+                finally:
+                    isla_a64.close()
+                    z3.close()
 
-                    # RISC-V RV64IM + 16-bit RVC per-instruction SMT equivalence
-                    rv_ops = collect_rv64_smt_opcodes()
-                    rv_toks = [bs.hex() for _, _, bs in rv_ops]
+                # Phase 2: RISC-V RV64IM + 16-bit RVC per-instruction SMT equivalence
+                rv_ops = collect_rv64_smt_opcodes()
+                rv_toks = [bs.hex() for _, _, bs in rv_ops]
+                print(f"[sail-smt] Extracting RV64/RVC Isla symbolic traces ({len(rv_ops)} opcodes)...", flush=True)
+                z3 = Z3Client()
+                isla_rv = IslaBatchClient(paths["isla_batch"], paths["rv_ir"], paths["rv_toml"], args.threads)
+                try:
                     rv_traces = isla_rv.query_many(rv_toks)
+                    print("[sail-smt] Verifying RV64/RVC SMT equivalence via Z3...", flush=True)
                     for (nm, rvc, bs), tok in zip(rv_ops, rv_toks):
                         traces, errs = rv_traces[tok]
                         if errs:
@@ -1837,11 +1857,8 @@ def main(argv: Sequence[str]) -> int:
                         check_rv64_opcode_smt(rvc, bs, nm, json.loads(resp[3:]), traces, z3)
                         rv64_smt_n += 1
                     print(f"[sail-smt] RV64/RVC: {rv64_smt_n} opcodes across all 7 constructors proven equivalent over 2^64/2^128 (unsat)", flush=True)
-
-                    # Negative mutation tests
-                    run_smt_mutation_tests(z3, oracle, isla_a64, isla_rv)
+                    run_smt_mutation_tests(z3, oracle, isla_rv, "rv64")
                 finally:
-                    isla_a64.close()
                     isla_rv.close()
                     z3.close()
 
@@ -1849,6 +1866,7 @@ def main(argv: Sequence[str]) -> int:
                 for req in ("armv9_sim", "rv_sim"):
                     if not os.path.exists(paths[req]):
                         raise RuntimeError(f"Missing simulator binary {paths[req]} (pass --bootstrap?)")
+                print("[sail-sim] Starting ARMv9_Sim & SailRV64_Sim concrete differential fuzzing...", flush=True)
                 a64_sim_n = run_armv9_sim_suite(oracle, paths["armv9_sim"], tmpdir, args.a64_sim_cases)
                 rv64_sim_n = run_sail_riscv_sim_suite(oracle, paths["rv_sim"], tmpdir, args.rv64_sim_cases)
 

@@ -120,16 +120,25 @@ jobs:
             echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           fi
 
-      - name: Run Stage-2 Sail Symbolic SMT + Sail C-Simulator Verification Suite
+      - name: Bootstrap pinned Sail/Isla artifacts (if cache miss)
+        if: steps.sail-oracle-cache.outputs.cache-hit != 'true'
         run: |
-          opam exec -- python3 -u scripts/run_sail_oracle_suite.py \
+          python3 -u scripts/run_sail_oracle_suite.py \
             --bootstrap \
-            --cache-dir "$HOME/.cache/sail-oracle" \
-            --threads 2
+            --bootstrap-only \
+            --cache-dir "$HOME/.cache/sail-oracle"
 
       - name: Persist Sail/Isla prebuilt cache
-        if: always() && steps.sail-oracle-cache.outputs.cache-hit != 'true' && hashFiles('~/.cache/sail-oracle/isla_batch') != ''
+        if: steps.sail-oracle-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/sail-oracle
           key: ${{ steps.sail-oracle-cache.outputs.cache-primary-key }}
+
+      - name: Run Stage-2 Sail Symbolic SMT + Sail C-Simulator Verification Suite
+        run: |
+          free -h
+          df -h / /tmp
+          opam exec -- python3 -u scripts/run_sail_oracle_suite.py \
+            --cache-dir "$HOME/.cache/sail-oracle" \
+            --threads 2
