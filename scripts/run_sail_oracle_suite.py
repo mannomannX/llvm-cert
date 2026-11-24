@@ -324,12 +324,13 @@ def ensure_cache_ready(cache_dir: str, repo_root: str, bootstrap: bool) -> Dict[
                 )
                 subprocess.run(["git", "-C", bdir, "checkout", "FETCH_HEAD"], check=True)
                 runner_src = os.path.join(repo_root, "scripts", "isa_oracle", "isla_batch_runner.rs")
-                shutil.copy2(runner_src, os.path.join(bdir, "src", "isla_batch.rs"))
+                os.makedirs(os.path.join(bdir, "src", "bin"), exist_ok=True)
+                shutil.copy2(runner_src, os.path.join(bdir, "src", "bin", "isla_batch.rs"))
                 cargo_toml = os.path.join(bdir, "Cargo.toml")
                 with open(cargo_toml, "r", encoding="utf-8") as f:
                     ct = f.read()
                 if 'name = "isla_batch"' not in ct:
-                    ct += '\n[[bin]]\nname = "isla_batch"\npath = "src/isla_batch.rs"\n'
+                    ct += '\n[[bin]]\nname = "isla_batch"\npath = "src/bin/isla_batch.rs"\n'
                     with open(cargo_toml, "w", encoding="utf-8") as f:
                         f.write(ct)
                 env = os.environ.copy()
