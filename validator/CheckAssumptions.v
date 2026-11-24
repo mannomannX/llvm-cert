@@ -47,7 +47,10 @@ Check @CertValidator.Elf64Spec.elf64_extract_func_sound.
 Check @CertValidator.McFormat.parse_mc_cert_wf.
 Check @CertValidator.Rv64Sem.summarize_rv64_dag_wf.
 Check @CertValidator.Rv64Sem.summarize_rv64_dag_sound.
+Check @CertValidator.Rv64Sem.rv_step_sym_oracle_sound.
+Check @CertValidator.Rv64Sem.sail_divrem_128_width_reduce.
 Check @CertValidator.A64CoreSem.decode_a64_bytes_valid.
 Check @CertValidator.A64CoreSem.summarize_a64_dag_wf.
 Check @CertValidator.A64CoreSem.summarize_a64_dag_sound.
+Check @CertValidator.A64CoreSem.a64_step_sym_oracle_sound.
 Check @CertValidator.McValidator.validate_mc_tle_with_cert_str_sound.

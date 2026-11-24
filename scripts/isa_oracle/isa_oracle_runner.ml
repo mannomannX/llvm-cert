@@ -27,6 +27,13 @@ let z_of_coq_n = function
   | BinNums.N0 -> Z.zero
   | BinNums.Npos p -> z_of_pos p
 
+let z_of_coq_z = function
+  | BinNums.Z0 -> Z.zero
+  | BinNums.Zpos p -> z_of_pos p
+  | BinNums.Zneg p -> Z.neg (z_of_pos p)
+
+let int_of_pos p = Z.to_int (z_of_pos p)
+
 let coq_n_of_int i = coq_n_of_z (Z.of_int i)
 
 let coq_n_of_hex s =
@@ -62,6 +69,112 @@ let bit_of_bool b = if b then 1 else 0
 
 let clean_err s =
   String.map (function '\n' | '\r' -> ' ' | c -> c) s
+
+let json_str s =
+  let buf = Buffer.create (String.length s + 8) in
+  Buffer.add_char buf '"';
+  String.iter
+    (function
+      | '"' -> Buffer.add_string buf "\\\""
+      | '\\' -> Buffer.add_string buf "\\\\"
+      | '\n' -> Buffer.add_string buf "\\n"
+      | '\r' -> Buffer.add_string buf "\\r"
+      | '\t' -> Buffer.add_string buf "\\t"
+      | c -> Buffer.add_char buf c)
+    s;
+  Buffer.add_char buf '"';
+  Buffer.contents buf
+
+let smt2_ident name =
+  let valid =
+    String.length name > 0
+    && String.for_all
+         (function
+           | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' | '.' -> true
+           | _ -> false)
+         name
+  in
+  if valid then name else "|" ^ name ^ "|"
+
+let smt2_bv_const w v =
+  let mask = Z.pred (Z.shift_left Z.one w) in
+  let mv = Z.logand v mask in
+  Printf.sprintf "(_ bv%s %d)" (Z.to_string mv) w
+
+let rec smt2_of_cert_expr (e : CertFormat.cert_expr) : string =
+  match e with
+  | CertFormat.CE_BvConst (w, n) ->
+      smt2_bv_const (int_of_pos w) (z_of_coq_n n)
+  | CertFormat.CE_Poison w ->
+      failwith (Printf.sprintf "unexpected CE_Poison(%d)" (int_of_pos w))
+  | CertFormat.CE_Var (nm, _w) ->
+      smt2_ident (string_of_coq_chars nm)
+  | CertFormat.CE_BinOp (op, _w, _fl, l, r) ->
+      let sop =
+        match op with
+        | CertFormat.CB_Add -> "bvadd"
+        | CertFormat.CB_Sub -> "bvsub"
+        | CertFormat.CB_Mul -> "bvmul"
+        | CertFormat.CB_UDiv -> "bvudiv"
+        | CertFormat.CB_SDiv -> "bvsdiv"
+        | CertFormat.CB_URem -> "bvurem"
+        | CertFormat.CB_SRem -> "bvsrem"
+        | CertFormat.CB_Shl -> "bvshl"
+        | CertFormat.CB_LShr -> "bvlshr"
+        | CertFormat.CB_AShr -> "bvashr"
+        | CertFormat.CB_And -> "bvand"
+        | CertFormat.CB_Or -> "bvor"
+        | CertFormat.CB_Xor -> "bvxor"
+      in
+      Printf.sprintf "(%s %s %s)" sop (smt2_of_cert_expr l) (smt2_of_cert_expr r)
+  | CertFormat.CE_ICmp (pred, _ss, _w, l, r) ->
+      let sl = smt2_of_cert_expr l in
+      let sr = smt2_of_cert_expr r in
+      let cond =
+        match pred with
+        | CertFormat.CIP_Eq -> Printf.sprintf "(= %s %s)" sl sr
+        | CertFormat.CIP_Ne -> Printf.sprintf "(not (= %s %s))" sl sr
+        | CertFormat.CIP_Ult -> Printf.sprintf "(bvult %s %s)" sl sr
+        | CertFormat.CIP_Ule -> Printf.sprintf "(bvule %s %s)" sl sr
+        | CertFormat.CIP_Ugt -> Printf.sprintf "(bvugt %s %s)" sl sr
+        | CertFormat.CIP_Uge -> Printf.sprintf "(bvuge %s %s)" sl sr
+        | CertFormat.CIP_Slt -> Printf.sprintf "(bvslt %s %s)" sl sr
+        | CertFormat.CIP_Sle -> Printf.sprintf "(bvsle %s %s)" sl sr
+        | CertFormat.CIP_Sgt -> Printf.sprintf "(bvsgt %s %s)" sl sr
+        | CertFormat.CIP_Sge -> Printf.sprintf "(bvsge %s %s)" sl sr
+      in
+      Printf.sprintf "(ite %s (_ bv1 1) (_ bv0 1))" cond
+  | CertFormat.CE_Cast (kind, fw_p, tw_p, _fl, inner) ->
+      let fw = int_of_pos fw_p in
+      let tw = int_of_pos tw_p in
+      let si = smt2_of_cert_expr inner in
+      (match kind with
+       | CertFormat.CCK_Trunc ->
+           if tw = fw then si
+           else Printf.sprintf "((_ extract %d 0) %s)" (tw - 1) si
+       | CertFormat.CCK_ZExt ->
+           if tw = fw then si
+           else Printf.sprintf "((_ zero_extend %d) %s)" (tw - fw) si
+       | CertFormat.CCK_SExt ->
+           if tw = fw then si
+           else Printf.sprintf "((_ sign_extend %d) %s)" (tw - fw) si)
+  | CertFormat.CE_Select (_w, c, t, f) ->
+      Printf.sprintf "(ite (= %s (_ bv1 1)) %s %s)"
+        (smt2_of_cert_expr c) (smt2_of_cert_expr t) (smt2_of_cert_expr f)
+  | CertFormat.CE_Freeze (_w, inner) ->
+      smt2_of_cert_expr inner
+  | CertFormat.CE_Let (bindings, body) ->
+      List.fold_right
+        (fun (nm, rhs) acc ->
+           Printf.sprintf "(let ((%s %s)) %s)"
+             (smt2_ident (string_of_coq_chars nm))
+             (smt2_of_cert_expr rhs) acc)
+        bindings
+        (smt2_of_cert_expr body)
+
+let json_opt_str = function
+  | Some s -> json_str s
+  | None -> "null"
 
 let handle_line line =
   let parts =
@@ -106,6 +219,59 @@ let handle_line line =
         Printf.printf "OK\n%!"
       else
         Printf.printf "ERR\n%!"
+  | [ "A64_SYM"; word_hex ] ->
+      (try
+         match A64CoreSem.a64_step_sym_oracle (coq_n_of_hex word_hex) with
+         | None -> Printf.printf "NONE\n%!"
+         | Some out ->
+             let rd_json, rd_expr_json =
+               match out.A64CoreSem.aso_rd_write with
+               | None -> ("null", "null")
+               | Some (rd, e) ->
+                   (Z.to_string (z_of_coq_n rd), json_str (smt2_of_cert_expr e))
+             in
+             let flags_json =
+               match out.A64CoreSem.aso_flags_write with
+               | None -> "null"
+               | Some (((fn, fz), fc), fv) ->
+                   Printf.sprintf "[%s,%s,%s,%s]"
+                     (json_str (smt2_of_cert_expr fn))
+                     (json_str (smt2_of_cert_expr fz))
+                     (json_str (smt2_of_cert_expr fc))
+                     (json_str (smt2_of_cert_expr fv))
+             in
+             let br_json =
+               json_opt_str (Option.map smt2_of_cert_expr out.A64CoreSem.aso_br_cond)
+             in
+             Printf.printf
+               "OK {\"rd\":%s,\"rd_expr\":%s,\"flags\":%s,\"pc_kind\":%s,\"br_cond\":%s,\"rel_bytes\":%s}\n%!"
+               rd_json rd_expr_json flags_json
+               (Z.to_string (z_of_coq_n out.A64CoreSem.aso_pc_kind))
+               br_json
+               (Z.to_string (z_of_coq_z out.A64CoreSem.aso_rel_bytes))
+       with Failure msg -> Printf.printf "ERR %s\n%!" (clean_err msg))
+  | [ "RV64_SYM"; rvc_s; hex_bytes ] ->
+      (try
+         match Rv64Sem.rv_step_sym_oracle (bool_of_tok rvc_s) (bytes_of_hex hex_bytes) with
+         | None -> Printf.printf "NONE\n%!"
+         | Some out ->
+             let rd_json, rd_expr_json =
+               match out.Rv64Sem.rso_rd_write with
+               | None -> ("null", "null")
+               | Some (rd, e) ->
+                   (Z.to_string (z_of_coq_n rd), json_str (smt2_of_cert_expr e))
+             in
+             let br_json =
+               json_opt_str (Option.map smt2_of_cert_expr out.Rv64Sem.rso_br_cond)
+             in
+             Printf.printf
+               "OK {\"len\":%s,\"rd\":%s,\"rd_expr\":%s,\"pc_kind\":%s,\"br_cond\":%s,\"rel_bytes\":%s}\n%!"
+               (Z.to_string (z_of_coq_n out.Rv64Sem.rso_len))
+               rd_json rd_expr_json
+               (Z.to_string (z_of_coq_n out.Rv64Sem.rso_pc_kind))
+               br_json
+               (Z.to_string (z_of_coq_z out.Rv64Sem.rso_rel_bytes))
+       with Failure msg -> Printf.printf "ERR %s\n%!" (clean_err msg))
   | "RV64_EXEC" :: rvc_s :: fuel_s :: hex_bytes :: reg_toks ->
       let fuel = int_of_string fuel_s in
       let code = bytes_of_hex hex_bytes in

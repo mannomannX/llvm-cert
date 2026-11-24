@@ -180,6 +180,9 @@ jobs:
           Redirect "$PA_DIR/cert_val" Print Assumptions CertValidator.CertValidator.validate_tle_pair_with_cert_str_sound.
           Redirect "$PA_DIR/rv64_dag_sound" Print Assumptions CertValidator.Rv64Sem.summarize_rv64_dag_sound.
           Redirect "$PA_DIR/a64_dag_sound" Print Assumptions CertValidator.A64CoreSem.summarize_a64_dag_sound.
+          Redirect "$PA_DIR/rv64_sym_oracle" Print Assumptions CertValidator.Rv64Sem.rv_step_sym_oracle_sound.
+          Redirect "$PA_DIR/a64_sym_oracle" Print Assumptions CertValidator.A64CoreSem.a64_step_sym_oracle_sound.
+          Redirect "$PA_DIR/sail_divrem_bridge" Print Assumptions CertValidator.Rv64Sem.sail_divrem_128_width_reduce.
           Redirect "$PA_DIR/mc_val" Print Assumptions CertValidator.McValidator.validate_mc_tle_with_cert_str_sound.
           EOF
           (cd vellvm/src && opam exec -- rocq top -q -w none -R rocq Vellvm -R ../../passes CertPasses -R ../../validator CertValidator -batch -load-vernac-source "$PA_DIR/audit.v")
@@ -216,13 +219,13 @@ jobs:
               print(f"Unexpected upstream Vellvm 3.0 axioms: {sorted(vellvm_base - approved_vellvm3_classical)}", file=sys.stderr)
               sys.exit(1)
 
-          for zero_ax in ("aig_lrat", "dimacs_lrat", "elf64_extract", "mc_format_wf", "rv64_dag_wf", "a64_dag_wf"):
+          for zero_ax in ("aig_lrat", "dimacs_lrat", "elf64_extract", "mc_format_wf", "rv64_dag_wf", "a64_dag_wf", "sail_divrem_bridge"):
               axs = parse_axioms(zero_ax)
               if axs:
                   print(f"{zero_ax} must be 100% axiom-free, got: {sorted(axs)}", file=sys.stderr)
                   sys.exit(1)
 
-          for validator_thm in ("alg_rules", "cert_val", "rv64_dag_sound", "a64_dag_sound", "mc_val"):
+          for validator_thm in ("alg_rules", "cert_val", "rv64_dag_sound", "a64_dag_sound", "rv64_sym_oracle", "a64_sym_oracle", "mc_val"):
               axs = parse_axioms(validator_thm)
               extra = axs - (vellvm_base - {"Eqdep.Eq_rect_eq.eq_rect_eq"})
               if extra:

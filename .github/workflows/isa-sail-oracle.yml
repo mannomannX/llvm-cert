@@ -1,0 +1,135 @@
+name: Sail Formal ISA Reference Oracle CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "validator/A64CoreSem.v"
+      - "validator/Rv64Sem.v"
+      - "validator/CertFormat.v"
+      - "validator/CheckAssumptions.v"
+      - "vellvm/src/ml/extracted/Extract.v"
+      - "scripts/isa_oracle/**"
+      - "scripts/run_sail_oracle_suite.py"
+      - ".github/workflows/isa-sail-oracle.yml"
+  pull_request:
+    paths:
+      - "validator/A64CoreSem.v"
+      - "validator/Rv64Sem.v"
+      - "validator/CertFormat.v"
+      - "validator/CheckAssumptions.v"
+      - "vellvm/src/ml/extracted/Extract.v"
+      - "scripts/isa_oracle/**"
+      - "scripts/run_sail_oracle_suite.py"
+      - ".github/workflows/isa-sail-oracle.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  DUNE_CACHE: enabled
+  DUNE_CACHE_STORAGE_MODE: copy
+  OCAMLRUNPARAM: "s=2M,o=80"
+
+jobs:
+  sail-isa-oracle:
+    name: Stage-2 Sail Symbolic SMT + Sail C-Simulator Oracle (AArch64 & RV64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run static zero-Admitted & OCaml TCB gate
+        run: python3 scripts/verify_repo_integrity.py
+
+      - name: Set up OCaml 4.14 base switch
+        uses: ocaml/setup-ocaml@ff66428f72b64472e749b22e0ad4dded4b2ddca6 # v3.9.1
+        with:
+          ocaml-compiler: "4.14.x"
+          opam-pin: false
+          opam-repositories: |
+            rocq-released: https://rocq-prover.org/opam/released
+            default: https://opam.ocaml.org
+
+      - name: Restore compiled Rocq 9.1 & Vellvm opam dependencies
+        id: opam-deps-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: _opam
+          key: rocq91-opam-${{ runner.os }}-4.14-${{ hashFiles('vellvm/rocq-vellvm.opam') }}
+
+      - name: Install Rocq 9.1 & Vellvm dependencies (if cache miss)
+        run: |
+          if [ ! -x "_opam/bin/rocq" ]; then
+            opam install -y --deps-only ./vellvm/rocq-vellvm.opam -j$(nproc)
+          fi
+
+      - name: Cache Dune content-addressed build store
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/dune
+          key: vellvm-dune-${{ runner.os }}-${{ hashFiles('vellvm/src/ml/**') }}
+          restore-keys: |
+            vellvm-dune-${{ runner.os }}-
+
+      - name: Restore compiled Vellvm core .vo proof objects
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: vellvm/src/rocq
+          key: vellvm-core-vo-${{ runner.os }}-${{ hashFiles('vellvm/rocq-vellvm.opam', 'vellvm/src/_RocqProject', 'vellvm/src/rocq/**/*.v') }}
+
+      - name: Restore compiled CertPasses .vo proof objects
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: passes
+          key: vellvm-passes-vo-${{ runner.os }}-${{ hashFiles('vellvm/rocq-vellvm.opam', 'vellvm/src/_RocqProject', 'vellvm/src/rocq/**/*.v', 'passes/**/*.v') }}
+
+      - name: Restore compiled CertValidator .vo & extracted OCaml objects
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            validator
+            vellvm/src/ml/extracted
+          key: vellvm-validator-vo-${{ runner.os }}-${{ hashFiles('vellvm/rocq-vellvm.opam', 'vellvm/src/_RocqProject', 'vellvm/src/rocq/**/*.v', 'passes/**/*.v', 'validator/**/*.v', 'vellvm/src/ml/extracted/Extract.v') }}
+
+      - name: Build Rocq theories, extracted OCaml & libvellvm
+        run: |
+          opam exec -- make -C vellvm/src all -j2
+
+      - name: Restore cached Sail/Isla prebuilts & snapshots
+        id: sail-oracle-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/sail-oracle
+          key: sail-oracle-v1-${{ runner.os }}-${{ hashFiles('scripts/isa_oracle/isla_batch_runner.rs') }}-5416ef6b-71312d5-e9b5d945-d8b31014
+
+      - name: Install Z3 & Sail C/Rust build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends z3 libgmp-dev zlib1g-dev build-essential pkg-config
+          if ! command -v cargo >/dev/null 2>&1 && [ -x "$HOME/.cargo/bin/cargo" ]; then
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Run Stage-2 Sail Symbolic SMT + Sail C-Simulator Verification Suite
+        run: |
+          opam exec -- python3 -u scripts/run_sail_oracle_suite.py \
+            --bootstrap \
+            --cache-dir "$HOME/.cache/sail-oracle" \
+            --threads 2
+
+      - name: Persist Sail/Isla prebuilt cache
+        if: always() && steps.sail-oracle-cache.outputs.cache-hit != 'true' && hashFiles('~/.cache/sail-oracle/isla_batch') != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/sail-oracle
+          key: ${{ steps.sail-oracle-cache.outputs.cache-primary-key }}
