@@ -964,6 +964,64 @@ def main(argv: List[str]) -> int:
              format_mc_cert("rel", a64_pack_fn, 0, 32, a64_pack_args, arch="aarch64"), ir_a64_path),
         ]
 
+        # M3a adversarial stack-frame rejection cases (9 RV64 + 10 AArch64).
+        m3a_id64_rv_ir = os.path.join(tmpdir, "m3a_id64_rv.ll")
+        with open(m3a_id64_rv_ir, "w", encoding="utf-8") as f:
+            f.write(
+                'target datalayout = "e-m:e-p:64:64-i64:64-i128:128-n32:64-S128"\n'
+                'target triple = "riscv64-unknown-none-elf"\n'
+                'define dso_local i64 @id64(i64 %0, i64 %1) {\n'
+                '  ret i64 %0\n'
+                '}\n'
+            )
+        m3a_id64_a64_ir = os.path.join(tmpdir, "m3a_id64_a64.ll")
+        with open(m3a_id64_a64_ir, "w", encoding="utf-8") as f:
+            f.write(
+                'target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32"\n'
+                'target triple = "aarch64-unknown-none-elf"\n'
+                'define dso_local i64 @id64(i64 %0, i64 %1) {\n'
+                '  ret i64 %0\n'
+                '}\n'
+            )
+        id64_args = [("%0", 64, "none"), ("%1", 64, "none")]
+        rv_stk_adv = [
+            ("rv64_stk_unbalanced_sp",   "411122e4226421018280"),
+            ("rv64_stk_clobber_s0",      "411122e41304150041018280"),
+            ("rv64_stk_clobber_s1",      "930415008280"),
+            ("rv64_stk_oob_load",        "22658280"),
+            ("rv64_stk_oob_store",       "2ae48280"),
+            ("rv64_stk_unaligned_sd",    "41112332a1000335410041018280"),
+            ("rv64_stk_sp_above_sp0",    "41018280"),
+            ("rv64_stk_wrong_slot_load", "41112ae42ee0026541018280"),
+            ("rv64_stk_half_overwrite",  "41112ae42ec4226541018280"),
+        ]
+        for aname, ahex in rv_stk_adv:
+            adv_cases.append((
+                aname,
+                build_elf64("id64", bytes.fromhex(ahex), e_machine=243, e_flags=1),
+                format_mc_cert("rel", "id64", 1, 64, id64_args, arch="rv64"),
+                m3a_id64_rv_ir,
+            ))
+        a64_stk_adv = [
+            ("a64_stk_unbalanced_sp",     "ff8300d1f30b00f9f30b40f9ff430091c0035fd6"),
+            ("a64_stk_clobber_x19",       "ff4300d1f30300f913040091ff430091c0035fd6"),
+            ("a64_stk_clobber_x29",       "fd0300aac0035fd6"),
+            ("a64_stk_oob_load",          "e00740f9c0035fd6"),
+            ("a64_stk_oob_store",         "e00700f9c0035fd6"),
+            ("a64_stk_sp_above_sp0",      "ff430091c0035fd6"),
+            ("a64_stk_ldp_same_reg",      "ff4300d1e00700a9e00340a9ff430091c0035fd6"),
+            ("a64_stk_wb_alias",          "ff4300d1f30300f9738e40f8ff430091c0035fd6"),
+            ("a64_stk_wrong_slot_load",   "ff4300d1e00700f9e10300f9e00340f9ff430091c0035fd6"),
+            ("a64_stk_partial_overwrite", "ff4300d1e00700f9e10b00b9e00740f9ff430091c0035fd6"),
+        ]
+        for aname, ahex in a64_stk_adv:
+            adv_cases.append((
+                aname,
+                build_elf64("id64", bytes.fromhex(ahex), e_machine=183, e_flags=0),
+                format_mc_cert("rel", "id64", 0, 64, id64_args, arch="aarch64"),
+                m3a_id64_a64_ir,
+            ))
+
         for name, elf_bytes, cert_str, case_ir in adv_cases:
             ep = os.path.join(tmpdir, f"adv_{name}.elf")
             cp = os.path.join(tmpdir, f"adv_{name}.mc.cert")
@@ -976,6 +1034,133 @@ def main(argv: List[str]) -> int:
                 print(f"FAIL adversarial {name}: rcs={rcs}", file=sys.stderr)
                 return 1
         print(f"PASS {len(adv_cases)} adversarial forged-ELF/forged-MC rejection cases (native == bytecode parity)")
+
+        # M3a positive stack-frame & spill cases (prebuilt rel/exec + live clang -O0).
+        m3a_rv_mix_ir = os.path.join(tmpdir, "m3a_rv_mix.ll")
+        with open(m3a_rv_mix_ir, "w", encoding="utf-8") as f:
+            f.write(
+                'target datalayout = "e-m:e-p:64:64-i64:64-i128:128-n32:64-S128"\n'
+                'target triple = "riscv64-unknown-none-elf"\n'
+                'define dso_local signext i32 @stack_frame_mix_i32(i32 noundef signext %0, i32 noundef signext %1, i32 noundef signext %2, i32 noundef signext %3) local_unnamed_addr {\n'
+                '  %5 = xor i32 %3, %0\n'
+                '  %6 = and i32 %5, 1\n'
+                '  %7 = icmp eq i32 %6, 0\n'
+                '  br i1 %7, label %10, label %8\n'
+                '8:\n'
+                '  %9 = shl i32 %2, 3\n'
+                '  br label %12\n'
+                '10:\n'
+                '  %11 = lshr i32 %3, 5\n'
+                '  br label %12\n'
+                '12:\n'
+                '  %13 = phi i32 [ %9, %8 ], [ %11, %10 ]\n'
+                '  %14 = and i32 %1, 16711935\n'
+                '  %15 = xor i32 %14, %13\n'
+                '  %16 = xor i32 %15, %0\n'
+                '  %17 = xor i32 %16, 1431655765\n'
+                '  ret i32 %17\n'
+                '}\n'
+            )
+        m3a_a64_mix_ir = os.path.join(tmpdir, "m3a_a64_mix.ll")
+        with open(m3a_a64_mix_ir, "w", encoding="utf-8") as f:
+            f.write(
+                'target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32"\n'
+                'target triple = "aarch64-unknown-none-elf"\n'
+                'define dso_local i32 @stack_frame_mix_i32(i32 noundef %0, i32 noundef %1, i32 noundef %2, i32 noundef %3) local_unnamed_addr {\n'
+                '  %5 = xor i32 %3, %0\n'
+                '  %6 = and i32 %5, 1\n'
+                '  %7 = icmp eq i32 %6, 0\n'
+                '  br i1 %7, label %10, label %8\n'
+                '8:\n'
+                '  %9 = shl i32 %2, 3\n'
+                '  br label %12\n'
+                '10:\n'
+                '  %11 = lshr i32 %3, 5\n'
+                '  br label %12\n'
+                '12:\n'
+                '  %13 = phi i32 [ %9, %8 ], [ %11, %10 ]\n'
+                '  %14 = and i32 %1, 16711935\n'
+                '  %15 = xor i32 %14, %13\n'
+                '  %16 = xor i32 %15, %0\n'
+                '  %17 = xor i32 %16, 1431655765\n'
+                '  ret i32 %17\n'
+                '}\n'
+            )
+        m3a_rv_hex = "397106fc22f880002324a4fe2322b4fe2320c4fe232ed4fc032584fe232ca4fc032544fe232aa4fc032504fe2328a4fc0325c4fd2326a4fc032584fd836544fd3706ff001306f60ff18d2d8db7555555938555552d8d2324a4fc032584fd8325c4fc2d8d058901cd09a0032584fc832504fd9b9535002d8d2326a4fe11a8032584fc8365c4fc95812d8d2326a4fe09a00325c4fee270427421618280"
+        m3a_a64_hex = "ffc300d1e02b00b9e12700b9e22300b9e31f00b9e82b40b9e81b00b9e82740b9e81700b9e82340b9e81300b9e81f40b9e80f00b9e81b40b908f10052e91740b9299d00120801094ae80b00b9e81b40b9e90f40b90801094ae800003601000014e80b40b9e91340b9080d094ae82f00b906000014e80b40b9e90f40b90815494ae82f00b901000014e02f40b9ffc30091c0035fd6"
+        for m_arch, m_rvc, m_mach, m_fl, m_ir, m_hex, m_ext in [
+            ("rv64", 1, 243, 1, m3a_rv_mix_ir, m3a_rv_hex, "signext"),
+            ("aarch64", 0, 183, 0, m3a_a64_mix_ir, m3a_a64_hex, "none"),
+        ]:
+            m_args = [(f"%{i}", 32, m_ext) for i in range(4)]
+            m_rel = os.path.join(tmpdir, f"m3a_pre_{m_arch}.rel.elf")
+            with open(m_rel, "wb") as f:
+                f.write(build_elf64("stack_frame_mix_i32", bytes.fromhex(m_hex), e_type=1, e_machine=m_mach, e_flags=m_fl))
+            m_lrat = emit_and_solve_lrat(bins[0], m_arch, m_rvc, m_ir, m_rel, "stack_frame_mix_i32", 32, m_args, tmpdir)
+            for m_kind, m_et in [("rel", 1), ("exec", 2)]:
+                m_ep = os.path.join(tmpdir, f"m3a_pre_{m_arch}.{m_kind}.elf")
+                if m_et != 1:
+                    with open(m_ep, "wb") as f:
+                        f.write(build_elf64("stack_frame_mix_i32", bytes.fromhex(m_hex), e_type=m_et, e_machine=m_mach, e_flags=m_fl))
+                else:
+                    m_ep = m_rel
+                m_cp = os.path.join(tmpdir, f"m3a_pre_{m_arch}.{m_kind}.mc.cert")
+                with open(m_cp, "w", encoding="utf-8") as f:
+                    f.write(format_mc_cert(m_kind, "stack_frame_mix_i32", m_rvc, 32, m_args, m_lrat, arch=m_arch))
+                for b in bins:
+                    res = run_cmd([b, "--check-mc", "--ir", m_ir, "--elf", m_ep, "--cert", m_cp])
+                    if res.returncode != 0:
+                        print(f"FAIL M3a prebuilt {m_arch} {m_kind} ({b}): {res.stderr}", file=sys.stderr)
+                        return 1
+                pos_passed += 1
+
+        clang_22 = "/usr/lib/llvm-22/bin/clang"
+        lld_22 = "/usr/lib/llvm-22/bin/ld.lld"
+        if os.path.exists(clang_22) and os.path.exists(lld_22):
+            m3a_c_path = os.path.join(tmpdir, "m3a_stack_corpus.c")
+            with open(m3a_c_path, "w", encoding="utf-8") as f:
+                f.write(
+                    "#include <stdint.h>\n"
+                    "__attribute__((noinline))\n"
+                    "int32_t stack_frame_mix_i32(int32_t a, int32_t b, int32_t c, int32_t d) {\n"
+                    "    uint32_t ua = (uint32_t)a, ub = (uint32_t)b, uc = (uint32_t)c, ud = (uint32_t)d;\n"
+                    "    uint32_t t = (ua ^ 0x55555555U) ^ (ub & 0x00FF00FFU);\n"
+                    "    if ((ua ^ ud) & 1U) return (int32_t)(t ^ (uc << 3));\n"
+                    "    else return (int32_t)(t ^ (ud >> 5));\n"
+                    "}\n"
+                    "__attribute__((noinline))\n"
+                    "int32_t spill_mix_i32(int32_t a, int32_t b, int32_t c, int32_t d,\n"
+                    "                      int32_t e, int32_t f, int32_t g, int32_t h) {\n"
+                    "    uint32_t x = ((uint32_t)a ^ (uint32_t)b) ^ (((uint32_t)c << 1) ^ ((uint32_t)d >> 2));\n"
+                    "    uint32_t y = ((uint32_t)e ^ (uint32_t)f) ^ (((uint32_t)g << 3) ^ ((uint32_t)h >> 4));\n"
+                    "    uint32_t z = (((uint32_t)a << 2) ^ ((uint32_t)e >> 3)) ^ (((uint32_t)d >> 1) ^ ((uint32_t)h << 5));\n"
+                    "    return (int32_t)(x ^ y ^ z);\n"
+                    "}\n"
+                )
+            for m_arch, m_triple, m_flags, m_ldm, m_ldx, m_rvc, m_ext in [
+                ("rv64", "riscv64-unknown-none-elf", ["-march=rv64imc", "-mno-relax", "-mabi=lp64"], "elf64lriscv", ["--no-relax"], 1, "signext"),
+                ("aarch64", "aarch64-unknown-none-elf", [], "aarch64linux", [], 0, "none"),
+            ]:
+                m_ll = os.path.join(tmpdir, f"m3a_live_{m_arch}.ll")
+                m_o = os.path.join(tmpdir, f"m3a_live_{m_arch}.o")
+                m_elf = os.path.join(tmpdir, f"m3a_live_{m_arch}.elf")
+                subprocess.run([clang_22, "--target=" + m_triple, *m_flags, "-O2", "-fno-builtin", "-S", "-emit-llvm", m3a_c_path, "-o", m_ll], check=True)
+                subprocess.run([clang_22, "--target=" + m_triple, *m_flags, "-O0", "-fno-builtin", "-c", m3a_c_path, "-o", m_o], check=True)
+                subprocess.run([lld_22, "-m", m_ldm, *m_ldx, "-e", "stack_frame_mix_i32", m_o, "-o", m_elf], check=True)
+                for fn_m, n_args in [("stack_frame_mix_i32", 4), ("spill_mix_i32", 8)]:
+                    m_args = [(f"%{i}", 32, m_ext) for i in range(n_args)]
+                    m_lrat = emit_and_solve_lrat(bins[0], m_arch, m_rvc, m_ll, m_o, fn_m, 32, m_args, tmpdir)
+                    for m_kind, m_ep in [("rel", m_o), ("exec", m_elf)]:
+                        m_cp = os.path.join(tmpdir, f"m3a_live_{m_arch}_{fn_m}.{m_kind}.mc.cert")
+                        with open(m_cp, "w", encoding="utf-8") as f:
+                            f.write(format_mc_cert(m_kind, fn_m, m_rvc, 32, m_args, m_lrat, arch=m_arch))
+                        for b in bins:
+                            res = run_cmd([b, "--check-mc", "--ir", m_ll, "--elf", m_ep, "--cert", m_cp])
+                            if res.returncode != 0:
+                                print(f"FAIL M3a live {m_arch} {fn_m} {m_kind} ({b}): {res.stderr}", file=sys.stderr)
+                                return 1
+                        pos_passed += 1
+        print(f"PASS M3a stack-frame & spill suite ({pos_passed} total positive checks)")
 
         live_count = 0
         if ns.live_corpus:

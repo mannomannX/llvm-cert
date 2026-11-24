@@ -118,6 +118,7 @@
 ../../validator/AlgRules.v
 ../../validator/CertValidator.v
 ../../validator/Elf64Spec.v
+../../validator/McFrameMem.v
 ../../validator/Rv64Sem.v
 ../../validator/A64CoreSem.v
 ../../validator/McFormat.v

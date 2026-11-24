@@ -441,6 +441,7 @@ def run_qemu_rv64_batch(
         words.extend(rv_load_imm32(18, in_vaddr))
         words.extend(rv_load_imm32(19, out_vaddr))
         words.extend(rv_load_imm32(20, out_vaddr))
+        words.append(rv_itype(0x13, 0, 22, 2, 0))  # addi x22, sp, 0
         code_buf = bytearray().join(le32(w) for w in words)
 
         for snip, _, is_ret in cases:
@@ -450,7 +451,7 @@ def run_qemu_rv64_batch(
             for idx, r in enumerate(RV64_TRACKED_REGS):
                 pre.append(rv_itype(0x03, 3, r, 18, idx * 8))  # ld r, off(x18)
             pre.append(rv_itype(0x13, 0, 18, 18, rec_size))     # addi x18, x18, 136
-            for cr in (1, 3, 4, 22, 23, 24, 25, 26, 27):
+            for cr in (1, 3, 4, 23, 24, 25, 26, 27):
                 pre.append(rv_itype(0x13, 0, cr, 0, 0))         # addi cr, x0, 0
             code_buf.extend(b"".join(le32(w) for w in pre))
             if is_ret:
@@ -468,7 +469,7 @@ def run_qemu_rv64_batch(
             else:
                 code_buf.extend(snip)
             # Align back to 4B? Not strictly needed on RVC-enabled RV64, all subsequent are 4B.
-            post: List[int] = []
+            post: List[int] = [rv_itype(0x13, 0, 2, 22, 0)]    # addi sp, x22, 0
             for idx, r in enumerate(RV64_TRACKED_REGS):
                 post.append(rv_sd(r, 19, idx * 8))              # sd r, off(x19)
             post.append(rv_itype(0x13, 0, 19, 19, rec_size))    # addi x19, x19, 136
@@ -689,6 +690,7 @@ def compare_rv64_batch(
             rc_code = code if is_ret else (code + rv_ret)
             fuel = max(4, (len(rc_code) // 2) * 3 + 2)
             full32 = [0] * 32
+            full32[2] = 0x100000  # valid aligned stack base (>= mc_frame_cap = 65536) for RV64 memory ops
             for idx, r in enumerate(RV64_TRACKED_REGS):
                 full32[r] = regs17[idx] & MASK64
             rhex = " ".join(f"{v:016x}" for v in full32)
@@ -876,23 +878,108 @@ def run_a64_constructors_and_edges(
     ret_snip = le32(0xD503201F) + le32(a64_addsub_imm(1, 0, 0, 0, 77, 1, 0)) + le32(a64_ret())
     cases.append(("nop_add_ret", ret_snip, regs_ab(100, 0), (0, 0, 0, 0), True))
 
-    # Reject SP (r=31 where hardware reads/writes SP instead of XZR); allow XZR on S=1/TST
+    # Verify M3a SP rules: 64-bit non-flag AddSubImm SP reads/writes allowed; 32-bit/flag/UNPREDICTABLE rejected
     sp_checks = [
-        (a64_addsub_imm(1, 0, 0, 0, 16, 31, 0), False),  # add x0, sp, #16
-        (a64_addsub_imm(1, 1, 0, 0, 16, 1, 31), False),  # sub sp, x1, #16
-        (a64_addsub_ext(1, 0, 0, 3, 2, 0, 31, 0), False),# add x0, sp, w2, uxtw
-        (a64_addsub_ext(1, 0, 0, 3, 2, 0, 1, 31), False),# add sp, x1, w2, uxtw
-        (a64_logical_imm(1, 1, 1, 0, 0, 1, 31), False),  # orr sp, x1, #1
-        (a64_addsub_imm(1, 1, 1, 0, 16, 31, 0), False),  # cmp sp, #16
-        (a64_addsub_imm(1, 1, 1, 0, 16, 1, 31), True),   # cmp x1, #16 (rd=xzr)
-        (a64_logical_imm(1, 3, 1, 0, 0, 1, 31), True),   # tst x1, #1 (rd=xzr)
+        (a64_addsub_imm(1, 0, 0, 0, 16, 31, 0), True),    # add x0, sp, #16
+        (a64_addsub_imm(1, 1, 0, 0, 16, 1, 31), True),    # sub sp, x1, #16
+        (a64_addsub_imm(1, 1, 0, 0, 16, 31, 31), True),   # sub sp, sp, #16
+        (a64_addsub_imm(0, 0, 0, 0, 16, 31, 0), False),   # add w0, wsp, #16
+        (a64_addsub_imm(0, 1, 0, 0, 16, 1, 31), False),   # sub wsp, w1, #16
+        (a64_addsub_ext(1, 0, 0, 3, 2, 0, 31, 0), False), # add x0, sp, w2, uxtw
+        (a64_addsub_ext(1, 0, 0, 3, 2, 0, 1, 31), False), # add sp, x1, w2, uxtw
+        (a64_logical_imm(1, 1, 1, 0, 0, 1, 31), False),   # orr sp, x1, #1
+        (a64_addsub_imm(1, 1, 1, 0, 16, 31, 0), False),   # cmp sp, #16
+        (a64_addsub_imm(1, 1, 1, 0, 16, 1, 31), True),    # cmp x1, #16 (rd=xzr)
+        (a64_logical_imm(1, 3, 1, 0, 0, 1, 31), True),    # tst x1, #1 (rd=xzr)
+        (0xA94003E0, False),                              # ldp x0, x0, [sp] (UNPREDICTABLE Rt==Rt2)
+        (0xA9C10420, False),                              # ldp x0, x1, [x1, #16]! (writeback alias)
+        (0xF8408E73, False),                              # ldr x19, [x19, #8]! (writeback alias)
     ]
     sp_dec = oracle.a64_decode_batch([w for w, _ in sp_checks])
     for (w, want), got in zip(sp_checks, sp_dec):
         if got != want:
             raise AssertionError(f"A64 SP/XZR decode mismatch for 0x{w:08x}: expected {want}, got {got}")
 
+    cases.extend(build_a64_stack_cases())
     return compare_a64_batch(oracle, qemu_bin, tmpdir, "All-20-Constructors-Edges", cases)
+
+
+def build_a64_stack_cases() -> List[Tuple[str, bytes, Sequence[int], Tuple[int, int, int, int], bool]]:
+    """Concrete M3a AArch64 stack-frame differential cases (never leaking raw sp)."""
+    def uoff(size: int, opc: int, rt: int, rn: int, off_bytes: int, scale: int) -> int:
+        assert off_bytes % scale == 0
+        return (size << 30) | (57 << 24) | (opc << 22) | (((off_bytes // scale) & 0xFFF) << 10) | ((rn & 31) << 5) | (rt & 31)
+
+    def unsc(size: int, opc: int, mode_idx: int, rt: int, rn: int, simm9: int) -> int:
+        return (size << 30) | (56 << 24) | (opc << 22) | ((simm9 & 0x1FF) << 12) | (mode_idx << 10) | ((rn & 31) << 5) | (rt & 31)
+
+    def pair(is64: int, is_ld: int, am: int, rt: int, rt2: int, rn: int, off_bytes: int) -> int:
+        opc = 2 if is64 else 0
+        sc = 8 if is64 else 4
+        assert off_bytes % sc == 0
+        imm7 = (off_bytes // sc) & 0x7F
+        return (opc << 30) | (10 << 26) | (am << 23) | (is_ld << 22) | (imm7 << 15) | ((rt2 & 31) << 10) | ((rn & 31) << 5) | (rt & 31)
+
+    def r16(x0: int = 0, x1: int = 0, x2: int = 0, x3: int = 0) -> List[int]:
+        r = [0] * 16
+        r[0], r[1], r[2], r[3] = x0 & MASK64, x1 & MASK64, x2 & MASK64, x3 & MASK64
+        return r
+
+    sub_sp32 = a64_addsub_imm(1, 1, 0, 0, 32, 31, 31)
+    add_sp32 = a64_addsub_imm(1, 0, 0, 0, 32, 31, 31)
+    out: List[Tuple[str, bytes, Sequence[int], Tuple[int, int, int, int], bool]] = []
+
+    # 1. 64-bit / 32-bit str & ldr unsigned offset + fp-arith + ret
+    c1 = b"".join(le32(w) for w in [
+        sub_sp32,
+        uoff(3, 0, 0, 31, 16, 8),        # str x0, [sp, #16]
+        uoff(2, 0, 1, 31, 8, 4),         # str w1, [sp, #8]
+        a64_addsub_imm(1, 0, 0, 0, 16, 31, 4),  # add x4, sp, #16
+        uoff(3, 1, 2, 4, 0, 8),          # ldr x2, [x4]
+        uoff(2, 1, 3, 31, 8, 4),         # ldr w3, [sp, #8]
+        uoff(2, 2, 5, 31, 8, 4),         # ldrsw x5, [sp, #8]
+        a64_movz(1, 4, 0xCAFE, 0),       # clear x4 (never leak raw sp)
+        add_sp32,
+        a64_ret(),
+    ])
+    out.append(("stk_uoff_fp_64_32_sw", c1, r16(0xFEDCBA9876543210, 0x8000007F), (0, 0, 0, 0), True))
+
+    # 2. Byte & halfword signed/unsigned loads/stores on sign-bit edge values
+    c2 = b"".join(le32(w) for w in [
+        sub_sp32,
+        uoff(0, 0, 0, 31, 1, 1),         # strb w0, [sp, #1]
+        uoff(1, 0, 1, 31, 4, 2),         # strh w1, [sp, #4]
+        uoff(0, 1, 2, 31, 1, 1),         # ldrb w2, [sp, #1]
+        uoff(0, 2, 3, 31, 1, 1),         # ldrsb x3, [sp, #1]
+        uoff(0, 3, 4, 31, 1, 1),         # ldrsb w4, [sp, #1]
+        uoff(1, 1, 5, 31, 4, 2),         # ldrh w5, [sp, #4]
+        uoff(1, 2, 6, 31, 4, 2),         # ldrsh x6, [sp, #4]
+        uoff(1, 3, 7, 31, 4, 2),         # ldrsh w7, [sp, #4]
+        add_sp32,
+        a64_ret(),
+    ])
+    out.append(("stk_bh_ext_edges", c2, r16(0x12340080, 0xABCD8001), (0, 0, 0, 0), True))
+
+    # 3. Unscaled (STUR/LDUR), Pre-index, and Post-index STR/LDR
+    c3 = b"".join(le32(w) for w in [
+        unsc(3, 0, 3, 0, 31, -16),       # str x0, [sp, #-16]!
+        unsc(3, 0, 0, 1, 31, 8),         # stur x1, [sp, #8]
+        unsc(3, 1, 0, 2, 31, 8),         # ldur x2, [sp, #8]
+        unsc(3, 1, 1, 3, 31, 16),        # ldr x3, [sp], #16
+        a64_ret(),
+    ])
+    out.append(("stk_unsc_pre_post", c3, r16(0x1122334455667788, 0x99AABBCCDDEEFF00), (0, 0, 0, 0), True))
+
+    # 4. Pair (STP/LDP) 64-bit & 32-bit PreIndex / SignedOffset / PostIndex
+    c4 = b"".join(le32(w) for w in [
+        pair(1, 0, 3, 0, 1, 31, -32),    # stp x0, x1, [sp, #-32]!
+        pair(0, 0, 2, 2, 3, 31, 16),     # stp w2, w3, [sp, #16]
+        pair(0, 1, 2, 4, 5, 31, 16),     # ldp w4, w5, [sp, #16]
+        pair(1, 1, 1, 6, 7, 31, 32),     # ldp x6, x7, [sp], #32
+        a64_ret(),
+    ])
+    out.append(("stk_stp_ldp_modes", c4, r16(0x1020304050607080, 0xFEDCBA9876543210, 0xDEADBEEF, 0xCAFEBABE), (0, 0, 0, 0), True))
+    return out
 
 
 def rand_val64(rng: random.Random) -> int:
@@ -1022,14 +1109,21 @@ def run_a64_decoder_fuzz(
         top6 = (w >> 26) & 0x3F
         op24_8 = (w >> 24) & 0xFF
         op25_6 = (w >> 25) & 0x3F
-        # Skip branches & ret (PC-relative / link-reg control flow) and system hints
+        op26_4 = (w >> 26) & 0xF
+        op24_6 = (w >> 24) & 0x3F
+        # Skip branches, ret, and memory ops for QEMU execution (100% still checked by llvm-objdump)
         if top6 == 5 or (op24_8 == 84 and ((w >> 4) & 1) == 0) or op25_6 in (26, 27):
+            continue
+        if op26_4 == 10 or op24_6 in (56, 57):
             continue
         if ((w >> 10) & 0x3FFFFF) == 3512256:  # ret
             continue
         rd, rn, rm, ra = w & 31, (w >> 5) & 31, (w >> 16) & 31, (w >> 10) & 31
-        # Mask non-31 register slots cleanly to 0..15 by rebuilding safe subset OR test if safe
+        # Skip 64-bit non-flag AddSubImm reading/writing SP in QEMU fuzz loop (host SP differs from Rocq sp0=0)
         op24_5 = (w >> 24) & 0x1F
+        if op24_5 == 17 and ((w >> 31) & 1) == 1 and ((w >> 29) & 1) == 0 and (rd == 31 or rn == 31):
+            continue
+        # Mask non-31 register slots cleanly to 0..15 by rebuilding safe subset OR test if safe
         uses_rm = op24_5 in (10, 11, 27) or ((w >> 21) & 0xFF) in (210, 212, 214) or ((w >> 23) & 0x3F) == 39
         uses_ra = op24_5 == 27
         if (rd >= 16 and rd != 31) or (rn >= 16 and rn != 31):
@@ -1154,6 +1248,51 @@ def run_rv64_constructors_and_edges(
     cases.append(("c.beqz_not", 1, le16(0xC111) + le16(rvc_ci(2, 10, 9, 1)) + le16(0xA011) + le16(rvc_ci(2, 10, 5, 1)), mk_regs(1), False))
     cases.append(("c.ret", 1, le16(rvc_ci(2, 10, 19, 1)) + le16(0x8082), mk_regs(0), True))
 
+    # M3a RV64IM + RVC concrete stack-frame differential cases (never leaking raw sp).
+    def rv_stype(funct3: int, rs1: int, rs2: int, imm: int) -> int:
+        u = imm & 0xFFF
+        return (((u >> 5) & 0x7F) << 25) | ((rs2 & 31) << 20) | ((rs1 & 31) << 15) | (funct3 << 12) | ((u & 0x1F) << 7) | 0x23
+
+    rv_stk_32_64_bh = b"".join(le32(w) for w in [
+        *rv_load_imm32(10, 0xFEDCBA98),
+        *rv_load_imm32(11, 0x80008081),
+        rv_itype(0x13, 0, 2, 2, -32),   # addi sp, sp, -32
+        rv_stype(3, 2, 10, 16),          # sd a0, 16(sp)
+        rv_stype(2, 2, 11, 8),           # sw a1, 8(sp)
+        rv_stype(1, 2, 11, 4),           # sh a1, 4(sp)
+        rv_stype(0, 2, 11, 1),           # sb a1, 1(sp)
+        rv_itype(0x03, 3, 12, 2, 16),    # ld a2, 16(sp)
+        rv_itype(0x03, 2, 13, 2, 8),     # lw a3, 8(sp)
+        rv_itype(0x03, 6, 14, 2, 8),     # lwu a4, 8(sp)
+        rv_itype(0x03, 1, 15, 2, 4),     # lh a5, 4(sp)
+        rv_itype(0x03, 5, 5, 2, 4),      # lhu t0, 4(sp)
+        rv_itype(0x03, 0, 6, 2, 1),      # lb t1, 1(sp)
+        rv_itype(0x03, 4, 7, 2, 1),      # lbu t2, 1(sp)
+        rv_itype(0x13, 0, 2, 2, 32),     # addi sp, sp, 32
+        0x00008067,                      # ret
+    ])
+    cases.append(("rv64_stk_mem_widths_signs", 0, rv_stk_32_64_bh, mk_regs(0), True))
+
+    rvc_stk_ops = (
+        b"".join(le32(w) for w in rv_load_imm32(10, 0xCAFE8001))
+        + b"".join(le16(h) for h in [
+            0x7139,  # c.addi16sp sp, -64
+            0xE42A,  # c.sdsp a0, 8(sp)
+            0x65A2,  # c.ldsp a1, 8(sp)
+            0xC82A,  # c.swsp a0, 16(sp)
+            0x4642,  # c.lwsp a2, 16(sp)
+            0x0814,  # c.addi4spn a3, sp, 16
+            0xE68C,  # c.sd a1, 8(a3)
+            0x6698,  # c.ld a4, 8(a3)
+            0xC288,  # c.sw a0, 0(a3)
+            0x429C,  # c.lw a5, 0(a3)
+            0x4681,  # c.li a3, 0 (clear frame ptr; never leak raw sp)
+            0x6121,  # c.addi16sp sp, 64
+            0x8082,  # c.ret
+        ])
+    )
+    cases.append(("rvc_stk_c_sp_4spn", 1, rvc_stk_ops, mk_regs(0), True))
+
     return compare_rv64_batch(oracle, qemu_bin, tmpdir, "RV64-All-Constructors-Edges", cases)
 
 
@@ -1255,7 +1394,7 @@ def run_rv64_decoder_fuzz(
     for c in acc32:
         w = struct.unpack("<I", c)[0]
         opc = w & 0x7F
-        if opc in (0x63, 0x6F, 0x67):  # branches / jal / jalr
+        if opc in (0x03, 0x23, 0x63, 0x6F, 0x67):  # loads / stores / branches / jal / jalr
             continue
         rd, rs1, rs2 = (w >> 7) & 31, (w >> 15) & 31, (w >> 20) & 31
         if rd not in tracked_set:

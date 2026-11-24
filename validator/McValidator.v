@@ -62,6 +62,7 @@ From CertValidator Require Import
   AlgRules
   CertValidator
   Elf64Spec
+  McFrameMem
   Rv64Sem
   A64CoreSem
   McFormat.
@@ -2028,15 +2029,17 @@ Theorem validate_mc_tle_with_cert_str_sound :
           exists insts,
             decode_rv64_bytes (mc_rvc mcert) (efs_bytes sl) = inr insts /\
             let rv_fuel := S (2 * List.length insts) in
-            forall (vs : list (@dvalue Pa)) rf0,
+            forall (vs : list (@dvalue Pa)) rf0 mstk0,
               Forall2 dvalue_has_dtyp vs arg_dtys ->
               Forall2 (fun attrs v => existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
                       s_pattrs vs ->
+              mc_valid_sp0 (rv_read_reg 2%N rf0) ->
               rv_rf_matches_args (build_param_env ir_pnames vs) (mc_args mcert) rf0 ->
-              exists sigma_ir rf_end,
+              exists sigma_ir rf_end mstk_end,
                 wf_draw_strat sigma_ir /\
-                rv_exec rv_fuel insts 0%N rf0 = Some rf_end /\
+                rv_exec_mem rv_fuel insts 0%N (rv_read_reg 2%N rf0) rf0 mstk0 = Some (rf_end, mstk_end) /\
                 rv_callee_saved_preserved rf0 rf_end /\
+                rf_end 1%N = rf0 1%N /\
                 (cfg_steps_to_ub sigma_ir (init_cfg_locals (args ir_cfg) vs) (denote_cfg ir_cfg None) \/
                  exists sigma_ir' env_out dv_ir,
                    cfg_steps_to_ret sigma_ir (init_cfg_locals (args ir_cfg) vs) (denote_cfg ir_cfg None)
@@ -2049,14 +2052,15 @@ Theorem validate_mc_tle_with_cert_str_sound :
           exists insts,
             decode_a64_bytes (efs_bytes sl) = inr insts /\
             let a64_fuel := S (2 * List.length insts) in
-            forall (vs : list (@dvalue Pa)) rf0 fl0,
+            forall (vs : list (@dvalue Pa)) rf0 sp0 fl0 mstk0,
               Forall2 dvalue_has_dtyp vs arg_dtys ->
               Forall2 (fun attrs v => existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
                       s_pattrs vs ->
+              mc_valid_sp0 sp0 ->
               a64_rf_matches_args (build_param_env ir_pnames vs) (mc_args mcert) rf0 ->
-              exists sigma_ir rf_end fl_end,
+              exists sigma_ir rf_end fl_end mstk_end,
                 wf_draw_strat sigma_ir /\
-                a64_exec a64_fuel insts 0%N rf0 fl0 = Some (rf_end, fl_end) /\
+                a64_exec_mem a64_fuel insts 0%N sp0 rf0 sp0 fl0 mstk0 = Some (rf_end, sp0, fl_end, mstk_end) /\
                 a64_callee_saved_preserved rf0 rf_end /\
                 (cfg_steps_to_ub sigma_ir (init_cfg_locals (args ir_cfg) vs) (denote_cfg ir_cfg None) \/
                  exists sigma_ir' env_out dv_ir,
@@ -2160,7 +2164,7 @@ Proof.
       as [d_mc0 |] eqn:Esum_mc; [| discriminate Edec_s].
     inversion Edec_s; subst d_mc0; clear Edec_s.
     exists insts; split; [reflexivity |].
-    intros vs rf0 Hty Hnu Hm.
+    intros vs rf0 mstk0 Hty Hnu Hsp0 Hm.
     change (m_type_defs ir_m) with tenv in Hty, Hnu, Hm.
     change (convert_typ tenv (df_instrs ir_defn)) with ir_cfg in Hty, Hnu, Hm.
     change (List.map cert_reg_name (args ir_cfg)) with ir_pnames in Hty, Hnu, Hm.
@@ -2204,13 +2208,14 @@ Proof.
     { eapply wf_cfg_dag_mono; [| exact Hwfd_mc0].
       intros u Hu; apply in_map_iff in Hu as [sp [<- Hsp]]; exact (Hmc_vars_all sp Hsp). }
     destruct (summarize_rv64_dag_sound rv_fuel (mc_rvc mcert) (efs_bytes sl) insts
-                (mc_args mcert) (mc_ret_width mcert) d_mc penv dummy_freeze_oracle rf0
-                Edec Esum_mc Hm)
-      as (rf_end & Hexec & Hcs & Hevd_mc).
+                (mc_args mcert) (mc_ret_width mcert) d_mc penv dummy_freeze_oracle rf0 mstk0
+                Edec Esum_mc Hsp0 Hm)
+      as (rf_end & mstk_end & Hexec & Hcs & Hra & Hevd_mc).
     destruct (summarize_src_dag_with_uas_sound (fun _ => []) ir_cfg ir_pnames arg_dtys vs
                 dummy_freeze_oracle d_ir Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad Hcomp Hty Esum_ir)
       as (sigma_ir & Hwfsig & Hsrc_out).
-    exists sigma_ir, rf_end; split; [exact Hwfsig | split; [exact Hexec | split; [exact Hcs |]]].
+    exists sigma_ir, rf_end, mstk_end;
+      split; [exact Hwfsig | split; [exact Hexec | split; [exact Hcs | split; [exact Hra |]]]].
     destruct Hsrc_out as [[Hub_s _] | (sigma_ir' & env_out & dv_ir & Hevd_ir & Hst_ret)].
     + left; exact Hub_s.
     + right; exists sigma_ir', env_out, dv_ir; split; [exact Hst_ret |].
@@ -2226,7 +2231,7 @@ Proof.
       as [d_mc0 |] eqn:Esum_mc; [| discriminate Edec_s].
     inversion Edec_s; subst d_mc0; clear Edec_s.
     exists insts; split; [reflexivity |].
-    intros vs rf0 fl0 Hty Hnu Hm.
+    intros vs rf0 sp0 fl0 mstk0 Hty Hnu Hsp0 Hm.
     change (m_type_defs ir_m) with tenv in Hty, Hnu, Hm.
     change (convert_typ tenv (df_instrs ir_defn)) with ir_cfg in Hty, Hnu, Hm.
     change (List.map cert_reg_name (args ir_cfg)) with ir_pnames in Hty, Hnu, Hm.
@@ -2305,13 +2310,14 @@ Proof.
         unfold allowed; apply in_app_iff; right; apply in_app_iff; right; apply in_app_iff;
         [left; exact Hu1 | right; exact Hu2]. }
     destruct (summarize_a64_dag_sound a64_fuel (efs_bytes sl) insts (mc_args mcert) (mc_ret_width mcert)
-                d_mc penv dummy_freeze_oracle rf0 fl0 Edec Hnd_mc Hdis_args Esum_mc Hm)
-      as (rf_end & fl_end & Hexec & Hcs & Hevd_mc).
+                d_mc penv dummy_freeze_oracle rf0 sp0 fl0 mstk0 Edec Hnd_mc Hdis_args Esum_mc Hsp0 Hm)
+      as (rf_end & fl_end & mstk_end & Hexec & Hcs & Hevd_mc).
     fold penv' in Hevd_mc.
     destruct (summarize_src_dag_with_uas_sound (fun _ => []) ir_cfg ir_pnames arg_dtys vs
                 dummy_freeze_oracle d_ir Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad Hcomp Hty Esum_ir)
       as (sigma_ir & Hwfsig & Hsrc_out).
-    exists sigma_ir, rf_end, fl_end; split; [exact Hwfsig | split; [exact Hexec | split; [exact Hcs |]]].
+    exists sigma_ir, rf_end, fl_end, mstk_end;
+      split; [exact Hwfsig | split; [exact Hexec | split; [exact Hcs |]]].
     destruct Hsrc_out as [[Hub_s _] | (sigma_ir' & env_out & dv_ir & Hevd_ir & Hst_ret)].
     + left; exact Hub_s.
     + right; exists sigma_ir', env_out, dv_ir; split; [exact Hst_ret |].

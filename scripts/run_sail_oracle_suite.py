@@ -1451,6 +1451,8 @@ def collect_rv64_smt_opcodes() -> List[Tuple[str, int, bytes]]:
         ("c.beqz a0, +8", s1.le16(0xC401)),
         ("c.bnez a0, +8", s1.le16(0xE401)),
         ("c.j +8", s1.le16(0xA021)),
+        ("c.addi16sp sp, -16", s1.le16(0x717D)),
+        ("c.addi4spn a0, sp, 16", s1.le16(0x0808)),
     ]
     for nm, b in rvc_items:
         ops.append((nm, 1, b))
@@ -1672,7 +1674,7 @@ def build_rv64_sail_elf(
     """Minimal ELF64 LE at 0x80000000 with PT_LOAD + .symtab defining begin_signature/end_signature."""
     base_vaddr = 0x80000000
     ehdr_size = 64
-    phdr_size = 56 * 2
+    phdr_size = 56 * 3
     text_off = ehdr_size + phdr_size
     pad_ro = (16 - (len(code) % 16)) % 16
     assert base_vaddr + len(code) + pad_ro == rodata_vaddr
@@ -1696,11 +1698,12 @@ def build_rv64_sail_elf(
         "<16sHHIQQQIHHHHHH",
         b"\x7fELF\x02\x01\x01" + b"\x00" * 9,
         2, 243, 1, base_vaddr, ehdr_size, shoff,
-        0, 64, 56, 2, 64, 5, 4,
+        0, 64, 56, 3, 64, 5, 4,
     )
     ph_text = struct.pack(
         "<IIQQQQQQ", 1, 7, text_off, base_vaddr, base_vaddr, len(payload), max(len(payload), 0x1000), 0x1000
     )
+    ph_stack = struct.pack("<IIQQQQQQ", 1, 6, 0, 0x802F0000, 0x802F0000, 0, 0x10000, 0x1000)
     sig_memsz = max(0x1000, ((sig_end - sig_start + 0xFFF) // 0x1000) * 0x1000)
     ph_sig = struct.pack("<IIQQQQQQ", 1, 6, 0, sig_start, sig_start, 0, sig_memsz, 0x1000)
 
@@ -1710,7 +1713,7 @@ def build_rv64_sail_elf(
     sh3 = struct.pack("<IIQQQQIIQQ", 15, 2, 0, 0, symtab_off, len(symtab), 2, 1, 8, 24)
     sh4 = struct.pack("<IIQQQQIIQQ", 23, 3, 0, 0, shstrtab_off, len(shstrtab), 0, 0, 1, 0)
 
-    return ehdr + ph_text + ph_sig + payload + strtab + symtab + shstrtab + (b"\x00" * pad_sh) + sh0 + sh1 + sh2 + sh3 + sh4
+    return ehdr + ph_text + ph_stack + ph_sig + payload + strtab + symtab + shstrtab + (b"\x00" * pad_sh) + sh0 + sh1 + sh2 + sh3 + sh4
 
 
 def run_sail_riscv_sim_batch(
@@ -1724,11 +1727,14 @@ def run_sail_riscv_sim_batch(
     out_bytes_len = n_cases * rec_size
     base_vaddr = 0x80000000
     out_vaddr = 0x80400000
+    sp_vaddr = 0x80300000
 
     def assemble(in_vaddr: int) -> Tuple[bytes, int]:
         words: List[int] = []
         words.extend(rv_load_u32_zext(18, in_vaddr))
         words.extend(rv_load_u32_zext(19, out_vaddr))
+        words.extend(rv_load_u32_zext(22, sp_vaddr))
+        words.append(s1.rv_itype(0x13, 0, 2, 22, 0))  # addi sp, x22, 0
         code_buf = bytearray().join(s1.le32(w) for w in words)
 
         for snip, _, is_ret in cases:
@@ -1738,7 +1744,7 @@ def run_sail_riscv_sim_batch(
             for idx, r in enumerate(s1.RV64_TRACKED_REGS):
                 pre.append(s1.rv_itype(0x03, 3, r, 18, idx * 8))
             pre.append(s1.rv_itype(0x13, 0, 18, 18, rec_size))
-            for cr in (1, 3, 4, 22, 23, 24, 25, 26, 27):
+            for cr in (1, 3, 4, 23, 24, 25, 26, 27):
                 pre.append(s1.rv_itype(0x13, 0, cr, 0, 0))
             code_buf.extend(b"".join(s1.le32(w) for w in pre))
             if is_ret:
@@ -1754,7 +1760,7 @@ def run_sail_riscv_sim_batch(
                 code_buf.extend(snip)
             else:
                 code_buf.extend(snip)
-            post: List[int] = []
+            post: List[int] = [s1.rv_itype(0x13, 0, 2, 22, 0)]  # addi sp, x22, 0
             for idx, r in enumerate(s1.RV64_TRACKED_REGS):
                 post.append(s1.rv_sd(r, 19, idx * 8))
             post.append(s1.rv_itype(0x13, 0, 19, 19, rec_size))
@@ -1881,6 +1887,7 @@ def run_armv9_sim_suite(oracle: s1.IsaOracleClient, armv9_bin: str, tmpdir: str,
                 snip = s1.le32(s1.a64_tbz(op, 1, bit, 2)) + s1.le32(s1.a64_movz(1, 0, 0x33, 0)) + s1.le32(s1.a64_b(2)) + s1.le32(s1.a64_movz(1, 0, 0x44, 0))
                 con_cases.append((f"tbz bit={bit} op={op}", snip, regs_ab(1 << bit, 0), (0, 0, 0, 0), False))
         con_cases.append(("nop_add_ret", s1.le32(0xD503201F) + s1.le32(s1.a64_addsub_imm(1, 0, 0, 0, 77, 1, 0)) + s1.le32(s1.a64_ret()), regs_ab(100, 0), (0, 0, 0, 0), True))
+        con_cases.extend(s1.build_a64_stack_cases())
         n2 = s1.compare_a64_batch(oracle, armv9_bin, tmpdir, "ARMv9-Sim-Constructors-Edges", con_cases)
 
         n3 = s1.run_a64_random_diff_fuzz(oracle, armv9_bin, tmpdir, fuzz_count, seed=424242) if fuzz_count > 0 else 0

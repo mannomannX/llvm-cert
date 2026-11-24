@@ -25,6 +25,7 @@ From CertValidator Require
   AlgRules
   CertValidator
   Elf64Spec
+  McFrameMem
   Rv64Sem
   A64CoreSem
   McFormat
@@ -44,6 +45,10 @@ Check @CertValidator.CertFormat.validate_dimacs_lrat_str_sound.
 Check @CertValidator.CertValidator.validate_mcfg_with_cert_sound.
 Check @CertValidator.CertValidator.validate_tle_pair_with_cert_str_sound.
 Check @CertValidator.Elf64Spec.elf64_extract_func_sound.
+Check @CertValidator.McFrameMem.mc_stk_load_store_same.
+Check @CertValidator.McFrameMem.mc_stk_load_store_disjoint.
+Check @CertValidator.McFrameMem.mc_sym_stk_store_agrees.
+Check @CertValidator.McFrameMem.mc_sym_stk_load_sound.
 Check @CertValidator.McFormat.parse_mc_cert_wf.
 Check @CertValidator.Rv64Sem.summarize_rv64_dag_wf.
 Check @CertValidator.Rv64Sem.summarize_rv64_dag_sound.
