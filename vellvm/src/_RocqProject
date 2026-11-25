@@ -122,5 +122,6 @@
 ../../validator/Rv64Sem.v
 ../../validator/A64CoreSem.v
 ../../validator/McFormat.v
+../../validator/McLoop.v
 ../../validator/McValidator.v
 ../../validator/CheckAssumptions.v

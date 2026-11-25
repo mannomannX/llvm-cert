@@ -29,6 +29,7 @@ From CertValidator Require
   Rv64Sem
   A64CoreSem
   McFormat
+  McLoop
   McValidator.
 
 Check @CertPasses.Pipeline.optimize_mcfg_refines_IPZ.
@@ -58,4 +59,6 @@ Check @CertValidator.A64CoreSem.decode_a64_bytes_valid.
 Check @CertValidator.A64CoreSem.summarize_a64_dag_wf.
 Check @CertValidator.A64CoreSem.summarize_a64_dag_sound.
 Check @CertValidator.A64CoreSem.a64_step_sym_oracle_sound.
+Check @CertValidator.McLoop.validate_mc_loop_rv64_sound.
+Check @CertValidator.McLoop.validate_mc_loop_a64_sound.
 Check @CertValidator.McValidator.validate_mc_tle_with_cert_str_sound.

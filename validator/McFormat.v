@@ -28,7 +28,9 @@ Import ListNotations.
 From CertValidator Require Import
   AigLrat
   CertFormat
+  AlgRules
   Elf64Spec
+  McFrameMem
   Rv64Sem.
 
 Unset Implicit Arguments.
@@ -77,6 +79,25 @@ Qed.
 
 (** ** 2. Canonical [mc-cert-v1] AST & Well-Formedness *)
 
+Record mc_loop_reg_bind : Set := mk_mc_loop_reg_bind {
+  mlr_reg : N;
+  mlr_width : positive;
+  mlr_expr : cert_expr;
+}.
+
+Variant mc_loop_slot_bind : Set :=
+| MLS_Expr (off : Z) (sz : mc_mem_size) (e : cert_expr)
+| MLS_SavedReg (off : Z) (r : N).
+
+Record mc_loop_spec : Set := mk_mc_loop_spec {
+  ml_ir_header : string;
+  ml_mc_pc : N;
+  ml_sp_off : Z;
+  ml_regs : list mc_loop_reg_bind;
+  ml_slots : list mc_loop_slot_bind;
+  ml_inv : option cert_expr;
+}.
+
 Record mc_certificate : Set := mk_mc_certificate {
   mc_arch : elf_arch;
   mc_elf_kind : elf_kind;
@@ -84,14 +105,98 @@ Record mc_certificate : Set := mk_mc_certificate {
   mc_rvc : bool;
   mc_ret_width : positive;
   mc_args : list rv_arg_spec;
+  mc_loop : option mc_loop_spec;
   mc_lrat_proof : option (list lrat_step);
 }.
+
+Definition n_in_list_bool (x : N) (xs : list N) : bool :=
+  existsb (N.eqb x) xs.
+
+Fixpoint no_dup_N (xs : list N) : bool :=
+  match xs with
+  | [] => true
+  | x :: rest => negb (n_in_list_bool x rest) && no_dup_N rest
+  end.
+
+Definition mc_loop_reg_valid (arch : elf_arch) (r : N) : bool :=
+  match arch with
+  | EA_Riscv64 => (1 <=? r)%N && (r <=? 31)%N && negb (N.eqb r 2%N)
+  | EA_AArch64 => (r <=? 30)%N
+  end.
+
+Definition mc_loop_saved_reg_valid (arch : elf_arch) (r : N) : bool :=
+  match arch with
+  | EA_Riscv64 => N.eqb r 1%N || ((8 <=? r)%N && (r <=? 9)%N) || ((18 <=? r)%N && (r <=? 27)%N)
+  | EA_AArch64 => (19 <=? r)%N && (r <=? 30)%N
+  end.
+
+Definition wf_mc_loop_reg_bind (arch : elf_arch) (rb : mc_loop_reg_bind) : bool :=
+  mc_loop_reg_valid arch (mlr_reg rb) &&
+  (Pos.eqb (mlr_width rb) 32%positive || Pos.eqb (mlr_width rb) 64%positive) &&
+  wt_cert_expr [] (mlr_expr rb) &&
+  Pos.eqb (cert_expr_bit_width (mlr_expr rb)) (mlr_width rb) &&
+  is_let_free_expr (mlr_expr rb) &&
+  ub_free_expr (mlr_expr rb).
+
+Definition wf_mc_loop_slot_bind (arch : elf_arch) (sp_off : Z) (sb : mc_loop_slot_bind) : bool :=
+  match sb with
+  | MLS_Expr off sz e =>
+      mc_slot_in_frame sp_off off sz &&
+      wt_cert_expr [] e &&
+      Pos.eqb (cert_expr_bit_width e) (mc_mem_bits sz) &&
+      is_let_free_expr e &&
+      ub_free_expr e
+  | MLS_SavedReg off r =>
+      mc_slot_in_frame sp_off off MS_8 &&
+      mc_loop_saved_reg_valid arch r
+  end.
+
+Definition mc_loop_slot_interval (sb : mc_loop_slot_bind) : Z * mc_mem_size :=
+  match sb with
+  | MLS_Expr off sz _ => (off, sz)
+  | MLS_SavedReg off _ => (off, MS_8)
+  end.
+
+Definition mc_intervals_disjoint (p1 p2 : Z * mc_mem_size) : bool :=
+  let '(o1, s1) := p1 in
+  let '(o2, s2) := p2 in
+  Z.leb (o1 + mc_mem_bytes_Z s1)%Z o2 || Z.leb (o2 + mc_mem_bytes_Z s2)%Z o1.
+
+Fixpoint mc_intervals_pairwise_disjoint (ps : list (Z * mc_mem_size)) : bool :=
+  match ps with
+  | [] => true
+  | p :: rest => forallb (mc_intervals_disjoint p) rest && mc_intervals_pairwise_disjoint rest
+  end.
+
+Definition wf_mc_loop_spec (arch : elf_arch) (ls : mc_loop_spec) : bool :=
+  negb (String.eqb (ml_ir_header ls) "") &&
+  mc_sp_aligned16 (ml_sp_off ls) &&
+  match arch with
+  | EA_Riscv64 => N.eqb (N.modulo (ml_mc_pc ls) 2%N) 0%N
+  | EA_AArch64 => N.eqb (N.modulo (ml_mc_pc ls) 4%N) 0%N
+  end &&
+  no_dup_N (List.map mlr_reg (ml_regs ls)) &&
+  forallb (wf_mc_loop_reg_bind arch) (ml_regs ls) &&
+  forallb (wf_mc_loop_slot_bind arch (ml_sp_off ls)) (ml_slots ls) &&
+  mc_intervals_pairwise_disjoint (List.map mc_loop_slot_interval (ml_slots ls)) &&
+  match ml_inv ls with
+  | None => true
+  | Some inv =>
+      wt_cert_expr [] inv &&
+      Pos.eqb (cert_expr_bit_width inv) 1%positive &&
+      is_let_free_expr inv &&
+      ub_free_expr inv
+  end.
 
 Definition wf_mc_cert (c : mc_certificate) : bool :=
   negb (String.eqb (mc_fn_name c) "") &&
   rv_supported_arg_width (mc_ret_width c) &&
   Nat.leb (List.length (mc_args c)) 8 &&
   forallb rv_valid_arg_spec (mc_args c) &&
+  match mc_loop c with
+  | None => true
+  | Some ls => wf_mc_loop_spec (mc_arch c) ls
+  end &&
   match mc_lrat_proof c with
   | None => true
   | Some [] => false
@@ -233,17 +338,215 @@ Proof.
   exact (parse_tagged_section_list_wf _ _ _ parse_rv_arg_spec_wf _ _ Hs).
 Qed.
 
-Definition parse_mc_lrat_tail (tail : list sexp) : string + option (list lrat_step) :=
-  match tail with
+Definition parse_mc_N_sexp (sx : sexp) : string + N :=
+  match sx with
+  | SAtom s =>
+      match parse_canonical_N s with
+      | Some n => inr n
+      | None => inl "expected canonical unsigned integer in mc-cert-v1 loop section"
+      end
+  | _ => inl "expected unsigned integer atom in mc-cert-v1 loop section"
+  end.
+
+Definition parse_mc_Z_sexp (sx : sexp) : string + Z :=
+  match sx with
+  | SAtom (String c rest as s) =>
+      if Nat.eqb (Ascii.nat_of_ascii c) 45 then
+        match parse_pos_str rest with
+        | Some p => inr (Z.neg p)
+        | None => inl "expected canonical negative integer in mc-cert-v1 loop section"
+        end
+      else
+        match parse_canonical_N s with
+        | Some n => inr (Z.of_N n)
+        | None => inl "expected canonical integer in mc-cert-v1 loop section"
+        end
+  | _ => inl "expected integer atom in mc-cert-v1 loop section"
+  end.
+
+Definition parse_mc_slot_size_sexp (sx : sexp) : string + mc_mem_size :=
+  match sx with
+  | SAtom s =>
+      if String.eqb s "1" then inr MS_1
+      else if String.eqb s "2" then inr MS_2
+      else if String.eqb s "4" then inr MS_4
+      else if String.eqb s "8" then inr MS_8
+      else inl "expected stack slot byte size (1, 2, 4, or 8) in mc-cert-v1"
+  | _ => inl "expected stack slot byte size atom in mc-cert-v1"
+  end.
+
+Definition parse_mc_reg_width_sexp (sx : sexp) : string + positive :=
+  match sx with
+  | SAtom s =>
+      if String.eqb s "32" then inr 32%positive
+      else if String.eqb s "64" then inr 64%positive
+      else inl "expected loop register width (32 or 64) in mc-cert-v1"
+  | _ => inl "expected loop register width atom in mc-cert-v1"
+  end.
+
+Definition parse_mc_loop_reg_sexp (sx : sexp) : string + mc_loop_reg_bind :=
+  match sx with
+  | SList [SAtom tag; r_sx; w_sx; e_sx] =>
+      if String.eqb tag "reg" then
+        match parse_mc_N_sexp r_sx, parse_mc_reg_width_sexp w_sx, parse_cert_expr [] e_sx with
+        | inr r, inr w, inr e => inr (mk_mc_loop_reg_bind r w e)
+        | inl err, _, _ => inl err
+        | _, inl err, _ => inl err
+        | _, _, inl err => inl err
+        end
+      else inl "expected reg entry in mc-cert-v1 loop regs"
+  | _ => inl "malformed reg entry in mc-cert-v1 loop regs"
+  end.
+
+Definition parse_mc_loop_slot_sexp (sx : sexp) : string + mc_loop_slot_bind :=
+  match sx with
+  | SList [SAtom tag; off_sx; sz_sx; e_sx] =>
+      if String.eqb tag "slot" then
+        match parse_mc_Z_sexp off_sx, parse_mc_slot_size_sexp sz_sx, parse_cert_expr [] e_sx with
+        | inr off, inr sz, inr e => inr (MLS_Expr off sz e)
+        | inl err, _, _ => inl err
+        | _, inl err, _ => inl err
+        | _, _, inl err => inl err
+        end
+      else inl "unexpected slot entry tag in mc-cert-v1 loop slots"
+  | SList [SAtom tag; off_sx; r_sx] =>
+      if String.eqb tag "saved-reg" then
+        match parse_mc_Z_sexp off_sx, parse_mc_N_sexp r_sx with
+        | inr off, inr r => inr (MLS_SavedReg off r)
+        | inl err, _ => inl err
+        | _, inl err => inl err
+        end
+      else inl "unexpected slot entry tag in mc-cert-v1 loop slots"
+  | _ => inl "malformed slot entry in mc-cert-v1 loop slots"
+  end.
+
+Definition parse_mc_loop_inv_tail (inv_tail : list sexp) : string + option cert_expr :=
+  match inv_tail with
   | [] => inr None
-  | [lrat_sx] =>
-      match parse_nonempty_tagged_section "lrat" parse_lrat_step_sexp lrat_sx with
-      | inr (s :: sr) => inr (Some (s :: sr))
-      | inr [] => inl "empty lrat section in mc-cert-v1"
-      | inl err => inl err
+  | [SList [SAtom tag; inv_sx]] =>
+      if String.eqb tag "inv" then
+        match parse_cert_expr [] inv_sx with
+        | inr inv => inr (Some inv)
+        | inl err => inl err
+        end
+      else inl "expected optional inv field in mc-cert-v1 loop section"
+  | _ => inl "malformed trailing fields in mc-cert-v1 loop section"
+  end.
+
+Definition parse_mc_loop_sexp (arch : elf_arch) (sx : sexp) : string + mc_loop_spec :=
+  match sx with
+  | SList (SAtom tag :: hdr_sx :: pc_sx :: sp_sx :: regs_sx :: slots_sx :: inv_tail) =>
+      if String.eqb tag "loop" then
+        match parse_tagged_nonempty_str_sexp "ir-header" hdr_sx with
+        | inl err => inl err
+        | inr hdr =>
+            match pc_sx with
+            | SList [SAtom pc_t; pc_val_sx] =>
+                if String.eqb pc_t "mc-pc" then
+                  match sp_sx with
+                  | SList [SAtom sp_t; sp_val_sx] =>
+                      if String.eqb sp_t "sp-off" then
+                        match parse_tagged_section_list "regs" parse_mc_loop_reg_sexp regs_sx,
+                              parse_tagged_section_list "slots" parse_mc_loop_slot_sexp slots_sx,
+                              parse_mc_loop_inv_tail inv_tail,
+                              parse_mc_N_sexp pc_val_sx,
+                              parse_mc_Z_sexp sp_val_sx with
+                        | inr regs, inr slots, inr opt_inv, inr pc, inr sp_off =>
+                            let ls := mk_mc_loop_spec hdr pc sp_off regs slots opt_inv in
+                            if wf_mc_loop_spec arch ls then inr ls
+                            else inl "loop cutpoint specification failed well-formedness check"
+                        | inl err, _, _, _, _ => inl err
+                        | _, inl err, _, _, _ => inl err
+                        | _, _, inl err, _, _ => inl err
+                        | _, _, _, inl err, _ => inl err
+                        | _, _, _, _, inl err => inl err
+                        end
+                      else inl "expected sp-off field in mc-cert-v1 loop section"
+                  | _ => inl "malformed sp-off field in mc-cert-v1 loop section"
+                  end
+                else inl "expected mc-pc field in mc-cert-v1 loop section"
+            | _ => inl "malformed mc-pc field in mc-cert-v1 loop section"
+            end
+        end
+      else inl "expected loop section tag in mc-cert-v1"
+  | _ => inl "malformed loop section in mc-cert-v1"
+  end.
+
+Lemma parse_mc_loop_sexp_wf : forall arch sx ls,
+  parse_mc_loop_sexp arch sx = inr ls -> wf_mc_loop_spec arch ls = true.
+Proof.
+  intros arch [| | [| [tag | |] [| hdr_sx [| pc_sx [| sp_sx [| regs_sx [| slots_sx inv_tail]]]]]]] ls H;
+    cbn in H; try discriminate.
+  destruct (String.eqb tag "loop"); [| discriminate].
+  destruct (parse_tagged_nonempty_str_sexp "ir-header" hdr_sx) as [| hdr]; [discriminate |].
+  destruct pc_sx as [| | [| [pc_t | |] [| pc_val_sx [| ? ?]]]]; try discriminate.
+  destruct (String.eqb pc_t "mc-pc"); [| discriminate].
+  destruct sp_sx as [| | [| [sp_t | |] [| sp_val_sx [| ? ?]]]]; try discriminate.
+  destruct (String.eqb sp_t "sp-off"); [| discriminate].
+  destruct (parse_tagged_section_list "regs" parse_mc_loop_reg_sexp regs_sx) as [| regs]; [discriminate |].
+  destruct (parse_tagged_section_list "slots" parse_mc_loop_slot_sexp slots_sx) as [| slots]; [discriminate |].
+  destruct (parse_mc_loop_inv_tail inv_tail) as [| opt_inv]; [discriminate |].
+  destruct (parse_mc_N_sexp pc_val_sx) as [| pc]; [discriminate |].
+  destruct (parse_mc_Z_sexp sp_val_sx) as [| sp_off]; [discriminate |].
+  destruct (wf_mc_loop_spec arch (mk_mc_loop_spec hdr pc sp_off regs slots opt_inv)) eqn:Hwf;
+    [| discriminate].
+  inversion H; subst ls; exact Hwf.
+Qed.
+
+Definition parse_mc_tail (arch : elf_arch) (tail : list sexp)
+  : string + (option mc_loop_spec * option (list lrat_step)) :=
+  match tail with
+  | [] => inr (None, None)
+  | [sec_sx] =>
+      match sec_sx with
+      | SList (SAtom tag :: _) =>
+          if String.eqb tag "lrat" then
+            match parse_nonempty_tagged_section "lrat" parse_lrat_step_sexp sec_sx with
+            | inr (s :: sr) => inr (None, Some (s :: sr))
+            | inr [] => inl "empty lrat section in mc-cert-v1"
+            | inl err => inl err
+            end
+          else if String.eqb tag "loop" then
+            match parse_mc_loop_sexp arch sec_sx with
+            | inr ls => inr (Some ls, None)
+            | inl err => inl err
+            end
+          else inl "unexpected optional section tag in mc-cert-v1"
+      | _ => inl "malformed optional section in mc-cert-v1"
+      end
+  | [loop_sx; lrat_sx] =>
+      match parse_mc_loop_sexp arch loop_sx,
+            parse_nonempty_tagged_section "lrat" parse_lrat_step_sexp lrat_sx with
+      | inr ls, inr (s :: sr) => inr (Some ls, Some (s :: sr))
+      | inr _, inr [] => inl "empty lrat section in mc-cert-v1"
+      | inl err, _ => inl err
+      | _, inl err => inl err
       end
   | _ => inl "unexpected trailing section in mc-cert-v1"
   end.
+
+Lemma parse_mc_tail_wf : forall arch tail opt_loop opt_pf,
+  parse_mc_tail arch tail = inr (opt_loop, opt_pf) ->
+  (match opt_loop with None => true | Some ls => wf_mc_loop_spec arch ls end) = true /\
+  (match opt_pf with None => true | Some [] => false | Some (_ :: _) => true end) = true.
+Proof.
+  intros arch tail opt_loop opt_pf H.
+  destruct tail as [| s1 [| s2 [| ? ?]]]; cbn in H; try discriminate.
+  - inversion H; subst; split; reflexivity.
+  - destruct s1 as [| | [| [tag | |] s1_rest]]; try discriminate.
+    destruct (String.eqb tag "lrat").
+    + destruct (parse_nonempty_tagged_section "lrat" parse_lrat_step_sexp (SList (SAtom tag :: s1_rest)))
+        as [| [| s sr]]; try discriminate H.
+      inversion H; subst; split; reflexivity.
+    + destruct (String.eqb tag "loop"); [| discriminate H].
+      destruct (parse_mc_loop_sexp arch (SList (SAtom tag :: s1_rest))) as [| ls] eqn:Hl;
+        [discriminate H |].
+      inversion H; subst; split; [exact (parse_mc_loop_sexp_wf _ _ _ Hl) | reflexivity].
+  - destruct (parse_mc_loop_sexp arch s1) as [| ls] eqn:Hl; [discriminate H |].
+    destruct (parse_nonempty_tagged_section "lrat" parse_lrat_step_sexp s2)
+      as [| [| s sr]]; try discriminate H.
+    inversion H; subst; split; [exact (parse_mc_loop_sexp_wf _ _ _ Hl) | reflexivity].
+Qed.
 
 Definition parse_mc_cert_sexp (root : sexp) : string + mc_certificate :=
   match root with
@@ -254,17 +557,19 @@ Definition parse_mc_cert_sexp (root : sexp) : string + mc_certificate :=
               parse_tagged_nonempty_str_sexp "fn" fn_sx,
               parse_mc_rvc_sexp rvc_sx,
               parse_mc_ret_width_sexp rw_sx,
-              parse_mc_args_sexp args_sx,
-              parse_mc_lrat_tail tail with
-        | inr arch, inr kind, inr fn_nm, inr rvc, inr rw, inr args, inr opt_pf =>
-            inr (mk_mc_certificate arch kind fn_nm rvc rw args opt_pf)
-        | inl err, _, _, _, _, _, _ => inl err
-        | _, inl err, _, _, _, _, _ => inl err
-        | _, _, inl err, _, _, _, _ => inl err
-        | _, _, _, inl err, _, _, _ => inl err
-        | _, _, _, _, inl err, _, _ => inl err
-        | _, _, _, _, _, inl err, _ => inl err
-        | _, _, _, _, _, _, inl err => inl err
+              parse_mc_args_sexp args_sx with
+        | inr arch, inr kind, inr fn_nm, inr rvc, inr rw, inr args =>
+            match parse_mc_tail arch tail with
+            | inr (opt_loop, opt_pf) =>
+                inr (mk_mc_certificate arch kind fn_nm rvc rw args opt_loop opt_pf)
+            | inl err => inl err
+            end
+        | inl err, _, _, _, _, _ => inl err
+        | _, inl err, _, _, _, _ => inl err
+        | _, _, inl err, _, _, _ => inl err
+        | _, _, _, inl err, _, _ => inl err
+        | _, _, _, _, inl err, _ => inl err
+        | _, _, _, _, _, inl err => inl err
         end
       else inl "unsupported MC certificate schema tag (expected mc-cert-v1)"
   | _ => inl "malformed mc-cert-v1 root S-expression"
@@ -288,19 +593,14 @@ Proof.
   destruct (parse_mc_rvc_sexp rvc_sx) as [| rvc]; [discriminate |].
   destruct (parse_mc_ret_width_sexp rw_sx) as [| rw] eqn:Hrw; [discriminate |].
   destruct (parse_mc_args_sexp args_sx) as [| args] eqn:Hargs; [discriminate |].
-  destruct (parse_mc_lrat_tail tail) as [| opt_pf] eqn:Hpf; [discriminate |].
+  destruct (parse_mc_tail arch tail) as [| [opt_loop opt_pf]] eqn:Htail; [discriminate |].
   inversion H; subst c; clear H.
   destruct (parse_mc_args_wf _ _ Hargs) as [Hlen Hspecs].
-  unfold wf_mc_cert; cbn [mc_fn_name mc_ret_width mc_args mc_lrat_proof].
+  destruct (parse_mc_tail_wf _ _ _ _ Htail) as [Hloop Hpf].
+  unfold wf_mc_cert; cbn [mc_arch mc_fn_name mc_ret_width mc_args mc_loop mc_lrat_proof].
   rewrite (parse_tagged_nonempty_str_ok _ _ _ Hfn),
           (parse_mc_ret_width_supported _ _ Hrw),
-          Hlen, Hspecs.
-  cbn [andb].
-  destruct tail as [| lrat_sx [| ? ?]]; cbn [parse_mc_lrat_tail] in Hpf; try discriminate Hpf.
-  - inversion Hpf; reflexivity.
-  - destruct (parse_nonempty_tagged_section "lrat" parse_lrat_step_sexp lrat_sx)
-      as [| [| s sr]]; try discriminate Hpf.
-    inversion Hpf; reflexivity.
+          Hlen, Hspecs, Hloop, Hpf; reflexivity.
 Qed.
 
 Theorem parse_mc_cert_wf : forall input c,

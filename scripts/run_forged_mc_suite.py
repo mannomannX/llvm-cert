@@ -578,10 +578,12 @@ def format_mc_cert(
     args: List[Tuple[str, int, str]],
     lrat_s: Optional[str] = None,
     arch: str = "rv64",
+    loop_sexp: Optional[str] = None,
 ) -> str:
     args_s = " ".join(f'(arg "{r}" {w} {a})' for r, w, a in args)
-    tail = f" (lrat {lrat_s})" if lrat_s is not None else ""
-    return f'(mc-cert-v1 (arch {arch}) (elf-kind {kind}) (fn "{fn}") (rvc {rvc}) (ret-width {ret_width}) (args {args_s}){tail})'
+    loop_part = f" {loop_sexp}" if loop_sexp is not None else ""
+    lrat_part = f" (lrat {lrat_s})" if lrat_s is not None else ""
+    return f'(mc-cert-v1 (arch {arch}) (elf-kind {kind}) (fn "{fn}") (rvc {rvc}) (ret-width {ret_width}) (args {args_s}){loop_part}{lrat_part})'
 
 
 def build_elf64(
@@ -699,10 +701,11 @@ def emit_and_solve_lrat(
     rw: int,
     args: List[Tuple[str, int, str]],
     tmpdir: str,
+    loop_sexp: Optional[str] = None,
 ) -> Optional[str]:
     bare_cert = os.path.join(tmpdir, f"bare_{arch}_{fn}.mc.cert")
     with open(bare_cert, "w", encoding="utf-8") as f:
-        f.write(format_mc_cert("rel", fn, rvc, rw, args, arch=arch))
+        f.write(format_mc_cert("rel", fn, rvc, rw, args, arch=arch, loop_sexp=loop_sexp))
     em = run_cmd([bin_path, "--emit-mc-cnf", "--ir", ir_path, "--elf", elf_path, "--cert", bare_cert])
     if em.returncode != 0:
         raise RuntimeError(f"--emit-mc-cnf failed ({arch}, {fn}): rc={em.returncode} err={em.stderr}")
@@ -1022,6 +1025,137 @@ def main(argv: List[str]) -> int:
                 m3a_id64_a64_ir,
             ))
 
+        # M3b prebuilt structured-loop fixtures & 10 adversarial loop rejection cases.
+        m3b_rv_loop_ir = os.path.join(tmpdir, "m3b_rv_loop.ll")
+        with open(m3b_rv_loop_ir, "w", encoding="utf-8") as f:
+            f.write(
+                'target datalayout = "e-m:e-p:64:64-i64:64-i128:128-n32:64-S128"\n'
+                'target triple = "riscv64-unknown-none-elf"\n'
+                'define dso_local signext i32 @spilled_loop_u32(i32 noundef signext %0, i32 noundef signext %1) local_unnamed_addr {\n'
+                '  %3 = xor i32 %1, 1431655765\n'
+                '  %4 = icmp eq i32 %0, 0\n'
+                '  br i1 %4, label %5, label %7\n'
+                '5:\n'
+                '  %6 = phi i32 [ %3, %2 ], [ %12, %7 ]\n'
+                '  ret i32 %6\n'
+                '7:\n'
+                '  %8 = phi i32 [ %13, %7 ], [ %0, %2 ]\n'
+                '  %9 = phi i32 [ %12, %7 ], [ %3, %2 ]\n'
+                '  %10 = shl i32 %9, 3\n'
+                '  %11 = xor i32 %10, %9\n'
+                '  %12 = xor i32 %11, %8\n'
+                '  %13 = add i32 %8, -1\n'
+                '  %14 = icmp eq i32 %13, 0\n'
+                '  br i1 %14, label %5, label %7\n'
+                '}\n'
+            )
+        m3b_a64_loop_ir = os.path.join(tmpdir, "m3b_a64_loop.ll")
+        with open(m3b_a64_loop_ir, "w", encoding="utf-8") as f:
+            f.write(
+                'target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32"\n'
+                'target triple = "aarch64-unknown-none-elf"\n'
+                'define dso_local i32 @spilled_loop_u32(i32 noundef %0, i32 noundef %1) local_unnamed_addr {\n'
+                '  %3 = xor i32 %1, 1431655765\n'
+                '  %4 = icmp eq i32 %0, 0\n'
+                '  br i1 %4, label %5, label %7\n'
+                '5:\n'
+                '  %6 = phi i32 [ %3, %2 ], [ %12, %7 ]\n'
+                '  ret i32 %6\n'
+                '7:\n'
+                '  %8 = phi i32 [ %13, %7 ], [ %0, %2 ]\n'
+                '  %9 = phi i32 [ %12, %7 ], [ %3, %2 ]\n'
+                '  %10 = shl i32 %9, 3\n'
+                '  %11 = xor i32 %10, %9\n'
+                '  %12 = xor i32 %11, %8\n'
+                '  %13 = add i32 %8, -1\n'
+                '  %14 = icmp eq i32 %13, 0\n'
+                '  br i1 %14, label %5, label %7\n'
+                '}\n'
+            )
+        m3b_rv_loop_bytes = bytes.fromhex(
+            "411122e42ac0b75255559382525533c4550001cd82421b1334003344640033445400fd3216c0e39702fe2285226441018280"
+        )
+        m3b_a64_loop_bytes = bytes.fromhex(
+            "ff4300d1f30700f9e00300b933f00052e0000034e80340b9730e134a7302084a08050071e80300b961ffff54e003132af30740f9ff430091c0035fd6"
+        )
+        m3b_rv_loop_args = [("%0", 32, "signext"), ("%1", 32, "signext")]
+        m3b_a64_loop_args = [("%0", 32, "none"), ("%1", 32, "none")]
+        m3b_rv_loop_spec = (
+            '(loop (ir-header "7") (mc-pc 20) (sp-off -16) '
+            '(regs (reg 8 32 (var "!cut_1" 32))) '
+            '(slots (saved-reg -8 8) (slot -16 4 (var "!cut_0" 32))) '
+            '(inv (icmp ne 0 32 (var "!cut_0" 32) (bv 32 0))))'
+        )
+        m3b_a64_loop_spec = (
+            '(loop (ir-header "7") (mc-pc 20) (sp-off -16) '
+            '(regs (reg 19 32 (var "!cut_1" 32))) '
+            '(slots (saved-reg -8 19) (slot -16 4 (var "!cut_0" 32))) '
+            '(inv (icmp ne 0 32 (var "!cut_0" 32) (bv 32 0))))'
+        )
+        m3b_rv_pre_rel = os.path.join(tmpdir, "m3b_pre_rv.rel.elf")
+        with open(m3b_rv_pre_rel, "wb") as f:
+            f.write(build_elf64("spilled_loop_u32", m3b_rv_loop_bytes, e_type=1, e_machine=243, e_flags=1))
+        m3b_a64_pre_rel = os.path.join(tmpdir, "m3b_pre_a64.rel.elf")
+        with open(m3b_a64_pre_rel, "wb") as f:
+            f.write(build_elf64("spilled_loop_u32", m3b_a64_loop_bytes, e_type=1, e_machine=183, e_flags=0))
+        m3b_rv_loop_lrat = emit_and_solve_lrat(
+            bins[0], "rv64", 1, m3b_rv_loop_ir, m3b_rv_pre_rel,
+            "spilled_loop_u32", 32, m3b_rv_loop_args, tmpdir, loop_sexp=m3b_rv_loop_spec,
+        )
+        m3b_a64_loop_lrat = emit_and_solve_lrat(
+            bins[0], "aarch64", 0, m3b_a64_loop_ir, m3b_a64_pre_rel,
+            "spilled_loop_u32", 32, m3b_a64_loop_args, tmpdir, loop_sexp=m3b_a64_loop_spec,
+        )
+        m3b_a64_flipped_body = bytearray(m3b_a64_loop_bytes)
+        m3b_a64_flipped_body[24] ^= 0x01
+        m3b_rv_elf_raw = build_elf64("spilled_loop_u32", m3b_rv_loop_bytes, e_type=1, e_machine=243, e_flags=1)
+        m3b_a64_elf_raw = build_elf64("spilled_loop_u32", m3b_a64_loop_bytes, e_type=1, e_machine=183, e_flags=0)
+        adv_cases.extend([
+            ("m3b_rv64_wrong_mc_pc", m3b_rv_elf_raw,
+             format_mc_cert("rel", "spilled_loop_u32", 1, 32, m3b_rv_loop_args, m3b_rv_loop_lrat, arch="rv64",
+                            loop_sexp=m3b_rv_loop_spec.replace("(mc-pc 20)", "(mc-pc 22)")),
+             m3b_rv_loop_ir),
+            ("m3b_rv64_wrong_ir_header", m3b_rv_elf_raw,
+             format_mc_cert("rel", "spilled_loop_u32", 1, 32, m3b_rv_loop_args, m3b_rv_loop_lrat, arch="rv64",
+                            loop_sexp=m3b_rv_loop_spec.replace('(ir-header "7")', '(ir-header "5")')),
+             m3b_rv_loop_ir),
+            ("m3b_rv64_missing_live_reg_bind", m3b_rv_elf_raw,
+             format_mc_cert("rel", "spilled_loop_u32", 1, 32, m3b_rv_loop_args, m3b_rv_loop_lrat, arch="rv64",
+                            loop_sexp=m3b_rv_loop_spec.replace('(regs (reg 8 32 (var "!cut_1" 32)))', '(regs)')),
+             m3b_rv_loop_ir),
+            ("m3b_rv64_wrong_reg_bind_expr", m3b_rv_elf_raw,
+             format_mc_cert("rel", "spilled_loop_u32", 1, 32, m3b_rv_loop_args, m3b_rv_loop_lrat, arch="rv64",
+                            loop_sexp=m3b_rv_loop_spec.replace('(var "!cut_1" 32)', '(var "!cut_0" 32)')),
+             m3b_rv_loop_ir),
+            ("m3b_rv64_wrong_sp_off", m3b_rv_elf_raw,
+             format_mc_cert("rel", "spilled_loop_u32", 1, 32, m3b_rv_loop_args, m3b_rv_loop_lrat, arch="rv64",
+                            loop_sexp=m3b_rv_loop_spec.replace("(sp-off -16)", "(sp-off -32)")),
+             m3b_rv_loop_ir),
+            ("m3b_rv64_missing_saved_reg", m3b_rv_elf_raw,
+             format_mc_cert("rel", "spilled_loop_u32", 1, 32, m3b_rv_loop_args, m3b_rv_loop_lrat, arch="rv64",
+                            loop_sexp=m3b_rv_loop_spec.replace("(saved-reg -8 8) ", "")),
+             m3b_rv_loop_ir),
+            ("m3b_a64_invalid_inv", m3b_a64_elf_raw,
+             format_mc_cert("rel", "spilled_loop_u32", 0, 32, m3b_a64_loop_args, m3b_a64_loop_lrat, arch="aarch64",
+                            loop_sexp=m3b_a64_loop_spec.replace(
+                                '(inv (icmp ne 0 32 (var "!cut_0" 32) (bv 32 0)))',
+                                '(inv (icmp eq 0 32 (var "!cut_0" 32) (bv 32 1)))')),
+             m3b_a64_loop_ir),
+            ("m3b_rv64_tampered_loop_lrat", m3b_rv_elf_raw,
+             format_mc_cert("rel", "spilled_loop_u32", 1, 32, m3b_rv_loop_args, "(add 999999 () (999998))",
+                            arch="rv64", loop_sexp=m3b_rv_loop_spec),
+             m3b_rv_loop_ir),
+            ("m3b_a64_loop_body_bitflip",
+             build_elf64("spilled_loop_u32", bytes(m3b_a64_flipped_body), e_type=1, e_machine=183, e_flags=0),
+             format_mc_cert("rel", "spilled_loop_u32", 0, 32, m3b_a64_loop_args, m3b_a64_loop_lrat, arch="aarch64",
+                            loop_sexp=m3b_a64_loop_spec),
+             m3b_a64_loop_ir),
+            ("m3b_a64_loop_forged_rvc1", m3b_a64_elf_raw,
+             format_mc_cert("rel", "spilled_loop_u32", 1, 32, m3b_a64_loop_args, m3b_a64_loop_lrat, arch="aarch64",
+                            loop_sexp=m3b_a64_loop_spec),
+             m3b_a64_loop_ir),
+        ])
+
         for name, elf_bytes, cert_str, case_ir in adv_cases:
             ep = os.path.join(tmpdir, f"adv_{name}.elf")
             cp = os.path.join(tmpdir, f"adv_{name}.mc.cert")
@@ -1161,6 +1295,139 @@ def main(argv: List[str]) -> int:
                                 return 1
                         pos_passed += 1
         print(f"PASS M3a stack-frame & spill suite ({pos_passed} total positive checks)")
+
+        # M3b positive structured-loop suite: prebuilt saved-reg + spill loop + live clang-22 loops.
+        for l_arch, l_rvc, l_mach, l_fl, l_ir, l_bytes, l_args, l_spec, l_lrat in [
+            ("rv64", 1, 243, 1, m3b_rv_loop_ir, m3b_rv_loop_bytes, m3b_rv_loop_args, m3b_rv_loop_spec, m3b_rv_loop_lrat),
+            ("aarch64", 0, 183, 0, m3b_a64_loop_ir, m3b_a64_loop_bytes, m3b_a64_loop_args, m3b_a64_loop_spec, m3b_a64_loop_lrat),
+        ]:
+            for l_kind, l_et in [("rel", 1), ("exec", 2)]:
+                l_ep = os.path.join(tmpdir, f"m3b_pre_{l_arch}.{l_kind}.elf")
+                with open(l_ep, "wb") as f:
+                    f.write(build_elf64("spilled_loop_u32", l_bytes, e_type=l_et, e_machine=l_mach, e_flags=l_fl))
+                l_cp = os.path.join(tmpdir, f"m3b_pre_{l_arch}.{l_kind}.mc.cert")
+                with open(l_cp, "w", encoding="utf-8") as f:
+                    f.write(format_mc_cert(l_kind, "spilled_loop_u32", l_rvc, 32, l_args, l_lrat, arch=l_arch, loop_sexp=l_spec))
+                for b in bins:
+                    res = run_cmd([b, "--check-mc", "--ir", l_ir, "--elf", l_ep, "--cert", l_cp])
+                    if res.returncode != 0:
+                        print(f"FAIL M3b prebuilt {l_arch} {l_kind} ({b}): {res.stderr}", file=sys.stderr)
+                        return 1
+                pos_passed += 1
+
+        if os.path.exists(clang_22) and os.path.exists(lld_22):
+            m3b_loops_c = os.path.join(tmpdir, "m3b_live_loops.c")
+            with open(m3b_loops_c, "w", encoding="utf-8") as f:
+                f.write(
+                    "#include <stdint.h>\n"
+                    "__attribute__((noinline))\n"
+                    "uint32_t checksum_loop_u32(uint32_t n, uint32_t seed) {\n"
+                    "    uint32_t acc = seed;\n"
+                    "    for (uint32_t rem = n; rem != 0u; rem--) {\n"
+                    "        acc = (acc ^ (acc << 5)) + rem;\n"
+                    "    }\n"
+                    "    return acc;\n"
+                    "}\n"
+                    "__attribute__((noinline))\n"
+                    "uint32_t popcount_loop_u32(uint32_t x, uint32_t step) {\n"
+                    "    uint32_t cnt = 0;\n"
+                    "    for (uint32_t i = 0; i < 8u; i++) {\n"
+                    "        if ((x >> i) & 1u) {\n"
+                    "            cnt += (step ^ i) + 1u;\n"
+                    "        }\n"
+                    "    }\n"
+                    "    return cnt;\n"
+                    "}\n"
+                    "__attribute__((noinline))\n"
+                    "uint32_t crc_loop_u32(uint32_t crc, uint32_t poly, uint32_t n) {\n"
+                    "    uint32_t v = crc;\n"
+                    "    for (uint32_t i = 0; i < n; i++) {\n"
+                    "        uint32_t bit = v & 1u;\n"
+                    "        v >>= 1;\n"
+                    "        if (bit) v ^= poly;\n"
+                    "    }\n"
+                    "    return v;\n"
+                    "}\n"
+                )
+            m3b_spill_c = os.path.join(tmpdir, "m3b_live_spill_loop.c")
+            with open(m3b_spill_c, "w", encoding="utf-8") as f:
+                f.write(
+                    "#include <stdint.h>\n"
+                    "uint32_t spilled_loop_u32(uint32_t n, uint32_t seed) {\n"
+                    "    uint32_t acc = seed ^ 0x55555555u;\n"
+                    "    for (uint32_t rem = n; rem != 0u; rem--) {\n"
+                    "        acc = (acc ^ (acc << 3)) ^ rem;\n"
+                    "    }\n"
+                    "    return acc;\n"
+                    "}\n"
+                )
+            o2_loop_specs = {
+                "rv64": [
+                    ("checksum_loop_u32", 2,
+                     '(loop (ir-header "6") (mc-pc 2) (sp-off 0) (regs (reg 10 32 (var "!cut_0" 32)) (reg 11 32 (var "!cut_1" 32))) (slots) (inv (icmp ne 0 32 (var "!cut_0" 32) (bv 32 0))))'),
+                    ("popcount_loop_u32", 2,
+                     '(loop (ir-header "4") (mc-pc 6) (sp-off 0) (regs (reg 10 32 (var "%0" 32)) (reg 11 32 (var "%1" 32)) (reg 12 32 (var "!cut_1" 32)) (reg 13 64 (cast sext 32 64 (flags 0 0 0) (var "!cut_0" 32))) (reg 16 64 (bv 64 8))) (slots) (inv (icmp ult 0 32 (var "!cut_0" 32) (bv 32 8))))'),
+                    ("crc_loop_u32", 3,
+                     '(loop (ir-header "7") (mc-pc 2) (sp-off 0) (regs (reg 10 32 (var "!cut_0" 32)) (reg 11 32 (var "%1" 32)) (reg 12 32 (binop sub 32 (flags 0 0 0 0) (var "%2" 32) (var "!cut_1" 32)))) (slots))'),
+                ],
+                "aarch64": [
+                    ("checksum_loop_u32", 2,
+                     '(loop (ir-header "6") (mc-pc 12) (sp-off 0) (regs (reg 0 32 (var "!cut_1" 32)) (reg 8 32 (var "!cut_0" 32))) (slots) (inv (icmp ne 0 32 (var "!cut_0" 32) (bv 32 0))))'),
+                    ("popcount_loop_u32", 2,
+                     '(loop (ir-header "4") (mc-pc 8) (sp-off 0) (regs (reg 0 32 (var "%0" 32)) (reg 1 32 (var "%1" 32)) (reg 8 32 (var "!cut_1" 32)) (reg 9 32 (var "!cut_0" 32))) (slots) (inv (icmp ult 0 32 (var "!cut_0" 32) (bv 32 8))))'),
+                    ("crc_loop_u32", 3,
+                     '(loop (ir-header "7") (mc-pc 4) (sp-off 0) (regs (reg 0 32 (var "!cut_0" 32)) (reg 1 32 (var "%1" 32)) (reg 2 32 (binop sub 32 (flags 0 0 0 0) (var "%2" 32) (var "!cut_1" 32)))) (slots))'),
+                ],
+            }
+            spill_loop_specs = {
+                "rv64": '(loop (ir-header "7") (mc-pc 32) (sp-off -16) (regs) (slots (slot -12 4 (var "!cut_1" 32)) (slot -16 4 (var "!cut_0" 32))) (inv (icmp ne 0 32 (var "!cut_0" 32) (bv 32 0))))',
+                "aarch64": '(loop (ir-header "7") (mc-pc 48) (sp-off -16) (regs) (slots (slot -12 4 (var "!cut_1" 32)) (slot -16 4 (var "!cut_0" 32))) (inv (icmp ne 0 32 (var "!cut_0" 32) (bv 32 0))))',
+            }
+            for l_arch, l_triple, l_flags, l_ldm, l_ldx, l_rvc, l_ext in [
+                ("rv64", "riscv64-unknown-none-elf", ["-march=rv64imc", "-mno-relax", "-mabi=lp64"], "elf64lriscv", ["--no-relax"], 1, "signext"),
+                ("aarch64", "aarch64-unknown-none-elf", [], "aarch64linux", [], 0, "none"),
+            ]:
+                l_ll = os.path.join(tmpdir, f"m3b_live_{l_arch}.ll")
+                l_o = os.path.join(tmpdir, f"m3b_live_{l_arch}.o")
+                l_elf = os.path.join(tmpdir, f"m3b_live_{l_arch}.elf")
+                o2_flags = ["-O2", "-fno-unroll-loops", "-fno-vectorize", "-fno-builtin"]
+                subprocess.run([clang_22, "--target=" + l_triple, *l_flags, *o2_flags, "-S", "-emit-llvm", m3b_loops_c, "-o", l_ll], check=True)
+                subprocess.run([clang_22, "--target=" + l_triple, *l_flags, *o2_flags, "-c", m3b_loops_c, "-o", l_o], check=True)
+                subprocess.run([lld_22, "-m", l_ldm, *l_ldx, "-e", "checksum_loop_u32", l_o, "-o", l_elf], check=True)
+                for fn_l, n_args, l_spec in o2_loop_specs[l_arch]:
+                    l_args = [(f"%{i}", 32, l_ext) for i in range(n_args)]
+                    l_lrat = emit_and_solve_lrat(bins[0], l_arch, l_rvc, l_ll, l_o, fn_l, 32, l_args, tmpdir, loop_sexp=l_spec)
+                    for l_kind, l_ep in [("rel", l_o), ("exec", l_elf)]:
+                        l_cp = os.path.join(tmpdir, f"m3b_live_{l_arch}_{fn_l}.{l_kind}.mc.cert")
+                        with open(l_cp, "w", encoding="utf-8") as f:
+                            f.write(format_mc_cert(l_kind, fn_l, l_rvc, 32, l_args, l_lrat, arch=l_arch, loop_sexp=l_spec))
+                        for b in bins:
+                            res = run_cmd([b, "--check-mc", "--ir", l_ll, "--elf", l_ep, "--cert", l_cp])
+                            if res.returncode != 0:
+                                print(f"FAIL M3b live {l_arch} {fn_l} {l_kind} ({b}): {res.stderr}", file=sys.stderr)
+                                return 1
+                        pos_passed += 1
+
+                sp_ll = os.path.join(tmpdir, f"m3b_spill_{l_arch}.ll")
+                sp_o = os.path.join(tmpdir, f"m3b_spill_{l_arch}.o")
+                sp_elf = os.path.join(tmpdir, f"m3b_spill_{l_arch}.elf")
+                subprocess.run([clang_22, "--target=" + l_triple, *l_flags, "-O2", "-fno-unroll-loops", "-fno-vectorize", "-fno-builtin", "-S", "-emit-llvm", m3b_spill_c, "-o", sp_ll], check=True)
+                subprocess.run([clang_22, "--target=" + l_triple, *l_flags, "-O0", "-fomit-frame-pointer", "-fno-builtin", "-c", m3b_spill_c, "-o", sp_o], check=True)
+                subprocess.run([lld_22, "-m", l_ldm, *l_ldx, "-e", "spilled_loop_u32", sp_o, "-o", sp_elf], check=True)
+                sp_args = [("%0", 32, l_ext), ("%1", 32, l_ext)]
+                sp_spec = spill_loop_specs[l_arch]
+                sp_lrat = emit_and_solve_lrat(bins[0], l_arch, l_rvc, sp_ll, sp_o, "spilled_loop_u32", 32, sp_args, tmpdir, loop_sexp=sp_spec)
+                for l_kind, l_ep in [("rel", sp_o), ("exec", sp_elf)]:
+                    l_cp = os.path.join(tmpdir, f"m3b_spill_{l_arch}.{l_kind}.mc.cert")
+                    with open(l_cp, "w", encoding="utf-8") as f:
+                        f.write(format_mc_cert(l_kind, "spilled_loop_u32", l_rvc, 32, sp_args, sp_lrat, arch=l_arch, loop_sexp=sp_spec))
+                    for b in bins:
+                        res = run_cmd([b, "--check-mc", "--ir", sp_ll, "--elf", l_ep, "--cert", l_cp])
+                        if res.returncode != 0:
+                            print(f"FAIL M3b live spill {l_arch} {l_kind} ({b}): {res.stderr}", file=sys.stderr)
+                            return 1
+                    pos_passed += 1
+        print(f"PASS M3b verified structured-loop suite ({pos_passed} total positive checks)")
 
         live_count = 0
         if ns.live_corpus:
