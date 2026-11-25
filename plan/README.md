@@ -1,7 +1,7 @@
 # Master Plan & Roadmap (`cert-llvm`)
 
 **Target Baseline:** LLVM `23.1.5` (`llvmorg-23.1.5`, released 2026-11-03) + Vellvm (`main` on Rocq `9.1`)  
-**Last Updated:** 2026-11-24
+**Last Updated:** 2026-11-25
 
 ---
 
@@ -15,10 +15,10 @@
 | **Phase 4: Orchestration, Backend Check & Audit** | Months 6–9 | **Completed** | **100%** (4.1a `cert-llvm` + `runtime/`, 4.1b Rocq [`ModuleMerge.v`](../passes/ModuleMerge.v), 4.2 `cert-backend-check`, & 4.3 Ed25519 `.proof.json` Done) |
 | **Phase 5: Two-Stage Hardening & Assurance** | Continuous | **Completed** | **100%** ([`CheckAssumptions.v`](../validator/CheckAssumptions.v) `0` custom axioms [`AigLrat` closed; 5 upstream Vellvm 3.0 classical axioms gated], [`run_forged_cert_suite.py`](../scripts/run_forged_cert_suite.py) 34/34 + Wycheproof, 4-Persona Red-Team `68/68` + `22/22` `resolved`, & Stage B `cert-qual-suite` Done) |
 | **Phase 6: E2E Provability, Stage 4b LRAT & OCaml Assurance** | Post-v1 | **In Progress** | **6.0, 6.1, 6.2, 6.3a, 6.4a Done** (Wave 2 live E2E `8/8` `mc` & `4/7` `full`, Stage 3/4b LRAT, dual-compiler `34/34` forged + `230/230` mutation gate, `--require-mc-validated`); **6.4b ISA-QEMU Fuzzing Next**; **6.3b & 6.4c Planned** |
-| **Phase 8.3a: Hybrid Rocq ELF/MC Validator *(Pulled Forward)*** | Post-v1 | **In Progress (M1, M2 & M2b Done; M3 Next)** | **Closes Stage 4b TCB:** M1 `RV64IM+RVC` & M2 `AArch64` Core (`8/8` live `.o`+`.elf`, `32` pos + `35` adv, **Stage 1** QEMU oracle) + **M2b Stage 2** formal Sail oracles (**`298`** A64 + **`149`** RV64/RVC opcodes proven over $2^{64}/2^{128}/2^{192}$ via `isla_batch`+`Z3`, `8/8` mutations, **`1,447`** `armv9_sim` + **`3,065`** `sail_riscv_sim` cases, `0`-axiom div/rem bridge) Done; M3 (loops/stack/calls) next; Stage 3 in Phase 9 |
+| **Phase 8.3a: Hybrid Rocq ELF/MC Validator *(Pulled Forward)*** | Post-v1 | **In Progress (M1, M2, M2b, M3a & M3b Done; M3c -> M4 Next)** | **Closes Stage 4b TCB:** M1 `RV64IM+RVC` & M2 `AArch64` Core (`8/8` live `.o`+`.elf`, `32` pos + `35` adv, **Stage 1** QEMU oracle) + **M2b Stage 2** formal Sail oracles (**`298`** A64 + **`149`** RV64/RVC opcodes proven over $2^{64}/2^{128}/2^{192}$ via `isla_batch`+`Z3`, `8/8` mutations, **`1,447`** `armv9_sim` + **`3,065`** `sail_riscv_sim` cases, `0`-axiom div/rem bridge) + **M3a** stack-frames & **M3b** structured loops Done (commit `49a902e`, [`McLoop.v`](../validator/McLoop.v), `64` pos + `64` adv checks, `0 Admitted`); M3c (calls) -> **M4** Rocq cleanup (modularization/formatting, layered deterministic tactic library, build/checker performance, granular error-pointing, Spec/Proof auditability) next; Stage 3 in Phase 9 |
 | **Phase 7: 32-Bit Targets (`ILP32`, `RV32`, `Thumb-2`/`A32`)** | Post-v1 | **Planned *(After 8.3a)*** | Shared `ILP32` parameterization (~2.5k–3.5k LOC) -> `RISCV32` (~0.8k–1.2k LOC) -> `ARM Thumb-2` / `A32` (~3.5k–5.0k LOC), inheriting `.mc.cert` / `McValidator.v` |
 | **Phase 8 (Remaining): Deep Rocq Closure (`volatile`, `.bc`, `8.3b`)** | Post-v1 | **Planned** | Observable `volatile`/MMIO & verified `runtime/` (`8.1`) -> Rocq `.bc` codec (`8.2`) -> optional 2-tier private certifying fallback codegen (`llc -O0` retry + canonical `.mc.cert` emitter checked by public `8.3a`, `8.3b`) |
-| **Phase 9: Regulatory TQK, Concept Assessment & Frontends** | Post-v1 | **Planned** | `ISO 26262-8` Concept Assessment/`TQK`, Stage-1 `SuperTest`/`FLS` traceability -> formal `C`/`MIR` TV, & Stage-3 Sail Coq refinement |
+| **Phase 9: Regulatory TQK, Concept Assessment & Frontends** | Post-v1 | **Planned** | `ISO 26262-8` Concept Assessment/`TQK`, Stage-1 `SuperTest`/`FLS` traceability -> unified AbsInt-free `vellvmgen` hub (clean-room `Clang -> Clight`/VST for C & `MiniRust`/`Charon` for Rust `Source -> Vellvm` TV), & Stage-3 Sail Coq refinement |
 
 ---
 
