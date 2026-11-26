@@ -98,6 +98,13 @@ Record mc_loop_spec : Set := mk_mc_loop_spec {
   ml_inv : option cert_expr;
 }.
 
+Record mc_callee_spec : Set := mk_mc_callee_spec {
+  mcs_name : string;
+  mcs_ret_width : positive;
+  mcs_ret_ext : rv_arg_ext;
+  mcs_args : list rv_arg_spec;
+}.
+
 Record mc_certificate : Set := mk_mc_certificate {
   mc_arch : elf_arch;
   mc_elf_kind : elf_kind;
@@ -105,9 +112,31 @@ Record mc_certificate : Set := mk_mc_certificate {
   mc_rvc : bool;
   mc_ret_width : positive;
   mc_args : list rv_arg_spec;
+  mc_calls : list mc_callee_spec;
   mc_loop : option mc_loop_spec;
   mc_lrat_proof : option (list lrat_step);
 }.
+
+Definition mc_strip_leading_at (s : string) : string :=
+  match s with
+  | EmptyString => EmptyString
+  | String c rest => if Ascii.eqb c "@"%char then rest else s
+  end.
+
+Definition mc_format_starts_with_bang (s : string) : bool :=
+  match s with
+  | EmptyString => false
+  | String c _ => Ascii.eqb c "!"%char
+  end.
+
+Definition mc_str_in_list (s : string) (xs : list string) : bool :=
+  existsb (String.eqb s) xs.
+
+Fixpoint mc_no_dup_strings (xs : list string) : bool :=
+  match xs with
+  | [] => true
+  | x :: rest => negb (mc_str_in_list x rest) && mc_no_dup_strings rest
+  end.
 
 Definition n_in_list_bool (x : N) (xs : list N) : bool :=
   existsb (N.eqb x) xs.
@@ -188,11 +217,26 @@ Definition wf_mc_loop_spec (arch : elf_arch) (ls : mc_loop_spec) : bool :=
       ub_free_expr inv
   end.
 
+Definition wf_mc_callee_spec (c : mc_callee_spec) : bool :=
+  negb (String.eqb (mc_strip_leading_at (mcs_name c)) "") &&
+  rv_supported_arg_width (mcs_ret_width c) &&
+  Nat.leb (List.length (mcs_args c)) 8 &&
+  forallb rv_valid_arg_spec (mcs_args c) &&
+  forallb (fun sp => negb (mc_format_starts_with_bang (ras_name sp))) (mcs_args c) &&
+  mc_no_dup_strings (List.map ras_name (mcs_args c)).
+
+Definition wf_mc_calls (fn_name : string) (cs : list mc_callee_spec) : bool :=
+  let fn_bare := mc_strip_leading_at fn_name in
+  forallb wf_mc_callee_spec cs &&
+  forallb (fun c => negb (String.eqb (mc_strip_leading_at (mcs_name c)) fn_bare)) cs &&
+  mc_no_dup_strings (List.map (fun c => mc_strip_leading_at (mcs_name c)) cs).
+
 Definition wf_mc_cert (c : mc_certificate) : bool :=
   negb (String.eqb (mc_fn_name c) "") &&
   rv_supported_arg_width (mc_ret_width c) &&
   Nat.leb (List.length (mc_args c)) 8 &&
   forallb rv_valid_arg_spec (mc_args c) &&
+  wf_mc_calls (mc_fn_name c) (mc_calls c) &&
   match mc_loop c with
   | None => true
   | Some ls => wf_mc_loop_spec (mc_arch c) ls
@@ -493,7 +537,61 @@ Proof.
   inversion H; subst ls; exact Hwf.
 Qed.
 
-Definition parse_mc_tail (arch : elf_arch) (tail : list sexp)
+Definition parse_mc_callee_ret_sexp (sx : sexp) : string + (positive * rv_arg_ext) :=
+  match sx with
+  | SList [SAtom tag; w_sx; ext_sx] =>
+      if String.eqb tag "ret-width" then
+        match parse_rv_width_sexp w_sx, parse_rv_arg_ext_sexp ext_sx with
+        | inr w, inr ext => inr (w, ext)
+        | inl err, _ => inl err
+        | _, inl err => inl err
+        end
+      else inl "expected ret-width field in mc-cert-v1 callee"
+  | _ => inl "malformed ret-width field in mc-cert-v1 callee"
+  end.
+
+Lemma parse_mc_callee_ret_supported : forall sx w ext,
+  parse_mc_callee_ret_sexp sx = inr (w, ext) -> rv_supported_arg_width w = true.
+Proof.
+  intros [| | [| [tag | |] [| w_sx [| ext_sx [| ? ?]]]]] w ext H;
+    cbn in H; try discriminate H.
+  destruct (String.eqb tag "ret-width"); [| discriminate H].
+  destruct (parse_rv_width_sexp w_sx) as [| w0] eqn:Hw; [discriminate H |].
+  destruct (parse_rv_arg_ext_sexp ext_sx); [discriminate H |].
+  inversion H; subst w0; exact (parse_rv_width_supported _ _ Hw).
+Qed.
+
+Definition parse_mc_callee_sexp (sx : sexp) : string + mc_callee_spec :=
+  match sx with
+  | SList [SAtom tag; nm_sx; ret_sx; args_sx] =>
+      if String.eqb tag "callee" then
+        match parse_nonempty_str nm_sx, parse_mc_callee_ret_sexp ret_sx, parse_mc_args_sexp args_sx with
+        | inr nm, inr (rw, rext), inr cargs =>
+            let c := mk_mc_callee_spec nm rw rext cargs in
+            if wf_mc_callee_spec c then inr c
+            else inl "invalid callee specification in mc-cert-v1 calls"
+        | inl err, _, _ => inl err
+        | _, inl err, _ => inl err
+        | _, _, inl err => inl err
+        end
+      else inl "expected callee entry in mc-cert-v1 calls"
+  | _ => inl "malformed callee entry in mc-cert-v1 calls"
+  end.
+
+Lemma parse_mc_callee_sexp_wf : forall sx c,
+  parse_mc_callee_sexp sx = inr c -> wf_mc_callee_spec c = true.
+Proof.
+  intros [| | [| [tag | |] [| nm_sx [| ret_sx [| args_sx [| ? ?]]]]]] c H;
+    cbn in H; try discriminate H.
+  destruct (String.eqb tag "callee"); [| discriminate H].
+  destruct (parse_nonempty_str nm_sx) as [| nm]; [discriminate H |].
+  destruct (parse_mc_callee_ret_sexp ret_sx) as [| [rw rext]]; [discriminate H |].
+  destruct (parse_mc_args_sexp args_sx) as [| cargs]; [discriminate H |].
+  destruct (wf_mc_callee_spec (mk_mc_callee_spec nm rw rext cargs)) eqn:Hwf;
+    [inversion H; subst; exact Hwf | discriminate H].
+Qed.
+
+Definition parse_mc_loop_and_lrat (arch : elf_arch) (tail : list sexp)
   : string + (option mc_loop_spec * option (list lrat_step)) :=
   match tail with
   | [] => inr (None, None)
@@ -525,8 +623,8 @@ Definition parse_mc_tail (arch : elf_arch) (tail : list sexp)
   | _ => inl "unexpected trailing section in mc-cert-v1"
   end.
 
-Lemma parse_mc_tail_wf : forall arch tail opt_loop opt_pf,
-  parse_mc_tail arch tail = inr (opt_loop, opt_pf) ->
+Lemma parse_mc_loop_and_lrat_wf : forall arch tail opt_loop opt_pf,
+  parse_mc_loop_and_lrat arch tail = inr (opt_loop, opt_pf) ->
   (match opt_loop with None => true | Some ls => wf_mc_loop_spec arch ls end) = true /\
   (match opt_pf with None => true | Some [] => false | Some (_ :: _) => true end) = true.
 Proof.
@@ -548,6 +646,62 @@ Proof.
     inversion H; subst; split; [exact (parse_mc_loop_sexp_wf _ _ _ Hl) | reflexivity].
 Qed.
 
+Definition parse_mc_tail (arch : elf_arch) (fn_name : string) (tail : list sexp)
+  : string + (list mc_callee_spec * option mc_loop_spec * option (list lrat_step)) :=
+  match tail with
+  | SList (SAtom tag :: cre) :: rest =>
+      if String.eqb tag "calls" then
+        match parse_nonempty_tagged_section "calls" parse_mc_callee_sexp (SList (SAtom "calls" :: cre)) with
+        | inl err => inl err
+        | inr cs =>
+            if wf_mc_calls fn_name cs then
+              match parse_mc_loop_and_lrat arch rest with
+              | inr (opt_loop, opt_pf) => inr (cs, opt_loop, opt_pf)
+              | inl err => inl err
+              end
+            else inl "duplicate callee or direct self-recursion in mc-cert-v1 calls"
+        end
+      else
+        match parse_mc_loop_and_lrat arch tail with
+        | inr (opt_loop, opt_pf) => inr ([], opt_loop, opt_pf)
+        | inl err => inl err
+        end
+  | _ =>
+      match parse_mc_loop_and_lrat arch tail with
+      | inr (opt_loop, opt_pf) => inr ([], opt_loop, opt_pf)
+      | inl err => inl err
+      end
+  end.
+
+Lemma parse_mc_tail_wf : forall arch fn_name tail calls opt_loop opt_pf,
+  parse_mc_tail arch fn_name tail = inr (calls, opt_loop, opt_pf) ->
+  wf_mc_calls fn_name calls = true /\
+  (match opt_loop with None => true | Some ls => wf_mc_loop_spec arch ls end) = true /\
+  (match opt_pf with None => true | Some [] => false | Some (_ :: _) => true end) = true.
+Proof.
+  intros arch fn_name tail calls opt_loop opt_pf H.
+  destruct tail as [| [| | [| [tag | |] cre]] rest];
+    try (unfold parse_mc_tail in H;
+         destruct (parse_mc_loop_and_lrat arch _) as [| [ol op]] eqn:Hll; [discriminate H |];
+         inversion H; subst; clear H;
+         destruct (parse_mc_loop_and_lrat_wf _ _ _ _ Hll) as [Hl Hp];
+         split; [reflexivity | exact (conj Hl Hp)]).
+  unfold parse_mc_tail in H.
+  destruct (String.eqb tag "calls") eqn:Etag.
+  - destruct (parse_nonempty_tagged_section "calls" parse_mc_callee_sexp (SList (SAtom "calls" :: cre)))
+      as [| cs]; [discriminate H |].
+    destruct (wf_mc_calls fn_name cs) eqn:Hwc; [| discriminate H].
+    destruct (parse_mc_loop_and_lrat arch rest) as [| [ol op]] eqn:Hll; [discriminate H |].
+    inversion H; subst; clear H.
+    destruct (parse_mc_loop_and_lrat_wf _ _ _ _ Hll) as [Hl Hp].
+    split; [exact Hwc | exact (conj Hl Hp)].
+  - destruct (parse_mc_loop_and_lrat arch (SList (SAtom tag :: cre) :: rest)) as [| [ol op]] eqn:Hll;
+      [discriminate H |].
+    inversion H; subst; clear H.
+    destruct (parse_mc_loop_and_lrat_wf _ _ _ _ Hll) as [Hl Hp].
+    split; [reflexivity | exact (conj Hl Hp)].
+Qed.
+
 Definition parse_mc_cert_sexp (root : sexp) : string + mc_certificate :=
   match root with
   | SList (SAtom schema_tag :: arch_sx :: kind_sx :: fn_sx :: rvc_sx :: rw_sx :: args_sx :: tail) =>
@@ -559,9 +713,9 @@ Definition parse_mc_cert_sexp (root : sexp) : string + mc_certificate :=
               parse_mc_ret_width_sexp rw_sx,
               parse_mc_args_sexp args_sx with
         | inr arch, inr kind, inr fn_nm, inr rvc, inr rw, inr args =>
-            match parse_mc_tail arch tail with
-            | inr (opt_loop, opt_pf) =>
-                inr (mk_mc_certificate arch kind fn_nm rvc rw args opt_loop opt_pf)
+            match parse_mc_tail arch fn_nm tail with
+            | inr (calls, opt_loop, opt_pf) =>
+                inr (mk_mc_certificate arch kind fn_nm rvc rw args calls opt_loop opt_pf)
             | inl err => inl err
             end
         | inl err, _, _, _, _, _ => inl err
@@ -593,14 +747,14 @@ Proof.
   destruct (parse_mc_rvc_sexp rvc_sx) as [| rvc]; [discriminate |].
   destruct (parse_mc_ret_width_sexp rw_sx) as [| rw] eqn:Hrw; [discriminate |].
   destruct (parse_mc_args_sexp args_sx) as [| args] eqn:Hargs; [discriminate |].
-  destruct (parse_mc_tail arch tail) as [| [opt_loop opt_pf]] eqn:Htail; [discriminate |].
+  destruct (parse_mc_tail arch fn_nm tail) as [| [[calls opt_loop] opt_pf]] eqn:Htail; [discriminate |].
   inversion H; subst c; clear H.
   destruct (parse_mc_args_wf _ _ Hargs) as [Hlen Hspecs].
-  destruct (parse_mc_tail_wf _ _ _ _ Htail) as [Hloop Hpf].
-  unfold wf_mc_cert; cbn [mc_arch mc_fn_name mc_ret_width mc_args mc_loop mc_lrat_proof].
+  destruct (parse_mc_tail_wf _ _ _ _ _ _ Htail) as (Hcalls & Hloop & Hpf).
+  unfold wf_mc_cert; cbn [mc_arch mc_fn_name mc_ret_width mc_args mc_calls mc_loop mc_lrat_proof].
   rewrite (parse_tagged_nonempty_str_ok _ _ _ Hfn),
           (parse_mc_ret_width_supported _ _ Hrw),
-          Hlen, Hspecs, Hloop, Hpf; reflexivity.
+          Hlen, Hspecs, Hcalls, Hloop, Hpf; reflexivity.
 Qed.
 
 Theorem parse_mc_cert_wf : forall input c,

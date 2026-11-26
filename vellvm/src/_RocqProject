@@ -123,5 +123,6 @@
 ../../validator/A64CoreSem.v
 ../../validator/McFormat.v
 ../../validator/McLoop.v
+../../validator/McCall.v
 ../../validator/McValidator.v
 ../../validator/CheckAssumptions.v

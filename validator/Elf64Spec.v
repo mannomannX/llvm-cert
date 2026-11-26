@@ -633,3 +633,604 @@ Proof.
   split; [exact Enob |].
   split; [exact Eex | exact Erel].
 Qed.
+
+(** ** 6. Additive Call-Relocation & Linked Symbol-Address Extraction (M3c) *)
+
+Definition R_RISCV_JAL : N := 17%N.
+Definition R_RISCV_CALL : N := 18%N.
+Definition R_RISCV_CALL_PLT : N := 19%N.
+Definition R_AARCH64_CALL26 : N := 283%N.
+
+Record elf_call_info : Set := mk_elf_call_info {
+  eci_relocs : list (N * string);
+  eci_sym_addrs : list (string * N);
+}.
+
+Definition elf_str_in_list (s : string) (xs : list string) : bool :=
+  existsb (String.eqb s) xs.
+
+Definition elf_n_in_list (x : N) (xs : list N) : bool :=
+  existsb (N.eqb x) xs.
+
+Fixpoint elf_no_dup_N (xs : list N) : bool :=
+  match xs with
+  | [] => true
+  | x :: rest => negb (elf_n_in_list x rest) && elf_no_dup_N rest
+  end.
+
+Lemma elf_n_in_list_spec : forall x xs, elf_n_in_list x xs = true <-> In x xs.
+Proof.
+  intros x xs; unfold elf_n_in_list; rewrite existsb_exists; split.
+  - intros [y [Hy Heq]]; apply N.eqb_eq in Heq; subst y; exact Hy.
+  - intros Hin; exists x; split; [exact Hin | apply N.eqb_refl].
+Qed.
+
+Lemma elf_no_dup_N_sound : forall xs,
+  elf_no_dup_N xs = true -> NoDup xs.
+Proof.
+  induction xs as [| x xs IH]; intro H; cbn [elf_no_dup_N] in H; [constructor |].
+  apply andb_true_iff in H as [Hnin Hnd].
+  constructor; [intro Hin; apply elf_n_in_list_spec in Hin; rewrite Hin in Hnin; discriminate Hnin | exact (IH Hnd)].
+Qed.
+
+Definition rela_type_is_direct_call (arch : elf_arch) (r_type : N) : bool :=
+  match arch with
+  | EA_Riscv64 =>
+      N.eqb r_type R_RISCV_JAL ||
+      N.eqb r_type R_RISCV_CALL ||
+      N.eqb r_type R_RISCV_CALL_PLT
+  | EA_AArch64 =>
+      N.eqb r_type R_AARCH64_CALL26
+  end.
+
+Definition check_and_collect_call_rela_entry
+  (arch : elf_arch) (kind : elf_kind) (shdrs : list elf64_shdr)
+  (syms : list elf64_sym) (rela_info target_shndx : nat)
+  (fn_lo fn_hi : N) (allowed_callees : list string) (r : elf64_rela)
+  : string + option (N * string) :=
+  let forbidden_riscv :=
+    elf_arch_eqb arch EA_Riscv64 &&
+    (N.eqb (er_type r) R_RISCV_RELAX || N.eqb (er_type r) R_RISCV_ALIGN)
+  in
+  if forbidden_riscv then inl "ELF64 relocation/relaxation gate rejected R_RISCV_RELAX/ALIGN"
+  else if negb (Nat.eqb rela_info target_shndx) then inr None
+  else if N.ltb (er_offset r) fn_lo || N.leb fn_hi (er_offset r) then inr None
+  else
+    match kind with
+    | EK_Exec | EK_Dyn =>
+        inl "relocation inside function slice forbidden in linked ELF"
+    | EK_Rel =>
+        if negb (rela_type_is_direct_call arch (er_type r)) then
+          inl "unsupported relocation type inside function slice"
+        else if negb (N.eqb (er_addend r) 0%N) then
+          inl "non-zero relocation addend inside function slice"
+        else if negb (N.leb (er_sym r) (N.of_nat (List.length syms))) then
+          inl "call relocation symbol index out of range"
+        else
+          match nth_error syms (N.to_nat (er_sym r)) with
+          | None => inl "call relocation symbol index out of bounds"
+          | Some csym =>
+              if negb (N.eqb (esym_type csym) STT_FUNC) then
+                inl "call relocation does not target STT_FUNC symbol"
+              else if negb (elf_str_in_list (esym_name csym) allowed_callees) then
+                inl (String.append "unapproved callee relocation target: " (esym_name csym))
+              else
+                match find_unique_func_sym syms (esym_name csym) with
+                | None => inl "ambiguous callee STT_FUNC symbol"
+                | Some _ =>
+                    match nth_error shdrs (esym_shndx csym) with
+                    | None => inl "callee st_shndx out of bounds"
+                    | Some csh =>
+                        match compute_func_slice_offsets EK_Rel csh csym with
+                        | inl err => inl err
+                        | inr _ => inr (Some ((er_offset r - fn_lo)%N, esym_name csym))
+                        end
+                    end
+                end
+          end
+    end.
+
+Fixpoint collect_call_rela_entries
+  (arch : elf_arch) (kind : elf_kind) (shdrs : list elf64_shdr)
+  (syms : list elf64_sym) (rela_info target_shndx : nat)
+  (fn_lo fn_hi : N) (allowed_callees : list string) (rs : list elf64_rela)
+  {struct rs} : string + list (N * string) :=
+  match rs with
+  | [] => inr []
+  | r :: rest =>
+      match check_and_collect_call_rela_entry arch kind shdrs syms rela_info target_shndx fn_lo fn_hi allowed_callees r with
+      | inl err => inl err
+      | inr opt_p =>
+          match collect_call_rela_entries arch kind shdrs syms rela_info target_shndx fn_lo fn_hi allowed_callees rest with
+          | inl err => inl err
+          | inr tl =>
+              match opt_p with
+              | None => inr tl
+              | Some p => inr (p :: tl)
+              end
+          end
+      end
+  end.
+
+Definition collect_one_rela_section
+  (raw : list N) (arch : elf_arch) (kind : elf_kind) (shdrs : list elf64_shdr)
+  (syms : list elf64_sym) (target_shndx : nat) (fn_lo fn_hi : N)
+  (allowed_callees : list string) (sh : elf64_shdr) : string + list (N * string) :=
+  if negb (N.eqb (esh_type sh) SHT_RELA) then inr []
+  else
+    match nth_error shdrs (esh_info sh) with
+    | None => inl "ELF64 SHT_RELA sh_info out of bounds"
+    | Some tgt_sh =>
+        if negb (bit_is_set (esh_flags tgt_sh) 2%N) then inr []
+        else if negb (N.eqb (esh_entsize sh) 24%N && N.eqb (N.modulo (esh_size sh) 24%N) 0%N) then
+          inl "ELF64 SHT_RELA has invalid entsize or unaligned size"
+        else
+          match n_to_nat_checked (List.length raw) (esh_offset sh),
+                n_to_nat_checked (List.length raw) (esh_size sh)
+          with
+          | Some r_off, Some r_sz =>
+              let count := Nat.div r_sz 24 in
+              if negb (Nat.leb (r_off + count * 24) (List.length raw)) then
+                inl "ELF64 SHT_RELA payload out of bounds"
+              else
+                match parse_relas_aux count raw r_off 0 with
+                | None => inl "truncated ELF64 SHT_RELA entries"
+                | Some rs =>
+                    collect_call_rela_entries arch kind shdrs syms (esh_info sh) target_shndx fn_lo fn_hi allowed_callees rs
+                end
+          | _, _ => inl "ELF64 SHT_RELA offset or size out of bounds"
+          end
+    end.
+
+Fixpoint collect_all_call_relocs
+  (raw : list N) (arch : elf_arch) (kind : elf_kind) (all_shdrs rem_shdrs : list elf64_shdr)
+  (syms : list elf64_sym) (target_shndx : nat) (fn_lo fn_hi : N)
+  (allowed_callees : list string) {struct rem_shdrs} : string + list (N * string) :=
+  match rem_shdrs with
+  | [] => inr []
+  | sh :: rest =>
+      match collect_one_rela_section raw arch kind all_shdrs syms target_shndx fn_lo fn_hi allowed_callees sh,
+            collect_all_call_relocs raw arch kind all_shdrs rest syms target_shndx fn_lo fn_hi allowed_callees with
+      | inl err, _ => inl err
+      | _, inl err => inl err
+      | inr xs, inr ys => inr (xs ++ ys)
+      end
+  end.
+
+Fixpoint collect_exec_callee_addrs
+  (kind : elf_kind) (shdrs : list elf64_shdr) (syms : list elf64_sym)
+  (allowed_callees : list string) {struct allowed_callees} : string + list (string * N) :=
+  match allowed_callees with
+  | [] => inr []
+  | cn :: rest =>
+      match find_unique_func_sym syms cn with
+      | None => inl (String.append "missing or ambiguous linked callee STT_FUNC symbol: " cn)
+      | Some csym =>
+          match nth_error shdrs (esym_shndx csym) with
+          | None => inl "linked callee st_shndx out of bounds"
+          | Some csh =>
+              match compute_func_slice_offsets kind csh csym with
+              | inl err => inl err
+              | inr _ =>
+                  match collect_exec_callee_addrs kind shdrs syms rest with
+                  | inl err => inl err
+                  | inr rest_addrs => inr ((cn, esym_value csym) :: rest_addrs)
+                  end
+              end
+          end
+      end
+  end.
+
+(** Extract a caller function slice and verified direct-call relocation / symbol metadata.
+    [allowed_callees] contains bare ELF symbol names (without leading '@'). *)
+Definition elf64_extract_func_with_calls
+  (raw : list N) (want_arch : elf_arch) (want_kind : elf_kind)
+  (fn_name : string) (allowed_callees : list string)
+  : string + (elf_func_slice * elf_call_info) :=
+  match parse_elf64_header raw with
+  | inl err => inl err
+  | inr hdr =>
+      if negb (elf_arch_eqb (eh_arch hdr) want_arch) then inl "ELF64 architecture mismatch"
+      else if negb (elf_kind_eqb (eh_kind hdr) want_kind) then inl "ELF64 e_type mismatch"
+      else
+        match parse_elf64_shdrs raw hdr with
+        | inl err => inl err
+        | inr shdrs =>
+            match parse_elf64_symtab raw shdrs with
+            | inl err => inl err
+            | inr syms =>
+                match find_unique_func_sym syms fn_name with
+                | None => inl (String.append "missing or non-unique ELF64 STT_FUNC symbol: " fn_name)
+                | Some sym =>
+                    match nth_error shdrs (esym_shndx sym) with
+                    | None => inl "ELF64 function st_shndx out of bounds"
+                    | Some sh =>
+                        match compute_func_slice_offsets (eh_kind hdr) sh sym with
+                        | inl err => inl err
+                        | inr (foff, rlo, rhi) =>
+                            match n_to_nat_checked (List.length raw) foff,
+                                  n_to_nat_checked (List.length raw) (esym_size sym)
+                            with
+                            | Some foff_nat, Some fsz_nat =>
+                                match slice_bytes raw foff_nat fsz_nat with
+                                | None => inl "ELF64 function byte slice out of bounds"
+                                | Some bytes =>
+                                    let sl := mk_elf_func_slice
+                                                (eh_arch hdr) (eh_kind hdr) (eh_rvc hdr)
+                                                (esym_shndx sym) foff_nat fsz_nat bytes rlo rhi in
+                                    match eh_kind hdr with
+                                    | EK_Rel =>
+                                        match collect_all_call_relocs raw (eh_arch hdr) EK_Rel shdrs shdrs syms (esym_shndx sym) rlo rhi allowed_callees with
+                                        | inl err => inl err
+                                        | inr rels =>
+                                            if negb (elf_no_dup_N (List.map fst rels)) then
+                                              inl "duplicate call relocation offset inside function slice"
+                                            else
+                                              inr (sl, mk_elf_call_info rels [])
+                                        end
+                                    | EK_Exec | EK_Dyn =>
+                                        if negb (check_exec_relocations raw (eh_arch hdr) shdrs (esym_shndx sym) rlo rhi) then
+                                          inl "ELF64 executable relocation/relaxation gate rejected binary"
+                                        else
+                                          match collect_exec_callee_addrs (eh_kind hdr) shdrs syms allowed_callees with
+                                          | inl err => inl err
+                                          | inr addrs => inr (sl, mk_elf_call_info [] addrs)
+                                          end
+                                    end
+                                end
+                            | _, _ => inl "ELF64 function slice offset/size exceeds file length"
+                            end
+                        end
+                    end
+                end
+            end
+        end
+  end.
+
+Lemma check_and_collect_call_rela_entry_sound :
+  forall arch kind shdrs syms rela_info target_shndx fn_lo fn_hi allowed_callees r opt_p,
+    check_and_collect_call_rela_entry arch kind shdrs syms rela_info target_shndx fn_lo fn_hi allowed_callees r = inr opt_p ->
+    rela_info = target_shndx ->
+    (fn_lo <= fn_hi)%N ->
+    forall rel_off cname,
+      opt_p = Some (rel_off, cname) ->
+      kind = EK_Rel /\
+      (rel_off < fn_hi - fn_lo)%N /\
+      er_offset r = (fn_lo + rel_off)%N /\
+      rela_type_is_direct_call arch (er_type r) = true /\
+      er_addend r = 0%N /\
+      In cname allowed_callees /\
+      exists csym csh,
+        nth_error syms (N.to_nat (er_sym r)) = Some csym /\
+        esym_name csym = cname /\
+        esym_type csym = STT_FUNC /\
+        find_unique_func_sym syms cname = Some csym /\
+        nth_error shdrs (esym_shndx csym) = Some csh /\
+        exists r_, compute_func_slice_offsets EK_Rel csh csym = inr r_.
+Proof.
+  intros arch kind shdrs syms rela_info target_shndx fn_lo fn_hi allowed_callees r opt_p H Hi Hlohi rel_off cname Hop.
+  unfold check_and_collect_call_rela_entry in H.
+  destruct (elf_arch_eqb arch EA_Riscv64 && (N.eqb (er_type r) R_RISCV_RELAX || N.eqb (er_type r) R_RISCV_ALIGN));
+    [discriminate H |].
+  destruct (Nat.eqb rela_info target_shndx) eqn:Einfo; cbn [negb] in H;
+    [| subst; rewrite Nat.eqb_refl in Einfo; discriminate Einfo].
+  destruct (N.ltb (er_offset r) fn_lo || N.leb fn_hi (er_offset r)) eqn:Eout;
+    [inversion H; rewrite Hop in *; discriminate |].
+  apply orb_false_iff in Eout as [Hge Hlt].
+  apply N.ltb_ge in Hge; apply N.leb_gt in Hlt.
+  destruct kind; [| discriminate H | discriminate H].
+  destruct (rela_type_is_direct_call arch (er_type r)) eqn:Ety; cbn [negb] in H; [| discriminate H].
+  destruct (N.eqb (er_addend r) 0%N) eqn:Eadd; cbn [negb] in H; [| discriminate H].
+  apply N.eqb_eq in Eadd.
+  destruct (N.leb (er_sym r) (N.of_nat (List.length syms))); cbn [negb] in H; [| discriminate H].
+  destruct (nth_error syms (N.to_nat (er_sym r))) as [csym |] eqn:Esym; [| discriminate H].
+  destruct (N.eqb (esym_type csym) STT_FUNC) eqn:Eft; cbn [negb] in H; [| discriminate H].
+  apply N.eqb_eq in Eft.
+  destruct (elf_str_in_list (esym_name csym) allowed_callees) eqn:Eal; cbn [negb] in H; [| discriminate H].
+  unfold elf_str_in_list in Eal; apply existsb_exists in Eal as [cn [Hcn Hceq]].
+  apply String.eqb_eq in Hceq; subst cn.
+  destruct (find_unique_func_sym syms (esym_name csym)) as [usym |] eqn:Eu; [| discriminate H].
+  destruct (nth_error shdrs (esym_shndx csym)) as [csh |] eqn:Ecsh; [| discriminate H].
+  destruct (compute_func_slice_offsets EK_Rel csh csym) as [| r_] eqn:Eoff; [discriminate H |].
+  inversion H as [Hopt]; clear H.
+  rewrite <- Hopt in Hop; inversion Hop; subst rel_off cname; clear Hopt Hop.
+  assert (Husym : usym = csym).
+  { unfold find_unique_func_sym in Eu.
+    destruct (List.filter (fun s => N.eqb (esym_type s) STT_FUNC && String.eqb (esym_name s) (esym_name csym)) syms)
+      as [| s0 [| ? ?]] eqn:Ef; try discriminate Eu.
+    inversion Eu; subst s0; clear Eu.
+    assert (Hin : In csym (List.filter (fun s => N.eqb (esym_type s) STT_FUNC && String.eqb (esym_name s) (esym_name csym)) syms)).
+    { apply filter_In; split; [exact (nth_error_In _ _ Esym) |].
+      rewrite Eft, N.eqb_refl, String.eqb_refl; reflexivity. }
+    rewrite Ef in Hin; destruct Hin as [-> | []]; reflexivity. }
+  subst usym.
+  repeat split; try lia; try assumption.
+  exists csym, csh; repeat split; try assumption; eexists; exact Eoff.
+Qed.
+
+Lemma check_and_collect_call_rela_entry_disallows_relax :
+  forall arch kind shdrs syms rela_info target_shndx fn_lo fn_hi allowed_callees r opt_p,
+    check_and_collect_call_rela_entry arch kind shdrs syms rela_info target_shndx fn_lo fn_hi allowed_callees r = inr opt_p ->
+    (elf_arch_eqb arch EA_Riscv64 && (N.eqb (er_type r) R_RISCV_RELAX || N.eqb (er_type r) R_RISCV_ALIGN)) = false.
+Proof.
+  intros arch kind shdrs syms rela_info target_shndx fn_lo fn_hi allowed_callees r opt_p H.
+  unfold check_and_collect_call_rela_entry in H.
+  destruct (elf_arch_eqb arch EA_Riscv64 && (N.eqb (er_type r) R_RISCV_RELAX || N.eqb (er_type r) R_RISCV_ALIGN));
+    [discriminate H | reflexivity].
+Qed.
+
+Lemma collect_call_rela_entries_to_exec_check :
+  forall arch kind shdrs syms rela_info target_shndx fn_lo fn_hi allowed_callees rs rels,
+    collect_call_rela_entries arch kind shdrs syms rela_info target_shndx fn_lo fn_hi allowed_callees rs = inr rels ->
+    (kind = EK_Exec \/ kind = EK_Dyn) ->
+    rels = [] /\
+    forallb (rela_entry_allowed arch rela_info target_shndx fn_lo fn_hi) rs = true.
+Proof.
+  intros arch kind shdrs syms rela_info target_shndx fn_lo fn_hi allowed_callees rs.
+  induction rs as [| r rest IH]; intros rels H Hkind; cbn [collect_call_rela_entries] in H.
+  - inversion H; subst; split; reflexivity.
+  - destruct (check_and_collect_call_rela_entry arch kind shdrs syms rela_info target_shndx fn_lo fn_hi allowed_callees r)
+      as [| opt_p] eqn:He; [discriminate H |].
+    destruct (collect_call_rela_entries arch kind shdrs syms rela_info target_shndx fn_lo fn_hi allowed_callees rest)
+      as [| tl] eqn:Hr; [discriminate H |].
+    destruct (IH tl eq_refl Hkind) as [Htl Hfb]; subst tl.
+    assert (Hnot_rel : rela_entry_allowed arch rela_info target_shndx fn_lo fn_hi r = true /\ opt_p = None).
+    { unfold check_and_collect_call_rela_entry in He; unfold rela_entry_allowed.
+      destruct (elf_arch_eqb arch EA_Riscv64 && (N.eqb (er_type r) R_RISCV_RELAX || N.eqb (er_type r) R_RISCV_ALIGN));
+        [discriminate He |].
+      destruct (Nat.eqb rela_info target_shndx); cbn [negb] in He.
+      - destruct (N.ltb (er_offset r) fn_lo || N.leb fn_hi (er_offset r)); [inversion He; split; reflexivity |].
+        destruct Hkind as [-> | ->]; discriminate He.
+      - inversion He; split; reflexivity. }
+    destruct Hnot_rel as [Hr_ok ->]; inversion H; split; [reflexivity | cbn [forallb]; rewrite Hr_ok, Hfb; reflexivity].
+Qed.
+
+Lemma collect_call_rela_entries_rel_sound :
+  forall arch shdrs syms rela_info target_shndx fn_lo fn_hi allowed_callees rs rels,
+    (fn_lo <= fn_hi)%N ->
+    collect_call_rela_entries arch EK_Rel shdrs syms rela_info target_shndx fn_lo fn_hi allowed_callees rs = inr rels ->
+    forall rel_off cname,
+      In (rel_off, cname) rels ->
+      (rel_off < fn_hi - fn_lo)%N /\
+      In cname allowed_callees /\
+      exists r csym csh,
+        In r rs /\
+        rela_info = target_shndx /\
+        er_offset r = (fn_lo + rel_off)%N /\
+        rela_type_is_direct_call arch (er_type r) = true /\
+        er_addend r = 0%N /\
+        nth_error syms (N.to_nat (er_sym r)) = Some csym /\
+        esym_name csym = cname /\
+        esym_type csym = STT_FUNC /\
+        find_unique_func_sym syms cname = Some csym /\
+        nth_error shdrs (esym_shndx csym) = Some csh /\
+        exists r_, compute_func_slice_offsets EK_Rel csh csym = inr r_.
+Proof.
+  intros arch shdrs syms rela_info target_shndx fn_lo fn_hi allowed_callees rs.
+  induction rs as [| r rest IH]; intros rels Hlohi H rel_off cname Hin; cbn [collect_call_rela_entries] in H.
+  - inversion H; subst; contradiction Hin.
+  - destruct (check_and_collect_call_rela_entry arch EK_Rel shdrs syms rela_info target_shndx fn_lo fn_hi allowed_callees r)
+      as [| opt_p] eqn:He; [discriminate H |].
+    destruct (collect_call_rela_entries arch EK_Rel shdrs syms rela_info target_shndx fn_lo fn_hi allowed_callees rest)
+      as [| tl] eqn:Hr; [discriminate H |].
+    destruct opt_p as [[ro cn] |].
+    + inversion H; subst rels; clear H.
+      destruct Hin as [Heq | Hin].
+      * inversion Heq; subst ro cn; clear Heq.
+        assert (Hinfo : rela_info = target_shndx).
+        { unfold check_and_collect_call_rela_entry in He.
+          destruct (elf_arch_eqb _ _ && _); [discriminate He |].
+          destruct (Nat.eqb rela_info target_shndx) eqn:En; cbn [negb] in He;
+            [apply Nat.eqb_eq in En; exact En | discriminate He]. }
+        destruct (check_and_collect_call_rela_entry_sound _ _ _ _ _ _ _ _ _ _ _ He Hinfo Hlohi _ _ eq_refl)
+          as (_ & Hlt & Hoff & Hty & Hadd & Hcn & [csym [csh Hrest]]).
+        split; [exact Hlt | split; [exact Hcn |]].
+        exists r, csym, csh; repeat split; try (left; reflexivity); try assumption; tauto.
+      * destruct (IH _ Hlohi eq_refl _ _ Hin) as (Hlt & Hcn & [r0 [csym [csh Hrest]]]).
+        split; [exact Hlt | split; [exact Hcn |]].
+        exists r0, csym, csh; destruct Hrest as [Hin0 Hr_ok]; split; [right; exact Hin0 | exact Hr_ok].
+    + inversion H; subst rels; clear H.
+      destruct (IH _ Hlohi eq_refl _ _ Hin) as (Hlt & Hcn & [r0 [csym [csh Hrest]]]).
+      split; [exact Hlt | split; [exact Hcn |]].
+      exists r0, csym, csh; destruct Hrest as [Hin0 Hr_ok]; split; [right; exact Hin0 | exact Hr_ok].
+Qed.
+
+Lemma collect_all_call_relocs_rel_sound :
+  forall raw arch all_shdrs rem_shdrs syms target_shndx fn_lo fn_hi allowed_callees rels,
+    (fn_lo <= fn_hi)%N ->
+    collect_all_call_relocs raw arch EK_Rel all_shdrs rem_shdrs syms target_shndx fn_lo fn_hi allowed_callees = inr rels ->
+    forall rel_off cname,
+      In (rel_off, cname) rels ->
+      (rel_off < fn_hi - fn_lo)%N /\
+      In cname allowed_callees /\
+      exists csym csh r_,
+        find_unique_func_sym syms cname = Some csym /\
+        esym_name csym = cname /\
+        esym_type csym = STT_FUNC /\
+        nth_error all_shdrs (esym_shndx csym) = Some csh /\
+        compute_func_slice_offsets EK_Rel csh csym = inr r_.
+Proof.
+  intros raw arch all_shdrs rem_shdrs syms target_shndx fn_lo fn_hi allowed_callees.
+  induction rem_shdrs as [| sh rest IH]; intros rels Hlohi H rel_off cname Hin;
+    cbn [collect_all_call_relocs] in H.
+  - inversion H; subst; contradiction Hin.
+  - destruct (collect_one_rela_section raw arch EK_Rel all_shdrs syms target_shndx fn_lo fn_hi allowed_callees sh)
+      as [| xs] eqn:Hx; [discriminate H |].
+    destruct (collect_all_call_relocs raw arch EK_Rel all_shdrs rest syms target_shndx fn_lo fn_hi allowed_callees)
+      as [| ys] eqn:Hy; [discriminate H |].
+    inversion H; subst rels; clear H.
+    apply in_app_iff in Hin as [Hx_in | Hy_in]; [| exact (IH _ Hlohi eq_refl _ _ Hy_in)].
+    unfold collect_one_rela_section in Hx.
+    destruct (N.eqb (esh_type sh) SHT_RELA); cbn [negb] in Hx; [| inversion Hx; subst; contradiction Hx_in].
+    destruct (nth_error all_shdrs (esh_info sh)); [| discriminate Hx].
+    destruct (bit_is_set (esh_flags e) 2%N); cbn [negb] in Hx; [| inversion Hx; subst; contradiction Hx_in].
+    destruct (N.eqb (esh_entsize sh) 24%N && N.eqb (N.modulo (esh_size sh) 24%N) 0%N); cbn [negb] in Hx; [| discriminate Hx].
+    destruct (n_to_nat_checked (List.length raw) (esh_offset sh)); [| discriminate Hx].
+    destruct (n_to_nat_checked (List.length raw) (esh_size sh)); [| discriminate Hx].
+    destruct (Nat.leb (n + Nat.div n0 24 * 24) (List.length raw)); cbn [negb] in Hx; [| discriminate Hx].
+    destruct (parse_relas_aux (Nat.div n0 24) raw n 0) as [rs |]; [| discriminate Hx].
+    destruct (collect_call_rela_entries_rel_sound _ _ _ _ _ _ _ _ _ _ Hlohi Hx _ _ Hx_in)
+      as (Hlt & Hcn & [r [csym [csh (_ & _ & _ & _ & _ & _ & Hnm & Hty & Huniq & Hcsh & [r_ Hoff])]]]).
+    split; [exact Hlt | split; [exact Hcn |]].
+    exists csym, csh, r_; repeat split; assumption.
+Qed.
+
+Lemma collect_exec_callee_addrs_sound :
+  forall kind shdrs syms allowed_callees addrs,
+    collect_exec_callee_addrs kind shdrs syms allowed_callees = inr addrs ->
+    forall cn,
+      In cn allowed_callees ->
+      exists csym csh r_,
+        In (cn, esym_value csym) addrs /\
+        find_unique_func_sym syms cn = Some csym /\
+        nth_error shdrs (esym_shndx csym) = Some csh /\
+        compute_func_slice_offsets kind csh csym = inr r_.
+Proof.
+  intros kind shdrs syms allowed_callees.
+  induction allowed_callees as [| cn0 rest IH]; intros addrs H cn Hin;
+    cbn [collect_exec_callee_addrs] in H; [contradiction Hin |].
+  destruct (find_unique_func_sym syms cn0) as [csym |] eqn:Ef; [| discriminate H].
+  destruct (nth_error shdrs (esym_shndx csym)) as [csh |] eqn:Ecsh; [| discriminate H].
+  destruct (compute_func_slice_offsets kind csh csym) as [| r_] eqn:Eoff; [discriminate H |].
+  destruct (collect_exec_callee_addrs kind shdrs syms rest) as [| rest_addrs] eqn:Hr; [discriminate H |].
+  inversion H; subst addrs; clear H.
+  destruct Hin as [<- | Hin].
+  - exists csym, csh, r_; repeat split; [left; reflexivity | exact Ef | exact Ecsh | exact Eoff].
+  - destruct (IH _ eq_refl _ Hin) as (cs & ch & rr & Hina & Hfs & Hcs & Hof).
+    exists cs, ch, rr; repeat split; [right; exact Hina | exact Hfs | exact Hcs | exact Hof].
+Qed.
+
+Theorem elf64_extract_func_with_calls_sound :
+  forall raw want_arch want_kind fn_name allowed_callees sl ci,
+    elf64_extract_func_with_calls raw want_arch want_kind fn_name allowed_callees = inr (sl, ci) ->
+    efs_arch sl = want_arch /\
+    efs_kind sl = want_kind /\
+    0 < efs_size sl /\
+    efs_file_off sl + efs_size sl <= List.length raw /\
+    efs_bytes sl = firstn (efs_size sl) (skipn (efs_file_off sl) raw) /\
+    List.length (efs_bytes sl) = efs_size sl /\
+    (want_kind = EK_Rel ->
+      eci_sym_addrs ci = [] /\
+      NoDup (List.map fst (eci_relocs ci)) /\
+      forall rel_off cname,
+        In (rel_off, cname) (eci_relocs ci) ->
+        (rel_off < efs_range_hi sl - efs_range_lo sl)%N /\
+        In cname allowed_callees) /\
+    ((want_kind = EK_Exec \/ want_kind = EK_Dyn) ->
+      eci_relocs ci = [] /\
+      forall cn,
+        In cn allowed_callees ->
+        exists csym, In (cn, esym_value csym) (eci_sym_addrs ci)) /\
+    exists hdr shdrs syms sym sh,
+      parse_elf64_header raw = inr hdr /\
+      parse_elf64_shdrs raw hdr = inr shdrs /\
+      parse_elf64_symtab raw shdrs = inr syms /\
+      find_unique_func_sym syms fn_name = Some sym /\
+      nth_error shdrs (esym_shndx sym) = Some sh /\
+      esh_type sh <> SHT_NOBITS /\
+      bit_is_set (esh_flags sh) 2%N = true /\
+      (want_kind = EK_Exec \/ want_kind = EK_Dyn ->
+       check_exec_relocations raw want_arch shdrs (efs_shndx sl) (efs_range_lo sl) (efs_range_hi sl) = true).
+Proof.
+  intros raw want_arch want_kind fn_name allowed_callees sl ci H.
+  unfold elf64_extract_func_with_calls in H.
+  destruct (parse_elf64_header raw) as [err | hdr] eqn:Eh; [discriminate H |].
+  destruct (elf_arch_eqb (eh_arch hdr) want_arch) eqn:Ea; cbn [negb] in H; [| discriminate H].
+  apply elf_arch_eqb_eq in Ea.
+  destruct (elf_kind_eqb (eh_kind hdr) want_kind) eqn:Ek; cbn [negb] in H; [| discriminate H].
+  apply elf_kind_eqb_eq in Ek.
+  destruct (parse_elf64_shdrs raw hdr) as [err | shdrs] eqn:Eshs; [discriminate H |].
+  destruct (parse_elf64_symtab raw shdrs) as [err | syms] eqn:Esyms; [discriminate H |].
+  destruct (find_unique_func_sym syms fn_name) as [sym |] eqn:Ef; [| discriminate H].
+  destruct (nth_error shdrs (esym_shndx sym)) as [sh |] eqn:Eth; [| discriminate H].
+  destruct (compute_func_slice_offsets (eh_kind hdr) sh sym) as [err | [[foff rlo] rhi]] eqn:Eoff;
+    [discriminate H |].
+  destruct (n_to_nat_checked (List.length raw) foff) as [foff_nat |] eqn:Efn; [| discriminate H].
+  destruct (n_to_nat_checked (List.length raw) (esym_size sym)) as [fsz_nat |] eqn:Esn;
+    [| discriminate H].
+  destruct (slice_bytes raw foff_nat fsz_nat) as [bytes |] eqn:Esl; [| discriminate H].
+  destruct (slice_bytes_spec _ _ _ _ Esl) as (Hle & Hfirst & Hlen).
+  assert (Eoff_copy : compute_func_slice_offsets (eh_kind hdr) sh sym = inr (foff, rlo, rhi)) by exact Eoff.
+  unfold compute_func_slice_offsets in Eoff_copy.
+  destruct (N.eqb (esym_size sym) 0%N) eqn:Esz0; [discriminate Eoff_copy |].
+  destruct (N.eqb (esh_type sh) SHT_NOBITS) eqn:Enob; [discriminate Eoff_copy |].
+  destruct (bit_is_set (esh_flags sh) 2%N) eqn:Eex; cbn [negb] in Eoff_copy; [| discriminate Eoff_copy].
+  apply N.eqb_neq in Esz0; apply N.eqb_neq in Enob.
+  assert (Hlohi : (rlo <= rhi)%N).
+  { rewrite Ek in Eoff_copy; destruct want_kind;
+      [destruct (N.leb (esym_value sym + esym_size sym) (esh_size sh)); try discriminate Eoff_copy;
+       inversion Eoff_copy; lia
+      | destruct (N.leb (esh_addr sh) (esym_value sym)); try discriminate Eoff_copy;
+        destruct (N.leb (esym_value sym - esh_addr sh + esym_size sym) (esh_size sh)); try discriminate Eoff_copy;
+        inversion Eoff_copy; lia
+      | destruct (N.leb (esh_addr sh) (esym_value sym)); try discriminate Eoff_copy;
+        destruct (N.leb (esym_value sym - esh_addr sh + esym_size sym) (esh_size sh)); try discriminate Eoff_copy;
+        inversion Eoff_copy; lia]. }
+  unfold n_to_nat_checked in Esn.
+  destruct (N.leb (esym_size sym) (N.of_nat (List.length raw))); [| discriminate Esn].
+  inversion Esn as [Hfsz]; clear Esn.
+  assert (Hpos_sz : 0 < N.to_nat (esym_size sym)) by lia.
+  destruct (eh_kind hdr) eqn:Ehk.
+  - destruct (collect_all_call_relocs raw (eh_arch hdr) EK_Rel shdrs shdrs syms (esym_shndx sym) rlo rhi allowed_callees)
+      as [| rels] eqn:Erels; [discriminate H |].
+    destruct (elf_no_dup_N (List.map fst rels)) eqn:End; cbn [negb] in H; [| discriminate H].
+    inversion H; subst sl ci; clear H.
+    cbn [efs_arch efs_kind efs_shndx efs_file_off efs_size efs_bytes efs_range_lo efs_range_hi eci_relocs eci_sym_addrs].
+    rewrite Ea, Ek in *.
+    split; [reflexivity |].
+    split; [reflexivity |].
+    split; [lia |].
+    split; [exact Hle |].
+    split; [exact Hfirst |].
+    split; [exact Hlen |].
+    split.
+    + intros _; split; [reflexivity | split; [exact (elf_no_dup_N_sound _ End) |]].
+      intros rel_off cname Hin.
+      rewrite <- Ek in Erels.
+      destruct (collect_all_call_relocs_rel_sound _ _ _ _ _ _ _ _ _ _ Hlohi Erels _ _ Hin) as (Hlt & Hcn & _);
+        exact (conj Hlt Hcn).
+    + split.
+      * intros [C | C]; rewrite <- Ek in C; discriminate C.
+      * exists hdr, shdrs, syms, sym, sh; repeat split; try assumption.
+        intros [C | C]; rewrite <- Ek in C; discriminate C.
+  - destruct (check_exec_relocations raw (eh_arch hdr) shdrs (esym_shndx sym) rlo rhi) eqn:Ecr;
+      cbn [negb] in H; [| discriminate H].
+    destruct (collect_exec_callee_addrs EK_Exec shdrs syms allowed_callees) as [| addrs] eqn:Ead;
+      [discriminate H |].
+    inversion H; subst sl ci; clear H.
+    cbn [efs_arch efs_kind efs_shndx efs_file_off efs_size efs_bytes efs_range_lo efs_range_hi eci_relocs eci_sym_addrs].
+    rewrite Ea, Ek in *.
+    split; [reflexivity |].
+    split; [reflexivity |].
+    split; [lia |].
+    split; [exact Hle |].
+    split; [exact Hfirst |].
+    split; [exact Hlen |].
+    split; [intro C; rewrite <- Ek in C; discriminate C |].
+    split.
+    + intros _; split; [reflexivity |].
+      intros cn Hcn; destruct (collect_exec_callee_addrs_sound _ _ _ _ _ Ead cn Hcn) as (csym & _ & _ & Hina & _).
+      exists csym; exact Hina.
+    + exists hdr, shdrs, syms, sym, sh; repeat split; try assumption.
+      intros _; exact Ecr.
+  - destruct (check_exec_relocations raw (eh_arch hdr) shdrs (esym_shndx sym) rlo rhi) eqn:Ecr;
+      cbn [negb] in H; [| discriminate H].
+    destruct (collect_exec_callee_addrs EK_Dyn shdrs syms allowed_callees) as [| addrs] eqn:Ead;
+      [discriminate H |].
+    inversion H; subst sl ci; clear H.
+    cbn [efs_arch efs_kind efs_shndx efs_file_off efs_size efs_bytes efs_range_lo efs_range_hi eci_relocs eci_sym_addrs].
+    rewrite Ea, Ek in *.
+    split; [reflexivity |].
+    split; [reflexivity |].
+    split; [lia |].
+    split; [exact Hle |].
+    split; [exact Hfirst |].
+    split; [exact Hlen |].
+    split; [intro C; rewrite <- Ek in C; discriminate C |].
+    split.
+    + intros _; split; [reflexivity |].
+      intros cn Hcn; destruct (collect_exec_callee_addrs_sound _ _ _ _ _ Ead cn Hcn) as (csym & _ & _ & Hina & _).
+      exists csym; exact Hina.
+    + exists hdr, shdrs, syms, sym, sh; repeat split; try assumption.
+      intros _; exact Ecr.
+Qed.

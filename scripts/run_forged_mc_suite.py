@@ -579,11 +579,13 @@ def format_mc_cert(
     lrat_s: Optional[str] = None,
     arch: str = "rv64",
     loop_sexp: Optional[str] = None,
+    calls_sexp: Optional[str] = None,
 ) -> str:
     args_s = " ".join(f'(arg "{r}" {w} {a})' for r, w, a in args)
+    calls_part = f" {calls_sexp}" if calls_sexp is not None else ""
     loop_part = f" {loop_sexp}" if loop_sexp is not None else ""
     lrat_part = f" (lrat {lrat_s})" if lrat_s is not None else ""
-    return f'(mc-cert-v1 (arch {arch}) (elf-kind {kind}) (fn "{fn}") (rvc {rvc}) (ret-width {ret_width}) (args {args_s}){loop_part}{lrat_part})'
+    return f'(mc-cert-v1 (arch {arch}) (elf-kind {kind}) (fn "{fn}") (rvc {rvc}) (ret-width {ret_width}) (args {args_s}){calls_part}{loop_part}{lrat_part})'
 
 
 def build_elf64(
@@ -600,20 +602,30 @@ def build_elf64(
     sym_value_override: Optional[int] = None,
     sym_size_override: Optional[int] = None,
     relas: Optional[List[Tuple[int, int, int]]] = None,
+    extra_syms: Optional[List[Tuple[str, int, int, int]]] = None,
     truncate_to: Optional[int] = None,
 ) -> bytes:
-    """Build a minimal valid (or deliberately malformed) little-endian ELF64 RISC-V binary."""
+    """Build a minimal valid (or deliberately malformed) little-endian ELF64 binary."""
     actual_sym = fn_name if sym_name is None else sym_name
     text_vaddr = 0x10000 if e_type in (2, 3) else 0x0
     sym_val = text_vaddr if sym_value_override is None else sym_value_override
     sym_sz = len(text_bytes) if sym_size_override is None else sym_size_override
 
-    strtab = b"\x00" + actual_sym.encode("ascii") + b"\x00"
-    sym_entry0 = b"\x00" * 24
+    strtab_ba = bytearray(b"\x00")
+    sym_entries = [b"\x00" * 24]
+    fn_str_off = len(strtab_ba)
+    strtab_ba.extend(actual_sym.encode("ascii") + b"\x00")
     # Elf64_Sym: st_name(I), st_info(B), st_other(B), st_shndx(H), st_value(Q), st_size(Q)
     # STB_GLOBAL=1, STT_FUNC=2 -> st_info = 0x12
-    sym_entry1 = struct.pack("<IBBHQQ", 1, 0x12, 0, 1, sym_val, sym_sz)
-    symtab = sym_entry0 + sym_entry1
+    sym_entries.append(struct.pack("<IBBHQQ", fn_str_off, 0x12, 0, 1, sym_val, sym_sz))
+    if extra_syms is not None:
+        for es_name, es_val, es_sz, es_shndx in extra_syms:
+            es_off = len(strtab_ba)
+            strtab_ba.extend(es_name.encode("ascii") + b"\x00")
+            es_info = 0x12 if es_shndx != 0 else 0x10
+            sym_entries.append(struct.pack("<IBBHQQ", es_off, es_info, 0, es_shndx, es_val, es_sz))
+    strtab = bytes(strtab_ba)
+    symtab = b"".join(sym_entries)
 
     shstr_parts = [b"", b".text", b".symtab", b".strtab", b".shstrtab"]
     if relas is not None:
@@ -702,10 +714,11 @@ def emit_and_solve_lrat(
     args: List[Tuple[str, int, str]],
     tmpdir: str,
     loop_sexp: Optional[str] = None,
+    calls_sexp: Optional[str] = None,
 ) -> Optional[str]:
     bare_cert = os.path.join(tmpdir, f"bare_{arch}_{fn}.mc.cert")
     with open(bare_cert, "w", encoding="utf-8") as f:
-        f.write(format_mc_cert("rel", fn, rvc, rw, args, arch=arch, loop_sexp=loop_sexp))
+        f.write(format_mc_cert("rel", fn, rvc, rw, args, arch=arch, loop_sexp=loop_sexp, calls_sexp=calls_sexp))
     em = run_cmd([bin_path, "--emit-mc-cnf", "--ir", ir_path, "--elf", elf_path, "--cert", bare_cert])
     if em.returncode != 0:
         raise RuntimeError(f"--emit-mc-cnf failed ({arch}, {fn}): rc={em.returncode} err={em.stderr}")
@@ -1156,6 +1169,133 @@ def main(argv: List[str]) -> int:
              m3b_a64_loop_ir),
         ])
 
+        # M3c prebuilt call-summary baselines + 14 adversarial call rejection cases.
+        m3c_rv_ir = os.path.join(tmpdir, "m3c_adv_rv.ll")
+        with open(m3c_rv_ir, "w", encoding="utf-8") as f:
+            f.write(
+                'target datalayout = "e-m:e-p:64:64-i64:64-i128:128-n32:64-S128"\n'
+                'target triple = "riscv64-unknown-none-elf"\n'
+                'declare signext i32 @helper_id(i32 noundef signext)\n'
+                'define dso_local signext i32 @caller_id(i32 noundef signext %0, i32 noundef signext %1) local_unnamed_addr {\n'
+                '  %3 = call signext i32 @helper_id(i32 noundef signext %0)\n'
+                '  ret i32 %3\n'
+                '}\n'
+            )
+        m3c_a64_ir = os.path.join(tmpdir, "m3c_adv_a64.ll")
+        with open(m3c_a64_ir, "w", encoding="utf-8") as f:
+            f.write(
+                'target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32"\n'
+                'target triple = "aarch64-unknown-none-elf"\n'
+                'declare i32 @helper_id(i32 noundef)\n'
+                'define dso_local i32 @caller_id(i32 noundef %0, i32 noundef %1) local_unnamed_addr {\n'
+                '  %3 = call i32 @helper_id(i32 noundef %0)\n'
+                '  ret i32 %3\n'
+                '}\n'
+            )
+        # RV64: c.addi16sp -16; sd ra, 8(sp); auipc ra, 0; jalr ra, 0(ra); ld ra, 8(sp); c.addi16sp 16; c.ret
+        m3c_rv_call_bytes = bytes.fromhex("41112334110097000000e78000008330810041018280")
+        m3c_rv_helper_bytes = bytes.fromhex("8280")  # c.ret
+        # AArch64: sub sp, sp, #16; str x30, [sp, #8]; bl #0; ldr x30, [sp, #8]; add sp, sp, #16; ret
+        m3c_a64_call_bytes = bytes.fromhex("ff4300d1fe0700f900000094fe0740f9ff430091c0035fd6")
+        m3c_a64_helper_bytes = bytes.fromhex("c0035fd6")  # ret
+        # Mutated RV64 bodies sharing the closed-module STT_FUNC helper_id layout
+        m3c_rv_wrong_ret_bytes = bytes.fromhex("41112334110097000000e780000093c515008330810041018280")
+        m3c_rv_clobber_s0_bytes = bytes.fromhex("4111233411001304140097000000e78000008330810041018280")
+        m3c_rv_swap_arg_bytes = bytes.fromhex("411123341100aa822e8597000000e78000008330810041018280")
+        m3c_rv_args = [("%0", 32, "signext"), ("%1", 32, "signext")]
+        m3c_a64_args = [("%0", 32, "none"), ("%1", 32, "none")]
+        m3c_rv_calls = '(calls (callee "@helper_id" (ret-width 32 signext) (args (arg "x" 32 signext))))'
+        m3c_a64_calls = '(calls (callee "@helper_id" (ret-width 32 none) (args (arg "x" 32 none))))'
+
+        def build_m3c_rv_rel(caller_b: bytes, relas: List[Tuple[int, int, int]]) -> bytes:
+            return build_elf64(
+                "caller_id", caller_b + m3c_rv_helper_bytes, e_type=1, e_machine=243, e_flags=1,
+                sym_size_override=len(caller_b),
+                relas=relas, extra_syms=[("helper_id", len(caller_b), len(m3c_rv_helper_bytes), 1)],
+            )
+
+        def build_m3c_a64_rel(caller_b: bytes, relas: List[Tuple[int, int, int]]) -> bytes:
+            return build_elf64(
+                "caller_id", caller_b + m3c_a64_helper_bytes, e_type=1, e_machine=183, e_flags=0,
+                sym_size_override=len(caller_b),
+                relas=relas, extra_syms=[("helper_id", len(caller_b), len(m3c_a64_helper_bytes), 1)],
+            )
+
+        m3c_rv_pre_rel_raw = build_m3c_rv_rel(m3c_rv_call_bytes, [(6, (2 << 32) | 19, 0)])
+        m3c_a64_pre_rel_raw = build_m3c_a64_rel(m3c_a64_call_bytes, [(8, (2 << 32) | 283, 0)])
+        for p_arch, p_rvc, p_ir, p_raw, p_args, p_calls in [
+            ("rv64", 1, m3c_rv_ir, m3c_rv_pre_rel_raw, m3c_rv_args, m3c_rv_calls),
+            ("aarch64", 0, m3c_a64_ir, m3c_a64_pre_rel_raw, m3c_a64_args, m3c_a64_calls),
+        ]:
+            p_ep = os.path.join(tmpdir, f"m3c_pre_{p_arch}.rel.elf")
+            with open(p_ep, "wb") as f:
+                f.write(p_raw)
+            p_lrat = emit_and_solve_lrat(bins[0], p_arch, p_rvc, p_ir, p_ep, "caller_id", 32, p_args, tmpdir, calls_sexp=p_calls)
+            p_cp = os.path.join(tmpdir, f"m3c_pre_{p_arch}.rel.mc.cert")
+            with open(p_cp, "w", encoding="utf-8") as f:
+                f.write(format_mc_cert("rel", "caller_id", p_rvc, 32, p_args, p_lrat, arch=p_arch, calls_sexp=p_calls))
+            for b in bins:
+                res = run_cmd([b, "--check-mc", "--ir", p_ir, "--elf", p_ep, "--cert", p_cp])
+                if res.returncode != 0:
+                    print(f"FAIL M3c prebuilt {p_arch} rel ({b}): {res.stderr}", file=sys.stderr)
+                    return 1
+            pos_passed += 1
+
+        adv_cases.extend([
+            ("m3c_rv64_missing_calls_section", m3c_rv_pre_rel_raw,
+             format_mc_cert("rel", "caller_id", 1, 32, m3c_rv_args, arch="rv64"), m3c_rv_ir),
+            ("m3c_rv64_undef_notype_callee",
+             build_elf64("caller_id", m3c_rv_call_bytes, e_type=1, e_machine=243, e_flags=1,
+                         relas=[(6, (2 << 32) | 19, 0)], extra_syms=[("helper_id", 0, 0, 0)]),
+             format_mc_cert("rel", "caller_id", 1, 32, m3c_rv_args, arch="rv64", calls_sexp=m3c_rv_calls), m3c_rv_ir),
+            ("m3c_rv64_wrong_callee_name", m3c_rv_pre_rel_raw,
+             format_mc_cert("rel", "caller_id", 1, 32, m3c_rv_args, arch="rv64",
+                            calls_sexp=m3c_rv_calls.replace("@helper_id", "@other_helper")), m3c_rv_ir),
+            ("m3c_a64_wrong_callee_name", m3c_a64_pre_rel_raw,
+             format_mc_cert("rel", "caller_id", 0, 32, m3c_a64_args, arch="aarch64",
+                            calls_sexp=m3c_a64_calls.replace("@helper_id", "@other_helper")), m3c_a64_ir),
+            ("m3c_rv64_wrong_callee_ret_width", m3c_rv_pre_rel_raw,
+             format_mc_cert("rel", "caller_id", 1, 32, m3c_rv_args, arch="rv64",
+                            calls_sexp='(calls (callee "@helper_id" (ret-width 64 none) (args (arg "x" 32 signext))))'),
+             m3c_rv_ir),
+            ("m3c_rv64_wrong_callee_arg_ext", m3c_rv_pre_rel_raw,
+             format_mc_cert("rel", "caller_id", 1, 32, m3c_rv_args, arch="rv64",
+                            calls_sexp='(calls (callee "@helper_id" (ret-width 32 signext) (args (arg "x" 32 zeroext))))'),
+             m3c_rv_ir),
+            ("m3c_rv64_wrong_callee_arg_count", m3c_rv_pre_rel_raw,
+             format_mc_cert("rel", "caller_id", 1, 32, m3c_rv_args, arch="rv64",
+                            calls_sexp='(calls (callee "@helper_id" (ret-width 32 signext) (args (arg "x" 32 signext) (arg "y" 32 signext))))'),
+             m3c_rv_ir),
+            ("m3c_rv64_direct_self_recursion",
+             build_elf64("caller_id", m3c_rv_call_bytes, e_type=1, e_machine=243, e_flags=1,
+                         relas=[(6, (1 << 32) | 19, 0)]),
+             format_mc_cert("rel", "caller_id", 1, 32, m3c_rv_args, arch="rv64",
+                            calls_sexp='(calls (callee "@caller_id" (ret-width 32 signext) (args (arg "x" 32 signext) (arg "y" 32 signext))))'),
+             m3c_rv_ir),
+            ("m3c_rv64_duplicate_callee", m3c_rv_pre_rel_raw,
+             format_mc_cert("rel", "caller_id", 1, 32, m3c_rv_args, arch="rv64",
+                            calls_sexp='(calls (callee "@helper_id" (ret-width 32 signext) (args (arg "x" 32 signext))) (callee "@helper_id" (ret-width 32 signext) (args (arg "x" 32 signext))))'),
+             m3c_rv_ir),
+            ("m3c_rv64_calls_plus_loop_combined", m3c_rv_pre_rel_raw,
+             format_mc_cert("rel", "caller_id", 1, 32, m3c_rv_args, arch="rv64",
+                            loop_sexp=m3b_rv_loop_spec, calls_sexp=m3c_rv_calls), m3c_rv_ir),
+            ("m3c_rv64_swapped_call_arg",
+             build_m3c_rv_rel(m3c_rv_swap_arg_bytes, [(10, (2 << 32) | 19, 0)]),
+             format_mc_cert("rel", "caller_id", 1, 32, m3c_rv_args, arch="rv64", calls_sexp=m3c_rv_calls), m3c_rv_ir),
+            ("m3c_rv64_clobbered_s0_across_call",
+             build_m3c_rv_rel(m3c_rv_clobber_s0_bytes, [(10, (2 << 32) | 19, 0)]),
+             format_mc_cert("rel", "caller_id", 1, 32, m3c_rv_args, arch="rv64", calls_sexp=m3c_rv_calls), m3c_rv_ir),
+            ("m3c_rv64_wrong_ret_after_call",
+             build_m3c_rv_rel(m3c_rv_wrong_ret_bytes, [(6, (2 << 32) | 19, 0)]),
+             format_mc_cert("rel", "caller_id", 1, 32, m3c_rv_args, arch="rv64", calls_sexp=m3c_rv_calls), m3c_rv_ir),
+            ("m3c_rv64_call_with_rela_relax",
+             build_m3c_rv_rel(m3c_rv_call_bytes, [(6, (2 << 32) | 19, 0), (6, 51, 0)]),
+             format_mc_cert("rel", "caller_id", 1, 32, m3c_rv_args, arch="rv64", calls_sexp=m3c_rv_calls), m3c_rv_ir),
+            ("m3c_a64_unbound_extra_reloc",
+             build_m3c_a64_rel(m3c_a64_call_bytes, [(8, (2 << 32) | 283, 0), (4, (2 << 32) | 283, 0)]),
+             format_mc_cert("rel", "caller_id", 0, 32, m3c_a64_args, arch="aarch64", calls_sexp=m3c_a64_calls), m3c_a64_ir),
+        ])
+
         for name, elf_bytes, cert_str, case_ir in adv_cases:
             ep = os.path.join(tmpdir, f"adv_{name}.elf")
             cp = os.path.join(tmpdir, f"adv_{name}.mc.cert")
@@ -1428,6 +1568,95 @@ def main(argv: List[str]) -> int:
                             return 1
                     pos_passed += 1
         print(f"PASS M3b verified structured-loop suite ({pos_passed} total positive checks)")
+
+        # M3c live clang-22 -O2 verified call-summary + caller/leaf-callee composition suite.
+        if os.path.exists(clang_22) and os.path.exists(lld_22):
+            m3c_calls_c = os.path.join(tmpdir, "m3c_live_calls.c")
+            with open(m3c_calls_c, "w", encoding="utf-8") as f:
+                f.write(
+                    "#include <stdint.h>\n"
+                    "__attribute__((noinline))\n"
+                    "int32_t leaf_mix_i32(int32_t a, int32_t b) {\n"
+                    "    uint32_t ua = (uint32_t)a, ub = (uint32_t)b;\n"
+                    "    return (int32_t)((ua ^ 0x13572468U) + (ub << 2));\n"
+                    "}\n"
+                    "__attribute__((noinline))\n"
+                    "int32_t leaf_rot_i32(int32_t x, int32_t y) {\n"
+                    "    uint32_t ux = (uint32_t)x, uy = (uint32_t)y;\n"
+                    "    return (int32_t)(((ux << 3) ^ (ux >> 5) ^ uy) ^ 0xA5A55A5AU);\n"
+                    "}\n"
+                    "__attribute__((noinline))\n"
+                    "int64_t leaf_xor_i64(int64_t x, int64_t y) {\n"
+                    "    uint64_t ux = (uint64_t)x, uy = (uint64_t)y;\n"
+                    "    return (int64_t)(((ux ^ 0x13572468ULL) + (uy << 1)) ^ (ux >> 7));\n"
+                    "}\n"
+                    "__attribute__((noinline))\n"
+                    "int32_t caller_single_i32(int32_t a, int32_t b) {\n"
+                    "    int32_t r = leaf_mix_i32(a ^ 0x55, b + 1);\n"
+                    "    return (int32_t)((uint32_t)r ^ ((uint32_t)a << 1));\n"
+                    "}\n"
+                    "__attribute__((noinline))\n"
+                    "int32_t caller_multi_i32(int32_t a, int32_t b, int32_t c) {\n"
+                    "    int32_t r1 = leaf_mix_i32(a, b);\n"
+                    "    int32_t r2 = leaf_rot_i32(r1, c);\n"
+                    "    return (int32_t)((uint32_t)r1 ^ (uint32_t)r2 ^ (uint32_t)a);\n"
+                    "}\n"
+                    "__attribute__((noinline))\n"
+                    "uint16_t leaf_narrow_u16(uint16_t x, int16_t y) {\n"
+                    "    return (uint16_t)((x ^ (uint16_t)y) + 7u);\n"
+                    "}\n"
+                    "__attribute__((noinline))\n"
+                    "uint16_t caller_narrow_u16(uint16_t a, int16_t b) {\n"
+                    "    return (uint16_t)(leaf_narrow_u16((uint16_t)(a ^ 3u), b) ^ 1u);\n"
+                    "}\n"
+                    "__attribute__((noinline))\n"
+                    "int64_t caller_branch_i64(int64_t a, int64_t b, int64_t cond) {\n"
+                    "    if (cond & 1) {\n"
+                    "        return leaf_xor_i64(a, b) ^ a;\n"
+                    "    } else {\n"
+                    "        return leaf_xor_i64(b, a) ^ 0x11223344LL;\n"
+                    "    }\n"
+                    "}\n"
+                )
+            for c_arch, c_triple, c_flags, c_ldm, c_ldx, c_rvc, c_ext32, c_ext16_u, c_ext16_s in [
+                ("rv64", "riscv64-unknown-none-elf", ["-march=rv64imc", "-mno-relax", "-mabi=lp64"], "elf64lriscv", ["--no-relax"], 1, "signext", "zeroext", "signext"),
+                ("aarch64", "aarch64-unknown-none-elf", [], "aarch64linux", [], 0, "none", "none", "none"),
+            ]:
+                c_ll = os.path.join(tmpdir, f"m3c_live_{c_arch}.ll")
+                c_o = os.path.join(tmpdir, f"m3c_live_{c_arch}.o")
+                c_elf = os.path.join(tmpdir, f"m3c_live_{c_arch}.elf")
+                c_opts = ["-O2", "-fno-builtin", "-fno-optimize-sibling-calls"]
+                subprocess.run([clang_22, "--target=" + c_triple, *c_flags, *c_opts, "-S", "-emit-llvm", m3c_calls_c, "-o", c_ll], check=True)
+                subprocess.run([clang_22, "--target=" + c_triple, *c_flags, *c_opts, "-c", m3c_calls_c, "-o", c_o], check=True)
+                subprocess.run([lld_22, "-m", c_ldm, *c_ldx, "-e", "caller_single_i32", c_o, "-o", c_elf], check=True)
+
+                cal_mix = f'(callee "@leaf_mix_i32" (ret-width 32 {c_ext32}) (args (arg "a" 32 {c_ext32}) (arg "b" 32 {c_ext32})))'
+                cal_rot = f'(callee "@leaf_rot_i32" (ret-width 32 {c_ext32}) (args (arg "x" 32 {c_ext32}) (arg "y" 32 {c_ext32})))'
+                cal_xor = '(callee "@leaf_xor_i64" (ret-width 64 none) (args (arg "x" 64 none) (arg "y" 64 none)))'
+                cal_u16 = f'(callee "@leaf_narrow_u16" (ret-width 16 {c_ext16_u}) (args (arg "x" 16 {c_ext16_u}) (arg "y" 16 {c_ext16_s})))'
+                m3c_live_cases = [
+                    ("leaf_mix_i32", 32, [("%0", 32, c_ext32), ("%1", 32, c_ext32)], None),
+                    ("leaf_rot_i32", 32, [("%0", 32, c_ext32), ("%1", 32, c_ext32)], None),
+                    ("leaf_xor_i64", 64, [("%0", 64, "none"), ("%1", 64, "none")], None),
+                    ("leaf_narrow_u16", 16, [("%0", 16, c_ext16_u), ("%1", 16, c_ext16_s)], None),
+                    ("caller_single_i32", 32, [("%0", 32, c_ext32), ("%1", 32, c_ext32)], f"(calls {cal_mix})"),
+                    ("caller_multi_i32", 32, [("%0", 32, c_ext32), ("%1", 32, c_ext32), ("%2", 32, c_ext32)], f"(calls {cal_mix} {cal_rot})"),
+                    ("caller_narrow_u16", 16, [("%0", 16, c_ext16_u), ("%1", 16, c_ext16_s)], f"(calls {cal_u16})"),
+                    ("caller_branch_i64", 64, [("%0", 64, "none"), ("%1", 64, "none"), ("%2", 64, "none")], f"(calls {cal_xor})"),
+                ]
+                for fn_c, rw_c, args_c, calls_c in m3c_live_cases:
+                    lrat_c = emit_and_solve_lrat(bins[0], c_arch, c_rvc, c_ll, c_o, fn_c, rw_c, args_c, tmpdir, calls_sexp=calls_c)
+                    for kind_c, ep_c in [("rel", c_o), ("exec", c_elf)]:
+                        cp_c = os.path.join(tmpdir, f"m3c_live_{c_arch}_{fn_c}.{kind_c}.mc.cert")
+                        with open(cp_c, "w", encoding="utf-8") as f:
+                            f.write(format_mc_cert(kind_c, fn_c, c_rvc, rw_c, args_c, lrat_c, arch=c_arch, calls_sexp=calls_c))
+                        for b in bins:
+                            res = run_cmd([b, "--check-mc", "--ir", c_ll, "--elf", ep_c, "--cert", cp_c])
+                            if res.returncode != 0:
+                                print(f"FAIL M3c live {c_arch} {fn_c} {kind_c} ({b}): {res.stderr}", file=sys.stderr)
+                                return 1
+                        pos_passed += 1
+        print(f"PASS M3c verified call-summary suite ({pos_passed} total positive checks)")
 
         live_count = 0
         if ns.live_corpus:

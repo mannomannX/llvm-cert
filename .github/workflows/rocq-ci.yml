@@ -148,12 +148,12 @@ jobs:
               opam exec -- rocq check -o -R rocq Vellvm -R ../../passes CertPasses -R ../../validator CertValidator \
                 Vellvm.Semantics.TopLevel Vellvm.Theory.Equational CertPasses.Pipeline CertPasses.McfgExport \
                 CertPasses.ModuleMerge CertValidator.CertValidator CertValidator.Elf64Spec \
-                CertValidator.McFormat CertValidator.Rv64Sem CertValidator.A64CoreSem CertValidator.McLoop CertValidator.McValidator CertValidator.CheckAssumptions
+                CertValidator.McFormat CertValidator.Rv64Sem CertValidator.A64CoreSem CertValidator.McLoop CertValidator.McCall CertValidator.McValidator CertValidator.CheckAssumptions
           else
             (ulimit -v 13107200 && exec opam exec -- rocq check -o -R rocq Vellvm -R ../../passes CertPasses -R ../../validator CertValidator \
               Vellvm.Semantics.TopLevel Vellvm.Theory.Equational CertPasses.Pipeline CertPasses.McfgExport \
               CertPasses.ModuleMerge CertValidator.CertValidator CertValidator.Elf64Spec \
-              CertValidator.McFormat CertValidator.Rv64Sem CertValidator.A64CoreSem CertValidator.McLoop CertValidator.McValidator CertValidator.CheckAssumptions)
+              CertValidator.McFormat CertValidator.Rv64Sem CertValidator.A64CoreSem CertValidator.McLoop CertValidator.McCall CertValidator.McValidator CertValidator.CheckAssumptions)
           fi
 
       - name: Layer-1 kernel Print Assumptions audit gate
@@ -164,7 +164,7 @@ jobs:
           Set Printing Width 10000.
           From Vellvm Require Theory.I2F.I2F_toplevel.
           From CertPasses Require Pipeline ModuleMerge.
-          From CertValidator Require CertFormat AigLrat AlgRules CertValidator Elf64Spec McFormat Rv64Sem A64CoreSem McLoop McValidator.
+          From CertValidator Require CertFormat AigLrat AlgRules CertValidator Elf64Spec McFormat Rv64Sem A64CoreSem McLoop McCall McValidator.
           Redirect "$PA_DIR/vellvm_i2f" Print Assumptions Vellvm.Theory.I2F.I2F_toplevel.model_refine.
           Redirect "$PA_DIR/pipeline" Print Assumptions CertPasses.Pipeline.optimize_mcfg_I2F_model_refine.
           Redirect "$PA_DIR/merge_i2f" Print Assumptions CertPasses.ModuleMerge.validate_module_merge_parsed_I2F_model_refine.
@@ -173,6 +173,7 @@ jobs:
           Redirect "$PA_DIR/aig_lrat" Print Assumptions CertValidator.AigLrat.check_lrat_unsat_sound.
           Redirect "$PA_DIR/dimacs_lrat" Print Assumptions CertValidator.CertFormat.validate_dimacs_lrat_str_sound.
           Redirect "$PA_DIR/elf64_extract" Print Assumptions CertValidator.Elf64Spec.elf64_extract_func_sound.
+          Redirect "$PA_DIR/elf64_extract_calls" Print Assumptions CertValidator.Elf64Spec.elf64_extract_func_with_calls_sound.
           Redirect "$PA_DIR/mc_format_wf" Print Assumptions CertValidator.McFormat.parse_mc_cert_wf.
           Redirect "$PA_DIR/rv64_dag_wf" Print Assumptions CertValidator.Rv64Sem.summarize_rv64_dag_wf.
           Redirect "$PA_DIR/a64_dag_wf" Print Assumptions CertValidator.A64CoreSem.summarize_a64_dag_wf.
@@ -185,6 +186,10 @@ jobs:
           Redirect "$PA_DIR/sail_divrem_bridge" Print Assumptions CertValidator.Rv64Sem.sail_divrem_128_width_reduce.
           Redirect "$PA_DIR/mc_loop_rv64" Print Assumptions CertValidator.McLoop.validate_mc_loop_rv64_sound.
           Redirect "$PA_DIR/mc_loop_a64" Print Assumptions CertValidator.McLoop.validate_mc_loop_a64_sound.
+          Redirect "$PA_DIR/mc_call_rv64" Print Assumptions CertValidator.McCall.validate_mc_call_rv64_sound.
+          Redirect "$PA_DIR/mc_call_a64" Print Assumptions CertValidator.McCall.validate_mc_call_a64_sound.
+          Redirect "$PA_DIR/mc_compose_rv64" Print Assumptions CertValidator.McCall.compose_rv64_caller_callee_sound.
+          Redirect "$PA_DIR/mc_compose_a64" Print Assumptions CertValidator.McCall.compose_a64_caller_callee_sound.
           Redirect "$PA_DIR/mc_val" Print Assumptions CertValidator.McValidator.validate_mc_tle_with_cert_str_sound.
           EOF
           (cd vellvm/src && opam exec -- rocq top -q -w none -R rocq Vellvm -R ../../passes CertPasses -R ../../validator CertValidator -batch -load-vernac-source "$PA_DIR/audit.v")
@@ -221,13 +226,13 @@ jobs:
               print(f"Unexpected upstream Vellvm 3.0 axioms: {sorted(vellvm_base - approved_vellvm3_classical)}", file=sys.stderr)
               sys.exit(1)
 
-          for zero_ax in ("aig_lrat", "dimacs_lrat", "elf64_extract", "mc_format_wf", "rv64_dag_wf", "a64_dag_wf", "sail_divrem_bridge"):
+          for zero_ax in ("aig_lrat", "dimacs_lrat", "elf64_extract", "elf64_extract_calls", "mc_format_wf", "rv64_dag_wf", "a64_dag_wf", "sail_divrem_bridge"):
               axs = parse_axioms(zero_ax)
               if axs:
                   print(f"{zero_ax} must be 100% axiom-free, got: {sorted(axs)}", file=sys.stderr)
                   sys.exit(1)
 
-          for validator_thm in ("alg_rules", "cert_val", "rv64_dag_sound", "a64_dag_sound", "rv64_sym_oracle", "a64_sym_oracle", "mc_loop_rv64", "mc_loop_a64", "mc_val"):
+          for validator_thm in ("alg_rules", "cert_val", "rv64_dag_sound", "a64_dag_sound", "rv64_sym_oracle", "a64_sym_oracle", "mc_loop_rv64", "mc_loop_a64", "mc_call_rv64", "mc_call_a64", "mc_compose_rv64", "mc_compose_a64", "mc_val"):
               axs = parse_axioms(validator_thm)
               extra = axs - (vellvm_base - {"Eqdep.Eq_rect_eq.eq_rect_eq"})
               if extra:

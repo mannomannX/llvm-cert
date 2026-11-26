@@ -30,6 +30,7 @@ From CertValidator Require
   A64CoreSem
   McFormat
   McLoop
+  McCall
   McValidator.
 
 Check @CertPasses.Pipeline.optimize_mcfg_refines_IPZ.
@@ -46,6 +47,7 @@ Check @CertValidator.CertFormat.validate_dimacs_lrat_str_sound.
 Check @CertValidator.CertValidator.validate_mcfg_with_cert_sound.
 Check @CertValidator.CertValidator.validate_tle_pair_with_cert_str_sound.
 Check @CertValidator.Elf64Spec.elf64_extract_func_sound.
+Check @CertValidator.Elf64Spec.elf64_extract_func_with_calls_sound.
 Check @CertValidator.McFrameMem.mc_stk_load_store_same.
 Check @CertValidator.McFrameMem.mc_stk_load_store_disjoint.
 Check @CertValidator.McFrameMem.mc_sym_stk_store_agrees.
@@ -61,4 +63,8 @@ Check @CertValidator.A64CoreSem.summarize_a64_dag_sound.
 Check @CertValidator.A64CoreSem.a64_step_sym_oracle_sound.
 Check @CertValidator.McLoop.validate_mc_loop_rv64_sound.
 Check @CertValidator.McLoop.validate_mc_loop_a64_sound.
+Check @CertValidator.McCall.validate_mc_call_rv64_sound.
+Check @CertValidator.McCall.validate_mc_call_a64_sound.
+Check @CertValidator.McCall.compose_rv64_caller_callee_sound.
+Check @CertValidator.McCall.compose_a64_caller_callee_sound.
 Check @CertValidator.McValidator.validate_mc_tle_with_cert_str_sound.
