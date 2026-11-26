@@ -73,6 +73,7 @@ From CertValidator Require Import
   Rv64Sem
   A64CoreSem
   McFormat
+  Diag
   McLoop.
 
 Unset Implicit Arguments.
@@ -111,6 +112,20 @@ Local Open Scope list_scope.
 
 (** ** 1. Shared ELF Relocation/Symbol Lookup & Call-Site Decoders *)
 
+Definition mcc_sum_map {E A B : Type} (f : A -> B) (r : E + A) : E + B :=
+  match r with
+  | inl err => inl err
+  | inr a => inr (f a)
+  end.
+
+Definition mcc_sym_val_kind (v : mc_sym_val) : string :=
+  match v with
+  | MSV_Undef => "undef"
+  | MSV_Expr _ => "expr"
+  | MSV_SavedReg _ => "saved-reg"
+  | MSV_StackPtr _ => "stack-ptr"
+  end.
+
 Fixpoint lookup_call_reloc (relocs : list (N * string)) (off : N) : option string :=
   match relocs with
   | [] => None
@@ -130,6 +145,27 @@ Definition resolve_pc_rel_callee
   let tgt_z := (Z.of_N call_pc + rel_bytes)%Z in
   if Z.leb 0%Z tgt_z then find_unique_callee_by_addr addrs (Z.to_N tgt_z)
   else None.
+
+Definition resolve_pc_rel_callee_diag
+  (addrs : list (string * N)) (call_pc : N) (rel_bytes : Z) : string + string :=
+  let tgt_z := (Z.of_N call_pc + rel_bytes)%Z in
+  if Z.leb 0%Z tgt_z then
+    let tgt := Z.to_N tgt_z in
+    match find_unique_diag (fun '(_, a) => N.eqb a tgt) addrs with
+    | UM_Missing =>
+        inl (diag "mc-call-decode"
+          ("unresolved PC-relative call target " ++ diag_N_hex tgt ++
+           " at ELF offset " ++ diag_N_hex call_pc))
+    | UM_Unique (cn, _) => inr cn
+    | UM_Duplicate (cn1, _) (cn2, _) =>
+        inl (diag "mc-call-decode"
+          ("ambiguous PC-relative call target " ++ diag_N_hex tgt ++
+           " at ELF offset " ++ diag_N_hex call_pc ++
+           " (matches '" ++ cn1 ++ "' and '" ++ cn2 ++ "')"))
+    end
+  else
+    inl (diag "mc-call-decode"
+      ("PC-relative call target underflow at ELF offset " ++ diag_N_hex call_pc)).
 
 (** *** 1.1 RISC-V RV64IM+RVC Call-Site Decoder *)
 
@@ -166,6 +202,16 @@ Definition all_relocs_bound_to_rv_calls
       | RCI_Core _ => false
       end) insts) relocs.
 
+Definition find_stray_rv_call_reloc
+  (relocs : list (N * string)) (insts : list decoded_rv_call_inst) : option (N * string) :=
+  List.find (fun '(off, cn) =>
+    negb (existsb (fun d =>
+      N.eqb (drci_off d) off &&
+      match drci_inst d with
+      | RCI_Call cn' => String.eqb cn cn'
+      | RCI_Core _ => false
+      end) insts)) relocs.
+
 Definition decode_rv_auipc_jalr_call
   (kind : elf_kind) (fn_lo : N) (ci : elf_call_info)
   (cur_off : nat) (w1 w2 : N) : option (string + string) :=
@@ -187,16 +233,21 @@ Definition decode_rv_auipc_jalr_call
                 lookup_call_reloc (eci_relocs ci) (cur_n + 4%N)%N with
           | Some cname, None =>
               if N.eqb imm20 0%N && N.eqb imm12 0%N then inr cname
-              else inl "non-zero immediate in ET_REL RV64 auipc+jalr call"
-          | Some _, Some _ => inl "unexpected second relocation inside RV64 auipc+jalr call"
-          | None, _ => inl "missing call relocation on ET_REL RV64 auipc+jalr call"
+              else
+                inl (diag "mc-call-decode"
+                  ("non-zero immediate in ET_REL RV64 auipc+jalr call to '" ++ cname ++
+                   "' at offset " ++ diag_N_hex cur_n))
+          | Some cname, Some cname2 =>
+              inl (diag "mc-call-decode"
+                ("unexpected second relocation '" ++ cname2 ++ "' inside ET_REL RV64 auipc+jalr call to '" ++
+                 cname ++ "' at offset " ++ diag_N_hex cur_n))
+          | None, _ =>
+              inl (diag "mc-call-decode"
+                ("missing call relocation on ET_REL RV64 auipc+jalr call at offset " ++ diag_N_hex cur_n))
           end
       | EK_Exec | EK_Dyn =>
           let rel := (sext_z (imm20 * 4096%N) 32%N + sext_z imm12 12%N)%Z in
-          match resolve_pc_rel_callee (eci_sym_addrs ci) (fn_lo + cur_n)%N rel with
-          | Some cname => inr cname
-          | None => inl "unresolved RV64 auipc+jalr call target address"
-          end
+          resolve_pc_rel_callee_diag (eci_sym_addrs ci) (fn_lo + cur_n)%N rel
       end
   else None.
 
@@ -218,14 +269,16 @@ Definition decode_rv_jal_ra_call
           match lookup_call_reloc (eci_relocs ci) cur_n with
           | Some cname =>
               if N.eqb j21 0%N then inr cname
-              else inl "non-zero offset in ET_REL RV64 jal ra call"
-          | None => inl "missing call relocation on ET_REL RV64 jal ra call"
+              else
+                inl (diag "mc-call-decode"
+                  ("non-zero offset in ET_REL RV64 jal ra call to '" ++ cname ++
+                   "' at offset " ++ diag_N_hex cur_n))
+          | None =>
+              inl (diag "mc-call-decode"
+                ("missing call relocation on ET_REL RV64 jal ra call at offset " ++ diag_N_hex cur_n))
           end
       | EK_Exec | EK_Dyn =>
-          match resolve_pc_rel_callee (eci_sym_addrs ci) (fn_lo + cur_n)%N (sext_z j21 21%N) with
-          | Some cname => inr cname
-          | None => inl "unresolved RV64 jal ra call target address"
-          end
+          resolve_pc_rel_callee_diag (eci_sym_addrs ci) (fn_lo + cur_n)%N (sext_z j21 21%N)
       end
   else None.
 
@@ -238,16 +291,26 @@ Fixpoint decode_rv64_stream_with_calls_acc
   | [] => inr (elf_rev_tr acc)
   | _ :: _ =>
       match fuel with
-      | O => inl "RV64 call decoder fuel exhausted"
+      | O =>
+          inl (diag "mc-call-decode"
+            ("RV64 call decoder fuel exhausted at offset " ++ diag_N_hex (N.of_nat cur_off)))
       | S fuel' =>
           match take_u16_le rem with
-          | None => inl "truncated RV64 instruction stream"
+          | None =>
+              inl (diag "mc-call-decode"
+                ("truncated RV64 instruction stream at offset " ++ diag_N_hex (N.of_nat cur_off)))
           | Some (hw, rem2) =>
               if negb (N.eqb (N.modulo hw 4%N) 3%N) then
-                if negb rvc_enabled then inl "16-bit RVC instruction encountered with RVC disabled"
+                if negb rvc_enabled then
+                  inl (diag "mc-call-decode"
+                    ("16-bit RVC instruction " ++ diag_N_hex hw ++
+                     " encountered with RVC disabled at offset " ++ diag_N_hex (N.of_nat cur_off)))
                 else
                   match decode_rvc_hw hw with
-                  | None => inl "unsupported 16-bit RVC instruction"
+                  | None =>
+                      inl (diag "mc-call-decode"
+                        ("unsupported 16-bit RVC instruction " ++ diag_N_hex hw ++
+                         " at offset " ++ diag_N_hex (N.of_nat cur_off)))
                   | Some inst =>
                       decode_rv64_stream_with_calls_acc fuel' rvc_enabled kind fn_lo ci
                         rem2 (cur_off + 2)
@@ -255,7 +318,9 @@ Fixpoint decode_rv64_stream_with_calls_acc
                   end
               else
                 match take_u32_le rem with
-                | None => inl "truncated 32-bit RV64 instruction"
+                | None =>
+                    inl (diag "mc-call-decode"
+                      ("truncated 32-bit RV64 instruction at offset " ++ diag_N_hex (N.of_nat cur_off)))
                 | Some (w1, rem4) =>
                     let pair_res :=
                       match take_u32_le rem4 with
@@ -281,7 +346,10 @@ Fixpoint decode_rv64_stream_with_calls_acc
                               (mk_decoded_rv_call_inst (N.of_nat cur_off) 4%N (RCI_Call cname) :: acc)
                         | None =>
                             match decode_rv32_word w1 with
-                            | None => inl "unsupported 32-bit RV64 instruction"
+                            | None =>
+                                inl (diag "mc-call-decode"
+                                  ("unsupported 32-bit RV64 instruction " ++ diag_N_hex w1 ++
+                                   " at offset " ++ diag_N_hex (N.of_nat cur_off)))
                             | Some inst =>
                                 decode_rv64_stream_with_calls_acc fuel' rvc_enabled kind fn_lo ci
                                   rem4 (cur_off + 4)
@@ -300,9 +368,11 @@ Definition decode_rv64_bytes_with_calls
   : string + list decoded_rv_call_inst :=
   let len := elf_length_tr code in
   if Nat.eqb len 0 || negb (Nat.eqb (Nat.modulo len 2) 0) then
-    inl "RV64 function byte length must be positive and even"
+    inl (diag "mc-call-decode"
+      ("RV64 function byte length must be positive and even (got " ++ diag_nat_dec len ++ ")"))
   else if negb rvc_enabled && negb (Nat.eqb (Nat.modulo len 4) 0) then
-    inl "non-RVC RV64 function length must be a multiple of 4"
+    inl (diag "mc-call-decode"
+      ("non-RVC RV64 function byte length must be a multiple of 4 (got " ++ diag_nat_dec len ++ ")"))
   else
     match decode_rv64_stream_with_calls_acc (Nat.div len 2 + 1) rvc_enabled kind fn_lo ci code 0 [] with
     | inl err => inl err
@@ -310,7 +380,15 @@ Definition decode_rv64_bytes_with_calls
         match kind with
         | EK_Rel =>
             if all_relocs_bound_to_rv_calls (eci_relocs ci) insts then inr insts
-            else inl "stray call relocation outside RV64 call instruction"
+            else
+              let msg :=
+                match find_stray_rv_call_reloc (eci_relocs ci) insts with
+                | Some (off, cn) =>
+                    ("stray call relocation to '" ++ cn ++ "' at offset " ++ diag_N_hex off ++
+                     " outside RV64 call instruction")%string
+                | None => "stray call relocation outside RV64 call instruction"
+                end in
+              inl (diag "mc-call-decode" msg)
         | EK_Exec | EK_Dyn => inr insts
         end
     end.
@@ -424,6 +502,16 @@ Definition all_relocs_bound_to_a64_calls
       | ACI_Core _ => false
       end) insts) relocs.
 
+Definition find_stray_a64_call_reloc
+  (relocs : list (N * string)) (insts : list decoded_a64_call_inst) : option (N * string) :=
+  List.find (fun '(off, cn) =>
+    negb (existsb (fun d =>
+      N.eqb (daci_off d) off &&
+      match daci_inst d with
+      | ACI_Call cn' => String.eqb cn cn'
+      | ACI_Core _ => false
+      end) insts)) relocs.
+
 Definition decode_a64_bl_call
   (kind : elf_kind) (fn_lo : N) (ci : elf_call_info)
   (cur_off : nat) (w : N) : option (string + string) :=
@@ -436,15 +524,17 @@ Definition decode_a64_bl_call
           match lookup_call_reloc (eci_relocs ci) cur_n with
           | Some cname =>
               if N.eqb imm26 0%N then inr cname
-              else inl "non-zero imm26 in ET_REL AArch64 BL call"
-          | None => inl "missing call relocation on ET_REL AArch64 BL call"
+              else
+                inl (diag "mc-call-decode"
+                  ("non-zero imm26 in ET_REL AArch64 BL call to '" ++ cname ++
+                   "' at offset " ++ diag_N_hex cur_n))
+          | None =>
+              inl (diag "mc-call-decode"
+                ("missing call relocation on ET_REL AArch64 BL call at offset " ++ diag_N_hex cur_n))
           end
       | EK_Exec | EK_Dyn =>
           let rel := (4%Z * sext_z imm26 26%N)%Z in
-          match resolve_pc_rel_callee (eci_sym_addrs ci) (fn_lo + cur_n)%N rel with
-          | Some cname => inr cname
-          | None => inl "unresolved AArch64 BL call target address"
-          end
+          resolve_pc_rel_callee_diag (eci_sym_addrs ci) (fn_lo + cur_n)%N rel
       end
   else None.
 
@@ -457,10 +547,14 @@ Fixpoint decode_a64_stream_with_calls_acc
   | [] => inr (elf_rev_tr acc)
   | _ :: _ =>
       match fuel with
-      | O => inl "AArch64 call decoder fuel exhausted"
+      | O =>
+          inl (diag "mc-call-decode"
+            ("AArch64 call decoder fuel exhausted at offset " ++ diag_N_hex (N.of_nat cur_off)))
       | S fuel' =>
           match take_u32_le rem with
-          | None => inl "truncated 32-bit A64 instruction"
+          | None =>
+              inl (diag "mc-call-decode"
+                ("truncated 32-bit A64 instruction at offset " ++ diag_N_hex (N.of_nat cur_off)))
           | Some (w, rem4) =>
               match decode_a64_bl_call kind fn_lo ci cur_off w with
               | Some (inl err) => inl err
@@ -469,7 +563,10 @@ Fixpoint decode_a64_stream_with_calls_acc
                     (mk_decoded_a64_call_inst (N.of_nat cur_off) (ACI_Call cname) :: acc)
               | None =>
                   match decode_a64_word w with
-                  | None => inl "unsupported AArch64 instruction"
+                  | None =>
+                      inl (diag "mc-call-decode"
+                        ("unsupported AArch64 instruction " ++ diag_N_hex w ++
+                         " at offset " ++ diag_N_hex (N.of_nat cur_off)))
                   | Some inst =>
                       decode_a64_stream_with_calls_acc fuel' kind fn_lo ci rem4 (cur_off + 4)
                         (mk_decoded_a64_call_inst (N.of_nat cur_off) (ACI_Core inst) :: acc)
@@ -484,7 +581,8 @@ Definition decode_a64_bytes_with_calls
   : string + list decoded_a64_call_inst :=
   let len := elf_length_tr code in
   if Nat.eqb len 0 || negb (Nat.eqb (Nat.modulo len 4) 0) then
-    inl "AArch64 function byte length must be a positive multiple of 4"
+    inl (diag "mc-call-decode"
+      ("AArch64 function byte length must be a positive multiple of 4 (got " ++ diag_nat_dec len ++ ")"))
   else
     match decode_a64_stream_with_calls_acc (Nat.div len 4 + 1) kind fn_lo ci code 0 [] with
     | inl err => inl err
@@ -492,7 +590,15 @@ Definition decode_a64_bytes_with_calls
         match kind with
         | EK_Rel =>
             if all_relocs_bound_to_a64_calls (eci_relocs ci) insts then inr insts
-            else inl "stray call relocation outside AArch64 BL instruction"
+            else
+              let msg :=
+                match find_stray_a64_call_reloc (eci_relocs ci) insts with
+                | Some (off, cn) =>
+                    ("stray call relocation to '" ++ cn ++ "' at offset " ++ diag_N_hex off ++
+                     " outside AArch64 BL instruction")%string
+                | None => "stray call relocation outside AArch64 BL instruction"
+                end in
+              inl (diag "mc-call-decode" msg)
         | EK_Exec | EK_Dyn => inr insts
         end
     end.
@@ -657,6 +763,224 @@ Definition check_mc_callee_contracts
   (tenv : list (ident * typ)) (ir_m : CFG.mcfg typ) (arch : elf_arch) (cs : list mc_callee_spec)
   : bool :=
   forallb (check_one_callee_contract tenv ir_m arch) cs.
+
+Fixpoint find_unique_decl_diag_in_list {A : Type}
+  (proj : A -> declaration typ) (cname : string)
+  (xs : list A) (found : option (declaration typ))
+  : string + option (declaration typ) :=
+  match xs with
+  | [] => inr found
+  | x :: rest =>
+      let d := proj x in
+      if cert_fn_matches_raw_id cname (dc_name d) then
+        match found with
+        | None => find_unique_decl_diag_in_list proj cname rest (Some d)
+        | Some _ =>
+            inl (diag "mc-call-contract"
+              ("duplicate IR declaration/definition for callee '" ++ cname ++ "'"))
+        end
+      else find_unique_decl_diag_in_list proj cname rest found
+  end.
+
+Definition find_unique_callee_decl_diag (ir_m : CFG.mcfg typ) (cname : string)
+  : string + declaration typ :=
+  match find_unique_decl_diag_in_list (fun d => d) cname (m_declarations ir_m) None with
+  | inl err => inl err
+  | inr found1 =>
+      match find_unique_decl_diag_in_list df_prototype cname (m_definitions ir_m) found1 with
+      | inl err => inl err
+      | inr (Some d) => inr d
+      | inr None =>
+          inl (diag "mc-call-contract"
+            ("missing IR declaration/definition for callee '" ++ cname ++ "'"))
+      end
+  end.
+
+Local Lemma find_unique_decl_diag_in_list_sound {A : Type} :
+  forall (proj : A -> declaration typ) cname xs found res,
+    find_unique_decl_diag_in_list proj cname xs found = inr res ->
+    find_unique_decl_in_list proj cname xs found = Some res.
+Proof.
+  intros proj cname xs; induction xs as [| x rest IH];
+    intros found res H; cbn [find_unique_decl_diag_in_list find_unique_decl_in_list] in *.
+  - inversion H; reflexivity.
+  - destruct (cert_fn_matches_raw_id cname (dc_name (proj x)));
+      [destruct found; [discriminate H | exact (IH _ _ H)] | exact (IH _ _ H)].
+Qed.
+
+Local Lemma find_unique_callee_decl_diag_sound :
+  forall ir_m cname d,
+    find_unique_callee_decl_diag ir_m cname = inr d ->
+    find_unique_callee_decl ir_m cname = Some d.
+Proof.
+  intros ir_m cname d H; unfold find_unique_callee_decl_diag, find_unique_callee_decl in *.
+  destruct (find_unique_decl_diag_in_list (fun d0 => d0) cname (m_declarations ir_m) None) as [| f1] eqn:E1;
+    [discriminate H |].
+  rewrite (find_unique_decl_diag_in_list_sound _ _ _ _ _ E1).
+  destruct (find_unique_decl_diag_in_list df_prototype cname (m_definitions ir_m) f1) as [| [d0 |]] eqn:E2;
+    [discriminate H | | discriminate H].
+  rewrite (find_unique_decl_diag_in_list_sound _ _ _ _ _ E2); inversion H; reflexivity.
+Qed.
+
+Definition check_callee_ret_ext_diag
+  (cname : string) (w : positive) (rattrs : list param_attr) (ext : rv_arg_ext) : string + unit :=
+  if check_callee_ret_ext w rattrs ext then inr tt
+  else
+    inl (diag "mc-call-contract"
+      ("callee '" ++ cname ++ "' return extension mismatches IR return attributes for width i" ++
+       diag_pos_dec w)).
+
+Definition check_callee_arg_contract_diag
+  (cname : string) (idx : nat) (arch : elf_arch)
+  (dt : dtyp) (pattrs : list param_attr) (sp : rv_arg_spec) : string + unit :=
+  if negb (rv_valid_arg_spec sp) then
+    inl (diag "mc-call-contract"
+      ("callee '" ++ cname ++ "' argument #" ++ diag_nat_dec idx ++
+       " has invalid arg spec (width i" ++ diag_pos_dec (ras_width sp) ++ ")"))
+  else if negb (dtyp_eqb dt (DTYPE_Base (DTYPE_I (ras_width sp)))) then
+    inl (diag "mc-call-contract"
+      ("callee '" ++ cname ++ "' argument #" ++ diag_nat_dec idx ++
+       " IR type mismatches declared width i" ++ diag_pos_dec (ras_width sp)))
+  else if check_callee_arg_contract arch dt pattrs sp then inr tt
+  else
+    inl (diag "mc-call-contract"
+      ("callee '" ++ cname ++ "' argument #" ++ diag_nat_dec idx ++
+       " extension/attribute contract mismatch")).
+
+Fixpoint check_callee_args_list_diag
+  (cname : string) (idx : nat) (arch : elf_arch)
+  (arg_dtys : list dtyp) (pattrs : list (list param_attr)) (specs : list rv_arg_spec)
+  {struct specs} : string + unit :=
+  match arg_dtys, pattrs, specs with
+  | [], [], [] => inr tt
+  | dt :: rd, pa :: rp, sp :: rs =>
+      match check_callee_arg_contract_diag cname idx arch dt pa sp with
+      | inl err => inl err
+      | inr tt => check_callee_args_list_diag cname (S idx) arch rd rp rs
+      end
+  | _, _, _ =>
+      inl (diag "mc-call-contract"
+        ("callee '" ++ cname ++ "' argument count mismatch (IR=" ++
+         diag_nat_dec (List.length arg_dtys) ++ ", attrs=" ++
+         diag_nat_dec (List.length pattrs) ++ ", cert=" ++
+         diag_nat_dec (List.length specs) ++ ")"))
+  end.
+
+Local Lemma check_callee_args_list_diag_sound :
+  forall cname idx arch arg_dtys pattrs specs,
+    check_callee_args_list_diag cname idx arch arg_dtys pattrs specs = inr tt ->
+    check_callee_args_list arch arg_dtys pattrs specs = true.
+Proof.
+  intros cname idx arch arg_dtys pattrs specs; revert idx arg_dtys pattrs.
+  induction specs as [| sp rs IH];
+    intros idx [| dt rd] [| pa rp] H;
+    cbn [check_callee_args_list_diag check_callee_args_list] in *;
+    try discriminate H; [reflexivity |].
+  unfold check_callee_arg_contract_diag in H.
+  destruct (rv_valid_arg_spec sp); cbn [negb] in H; [| discriminate H].
+  destruct (dtyp_eqb dt (DTYPE_Base (DTYPE_I (ras_width sp)))); cbn [negb] in H; [| discriminate H].
+  destruct (check_callee_arg_contract arch dt pa sp) eqn:Eac; [| discriminate H].
+  rewrite (IH (S idx) rd rp H), Bool.andb_true_r.
+  reflexivity.
+Qed.
+
+Definition check_one_callee_contract_diag
+  (tenv : list (ident * typ)) (ir_m : CFG.mcfg typ) (arch : elf_arch) (c : mc_callee_spec)
+  : string + unit :=
+  let cn := mcs_name c in
+  match find_unique_callee_decl_diag ir_m cn with
+  | inl err => inl err
+  | inr d =>
+      let '(d_rattrs, d_pattrs) := dc_param_attrs d in
+      match dc_type d with
+      | TYPE_Function ret_ty arg_tys false =>
+          let arg_dtys := List.map (typ_to_dtyp tenv) arg_tys in
+          if negb (dtyp_eqb (typ_to_dtyp tenv ret_ty) (DTYPE_Base (DTYPE_I (mcs_ret_width c)))) then
+            inl (diag "mc-call-contract"
+              ("callee '" ++ cn ++ "' IR return type mismatches cert width i" ++ diag_pos_dec (mcs_ret_width c)))
+          else if negb (rv_supported_arg_width (mcs_ret_width c)) then
+            inl (diag "mc-call-contract"
+              ("callee '" ++ cn ++ "' unsupported return width i" ++ diag_pos_dec (mcs_ret_width c)))
+          else if negb (cconv_eqb (anns_cconv (dc_annotations d)) CC_Ccc) then
+            inl (diag "mc-call-contract"
+              ("callee '" ++ cn ++ "' has unsupported calling convention"))
+          else if negb (forallb decl_ann_supported (dc_annotations d)) then
+            inl (diag "mc-call-contract"
+              ("callee '" ++ cn ++ "' has unsupported declaration annotation"))
+          else if negb (forallb (fun a => negb (is_unmodeled_fn_attr a))
+                                (dc_attrs d ++ ann_fun_attributes (dc_annotations d))) then
+            inl (diag "mc-call-contract"
+              ("callee '" ++ cn ++ "' has unmodeled function attribute"))
+          else if negb (forallb (fun a => negb (is_unmodeled_param_attr a)) d_rattrs) then
+            inl (diag "mc-call-contract"
+              ("callee '" ++ cn ++ "' has unmodeled return attribute"))
+          else if negb (forallb (forallb (fun a => negb (is_unmodeled_param_attr a))) d_pattrs) then
+            inl (diag "mc-call-contract"
+              ("callee '" ++ cn ++ "' has unmodeled parameter attribute"))
+          else
+            match check_callee_ret_ext_diag cn (mcs_ret_width c) d_rattrs (mcs_ret_ext c) with
+            | inl err => inl err
+            | inr tt => check_callee_args_list_diag cn 0%nat arch arg_dtys d_pattrs (mcs_args c)
+            end
+      | TYPE_Function _ _ true =>
+          inl (diag "mc-call-contract" ("varargs callee '" ++ cn ++ "' is not supported"))
+      | _ =>
+          inl (diag "mc-call-contract" ("callee '" ++ cn ++ "' does not have function type"))
+      end
+  end.
+
+Local Lemma check_one_callee_contract_diag_sound :
+  forall tenv ir_m arch c,
+    check_one_callee_contract_diag tenv ir_m arch c = inr tt ->
+    check_one_callee_contract tenv ir_m arch c = true.
+Proof.
+  intros tenv ir_m arch c H; unfold check_one_callee_contract_diag, check_one_callee_contract in *.
+  destruct (find_unique_callee_decl_diag ir_m (mcs_name c)) as [| d] eqn:Efd; [discriminate H |].
+  rewrite (find_unique_callee_decl_diag_sound _ _ _ Efd).
+  destruct (dc_param_attrs d) as [d_rattrs d_pattrs].
+  destruct (dc_type d); try discriminate H.
+  match goal with b : bool |- _ => destruct b; [discriminate H |] end.
+  match goal with
+  | |- context [dtyp_eqb (typ_to_dtyp tenv ?r) (DTYPE_Base (DTYPE_I (mcs_ret_width c)))] =>
+      destruct (dtyp_eqb (typ_to_dtyp tenv r) (DTYPE_Base (DTYPE_I (mcs_ret_width c))))
+  end; cbn [negb] in H; [| discriminate H].
+  destruct (rv_supported_arg_width (mcs_ret_width c)); cbn [negb] in H; [| discriminate H].
+  destruct (cconv_eqb (anns_cconv (dc_annotations d)) CC_Ccc); cbn [negb] in H; [| discriminate H].
+  destruct (forallb decl_ann_supported (dc_annotations d)); cbn [negb] in H; [| discriminate H].
+  destruct (forallb (fun a => negb (is_unmodeled_fn_attr a))
+                    (dc_attrs d ++ ann_fun_attributes (dc_annotations d)));
+    cbn [negb] in H; [| discriminate H].
+  destruct (forallb (fun a => negb (is_unmodeled_param_attr a)) d_rattrs);
+    cbn [negb] in H; [| discriminate H].
+  destruct (forallb (forallb (fun a => negb (is_unmodeled_param_attr a))) d_pattrs);
+    cbn [negb] in H; [| discriminate H].
+  unfold check_callee_ret_ext_diag in H.
+  destruct (check_callee_ret_ext (mcs_ret_width c) d_rattrs (mcs_ret_ext c)); [| discriminate H].
+  cbn [andb]; exact (check_callee_args_list_diag_sound _ _ _ _ _ _ H).
+Qed.
+
+Fixpoint check_mc_callee_contracts_diag
+  (tenv : list (ident * typ)) (ir_m : CFG.mcfg typ) (arch : elf_arch) (cs : list mc_callee_spec)
+  : string + unit :=
+  match cs with
+  | [] => inr tt
+  | c :: rest =>
+      match check_one_callee_contract_diag tenv ir_m arch c with
+      | inl err => inl err
+      | inr tt => check_mc_callee_contracts_diag tenv ir_m arch rest
+      end
+  end.
+
+Lemma check_mc_callee_contracts_diag_sound :
+  forall tenv ir_m arch cs,
+    check_mc_callee_contracts_diag tenv ir_m arch cs = inr tt ->
+    check_mc_callee_contracts tenv ir_m arch cs = true.
+Proof.
+  intros tenv ir_m arch cs; unfold check_mc_callee_contracts; induction cs as [| c rest IH]; intro H;
+    cbn [check_mc_callee_contracts_diag forallb] in *; [reflexivity |].
+  destruct (check_one_callee_contract_diag tenv ir_m arch c) as [| []] eqn:Ec; [discriminate H |].
+  rewrite (check_one_callee_contract_diag_sound _ _ _ _ Ec), (IH H); reflexivity.
+Qed.
 
 (** Call-site attribute safety predicates ensuring [apply_attrs] and [check_call_return]
     reduce cleanly on integer values. *)
@@ -1387,104 +1711,179 @@ Fixpoint mc_call_tree_wf (allowed : list (string * positive)) (ret_w : positive)
 (** *** 3.2 Acyclic IR Call-Tree Reifier *)
 
 Fixpoint reify_ir_call_args
-  (lmap : rmap (positive * cert_expr))
+  (cname : string) (arg_idx : nat) (lmap : rmap (positive * cert_expr))
   (specs : list rv_arg_spec)
   (args : list (texp dtyp * list param_attr))
-  {struct specs} : option (list (bool * positive * cert_expr)) :=
+  {struct specs} : string + list (bool * positive * cert_expr) :=
   match specs, args with
-  | [], [] => Some []
+  | [], [] => inr []
   | sp :: srest, ((aty, ae), pas) :: arest =>
       let w := ras_width sp in
-      if dtyp_eqb aty (DTYPE_Base (DTYPE_I w)) && pattrs_no_value_poison pas then
+      if negb (dtyp_eqb aty (DTYPE_Base (DTYPE_I w))) then
+        inl (diag "mc-call-ir"
+          ("argument #" ++ diag_nat_dec arg_idx ++ " type mismatch in call to '" ++ cname ++
+           "' (expected i" ++ diag_pos_dec w ++ ")"))
+      else if negb (pattrs_no_value_poison pas) then
+        inl (diag "mc-call-ir"
+          ("argument #" ++ diag_nat_dec arg_idx ++ " has unsupported attribute in call to '" ++ cname ++ "'"))
+      else
         match reify_pure_exp lmap (Some aty) ae with
+        | None =>
+            inl (diag "mc-call-ir"
+              ("unsupported non-pure expression in argument #" ++ diag_nat_dec arg_idx ++
+               " calling '" ++ cname ++ "'"))
         | Some (_, ce) =>
-            if ub_free_expr ce && negb (expr_has_freeze ce) then
-              match reify_ir_call_args lmap srest arest with
-              | Some rest =>
+            if negb (ub_free_expr ce) then
+              inl (diag "mc-call-ir"
+                ("non-UB-free expression in argument #" ++ diag_nat_dec arg_idx ++
+                 " calling '" ++ cname ++ "'"))
+            else if expr_has_freeze ce then
+              inl (diag "mc-call-ir"
+                ("freeze expression not allowed in argument #" ++ diag_nat_dec arg_idx ++
+                 " calling '" ++ cname ++ "'"))
+            else
+              match reify_ir_call_args cname (S arg_idx) lmap srest arest with
+              | inl err => inl err
+              | inr rest =>
                   let need_def := negb (existsb attr_is_noundef pas) in
-                  Some ((need_def, w, ce) :: rest)
-              | None => None
+                  inr ((need_def, w, ce) :: rest)
               end
-            else None
-        | None => None
         end
-      else None
-  | _, _ => None
+  | _, _ =>
+      inl (diag "mc-call-ir"
+        ("argument count mismatch in call to '" ++ cname ++ "' (at argument #" ++
+         diag_nat_dec arg_idx ++ ")"))
   end.
 
 Fixpoint reify_ir_code_calls
-  (callees : list mc_callee_spec) (c : code dtyp)
+  (cur_bid : block_id) (callees : list mc_callee_spec) (c : code dtyp)
   (cid : nat) (lmap : rmap (positive * cert_expr))
-  (k_end : nat -> rmap (positive * cert_expr) -> option ir_call_tree)
-  {struct c} : option ir_call_tree :=
+  (k_end : nat -> rmap (positive * cert_expr) -> string + ir_call_tree)
+  {struct c} : string + ir_call_tree :=
+  let loc (_ : unit) : string :=
+    (" in IR block '" ++ cert_raw_id_bare cur_bid ++ "'")%string
+  in
   match c with
   | [] => k_end cid lmap
   | (IVoid _, INSTR_Comment _, _) :: rest =>
-      reify_ir_code_calls callees rest cid lmap k_end
+      reify_ir_code_calls cur_bid callees rest cid lmap k_end
+  | (IVoid _, _, _) :: _ =>
+      inl (diag "mc-call-ir" ("unsupported void instruction" ++ loc tt))
   | (IId id, INSTR_Op op, _) :: rest =>
       match reify_pure_exp lmap None op with
+      | None =>
+          inl (diag "mc-call-ir"
+            ("unsupported non-pure expression for %" ++ cert_raw_id_bare id ++ loc tt))
       | Some (w, ce) =>
-          if ub_free_expr ce && negb (expr_has_freeze ce) then
-            reify_ir_code_calls callees rest cid (RM.add id (w, ce) lmap) k_end
-          else None
-      | None => None
+          if negb (ub_free_expr ce) then
+            inl (diag "mc-call-ir"
+              ("non-UB-free expression for %" ++ cert_raw_id_bare id ++ loc tt))
+          else if expr_has_freeze ce then
+            inl (diag "mc-call-ir"
+              ("freeze expression not allowed for %" ++ cert_raw_id_bare id ++ loc tt))
+          else
+            reify_ir_code_calls cur_bid callees rest cid (RM.add id (w, ce) lmap) k_end
       end
   | (IId id, (INSTR_Call (dt_ret, fn_e) call_args anns obs as ins), md) :: rest =>
       match match_pure_int_intrinsic_call ins with
       | Some (PIICA_Binop op w a0 a1) =>
-          if match metadata_range md with None => true | Some _ => false end then
+          if negb (match metadata_range md with None => true | Some _ => false end) then
+            inl (diag "mc-call-ir"
+              ("range metadata not supported on integer intrinsic for %" ++ cert_raw_id_bare id ++ loc tt))
+          else
             match reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I w))) a0,
                   reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I w))) a1 with
             | Some (_, ca), Some (_, cb) =>
-                if ub_free_expr ca && ub_free_expr cb &&
-                   negb (expr_has_freeze ca) && negb (expr_has_freeze cb) then
+                if negb (ub_free_expr ca && ub_free_expr cb) then
+                  inl (diag "mc-call-ir"
+                    ("non-UB-free operand in integer intrinsic for %" ++ cert_raw_id_bare id ++ loc tt))
+                else if expr_has_freeze ca || expr_has_freeze cb then
+                  inl (diag "mc-call-ir"
+                    ("freeze operand not allowed in integer intrinsic for %" ++ cert_raw_id_bare id ++ loc tt))
+                else
                   let ce := lower_pure_int_intrinsic_binop op w ca cb in
-                  reify_ir_code_calls callees rest cid (RM.add id (w, ce) lmap) k_end
-                else None
-            | _, _ => None
+                  reify_ir_code_calls cur_bid callees rest cid (RM.add id (w, ce) lmap) k_end
+            | _, _ =>
+                inl (diag "mc-call-ir"
+                  ("unsupported operand in binary integer intrinsic for %" ++ cert_raw_id_bare id ++ loc tt))
             end
-          else None
       | Some (PIICA_Abs w a0 flag) =>
-          if match metadata_range md with None => true | Some _ => false end then
+          if negb (match metadata_range md with None => true | Some _ => false end) then
+            inl (diag "mc-call-ir"
+              ("range metadata not supported on abs intrinsic for %" ++ cert_raw_id_bare id ++ loc tt))
+          else
             match reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I w))) a0 with
             | Some (_, ca) =>
-                if ub_free_expr ca && negb (expr_has_freeze ca) then
+                if negb (ub_free_expr ca) then
+                  inl (diag "mc-call-ir"
+                    ("non-UB-free operand in abs intrinsic for %" ++ cert_raw_id_bare id ++ loc tt))
+                else if expr_has_freeze ca then
+                  inl (diag "mc-call-ir"
+                    ("freeze operand not allowed in abs intrinsic for %" ++ cert_raw_id_bare id ++ loc tt))
+                else
                   let ce := lower_pure_int_intrinsic_abs w ca flag in
-                  reify_ir_code_calls callees rest cid (RM.add id (w, ce) lmap) k_end
-                else None
-            | None => None
+                  reify_ir_code_calls cur_bid callees rest cid (RM.add id (w, ce) lmap) k_end
+            | None =>
+                inl (diag "mc-call-ir"
+                  ("unsupported operand in abs intrinsic for %" ++ cert_raw_id_bare id ++ loc tt))
             end
-          else None
       | None =>
           match dt_ret, fn_e, obs with
           | DTYPE_Base (DTYPE_I rw), EXP_Ident (ID_Global (Name cname)), [] =>
-              if match @intrinsic_exp dtyp fn_e with None => true | Some _ => false end &&
-                 cconv_eqb (anns_cconv anns) CC_Ccc &&
-                 match metadata_range md with None => true | Some _ => false end &&
-                 fattrs_call_ok (ann_fun_attributes anns) &&
-                 pattrs_no_value_poison (ann_ret_attributes anns) &&
-                 is_supported_bit_width rw then
+              if negb (match @intrinsic_exp dtyp fn_e with None => true | Some _ => false end) then
+                inl (diag "mc-call-ir"
+                  ("unsupported LLVM intrinsic call @" ++ cname ++ loc tt))
+              else if negb (cconv_eqb (anns_cconv anns) CC_Ccc) then
+                inl (diag "mc-call-ir"
+                  ("non-C calling convention on call to @" ++ cname ++ loc tt))
+              else if negb (match metadata_range md with None => true | Some _ => false end) then
+                inl (diag "mc-call-ir"
+                  ("range metadata not supported on call to @" ++ cname ++ loc tt))
+              else if negb (fattrs_call_ok (ann_fun_attributes anns)) then
+                inl (diag "mc-call-ir"
+                  ("unsupported function attributes on call to @" ++ cname ++ loc tt))
+              else if negb (pattrs_no_value_poison (ann_ret_attributes anns)) then
+                inl (diag "mc-call-ir"
+                  ("unsupported return attributes on call to @" ++ cname ++ loc tt))
+              else if negb (is_supported_bit_width rw) then
+                inl (diag "mc-call-ir"
+                  ("unsupported return width i" ++ diag_pos_dec rw ++ " on call to @" ++ cname ++ loc tt))
+              else
                 match find_callee_spec callees cname with
-                | None => None
+                | None =>
+                    inl (diag "mc-call-ir"
+                      ("missing callee specification for @" ++ cname ++ loc tt))
                 | Some sp =>
                     if Pos.eqb rw (mcs_ret_width sp) then
-                      match reify_ir_call_args lmap (mcs_args sp) call_args with
-                      | None => None
-                      | Some arg_es =>
+                      match reify_ir_call_args cname 0%nat lmap (mcs_args sp) call_args with
+                      | inl err => inl err
+                      | inr arg_es =>
                           let rv := mc_call_ret_var cid rw in
                           let lmap' := RM.add id (rw, CE_Var rv rw) lmap in
-                          match reify_ir_code_calls callees rest (S cid) lmap' k_end with
-                          | None => None
-                          | Some cont => Some (ICT_Call cname arg_es rw rv cont)
+                          match reify_ir_code_calls cur_bid callees rest (S cid) lmap' k_end with
+                          | inl err => inl err
+                          | inr cont => inr (ICT_Call cname arg_es rw rv cont)
                           end
                       end
-                    else None
+                    else
+                      inl (diag "mc-call-ir"
+                        ("call to @" ++ cname ++ " returns i" ++ diag_pos_dec rw ++
+                         ", expected i" ++ diag_pos_dec (mcs_ret_width sp) ++ loc tt))
                 end
-              else None
-          | _, _, _ => None
+          | _, _, _ :: _ =>
+              inl (diag "mc-call-ir"
+                ("operand bundles not supported in call for %" ++ cert_raw_id_bare id ++ loc tt))
+          | _, EXP_Ident (ID_Global (Name cname)), [] =>
+              inl (diag "mc-call-ir"
+                ("non-integer return type on call to @" ++ cname ++ loc tt))
+          | _, _, [] =>
+              inl (diag "mc-call-ir"
+                ("indirect or non-named call for %" ++ cert_raw_id_bare id ++ loc tt))
           end
       end
-  | _ :: _ => None
+  | (IId id, _, _) :: _ =>
+      inl (diag "mc-call-ir"
+        ("unsupported non-pure instruction for %" ++ cert_raw_id_bare id ++ loc tt))
   end.
 
 Fixpoint reify_ir_call_at
@@ -1492,60 +1891,80 @@ Fixpoint reify_ir_call_at
   (ret_w : positive) (visited : list block_id)
   (is_entry : bool) (bid_from cur_bid : block_id)
   (cid : nat) (lmap : rmap (positive * cert_expr))
-  {struct fuel} : option ir_call_tree :=
-  if raw_id_in_list cur_bid visited then None
+  {struct fuel} : string + ir_call_tree :=
+  let loc (_ : unit) : string :=
+    ("block '" ++ cert_raw_id_bare cur_bid ++ "' (from '" ++ cert_raw_id_bare bid_from ++ "')")%string
+  in
+  if raw_id_in_list cur_bid visited then
+    inl (diag "mc-call-ir" ("CFG loop/cycle detected at " ++ loc tt))
   else
     match fuel with
-    | O => None
+    | O => inl (diag "mc-call-ir" ("CFG fuel exhausted at " ++ loc tt))
     | S fuel' =>
         match RM.find cur_bid bmap with
-        | None => None
+        | None => inl (diag "mc-call-ir" ("missing CFG " ++ loc tt))
         | Some b =>
             let visited' := cur_bid :: visited in
-            let lmap_phis :=
+            let lmap_phis : string + rmap (positive * cert_expr) :=
               if is_entry then
-                match blk_phis b with [] => Some lmap | _ :: _ => None end
+                match blk_phis b with
+                | [] => inr lmap
+                | _ :: _ => inl (diag "mc-call-ir" ("entry " ++ loc tt ++ " must not contain phi nodes"))
+                end
               else
                 match reify_pure_phis bid_from lmap (blk_phis b) with
-                | None => None
+                | None => inl (diag "mc-call-ir" ("unsupported phi instruction in " ++ loc tt))
                 | Some pevals =>
-                    if pevals_ub_free pevals &&
-                       forallb (fun '(_, _, ce) => negb (expr_has_freeze ce)) pevals
-                    then Some (apply_reified_phis lmap pevals)
-                    else None
+                    if negb (pevals_ub_free pevals) then
+                      inl (diag "mc-call-ir" ("non-UB-free phi expression in " ++ loc tt))
+                    else if negb (forallb (fun '(_, _, ce) => negb (expr_has_freeze ce)) pevals) then
+                      inl (diag "mc-call-ir" ("freeze expression not allowed in phi of " ++ loc tt))
+                    else inr (apply_reified_phis lmap pevals)
                 end in
             match lmap_phis with
-            | None => None
-            | Some lmap1 =>
-                reify_ir_code_calls callees (blk_code b) cid lmap1
+            | inl err => inl err
+            | inr lmap1 =>
+                reify_ir_code_calls cur_bid callees (blk_code b) cid lmap1
                   (fun cid' lmap2 =>
                      let '(_, term) := fst (blk_term b) in
                      match term with
-                     | TERM_Unreachable => Some ICT_UB
+                     | TERM_Unreachable => inr ICT_UB
                      | TERM_Ret (DTYPE_Base (DTYPE_I rw), op) =>
                          if Pos.eqb rw ret_w then
                            match reify_pure_exp lmap2 (Some (DTYPE_Base (DTYPE_I rw))) op with
                            | Some (_, ret_e) =>
-                               if ub_free_expr ret_e && negb (expr_has_freeze ret_e)
-                               then Some (ICT_Ret rw ret_e) else None
-                           | None => None
+                               if negb (ub_free_expr ret_e) then
+                                 inl (diag "mc-call-ir" ("non-UB-free return expression in " ++ loc tt))
+                               else if expr_has_freeze ret_e then
+                                 inl (diag "mc-call-ir" ("freeze expression not allowed in return of " ++ loc tt))
+                               else inr (ICT_Ret rw ret_e)
+                           | None => inl (diag "mc-call-ir" ("unsupported return operand in " ++ loc tt))
                            end
-                         else None
+                         else
+                           inl (diag "mc-call-ir"
+                             ("return width i" ++ diag_pos_dec rw ++ " mismatches expected i" ++
+                              diag_pos_dec ret_w ++ " in " ++ loc tt))
                      | TERM_Br_1 next_bid =>
                          reify_ir_call_at fuel' callees bmap ret_w visited' false cur_bid next_bid cid' lmap2
                      | TERM_Br (DTYPE_Base (DTYPE_I 1%positive), op) br1 br2 =>
                          match reify_pure_exp lmap2 (Some (DTYPE_Base (DTYPE_I 1%positive))) op with
                          | Some (_, cond_e) =>
-                             if ub_free_expr cond_e && negb (expr_has_freeze cond_e) then
-                               match reify_ir_call_at fuel' callees bmap ret_w visited' false cur_bid br1 cid' lmap2,
-                                     reify_ir_call_at fuel' callees bmap ret_w visited' false cur_bid br2 cid' lmap2 with
-                               | Some dt, Some df => Some (ICT_Branch cond_e dt df)
-                               | _, _ => None
+                             if negb (ub_free_expr cond_e) then
+                               inl (diag "mc-call-ir" ("non-UB-free branch condition in " ++ loc tt))
+                             else if expr_has_freeze cond_e then
+                               inl (diag "mc-call-ir" ("freeze expression not allowed in branch condition of " ++ loc tt))
+                             else
+                               match reify_ir_call_at fuel' callees bmap ret_w visited' false cur_bid br1 cid' lmap2 with
+                               | inl err => inl err
+                               | inr dt =>
+                                   match reify_ir_call_at fuel' callees bmap ret_w visited' false cur_bid br2 cid' lmap2 with
+                                   | inl err => inl err
+                                   | inr df => inr (ICT_Branch cond_e dt df)
+                                   end
                                end
-                             else None
-                         | None => None
+                         | None => inl (diag "mc-call-ir" ("unsupported branch condition in " ++ loc tt))
                          end
-                     | _ => None
+                     | _ => inl (diag "mc-call-ir" ("unsupported terminator in " ++ loc tt))
                      end)
             end
         end
@@ -1571,7 +1990,7 @@ Qed.
 
 Definition reify_ir_call_tree
   (ir_cfg : CFG.cfg dtyp) (arg_specs : list rv_arg_spec) (callees : list mc_callee_spec) (ret_w : positive)
-  : option ir_call_tree :=
+  : string + ir_call_tree :=
   let ir_pnames := List.map cert_reg_name (args ir_cfg) in
   let lmap_init := init_param_lmap (args ir_cfg) ir_pnames (arg_specs_uses_from 0%nat arg_specs) in
   let bmap := ocfg_map (blks ir_cfg) in
@@ -1631,27 +2050,27 @@ Proof.
   eapply incl_tran; [exact Hfv | exact Hinc].
 Qed.
 
-Lemma reify_ir_call_args_wf : forall allowed lmap specs args aes,
+Lemma reify_ir_call_args_wf : forall cname arg_idx allowed lmap specs args aes,
   wf_pure_lmap allowed lmap ->
-  reify_ir_call_args lmap specs args = Some aes ->
+  reify_ir_call_args cname arg_idx lmap specs args = inr aes ->
   Forall (fun '(_, w, e) => sym_expr_freeze_free allowed w e) aes.
 Proof.
-  intros allowed lmap specs; induction specs as [| sp srest IH];
-    intros [| [[aty ae] pas] arest] aes Hlmap H; cbn [reify_ir_call_args] in H;
+  intros cname arg_idx allowed lmap specs; revert arg_idx;
+    induction specs as [| sp srest IH];
+    intros arg_idx [| [[aty ae] pas] arest] aes Hlmap H; cbn [reify_ir_call_args] in H;
     try discriminate H; [inversion H; constructor |].
-  destruct (dtyp_eqb aty (DTYPE_Base (DTYPE_I (ras_width sp))) && pattrs_no_value_poison pas) eqn:Ehd;
-    [| discriminate H].
-  apply andb_true_iff in Ehd as [Hdt _]; unfold dtyp_eqb in Hdt.
-  destruct (dtyp_eq_dec aty (DTYPE_Base (DTYPE_I (ras_width sp)))); [| discriminate Hdt].
+  destruct (dtyp_eqb aty (DTYPE_Base (DTYPE_I (ras_width sp)))) eqn:Hdt; cbn [negb] in H; [| discriminate H].
+  unfold dtyp_eqb in Hdt; destruct (dtyp_eq_dec aty (DTYPE_Base (DTYPE_I (ras_width sp)))); [| discriminate Hdt].
+  destruct (pattrs_no_value_poison pas); cbn [negb] in H; [| discriminate H].
   destruct (reify_pure_exp lmap (Some aty) ae) as [[w ce] |] eqn:Ere; [| discriminate H].
-  destruct (ub_free_expr ce && negb (expr_has_freeze ce)) eqn:Eub; [| discriminate H].
-  apply andb_true_iff in Eub as [Hub Hnf]; apply negb_true_iff in Hnf.
-  destruct (reify_ir_call_args lmap srest arest) as [rest |] eqn:Hr; [| discriminate H].
+  destruct (ub_free_expr ce) eqn:Hub; cbn [negb] in H; [| discriminate H].
+  destruct (expr_has_freeze ce) eqn:Hnf; [discriminate H |].
+  destruct (reify_ir_call_args cname (S arg_idx) lmap srest arest) as [| rest] eqn:Hr; [discriminate H |].
   inversion H; subst aes; clear H.
   destruct (reify_pure_exp_typing ae allowed lmap (Some aty) w ce Hlmap Ere) as (_ & Hwt & Hbw & Hlf & Hfv).
   pose proof (reify_pure_exp_top_width ae lmap (Some aty) w ce Ere) as Htw; rewrite e in Htw.
   cbn [check_opt_int_width] in Htw; apply Pos.eqb_eq in Htw; subst w.
-  constructor; [exact (sym_expr_freeze_free_wf_intro _ _ _ Hwt Htw Hlf Hfv Hnf) | exact (IH _ _ Hlmap Hr)].
+  constructor; [exact (sym_expr_freeze_free_wf_intro _ _ _ Hwt Htw Hlf Hfv Hnf) | exact (IH _ _ _ Hlmap Hr)].
 Qed.
 
 Lemma expr_has_freeze_false_collect_keys : forall e,
@@ -1701,24 +2120,24 @@ Proof.
 Qed.
 
 Lemma reify_ir_code_calls_wf :
-  forall callees c cid allowed lmap ret_w k_end t,
+  forall cur_bid callees c cid allowed lmap ret_w k_end t,
     wf_pure_lmap allowed lmap ->
     (forall cid' allowed' lmap' t',
        incl allowed allowed' ->
        wf_pure_lmap allowed' lmap' ->
-       k_end cid' lmap' = Some t' ->
+       k_end cid' lmap' = inr t' ->
        ir_call_tree_wf allowed' ret_w t') ->
-    reify_ir_code_calls callees c cid lmap k_end = Some t ->
+    reify_ir_code_calls cur_bid callees c cid lmap k_end = inr t ->
     ir_call_tree_wf allowed ret_w t.
 Proof.
-  intros callees c; induction c as [| [[iid ins] md] rest IH];
+  intros cur_bid callees c; induction c as [| [[iid ins] md] rest IH];
     intros cid allowed lmap ret_w k_end t Hlmap Hk Hrc; cbn [reify_ir_code_calls] in Hrc.
   - exact (Hk cid allowed lmap t (incl_refl _) Hlmap Hrc).
   - destruct iid as [id | vid].
     + destruct ins; try discriminate Hrc.
       * destruct (reify_pure_exp lmap None op) as [[w ce] |] eqn:Ere; [| discriminate Hrc].
-        destruct (ub_free_expr ce && negb (expr_has_freeze ce)) eqn:Euf; [| discriminate Hrc].
-        apply andb_true_iff in Euf as [_ _].
+        destruct (ub_free_expr ce); cbn [negb] in Hrc; [| discriminate Hrc].
+        destruct (expr_has_freeze ce); [discriminate Hrc |].
         destruct (reify_pure_exp_typing op allowed lmap None w ce Hlmap Ere) as (_ & Hwt & Hbw & Hlf & Hfv).
         exact (IH cid allowed (RM.add id (w, ce) lmap) ret_w k_end t
                  (wf_pure_lmap_add _ _ _ _ _ Hlmap Hwt Hbw Hlf Hfv)
@@ -1726,12 +2145,12 @@ Proof.
       * destruct (match_pure_int_intrinsic_call (INSTR_Call fn args anns obs)) as [pic |] eqn:Epic.
         -- pose proof (match_pure_int_intrinsic_call_inv _ _ Epic) as Hinv.
            destruct pic as [op w a0 a1 | w a0 flag]; destruct fn as [dt_fn fn_e].
-           ++ destruct (match metadata_range md with None => true | Some _ => false end); [| discriminate Hrc].
+           ++ destruct (match metadata_range md with None => true | Some _ => false end); cbn [negb] in Hrc; [| discriminate Hrc].
               destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I w))) a0) as [[wa ca] |] eqn:Ea0; [| discriminate Hrc].
               destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I w))) a1) as [[wb cb] |] eqn:Ea1; [| discriminate Hrc].
-              destruct (ub_free_expr ca && ub_free_expr cb && negb (expr_has_freeze ca) && negb (expr_has_freeze cb)) eqn:Euf; [| discriminate Hrc].
-              rewrite !andb_true_iff in Euf; destruct Euf as (((_ & _) & Hnfa) & Hnfb);
-                apply negb_true_iff in Hnfa; apply negb_true_iff in Hnfb.
+              destruct (ub_free_expr ca && ub_free_expr cb); cbn [negb] in Hrc; [| discriminate Hrc].
+              destruct (expr_has_freeze ca || expr_has_freeze cb) eqn:Efr; [discriminate Hrc |].
+              apply orb_false_iff in Efr as [Hnfa Hnfb].
               destruct (reify_pure_exp_typing a0 allowed lmap (Some (DTYPE_Base (DTYPE_I w))) wa ca Hlmap Ea0)
                 as (_ & Hwt0 & Hbw0 & Hlf0 & Hfv0).
               pose proof (reify_pure_exp_top_width a0 lmap (Some (DTYPE_Base (DTYPE_I w))) wa ca Ea0) as Htw0.
@@ -1748,10 +2167,10 @@ Proof.
                 by (intros x Hx; apply Hfv_sub, in_app_iff in Hx as [Hx | Hx]; [exact (Hfv0 _ Hx) | exact (Hfv1 _ Hx)]).
               exact (IH cid allowed (RM.add id (w, lower_pure_int_intrinsic_binop op w ca cb) lmap) ret_w k_end t
                        (wf_pure_lmap_add _ _ _ _ _ Hlmap Hwt Hbw Hlf Hfv) Hk Hrc).
-           ++ destruct (match metadata_range md with None => true | Some _ => false end); [| discriminate Hrc].
+           ++ destruct (match metadata_range md with None => true | Some _ => false end); cbn [negb] in Hrc; [| discriminate Hrc].
               destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I w))) a0) as [[wa ca] |] eqn:Ea0; [| discriminate Hrc].
-              destruct (ub_free_expr ca && negb (expr_has_freeze ca)) eqn:Euf; [| discriminate Hrc].
-              rewrite andb_true_iff in Euf; destruct Euf as [_ Hnfa]; apply negb_true_iff in Hnfa.
+              destruct (ub_free_expr ca); cbn [negb] in Hrc; [| discriminate Hrc].
+              destruct (expr_has_freeze ca) eqn:Hnfa; [discriminate Hrc |].
               destruct (reify_pure_exp_typing a0 allowed lmap (Some (DTYPE_Base (DTYPE_I w))) wa ca Hlmap Ea0)
                 as (_ & Hwt0 & Hbw0 & Hlf0 & Hfv0).
               pose proof (reify_pure_exp_top_width a0 lmap (Some (DTYPE_Base (DTYPE_I w))) wa ca Ea0) as Htw0.
@@ -1763,24 +2182,25 @@ Proof.
                 by (intros x Hx; exact (Hfv0 _ (Hfv_sub _ Hx))).
               exact (IH cid allowed (RM.add id (w, lower_pure_int_intrinsic_abs w ca flag) lmap) ret_w k_end t
                        (wf_pure_lmap_add _ _ _ _ _ Hlmap Hwt Hbw Hlf Hfv) Hk Hrc).
-        -- destruct fn as [dt_ret fn_e]; destruct dt_ret as [[rw | | | | | | | | | |] | |]; try discriminate Hrc.
-           destruct fn_e; try discriminate Hrc; destruct id0 as [[cname | | ] | ?]; try discriminate Hrc.
-           destruct obs; try discriminate Hrc.
-           destruct (match @intrinsic_exp dtyp (EXP_Ident (ID_Global (Name cname))) with None => true | Some _ => false end &&
-                     cconv_eqb (anns_cconv anns) CC_Ccc &&
-                     match metadata_range md with None => true | Some _ => false end &&
-                     fattrs_call_ok (ann_fun_attributes anns) &&
-                     pattrs_no_value_poison (ann_ret_attributes anns) &&
-                     is_supported_bit_width rw) eqn:Eg; [| discriminate Hrc].
-           rewrite !andb_true_iff in Eg; destruct Eg as (((((_ & _) & _) & _) & _) & Hsup).
+        -- destruct fn as [dt_ret fn_e].
+           destruct dt_ret as [bdt | |]; [destruct bdt as [rw | | | | | | | | | |] | |];
+             destruct fn_e;
+             try match goal with iv : ident |- _ => destruct iv as [[cname | | ] | ?] end;
+             destruct obs; try discriminate Hrc.
+           destruct (match @intrinsic_exp dtyp (EXP_Ident (ID_Global (Name cname))) with None => true | Some _ => false end); cbn [negb] in Hrc; [| discriminate Hrc].
+           destruct (cconv_eqb (anns_cconv anns) CC_Ccc); cbn [negb] in Hrc; [| discriminate Hrc].
+           destruct (match metadata_range md with None => true | Some _ => false end); cbn [negb] in Hrc; [| discriminate Hrc].
+           destruct (fattrs_call_ok (ann_fun_attributes anns)); cbn [negb] in Hrc; [| discriminate Hrc].
+           destruct (pattrs_no_value_poison (ann_ret_attributes anns)); cbn [negb] in Hrc; [| discriminate Hrc].
+           destruct (is_supported_bit_width rw) eqn:Hsup; cbn [negb] in Hrc; [| discriminate Hrc].
            destruct (find_callee_spec callees cname) as [sp |]; [| discriminate Hrc].
            destruct (Pos.eqb rw (mcs_ret_width sp)); [| discriminate Hrc].
-           destruct (reify_ir_call_args lmap (mcs_args sp) args) as [aes |] eqn:Eaes; [| discriminate Hrc].
-           destruct (reify_ir_code_calls callees rest (S cid)
+           destruct (reify_ir_call_args cname 0%nat lmap (mcs_args sp) args) as [| aes] eqn:Eaes; [discriminate Hrc |].
+           destruct (reify_ir_code_calls cur_bid callees rest (S cid)
                        (RM.add id (rw, CE_Var (mc_call_ret_var cid rw) rw) lmap) k_end)
-             as [cont |] eqn:Ect; [| discriminate Hrc].
+             as [| cont] eqn:Ect; [discriminate Hrc |].
            inversion Hrc; subst t; cbn [ir_call_tree_wf]; repeat split; try assumption.
-           ++ exact (reify_ir_call_args_wf allowed lmap _ _ _ Hlmap Eaes).
+           ++ exact (reify_ir_call_args_wf cname 0%nat allowed lmap _ _ _ Hlmap Eaes).
            ++ eapply IH; [| | exact Ect].
               ** apply wf_pure_lmap_add.
                  --- exact (wf_pure_lmap_mono allowed ((mc_call_ret_var cid rw, rw) :: allowed) lmap
@@ -1797,7 +2217,7 @@ Lemma reify_ir_call_at_wf :
   forall fuel callees bmap ret_w visited is_entry bid_from cur_bid cid allowed lmap t,
     is_supported_bit_width ret_w = true ->
     wf_pure_lmap allowed lmap ->
-    reify_ir_call_at fuel callees bmap ret_w visited is_entry bid_from cur_bid cid lmap = Some t ->
+    reify_ir_call_at fuel callees bmap ret_w visited is_entry bid_from cur_bid cid lmap = inr t ->
     ir_call_tree_wf allowed ret_w t.
 Proof.
   intro fuel; induction fuel as [| fuel' IH];
@@ -1805,20 +2225,16 @@ Proof.
     cbn [reify_ir_call_at] in H;
     destruct (raw_id_in_list cur_bid visited); try discriminate H.
   destruct (RM.find cur_bid bmap) as [b |]; [| discriminate H].
-  set (lmap_phis :=
-    if is_entry then match blk_phis b with [] => Some lmap | _ :: _ => None end
-    else match reify_pure_phis bid_from lmap (blk_phis b) with
-         | None => None
-         | Some pevals =>
-             if pevals_ub_free pevals && forallb (fun '(_, _, ce) => negb (expr_has_freeze ce)) pevals
-             then Some (apply_reified_phis lmap pevals) else None
-         end) in *.
-  destruct lmap_phis as [lmap1 |] eqn:El1; [| discriminate H].
+  match type of H with
+  | match ?x with inl _ => _ | inr _ => _ end = _ => destruct x as [| lmap1] eqn:El1
+  end; [discriminate H |].
   assert (Hlmap1 : wf_pure_lmap allowed lmap1).
-  { unfold lmap_phis in El1; destruct is_entry.
+  { destruct is_entry.
     - destruct (blk_phis b); inversion El1; subst; exact Hlmap.
     - destruct (reify_pure_phis bid_from lmap (blk_phis b)) as [pevals |] eqn:Erp; [| discriminate El1].
-      destruct (pevals_ub_free pevals && _); inversion El1; subst.
+      destruct (pevals_ub_free pevals); cbn [negb] in El1; [| discriminate El1].
+      destruct (forallb (fun '(_, _, ce) => negb (expr_has_freeze ce)) pevals); cbn [negb] in El1;
+        inversion El1; subst.
       exact (apply_reified_phis_wf _ _ _ Hlmap (reify_pure_phis_typing _ _ _ _ _ Hlmap Erp)). }
   eapply reify_ir_code_calls_wf; [exact Hlmap1 | | exact H].
   intros cid' allowed' lmap2 t' _ Hlmap2 Hterm.
@@ -1827,8 +2243,8 @@ Proof.
   - destruct v as [[[rw | | | | | | | | | |] | |] op]; try discriminate Hterm.
     destruct (Pos.eqb rw ret_w) eqn:Erw; [apply Pos.eqb_eq in Erw; subst rw | discriminate Hterm].
     destruct (reify_pure_exp lmap2 (Some (DTYPE_Base (DTYPE_I ret_w))) op) as [[w0 ret_e] |] eqn:Ere; [| discriminate Hterm].
-    destruct (ub_free_expr ret_e && negb (expr_has_freeze ret_e)) eqn:Euf; [| discriminate Hterm].
-    apply andb_true_iff in Euf as [Hub Hnf]; apply negb_true_iff in Hnf.
+    destruct (ub_free_expr ret_e); cbn [negb] in Hterm; [| discriminate Hterm].
+    destruct (expr_has_freeze ret_e) eqn:Hnf; [discriminate Hterm |].
     inversion Hterm; subst t'; cbn [ir_call_tree_wf]; split; [reflexivity |].
     destruct (reify_pure_exp_typing op allowed' lmap2 (Some (DTYPE_Base (DTYPE_I ret_w))) w0 ret_e Hlmap2 Ere)
       as (_ & Hwt & Hbw & Hlf & Hfv).
@@ -1838,12 +2254,12 @@ Proof.
   - match goal with x : texp dtyp |- _ => destruct x as [[[rw | | | | | | | | | |] | |] e_cond] end; try discriminate Hterm.
     destruct rw; try discriminate Hterm.
     destruct (reify_pure_exp lmap2 (Some (DTYPE_Base (DTYPE_I 1%positive))) e_cond) as [[w0 cond_e] |] eqn:Erc; [| discriminate Hterm].
-    destruct (ub_free_expr cond_e && negb (expr_has_freeze cond_e)) eqn:Euf; [| discriminate Hterm].
-    apply andb_true_iff in Euf as [Hub Hnf]; apply negb_true_iff in Hnf.
+    destruct (ub_free_expr cond_e); cbn [negb] in Hterm; [| discriminate Hterm].
+    destruct (expr_has_freeze cond_e) eqn:Hnf; [discriminate Hterm |].
     destruct (reify_ir_call_at fuel' callees bmap ret_w (cur_bid :: visited) false cur_bid br1 cid' lmap2)
-      as [dt |] eqn:Hdt; [| discriminate Hterm].
+      as [| dt] eqn:Hdt; [discriminate Hterm |].
     destruct (reify_ir_call_at fuel' callees bmap ret_w (cur_bid :: visited) false cur_bid br2 cid' lmap2)
-      as [df |] eqn:Hdf; [| discriminate Hterm].
+      as [| df] eqn:Hdf; [discriminate Hterm |].
     inversion Hterm; subst t'; cbn [ir_call_tree_wf]; split; [| split].
     + destruct (reify_pure_exp_typing e_cond allowed' lmap2 (Some (DTYPE_Base (DTYPE_I 1%positive))) w0 cond_e Hlmap2 Erc)
         as (_ & Hwt & Hbw & Hlf & Hfv).
@@ -1863,7 +2279,7 @@ Lemma reify_ir_call_tree_wf :
        In (idx, DTYPE_Base (DTYPE_I w)) (arg_specs_uses_from 0%nat arg_specs) ->
        nth_error (List.map cert_reg_name (args ir_cfg)) idx = Some pnm ->
        In (pnm, w) allowed) ->
-    reify_ir_call_tree ir_cfg arg_specs callees ret_w = Some t_ir ->
+    reify_ir_call_tree ir_cfg arg_specs callees ret_w = inr t_ir ->
     ir_call_tree_wf allowed ret_w t_ir.
 Proof.
   intros ir_cfg arg_specs callees ret_w allowed t_ir Hrw Hpu H.
@@ -1884,18 +2300,23 @@ Definition rv_post_call_vrf (call_idx : nat) (c : mc_callee_spec) (vrf : rv_val_
     else if rv_is_callee_saved r then vrf r
     else MSV_Undef.
 
-Fixpoint rv_sym_read_call_args_from (idx : N) (n : nat) (vrf : rv_val_regs) {struct n}
-  : option (list cert_expr) :=
+Fixpoint rv_sym_read_call_args_from
+  (pc : N) (cname : string) (idx : N) (n : nat) (vrf : rv_val_regs) {struct n}
+  : string + list cert_expr :=
   match n with
-  | O => Some []
+  | O => inr []
   | S n' =>
       match rv_val_read idx vrf with
       | MSV_Expr e64 =>
-          match rv_sym_read_call_args_from (N.succ idx) n' vrf with
-          | None => None
-          | Some rest => Some (e64 :: rest)
+          match rv_sym_read_call_args_from pc cname (N.succ idx) n' vrf with
+          | inl err => inl err
+          | inr rest => inr (e64 :: rest)
           end
-      | _ => None
+      | other =>
+          inl (diag "mc-call-mc"
+            ("RV64 call to '" ++ cname ++ "' at pc " ++ diag_N_hex pc ++
+             ": arg register a" ++ diag_N_dec (idx - 10%N) ++ " holds " ++
+             mcc_sym_val_kind other ++ " instead of scalar expr"))
       end
   end.
 
@@ -1916,42 +2337,55 @@ Fixpoint summarize_rv64_call_at
   (fuel : nat) (im : pos_trie decoded_rv_call_inst) (callees : list mc_callee_spec)
   (visited : pos_trie unit) (pc : N) (cid : nat) (sp_off : Z)
   (vrf : rv_val_regs) (astk : mc_sym_stack) (ret_w : positive)
-  {struct fuel} : option mc_call_tree :=
-  if pt_has_n pc visited then None
+  {struct fuel} : string + mc_call_tree :=
+  if pt_has_n pc visited then
+    inl (diag "mc-call-mc" ("RV64 loop/cycle detected at pc " ++ diag_N_hex pc))
   else
     match fuel with
-    | O => None
+    | O => inl (diag "mc-call-mc" ("RV64 call summarizer out of fuel at pc " ++ diag_N_hex pc))
     | S fuel' =>
         match pt_get (N.succ_pos pc) im with
-        | None => None
+        | None => inl (diag "mc-call-mc" ("missing decoded RV64 instruction at pc " ++ diag_N_hex pc))
         | Some dec =>
             let visited' := pt_add_n pc visited in
             match drci_inst dec with
             | RCI_Core i =>
                 let cdec := mk_decoded_rv (drci_off dec) (drci_len dec) i in
                 match rv_sym_step_one cdec pc sp_off vrf astk ret_w with
-                | None => None
+                | None =>
+                    inl (diag "mc-call-mc"
+                      ("unsupported/failed RV64 symbolic step at pc " ++ diag_N_hex pc ++
+                       " (sp-off=" ++ diag_Z_dec sp_off ++ ")"))
                 | Some (RSSR_Next next_pc sp_off' vrf' astk') =>
                     summarize_rv64_call_at fuel' im callees visited'
                       next_pc cid sp_off' vrf' astk' ret_w
                 | Some (RSSR_Branch cond tgt_pc next_pc) =>
                     match summarize_rv64_call_at fuel' im callees visited'
-                            tgt_pc cid sp_off vrf astk ret_w,
-                          summarize_rv64_call_at fuel' im callees visited'
-                            next_pc cid sp_off vrf astk ret_w with
-                    | Some dt, Some df => Some (MCT_Branch cond dt df)
-                    | _, _ => None
+                            tgt_pc cid sp_off vrf astk ret_w with
+                    | inl err => inl err
+                    | inr dt =>
+                        match summarize_rv64_call_at fuel' im callees visited'
+                                next_pc cid sp_off vrf astk ret_w with
+                        | inl err => inl err
+                        | inr df => inr (MCT_Branch cond dt df)
+                        end
                     end
-                | Some (RSSR_Ret ret_e) => Some (MCT_Ret ret_e)
+                | Some (RSSR_Ret ret_e) => inr (MCT_Ret ret_e)
                 end
             | RCI_Call cname =>
-                if mc_sp_aligned16 sp_off then
+                if negb (mc_sp_aligned16 sp_off) then
+                  inl (diag "mc-call-mc"
+                    ("unaligned stack pointer (sp-off=" ++ diag_Z_dec sp_off ++
+                     ") at RV64 call to '" ++ cname ++ "' at pc " ++ diag_N_hex pc))
+                else
                   match find_callee_spec callees cname with
-                  | None => None
+                  | None =>
+                      inl (diag "mc-call-mc"
+                        ("missing callee spec for '" ++ cname ++ "' at RV64 pc " ++ diag_N_hex pc))
                   | Some c =>
-                      match rv_sym_read_call_args_from 10%N (List.length (mcs_args c)) vrf with
-                      | None => None
-                      | Some arg_es64 =>
+                      match rv_sym_read_call_args_from pc cname 10%N (List.length (mcs_args c)) vrf with
+                      | inl err => inl err
+                      | inr arg_es64 =>
                           let rw := mcs_ret_width c in
                           let rext := mcs_ret_ext c in
                           let rv := mc_call_ret_var cid rw in
@@ -1960,20 +2394,19 @@ Fixpoint summarize_rv64_call_at
                           let next_pc := (pc + drci_len dec)%N in
                           match summarize_rv64_call_at fuel' im callees visited'
                                   next_pc (S cid) sp_off vrf' astk ret_w with
-                          | None => None
-                          | Some cont =>
-                              Some (MCT_Call cname arg_es64 rw rext rv opt_hi cont)
+                          | inl err => inl err
+                          | inr cont =>
+                              inr (MCT_Call cname arg_es64 rw rext rv opt_hi cont)
                           end
                       end
                   end
-                else None
             end
         end
     end.
 
 Definition summarize_rv64_call_tree
   (insts : list decoded_rv_call_inst) (callees : list mc_callee_spec)
-  (arg_specs : list rv_arg_spec) (ret_w : positive) : option mc_call_tree :=
+  (arg_specs : list rv_arg_spec) (ret_w : positive) : string + mc_call_tree :=
   let fuel := S (2 * elf_length_tr insts) in
   summarize_rv64_call_at fuel (pt_of_list_first drci_off insts) callees PT_Empty 0%N 0%nat 0%Z
     (rv_build_init_val_regs 10%N arg_specs) [] ret_w.
@@ -1988,18 +2421,23 @@ Definition a64_post_call_vrf (call_idx : nat) (c : mc_callee_spec) (vrf : a64_va
     else if (N.leb 19%N r && N.leb r 29%N) then vrf r
     else MSV_Undef.
 
-Fixpoint a64_sym_read_call_args_from (idx : N) (n : nat) (vrf : a64_val_regs) {struct n}
-  : option (list cert_expr) :=
+Fixpoint a64_sym_read_call_args_from
+  (pc : N) (cname : string) (idx : N) (n : nat) (vrf : a64_val_regs) {struct n}
+  : string + list cert_expr :=
   match n with
-  | O => Some []
+  | O => inr []
   | S n' =>
       match a64_val_read idx vrf with
       | MSV_Expr e64 =>
-          match a64_sym_read_call_args_from (N.succ idx) n' vrf with
-          | None => None
-          | Some rest => Some (e64 :: rest)
+          match a64_sym_read_call_args_from pc cname (N.succ idx) n' vrf with
+          | inl err => inl err
+          | inr rest => inr (e64 :: rest)
           end
-      | _ => None
+      | other =>
+          inl (diag "mc-call-mc"
+            ("AArch64 call to '" ++ cname ++ "' at pc " ++ diag_N_hex pc ++
+             ": arg register x" ++ diag_N_dec idx ++ " holds " ++
+             mcc_sym_val_kind other ++ " instead of scalar expr"))
       end
   end.
 
@@ -2021,42 +2459,55 @@ Fixpoint summarize_a64_call_at
   (visited : pos_trie unit) (pc : N) (cid : nat) (sp_off : Z)
   (vrf : a64_val_regs) (astk : mc_sym_stack) (sfl : a64_sym_flags) (fl_def : bool)
   (ret_w : positive)
-  {struct fuel} : option mc_call_tree :=
-  if pt_has_n pc visited then None
+  {struct fuel} : string + mc_call_tree :=
+  if pt_has_n pc visited then
+    inl (diag "mc-call-mc" ("AArch64 loop/cycle detected at pc " ++ diag_N_hex pc))
   else
     match fuel with
-    | O => None
+    | O => inl (diag "mc-call-mc" ("AArch64 call summarizer out of fuel at pc " ++ diag_N_hex pc))
     | S fuel' =>
         match pt_get (N.succ_pos pc) im with
-        | None => None
+        | None => inl (diag "mc-call-mc" ("missing decoded AArch64 instruction at pc " ++ diag_N_hex pc))
         | Some dec =>
             let visited' := pt_add_n pc visited in
             match daci_inst dec with
             | ACI_Core i =>
                 let cdec := mk_decoded_a64_inst (daci_off dec) i in
                 match a64_sym_step_one cdec pc sp_off vrf astk sfl fl_def ret_w with
-                | None => None
+                | None =>
+                    inl (diag "mc-call-mc"
+                      ("unsupported/failed AArch64 symbolic step at pc " ++ diag_N_hex pc ++
+                       " (sp-off=" ++ diag_Z_dec sp_off ++ ")"))
                 | Some (ASSR_Next next_pc sp_off' vrf' astk' sfl' fl_def') =>
                     summarize_a64_call_at fuel' im callees visited'
                       next_pc cid sp_off' vrf' astk' sfl' fl_def' ret_w
                 | Some (ASSR_Branch cond tgt_pc next_pc fl_def') =>
                     match summarize_a64_call_at fuel' im callees visited'
-                            tgt_pc cid sp_off vrf astk sfl fl_def' ret_w,
-                          summarize_a64_call_at fuel' im callees visited'
-                            next_pc cid sp_off vrf astk sfl fl_def' ret_w with
-                    | Some dt, Some df => Some (MCT_Branch cond dt df)
-                    | _, _ => None
+                            tgt_pc cid sp_off vrf astk sfl fl_def' ret_w with
+                    | inl err => inl err
+                    | inr dt =>
+                        match summarize_a64_call_at fuel' im callees visited'
+                                next_pc cid sp_off vrf astk sfl fl_def' ret_w with
+                        | inl err => inl err
+                        | inr df => inr (MCT_Branch cond dt df)
+                        end
                     end
-                | Some (ASSR_Ret ret_e) => Some (MCT_Ret ret_e)
+                | Some (ASSR_Ret ret_e) => inr (MCT_Ret ret_e)
                 end
             | ACI_Call cname =>
-                if mc_sp_aligned16 sp_off then
+                if negb (mc_sp_aligned16 sp_off) then
+                  inl (diag "mc-call-mc"
+                    ("unaligned stack pointer (sp-off=" ++ diag_Z_dec sp_off ++
+                     ") at AArch64 call to '" ++ cname ++ "' at pc " ++ diag_N_hex pc))
+                else
                   match find_callee_spec callees cname with
-                  | None => None
+                  | None =>
+                      inl (diag "mc-call-mc"
+                        ("missing callee spec for '" ++ cname ++ "' at AArch64 pc " ++ diag_N_hex pc))
                   | Some c =>
-                      match a64_sym_read_call_args_from 0%N (List.length (mcs_args c)) vrf with
-                      | None => None
-                      | Some arg_es64 =>
+                      match a64_sym_read_call_args_from pc cname 0%N (List.length (mcs_args c)) vrf with
+                      | inl err => inl err
+                      | inr arg_es64 =>
                           let rw := mcs_ret_width c in
                           let rext := mcs_ret_ext c in
                           let rv := mc_call_ret_var cid rw in
@@ -2065,20 +2516,19 @@ Fixpoint summarize_a64_call_at
                           let next_pc := (pc + 4%N)%N in
                           match summarize_a64_call_at fuel' im callees visited'
                                   next_pc (S cid) sp_off vrf' astk sfl false ret_w with
-                          | None => None
-                          | Some cont =>
-                              Some (MCT_Call cname arg_es64 rw rext rv opt_hi cont)
+                          | inl err => inl err
+                          | inr cont =>
+                              inr (MCT_Call cname arg_es64 rw rext rv opt_hi cont)
                           end
                       end
                   end
-                else None
             end
         end
     end.
 
 Definition summarize_a64_call_tree
   (insts : list decoded_a64_call_inst) (callees : list mc_callee_spec)
-  (arg_specs : list rv_arg_spec) (ret_w : positive) : option mc_call_tree :=
+  (arg_specs : list rv_arg_spec) (ret_w : positive) : string + mc_call_tree :=
   let fuel := S (2 * elf_length_tr insts) in
   summarize_a64_call_at fuel (pt_of_list_first daci_off insts) callees PT_Empty 0%N 0%nat 0%Z
     (a64_build_init_val_regs 0%N arg_specs) [] a64_init_sym_flags false ret_w.
@@ -2115,30 +2565,30 @@ Proof.
     eapply wf_sym_expr_mono; try exact Hinc; assumption.
 Qed.
 
-Lemma rv_sym_read_call_args_from_wf : forall allowed idx n vrf es,
+Lemma rv_sym_read_call_args_from_wf : forall pc cname allowed idx n vrf es,
   rv_val_regs_wf allowed vrf ->
-  rv_sym_read_call_args_from idx n vrf = Some es ->
+  rv_sym_read_call_args_from pc cname idx n vrf = inr es ->
   Forall (wf_sym_expr allowed 64%positive) es.
 Proof.
-  intros allowed idx n; revert idx; induction n as [| n' IH];
+  intros pc cname allowed idx n; revert idx; induction n as [| n' IH];
     intros idx vrf es Hwf H; cbn [rv_sym_read_call_args_from] in H;
     [inversion H; constructor |].
   destruct (rv_val_read idx vrf) as [| e64 | |] eqn:Er; try discriminate H.
-  destruct (rv_sym_read_call_args_from (N.succ idx) n' vrf) as [rest |] eqn:Hr; [| discriminate H].
+  destruct (rv_sym_read_call_args_from pc cname (N.succ idx) n' vrf) as [| rest] eqn:Hr; [discriminate H |].
   inversion H; subst es; constructor;
     [pose proof (Hwf idx) as Hi; rewrite Er in Hi; exact Hi | exact (IH _ _ _ Hwf Hr)].
 Qed.
 
-Lemma a64_sym_read_call_args_from_wf : forall allowed idx n vrf es,
+Lemma a64_sym_read_call_args_from_wf : forall pc cname allowed idx n vrf es,
   wf_a64_val_regs allowed vrf ->
-  a64_sym_read_call_args_from idx n vrf = Some es ->
+  a64_sym_read_call_args_from pc cname idx n vrf = inr es ->
   Forall (wf_sym_expr allowed 64%positive) es.
 Proof.
-  intros allowed idx n; revert idx; induction n as [| n' IH];
+  intros pc cname allowed idx n; revert idx; induction n as [| n' IH];
     intros idx vrf es Hwf H; cbn [a64_sym_read_call_args_from] in H;
     [inversion H; constructor |].
   destruct (a64_val_read idx vrf) as [| e64 | |] eqn:Er; try discriminate H.
-  destruct (a64_sym_read_call_args_from (N.succ idx) n' vrf) as [rest |] eqn:Hr; [| discriminate H].
+  destruct (a64_sym_read_call_args_from pc cname (N.succ idx) n' vrf) as [| rest] eqn:Hr; [discriminate H |].
   inversion H; subst es; constructor;
     [pose proof (Hwf idx) as Hi; rewrite Er in Hi; exact Hi | exact (IH _ _ _ Hwf Hr)].
 Qed.
@@ -2205,7 +2655,7 @@ Lemma summarize_rv64_call_at_wfsym :
     rv_val_read 2%N vrf = MSV_StackPtr sp_off ->
     rv_val_regs_wf allowed vrf ->
     mc_sym_stack_wf allowed sp_off astk ->
-    summarize_rv64_call_at fuel im callees visited pc cid sp_off vrf astk ret_w = Some t ->
+    summarize_rv64_call_at fuel im callees visited pc cid sp_off vrf astk ret_w = inr t ->
     mc_call_tree_wf allowed ret_w t.
 Proof.
   intros insts im Him fuel; induction fuel as [| fuel' IH];
@@ -2230,21 +2680,21 @@ Proof.
     + destruct Hwf_step as (Hrng' & Hsp2' & Hvrf' & Hastk').
       exact (IH _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hmul Hrng' Hsp2' Hvrf' Hastk' Hsum).
     + destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) tpc cid sp_off vrf astk ret_w)
-        as [dt |] eqn:Hdt; [| discriminate Hsum].
+        as [| dt] eqn:Hdt; [discriminate Hsum |].
       destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) npc cid sp_off vrf astk ret_w)
-        as [df |] eqn:Hdf; [| discriminate Hsum].
+        as [| df] eqn:Hdf; [discriminate Hsum |].
       inversion Hsum; subst t; cbn [mc_call_tree_wf]; split; [exact Hwf_step | split;
         [exact (IH _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hmul Hrng Hsp2 Hvrf Hastk Hdt)
         | exact (IH _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hmul Hrng Hsp2 Hvrf Hastk Hdf)]].
     + inversion Hsum; subst t; exact Hwf_step.
-  - destruct (mc_sp_aligned16 sp_off) eqn:Esp_al; [| discriminate Hsum].
+  - destruct (mc_sp_aligned16 sp_off) eqn:Esp_al; cbn [negb] in Hsum; [| discriminate Hsum].
     destruct (find_callee_spec callees cname) as [c |] eqn:Efc; [| discriminate Hsum].
-    destruct (rv_sym_read_call_args_from 10%N (List.length (mcs_args c)) vrf) as [aes |] eqn:Eargs;
-      [| discriminate Hsum].
+    destruct (rv_sym_read_call_args_from pc cname 10%N (List.length (mcs_args c)) vrf) as [| aes] eqn:Eargs;
+      [discriminate Hsum |].
     destruct (mc_post_call_ret_expr cid (mcs_ret_width c) (mcs_ret_ext c)) as [ret_e64 opt_hi] eqn:Epc.
     destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited)
                 (pc + drci_len dec)%N (S cid) sp_off (rv_post_call_vrf cid c vrf) astk ret_w)
-      as [cont |] eqn:Ect; [| discriminate Hsum].
+      as [| cont] eqn:Ect; [discriminate Hsum |].
     inversion Hsum; subst t; clear Hsum.
     pose proof (find_callee_spec_in _ _ _ Efc) as [Hc_in _].
     pose proof (Hcws c Hc_in) as Hcrw.
@@ -2260,7 +2710,7 @@ Proof.
     assert (Hastk' : mc_sym_stack_wf allowed' sp_off astk)
       by exact (mc_sym_stack_wf_mono _ _ _ _ Hinc Hastk).
     cbn [mc_call_tree_wf]; split; [| split].
-    + exact (rv_sym_read_call_args_from_wf _ _ _ _ _ Hvrf Eargs).
+    + exact (rv_sym_read_call_args_from_wf _ _ _ _ _ _ _ Hvrf Eargs).
     + exact Hcrw.
     + exact (IH _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hmul Hrng Hsp2' Hvrf' Hastk' Ect).
 Qed.
@@ -2276,7 +2726,7 @@ Lemma summarize_a64_call_at_wfsym :
     wf_a64_val_regs allowed vrf ->
     mc_sym_stack_wf allowed sp_off astk ->
     (fl_def = true -> wf_sym_flags allowed sfl) ->
-    summarize_a64_call_at fuel im callees visited pc cid sp_off vrf astk sfl fl_def ret_w = Some t ->
+    summarize_a64_call_at fuel im callees visited pc cid sp_off vrf astk sfl fl_def ret_w = inr t ->
     mc_call_tree_wf allowed ret_w t.
 Proof.
   intros insts im Him fuel; induction fuel as [| fuel' IH];
@@ -2299,21 +2749,21 @@ Proof.
       exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hval Hrng' Hvrf' Hastk' Hfl' Hsum).
     + destruct Hwf_step as [Hcw Himp].
       destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited) tpc cid sp_off vrf astk sfl fl_def' ret_w)
-        as [dt |] eqn:Hdt; [| discriminate Hsum].
+        as [| dt] eqn:Hdt; [discriminate Hsum |].
       destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited) npc cid sp_off vrf astk sfl fl_def' ret_w)
-        as [df |] eqn:Hdf; [| discriminate Hsum].
+        as [| df] eqn:Hdf; [discriminate Hsum |].
       inversion Hsum; subst t; cbn [mc_call_tree_wf]; split; [exact Hcw | split;
         [exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hval Hrng Hvrf Hastk (fun h => Hfl (Himp h)) Hdt)
         | exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hval Hrng Hvrf Hastk (fun h => Hfl (Himp h)) Hdf)]].
     + inversion Hsum; subst t; exact Hwf_step.
-  - destruct (mc_sp_aligned16 sp_off) eqn:Esp_al; [| discriminate Hsum].
+  - destruct (mc_sp_aligned16 sp_off) eqn:Esp_al; cbn [negb] in Hsum; [| discriminate Hsum].
     destruct (find_callee_spec callees cname) as [c |] eqn:Efc; [| discriminate Hsum].
-    destruct (a64_sym_read_call_args_from 0%N (List.length (mcs_args c)) vrf) as [aes |] eqn:Eargs;
-      [| discriminate Hsum].
+    destruct (a64_sym_read_call_args_from pc cname 0%N (List.length (mcs_args c)) vrf) as [| aes] eqn:Eargs;
+      [discriminate Hsum |].
     destruct (mc_post_call_ret_expr cid (mcs_ret_width c) (mcs_ret_ext c)) as [ret_e64 opt_hi] eqn:Epc.
     destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited)
                 (pc + 4%N)%N (S cid) sp_off (a64_post_call_vrf cid c vrf) astk sfl false ret_w)
-      as [cont |] eqn:Ect; [| discriminate Hsum].
+      as [| cont] eqn:Ect; [discriminate Hsum |].
     inversion Hsum; subst t; clear Hsum.
     pose proof (find_callee_spec_in _ _ _ Efc) as [Hc_in _].
     pose proof (Hcws c Hc_in) as Hcrw.
@@ -2326,7 +2776,7 @@ Proof.
     assert (Hastk' : mc_sym_stack_wf allowed' sp_off astk)
       by exact (mc_sym_stack_wf_mono _ _ _ _ Hinc Hastk).
     cbn [mc_call_tree_wf]; split; [| split].
-    + exact (a64_sym_read_call_args_from_wf _ _ _ _ _ Hvrf Eargs).
+    + exact (a64_sym_read_call_args_from_wf _ _ _ _ _ _ _ Hvrf Eargs).
     + exact Hcrw.
     + exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hval Hrng Hvrf' Hastk' (fun C : false = true => ltac:(discriminate C)) Ect).
 Qed.
@@ -2343,187 +2793,240 @@ Definition build_rv_call_arg_expr (w : positive) (ext : rv_arg_ext) (e_ir : cert
     end.
 
 Definition build_call_arg_cmp
-  (arch : elf_arch) (path : list (bool * cert_expr))
-  (sp : rv_arg_spec) (w : positive) (e_ir e_mc64 : cert_expr) : option mc_loop_obl :=
+  (cname : string) (arg_idx : nat) (arch : elf_arch) (path : list (bool * cert_expr))
+  (sp : rv_arg_spec) (w : positive) (e_ir e_mc64 : cert_expr) : string + mc_loop_obl :=
   match arch with
   | EA_Riscv64 =>
-      Some (MLO_Refine false path 64%positive
-              (build_rv_call_arg_expr w (ras_ext sp) e_ir) e_mc64)
+      inr (MLO_Refine false path 64%positive
+             (build_rv_call_arg_expr w (ras_ext sp) e_ir) e_mc64)
   | EA_AArch64 =>
       if Pos.eqb w 64%positive then
         match ras_ext sp with
-        | RAE_None => Some (MLO_Refine false path 64%positive e_ir e_mc64)
-        | _ => None
+        | RAE_None => inr (MLO_Refine false path 64%positive e_ir e_mc64)
+        | _ =>
+            inl (diag "mc-call-obl"
+              ("unsupported extension on 64-bit AArch64 arg #" ++ diag_nat_dec arg_idx ++
+               " calling '" ++ cname ++ "'"))
         end
       else
         match ras_ext sp with
         | RAE_None =>
             let e_trunc := CE_Cast CCK_Trunc 64%positive w no_cast_flags e_mc64 in
-            Some (MLO_Refine false path w e_ir e_trunc)
+            inr (MLO_Refine false path w e_ir e_trunc)
         | RAE_SignExt =>
             let src32 :=
               if Pos.eqb w 32%positive then e_ir
               else CE_Cast CCK_SExt w 32%positive no_cast_flags e_ir in
             let tgt32 := CE_Cast CCK_Trunc 64%positive 32%positive no_cast_flags e_mc64 in
-            Some (MLO_Refine false path 32%positive src32 tgt32)
+            inr (MLO_Refine false path 32%positive src32 tgt32)
         | RAE_ZeroExt =>
             let src32 :=
               if Pos.eqb w 32%positive then e_ir
               else CE_Cast CCK_ZExt w 32%positive no_cast_flags e_ir in
             let tgt32 := CE_Cast CCK_Trunc 64%positive 32%positive no_cast_flags e_mc64 in
-            Some (MLO_Refine false path 32%positive src32 tgt32)
+            inr (MLO_Refine false path 32%positive src32 tgt32)
         end
   end.
 
 Fixpoint build_call_arg_obls_acc
-  (arch : elf_arch) (path : list (bool * cert_expr))
+  (cname : string) (arg_idx : nat) (arch : elf_arch) (path : list (bool * cert_expr))
   (specs : list rv_arg_spec)
   (ir_args : list (bool * positive * cert_expr))
   (mc_args64 : list cert_expr)
   (acc : list mc_loop_obl)
-  {struct specs} : option (list mc_loop_obl) :=
+  {struct specs} : string + list mc_loop_obl :=
   match specs, ir_args, mc_args64 with
-  | [], [], [] => Some acc
+  | [], [], [] => inr acc
   | sp :: srest, (need_def, w, e_ir) :: irest, e_mc64 :: mrest =>
       if Pos.eqb w (ras_width sp) then
-        match build_call_arg_cmp arch path sp w e_ir e_mc64 with
-        | None => None
-        | Some cmp_o =>
+        match build_call_arg_cmp cname arg_idx arch path sp w e_ir e_mc64 with
+        | inl err => inl err
+        | inr cmp_o =>
             let acc1 := if need_def then MLO_Defined false path w e_ir :: cmp_o :: acc else cmp_o :: acc in
-            build_call_arg_obls_acc arch path srest irest mrest acc1
+            build_call_arg_obls_acc cname (S arg_idx) arch path srest irest mrest acc1
         end
-      else None
-  | _, _, _ => None
+      else
+        inl (diag "mc-call-obl"
+          ("argument #" ++ diag_nat_dec arg_idx ++ " width mismatch calling '" ++ cname ++
+           "': IR has i" ++ diag_pos_dec w ++ ", spec expects i" ++ diag_pos_dec (ras_width sp)))
+  | _, _, _ =>
+      inl (diag "mc-call-obl"
+        ("argument count mismatch calling '" ++ cname ++ "' at argument #" ++
+         diag_nat_dec arg_idx))
   end.
 
-Definition build_call_arg_obls
-  (arch : elf_arch) (path : list (bool * cert_expr))
+Definition build_call_arg_obls_from
+  (cname : string) (arg_idx : nat) (arch : elf_arch) (path : list (bool * cert_expr))
   (specs : list rv_arg_spec)
   (ir_args : list (bool * positive * cert_expr))
-  (mc_args64 : list cert_expr) : option (list mc_loop_obl) :=
-  build_call_arg_obls_acc arch path specs ir_args mc_args64 [].
+  (mc_args64 : list cert_expr) : string + list mc_loop_obl :=
+  build_call_arg_obls_acc cname arg_idx arch path specs ir_args mc_args64 [].
 
-Lemma build_call_arg_obls_acc_shift : forall arch path specs ir_args mc_args64 acc,
-  build_call_arg_obls_acc arch path specs ir_args mc_args64 acc =
-  option_map (fun xs => xs ++ acc) (build_call_arg_obls arch path specs ir_args mc_args64).
+Definition build_call_arg_obls
+  (cname : string) (arch : elf_arch) (path : list (bool * cert_expr))
+  (specs : list rv_arg_spec)
+  (ir_args : list (bool * positive * cert_expr))
+  (mc_args64 : list cert_expr) : string + list mc_loop_obl :=
+  build_call_arg_obls_from cname 0%nat arch path specs ir_args mc_args64.
+
+Lemma build_call_arg_obls_acc_shift : forall cname arg_idx arch path specs ir_args mc_args64 acc,
+  build_call_arg_obls_acc cname arg_idx arch path specs ir_args mc_args64 acc =
+  mcc_sum_map (fun xs => xs ++ acc) (build_call_arg_obls_from cname arg_idx arch path specs ir_args mc_args64).
 Proof.
-  unfold build_call_arg_obls.
-  intros arch path specs; induction specs as [| sp srest IH];
-    intros [| [[need_def w] e_ir] irest] [| e_mc64 mrest] acc;
-    cbn [build_call_arg_obls_acc option_map]; try reflexivity.
+  unfold build_call_arg_obls_from.
+  intros cname arg_idx arch path specs; revert arg_idx;
+    induction specs as [| sp srest IH];
+    intros arg_idx [| [[need_def w] e_ir] irest] [| e_mc64 mrest] acc;
+    cbn [build_call_arg_obls_acc mcc_sum_map]; try reflexivity.
   destruct (Pos.eqb w (ras_width sp)); [| reflexivity].
-  destruct (build_call_arg_cmp arch path sp w e_ir e_mc64) as [cmp_o |]; [| reflexivity].
+  destruct (build_call_arg_cmp cname arg_idx arch path sp w e_ir e_mc64) as [| cmp_o]; [reflexivity |].
   destruct need_def.
-  - rewrite IH, (IH _ _ [MLO_Defined false path w e_ir; cmp_o]).
-    destruct (build_call_arg_obls_acc arch path srest irest mrest []) as [xs |];
-      [cbn [option_map]; rewrite <- app_assoc; reflexivity | reflexivity].
-  - rewrite IH, (IH _ _ [cmp_o]).
-    destruct (build_call_arg_obls_acc arch path srest irest mrest []) as [xs |];
-      [cbn [option_map]; rewrite <- app_assoc; reflexivity | reflexivity].
+  - rewrite IH, (IH (S arg_idx) _ _ [MLO_Defined false path w e_ir; cmp_o]).
+    destruct (build_call_arg_obls_acc cname (S arg_idx) arch path srest irest mrest []) as [| xs];
+      [reflexivity | cbn [mcc_sum_map]; rewrite <- app_assoc; reflexivity].
+  - rewrite IH, (IH (S arg_idx) _ _ [cmp_o]).
+    destruct (build_call_arg_obls_acc cname (S arg_idx) arch path srest irest mrest []) as [| xs];
+      [reflexivity | cbn [mcc_sum_map]; rewrite <- app_assoc; reflexivity].
 Qed.
 
-Lemma build_call_arg_obls_cons :
-  forall arch path sp sr nd w e ir m mr,
-    build_call_arg_obls arch path (sp :: sr) ((nd, w, e) :: ir) (m :: mr) =
+Lemma build_call_arg_obls_from_cons :
+  forall cname arg_idx arch path sp sr nd w e ir m mr,
+    build_call_arg_obls_from cname arg_idx arch path (sp :: sr) ((nd, w, e) :: ir) (m :: mr) =
     if Pos.eqb w (ras_width sp) then
-      match build_call_arg_cmp arch path sp w e m with
-      | None => None
-      | Some cmp_o =>
-          option_map
+      match build_call_arg_cmp cname arg_idx arch path sp w e m with
+      | inl err => inl err
+      | inr cmp_o =>
+          mcc_sum_map
             (fun rest => rest ++ (if nd then [MLO_Defined false path w e; cmp_o] else [cmp_o]))
-            (build_call_arg_obls arch path sr ir mr)
+            (build_call_arg_obls_from cname (S arg_idx) arch path sr ir mr)
       end
-    else None.
+    else
+      inl (diag "mc-call-obl"
+        ("argument #" ++ diag_nat_dec arg_idx ++ " width mismatch calling '" ++ cname ++
+         "': IR has i" ++ diag_pos_dec w ++ ", spec expects i" ++ diag_pos_dec (ras_width sp))).
 Proof.
-  intros arch path sp sr nd w e ir m mr; unfold build_call_arg_obls; cbn [build_call_arg_obls_acc].
+  intros cname arg_idx arch path sp sr nd w e ir m mr; unfold build_call_arg_obls_from;
+    cbn [build_call_arg_obls_acc].
   destruct (Pos.eqb w (ras_width sp)); [| reflexivity].
-  destruct (build_call_arg_cmp arch path sp w e m) as [cmp_o |]; [| reflexivity].
+  destruct (build_call_arg_cmp cname arg_idx arch path sp w e m) as [| cmp_o]; [reflexivity |].
   apply build_call_arg_obls_acc_shift.
 Qed.
 
 Fixpoint collect_call_obls_ret_acc
   (ret_w rw : positive) (e_ir : cert_expr)
   (p : list (bool * cert_expr)) (m : mc_call_tree) (a : list mc_loop_obl)
-  {struct m} : option (list mc_loop_obl) :=
+  {struct m} : string + list mc_loop_obl :=
   match m with
   | MCT_Ret e_mc =>
-      if Pos.eqb rw ret_w then Some (MLO_Refine false p ret_w e_ir e_mc :: a) else None
+      if Pos.eqb rw ret_w then inr (MLO_Refine false p ret_w e_ir e_mc :: a)
+      else
+        inl (diag "mc-call-obl"
+          ("IR return width i" ++ diag_pos_dec rw ++
+           " does not match declared ret-width i" ++ diag_pos_dec ret_w))
   | MCT_Branch c mt mf =>
       match collect_call_obls_ret_acc ret_w rw e_ir ((true, c) :: p) mt a with
-      | None => None
-      | Some a1 => collect_call_obls_ret_acc ret_w rw e_ir ((false, c) :: p) mf a1
+      | inl err => inl err
+      | inr a1 => collect_call_obls_ret_acc ret_w rw e_ir ((false, c) :: p) mf a1
       end
-  | MCT_Call _ _ _ _ _ _ _ => Some (imposs_obl false p ++ a)
+  | MCT_Call cn_m _ _ _ _ _ _ =>
+      match p with
+      | [] =>
+          inl (diag "mc-call-obl"
+            ("control-flow mismatch: IR returned while MC called '" ++ cn_m ++ "' unconditionally"))
+      | _ :: _ => inr (imposs_obl false p ++ a)
+      end
   end.
 
 Lemma collect_call_obls_ret_acc_shift : forall ret_w rw e_ir p m a,
   collect_call_obls_ret_acc ret_w rw e_ir p m a =
-  option_map (fun xs => xs ++ a) (collect_call_obls_ret_acc ret_w rw e_ir p m []).
+  mcc_sum_map (fun xs => xs ++ a) (collect_call_obls_ret_acc ret_w rw e_ir p m []).
 Proof.
   intros ret_w rw e_ir p m; revert p;
     induction m as [e_mc | cm mt IHmt mf IHmf | cn_m am rw_m rm rv_m oh_m cm];
-    intros p a; cbn [collect_call_obls_ret_acc option_map].
+    intros p a; cbn [collect_call_obls_ret_acc mcc_sum_map].
   - destruct (Pos.eqb rw ret_w); reflexivity.
   - rewrite IHmt at 1;
-      destruct (collect_call_obls_ret_acc ret_w rw e_ir ((true, cm) :: p) mt []) as [o1 |];
-      cbn [option_map]; [| reflexivity].
+      destruct (collect_call_obls_ret_acc ret_w rw e_ir ((true, cm) :: p) mt []) as [| o1];
+      cbn [mcc_sum_map]; [reflexivity |].
     rewrite IHmf at 1; rewrite (IHmf _ o1);
-      destruct (collect_call_obls_ret_acc ret_w rw e_ir ((false, cm) :: p) mf []) as [o2 |];
-      cbn [option_map]; [rewrite <- app_assoc; reflexivity | reflexivity].
-  - rewrite app_nil_r; reflexivity.
+      destruct (collect_call_obls_ret_acc ret_w rw e_ir ((false, cm) :: p) mf []) as [| o2];
+      cbn [mcc_sum_map]; [reflexivity | rewrite <- app_assoc; reflexivity].
+  - destruct p; [reflexivity | cbn [mcc_sum_map]; rewrite app_nil_r; reflexivity].
 Qed.
 
 Fixpoint collect_call_obls_acc
   (arch : elf_arch) (callees : list mc_callee_spec) (ret_w : positive)
   (path : list (bool * cert_expr)) (t_ir : ir_call_tree) (t_mc : mc_call_tree)
   (acc : list mc_loop_obl)
-  {struct t_ir} : option (list mc_loop_obl) :=
+  {struct t_ir} : string + list mc_loop_obl :=
   match t_ir with
-  | ICT_UB => Some acc
+  | ICT_UB => inr acc
   | ICT_Branch c dt df =>
       match collect_call_obls_acc arch callees ret_w ((true, c) :: path) dt t_mc acc with
-      | None => None
-      | Some a1 => collect_call_obls_acc arch callees ret_w ((false, c) :: path) df t_mc a1
+      | inl err => inl err
+      | inr a1 => collect_call_obls_acc arch callees ret_w ((false, c) :: path) df t_mc a1
       end
   | ICT_Ret rw e_ir => collect_call_obls_ret_acc ret_w rw e_ir path t_mc acc
   | ICT_Call cn_ir args_ir rw_ir rv_ir c_ir =>
       (fix go_call (p : list (bool * cert_expr)) (m : mc_call_tree) (a : list mc_loop_obl) {struct m}
-          : option (list mc_loop_obl) :=
+          : string + list mc_loop_obl :=
         match m with
         | MCT_Branch c mt mf =>
             match go_call ((true, c) :: p) mt a with
-            | None => None
-            | Some a1 => go_call ((false, c) :: p) mf a1
+            | inl err => inl err
+            | inr a1 => go_call ((false, c) :: p) mf a1
             end
-        | MCT_Ret _ => Some (imposs_obl false p ++ a)
+        | MCT_Ret _ =>
+            match p with
+            | [] =>
+                inl (diag "mc-call-obl"
+                  ("control-flow mismatch: IR called '" ++ cn_ir ++ "' while MC returned unconditionally"))
+            | _ :: _ => inr (imposs_obl false p ++ a)
+            end
         | MCT_Call cn_mc args_mc rw_mc _ rv_mc _ c_mc =>
             if String.eqb cn_ir cn_mc && Pos.eqb rw_ir rw_mc && String.eqb rv_ir rv_mc then
               match find_callee_spec callees cn_ir with
-              | None => None
+              | None => inl (diag "mc-call-obl" ("missing callee spec for '" ++ cn_ir ++ "'"))
               | Some sp =>
                   if Pos.eqb rw_ir (mcs_ret_width sp) then
-                    match build_call_arg_obls_acc arch p (mcs_args sp) args_ir args_mc a with
-                    | None => None
-                    | Some a1 => collect_call_obls_acc arch callees ret_w p c_ir c_mc a1
+                    match build_call_arg_obls_acc cn_ir 0%nat arch p (mcs_args sp) args_ir args_mc a with
+                    | inl err => inl err
+                    | inr a1 => collect_call_obls_acc arch callees ret_w p c_ir c_mc a1
                     end
-                  else None
+                  else
+                    inl (diag "mc-call-obl"
+                      ("callee '" ++ cn_ir ++ "' return width i" ++ diag_pos_dec rw_ir ++
+                       " mismatches spec i" ++ diag_pos_dec (mcs_ret_width sp)))
               end
-            else Some (imposs_obl false p ++ a)
+            else
+              match p with
+              | [] =>
+                  inl (diag "mc-call-obl"
+                    ("unconditional call mismatch: IR called '" ++ cn_ir ++ "' (i" ++
+                     diag_pos_dec rw_ir ++ ", " ++ rv_ir ++ ") while MC called '" ++
+                     cn_mc ++ "' (i" ++ diag_pos_dec rw_mc ++ ", " ++ rv_mc ++ ")"))
+              | _ :: _ => inr (imposs_obl false p ++ a)
+              end
         end) path t_mc acc
   end.
 
 Lemma collect_call_obls_acc_ict_call_ret :
   forall arch callees ret_w p cn_ir args_ir rw_ir rv_ir c_ir e_mc acc,
     collect_call_obls_acc arch callees ret_w p (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) (MCT_Ret e_mc) acc =
-    Some (imposs_obl false p ++ acc).
+    match p with
+    | [] =>
+        inl (diag "mc-call-obl"
+          ("control-flow mismatch: IR called '" ++ cn_ir ++ "' while MC returned unconditionally"))
+    | _ :: _ => inr (imposs_obl false p ++ acc)
+    end.
 Proof. reflexivity. Qed.
 
 Lemma collect_call_obls_acc_ict_call_branch :
   forall arch callees ret_w p cn_ir args_ir rw_ir rv_ir c_ir c mt mf acc,
     collect_call_obls_acc arch callees ret_w p (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) (MCT_Branch c mt mf) acc =
     match collect_call_obls_acc arch callees ret_w ((true, c) :: p) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mt acc with
-    | None => None
-    | Some a1 => collect_call_obls_acc arch callees ret_w ((false, c) :: p) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mf a1
+    | inl err => inl err
+    | inr a1 => collect_call_obls_acc arch callees ret_w ((false, c) :: p) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mf a1
     end.
 Proof. reflexivity. Qed.
 
@@ -2533,61 +3036,72 @@ Lemma collect_call_obls_acc_ict_call_call :
       (MCT_Call cn_mc args_mc rw_mc rm_mc rv_mc oh_mc c_mc) acc =
     (if String.eqb cn_ir cn_mc && Pos.eqb rw_ir rw_mc && String.eqb rv_ir rv_mc then
        match find_callee_spec callees cn_ir with
-       | None => None
+       | None => inl (diag "mc-call-obl" ("missing callee spec for '" ++ cn_ir ++ "'"))
        | Some sp =>
            if Pos.eqb rw_ir (mcs_ret_width sp) then
-             match build_call_arg_obls_acc arch p (mcs_args sp) args_ir args_mc acc with
-             | None => None
-             | Some a1 => collect_call_obls_acc arch callees ret_w p c_ir c_mc a1
+             match build_call_arg_obls_acc cn_ir 0%nat arch p (mcs_args sp) args_ir args_mc acc with
+             | inl err => inl err
+             | inr a1 => collect_call_obls_acc arch callees ret_w p c_ir c_mc a1
              end
-           else None
+           else
+             inl (diag "mc-call-obl"
+               ("callee '" ++ cn_ir ++ "' return width i" ++ diag_pos_dec rw_ir ++
+                " mismatches spec i" ++ diag_pos_dec (mcs_ret_width sp)))
        end
-     else Some (imposs_obl false p ++ acc)).
+     else
+       match p with
+       | [] =>
+           inl (diag "mc-call-obl"
+             ("unconditional call mismatch: IR called '" ++ cn_ir ++ "' (i" ++
+              diag_pos_dec rw_ir ++ ", " ++ rv_ir ++ ") while MC called '" ++
+              cn_mc ++ "' (i" ++ diag_pos_dec rw_mc ++ ", " ++ rv_mc ++ ")"))
+       | _ :: _ => inr (imposs_obl false p ++ acc)
+       end).
 Proof. reflexivity. Qed.
 
 Definition collect_call_obls
   (arch : elf_arch) (callees : list mc_callee_spec) (ret_w : positive)
   (path : list (bool * cert_expr)) (t_ir : ir_call_tree) (t_mc : mc_call_tree)
-  : option (list mc_loop_obl) :=
+  : string + list mc_loop_obl :=
   collect_call_obls_acc arch callees ret_w path t_ir t_mc [].
 
 Lemma collect_call_obls_acc_shift : forall arch callees ret_w path t_ir t_mc acc,
   collect_call_obls_acc arch callees ret_w path t_ir t_mc acc =
-  option_map (fun xs => xs ++ acc) (collect_call_obls arch callees ret_w path t_ir t_mc).
+  mcc_sum_map (fun xs => xs ++ acc) (collect_call_obls arch callees ret_w path t_ir t_mc).
 Proof.
   unfold collect_call_obls.
   intros arch callees ret_w path t_ir; revert path;
     induction t_ir as [rw e_ir | | c dt IHt df IHf | cn_ir args_ir rw_ir rv_ir c_ir IHc];
     intros path t_mc acc.
   - cbn [collect_call_obls_acc]; exact (collect_call_obls_ret_acc_shift ret_w rw e_ir path t_mc acc).
-  - cbn [collect_call_obls_acc option_map]; reflexivity.
+  - cbn [collect_call_obls_acc mcc_sum_map]; reflexivity.
   - cbn [collect_call_obls_acc].
     rewrite IHt at 1;
-      destruct (collect_call_obls_acc arch callees ret_w ((true, c) :: path) dt t_mc []) as [o1 |];
-      cbn [option_map]; [| reflexivity].
+      destruct (collect_call_obls_acc arch callees ret_w ((true, c) :: path) dt t_mc []) as [| o1];
+      cbn [mcc_sum_map]; [reflexivity |].
     rewrite IHf at 1; rewrite (IHf ((false, c) :: path) t_mc o1);
-      destruct (collect_call_obls_acc arch callees ret_w ((false, c) :: path) df t_mc []) as [o2 |];
-      cbn [option_map]; [rewrite <- app_assoc; reflexivity | reflexivity].
+      destruct (collect_call_obls_acc arch callees ret_w ((false, c) :: path) df t_mc []) as [| o2];
+      cbn [mcc_sum_map]; [reflexivity | rewrite <- app_assoc; reflexivity].
   - induction t_mc as [e_mc | cm mt IHmt mf IHmf | cn_mc args_mc rw_mc rm_mc rv_mc oh_mc c_mc] in path, acc |- *.
-    + rewrite !collect_call_obls_acc_ict_call_ret; cbn [option_map]; rewrite app_nil_r; reflexivity.
+    + rewrite !collect_call_obls_acc_ict_call_ret; destruct path; [reflexivity | cbn [mcc_sum_map]; rewrite app_nil_r; reflexivity].
     + rewrite !collect_call_obls_acc_ict_call_branch.
       rewrite IHmt at 1;
-        destruct (collect_call_obls_acc arch callees ret_w ((true, cm) :: path) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mt []) as [o1 |];
-        cbn [option_map]; [| reflexivity].
+        destruct (collect_call_obls_acc arch callees ret_w ((true, cm) :: path) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mt []) as [| o1];
+        cbn [mcc_sum_map]; [reflexivity |].
       rewrite IHmf at 1; rewrite (IHmf _ o1);
-        destruct (collect_call_obls_acc arch callees ret_w ((false, cm) :: path) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mf []) as [o2 |];
-        cbn [option_map]; [rewrite <- app_assoc; reflexivity | reflexivity].
+        destruct (collect_call_obls_acc arch callees ret_w ((false, cm) :: path) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mf []) as [| o2];
+        cbn [mcc_sum_map]; [reflexivity | rewrite <- app_assoc; reflexivity].
     + rewrite !collect_call_obls_acc_ict_call_call.
       destruct (String.eqb cn_ir cn_mc && Pos.eqb rw_ir rw_mc && String.eqb rv_ir rv_mc);
-        [| cbn [option_map]; rewrite app_nil_r; reflexivity].
+        [| destruct path; [reflexivity | cbn [mcc_sum_map]; rewrite app_nil_r; reflexivity]].
       destruct (find_callee_spec callees cn_ir) as [sp |]; [| reflexivity].
       destruct (Pos.eqb rw_ir (mcs_ret_width sp)); [| reflexivity].
       rewrite !build_call_arg_obls_acc_shift.
-      destruct (build_call_arg_obls arch path (mcs_args sp) args_ir args_mc) as [ao |];
-        cbn [option_map]; [rewrite app_nil_r | reflexivity].
+      destruct (build_call_arg_obls_from cn_ir 0%nat arch path (mcs_args sp) args_ir args_mc) as [| ao];
+        cbn [mcc_sum_map]; [reflexivity | rewrite app_nil_r].
       rewrite IHc, (IHc path c_mc ao);
-        destruct (collect_call_obls_acc arch callees ret_w path c_ir c_mc []) as [co |];
-        cbn [option_map]; [rewrite <- app_assoc; reflexivity | reflexivity].
+        destruct (collect_call_obls_acc arch callees ret_w path c_ir c_mc []) as [| co];
+        cbn [mcc_sum_map]; [reflexivity | rewrite <- app_assoc; reflexivity].
 Qed.
 
 Fixpoint dedup_typed_vars_acc
@@ -2667,36 +3181,38 @@ Definition build_mc_call_bundle_rv64
   (ir_cfg : CFG.cfg dtyp) (allowed0 : list (string * positive)) (mc_init_ctx : ub_ctx)
   (insts : list decoded_rv_call_inst) (arg_specs : list rv_arg_spec)
   (ret_w : positive) (callees : list mc_callee_spec) : string + mc_call_bundle :=
-  if negb (rv_supported_arg_width ret_w) then inl "unsupported RV64 return width for calls"
-  else if negb (forallb rv_call_inst_no_word_mulh insts) then inl "unsupported RV64 mulhw instruction in call function"
+  if negb (rv_supported_arg_width ret_w) then
+    inl (diag "mc-call-spec" ("unsupported RV64 call return width i" ++ diag_pos_dec ret_w))
+  else if negb (forallb rv_call_inst_no_word_mulh insts) then
+    inl (diag "mc-call-mc" "unsupported RV64 mulhw instruction in call function")
   else if negb (Nat.leb (List.length arg_specs) 8) || negb (forallb rv_valid_arg_spec arg_specs) then
-    inl "invalid RV64 argument specs for call function"
+    inl (diag "mc-call-spec" "invalid RV64 argument specs for call function")
   else if negb (forallb (fun '(nm, _) => negb (mc_starts_with_bang nm)) allowed0) then
-    inl "internal bang-prefixed parameter variable in IR/MC context"
+    inl (diag "mc-call-spec" "internal bang-prefixed parameter variable in IR/MC context")
   else if negb (forallb (fun c => rv_supported_arg_width (mcs_ret_width c) &&
                                    Nat.leb (List.length (mcs_args c)) 8 &&
                                    forallb rv_valid_arg_spec (mcs_args c) &&
                                    mc_no_dup_strings (List.map ras_name (mcs_args c))) callees) then
-    inl "unsupported callee return width, argument count, argument width, or duplicate argument name"
+    inl (diag "mc-call-spec" "unsupported callee return width, arg count, arg width, or duplicate arg name")
   else
     match reify_ir_call_tree ir_cfg arg_specs callees ret_w with
-    | None => inl "IR call-tree reification failed (loops, memory, or unsupported call)"
-    | Some t_ir =>
+    | inl err => inl err
+    | inr t_ir =>
         match summarize_rv64_call_tree insts callees arg_specs ret_w with
-        | None => inl "RV64 call-tree symbolic summarization failed"
-        | Some t_mc =>
+        | inl err => inl err
+        | inr t_mc =>
             match collect_call_obls EA_Riscv64 callees ret_w [] t_ir t_mc with
-            | None => inl "failed to collect RV64 call-tree obligations"
-            | Some obls =>
+            | inl err => inl err
+            | inr obls =>
                 let raw_cvars := collect_ir_call_vars_acc t_ir (collect_mc_call_vars_acc t_mc []) in
                 let call_vars := dedup_typed_vars raw_cvars in
                 let all_vars := dedup_typed_vars_acc allowed0 call_vars in
                 let call_ctx := List.map (fun '(nm, w) => UBA_ParamNoUndef nm w) call_vars in
                 let all_ctx := mc_init_ctx ++ call_ctx in
                 if negb (vars_width_consistent allowed0 all_vars && vars_width_consistent raw_cvars all_vars) then
-                  inl "inconsistent variable widths across call tree branches"
+                  inl (diag "mc-call-obl" "inconsistent variable widths across RV64 call tree branches")
                 else if negb (forallb (obl_wf_exprs all_vars) obls) then
-                  inl "ill-typed or ill-scoped call obligation"
+                  inl (diag "mc-call-obl" "ill-typed or ill-scoped RV64 call obligation")
                 else inr (mk_mc_call_bundle t_ir t_mc call_vars all_vars all_ctx obls)
             end
         end
@@ -2706,36 +3222,38 @@ Definition build_mc_call_bundle_a64
   (ir_cfg : CFG.cfg dtyp) (allowed0 : list (string * positive)) (mc_init_ctx : ub_ctx)
   (insts : list decoded_a64_call_inst) (arg_specs : list rv_arg_spec)
   (ret_w : positive) (callees : list mc_callee_spec) : string + mc_call_bundle :=
-  if negb (rv_supported_arg_width ret_w) then inl "unsupported AArch64 return width for calls"
-  else if negb (forallb a64_call_inst_valid insts) then inl "unsupported AArch64 instruction in call function"
+  if negb (rv_supported_arg_width ret_w) then
+    inl (diag "mc-call-spec" ("unsupported AArch64 call return width i" ++ diag_pos_dec ret_w))
+  else if negb (forallb a64_call_inst_valid insts) then
+    inl (diag "mc-call-mc" "unsupported AArch64 instruction in call function")
   else if negb (Nat.leb (List.length arg_specs) 8) || negb (forallb a64_valid_arg_spec arg_specs) then
-    inl "invalid AArch64 argument specs for call function"
+    inl (diag "mc-call-spec" "invalid AArch64 argument specs for call function")
   else if negb (forallb (fun '(nm, _) => negb (mc_starts_with_bang nm)) allowed0) then
-    inl "internal bang-prefixed parameter variable in IR/MC context"
+    inl (diag "mc-call-spec" "internal bang-prefixed parameter variable in IR/MC context")
   else if negb (forallb (fun c => rv_supported_arg_width (mcs_ret_width c) &&
                                    Nat.leb (List.length (mcs_args c)) 8 &&
                                    forallb rv_valid_arg_spec (mcs_args c) &&
                                    mc_no_dup_strings (List.map ras_name (mcs_args c))) callees) then
-    inl "unsupported callee return width, argument count, argument width, or duplicate argument name"
+    inl (diag "mc-call-spec" "unsupported callee return width, arg count, arg width, or duplicate arg name")
   else
     match reify_ir_call_tree ir_cfg arg_specs callees ret_w with
-    | None => inl "IR call-tree reification failed (loops, memory, or unsupported call)"
-    | Some t_ir =>
+    | inl err => inl err
+    | inr t_ir =>
         match summarize_a64_call_tree insts callees arg_specs ret_w with
-        | None => inl "AArch64 call-tree symbolic summarization failed"
-        | Some t_mc =>
+        | inl err => inl err
+        | inr t_mc =>
             match collect_call_obls EA_AArch64 callees ret_w [] t_ir t_mc with
-            | None => inl "failed to collect AArch64 call-tree obligations"
-            | Some obls =>
+            | inl err => inl err
+            | inr obls =>
                 let raw_cvars := collect_ir_call_vars_acc t_ir (collect_mc_call_vars_acc t_mc []) in
                 let call_vars := dedup_typed_vars raw_cvars in
                 let all_vars := dedup_typed_vars_acc allowed0 call_vars in
                 let call_ctx := List.map (fun '(nm, w) => UBA_ParamNoUndef nm w) call_vars in
                 let all_ctx := mc_init_ctx ++ call_ctx in
                 if negb (vars_width_consistent allowed0 all_vars && vars_width_consistent raw_cvars all_vars) then
-                  inl "inconsistent variable widths across call tree branches"
+                  inl (diag "mc-call-obl" "inconsistent variable widths across AArch64 call tree branches")
                 else if negb (forallb (obl_wf_exprs all_vars) obls) then
-                  inl "ill-typed or ill-scoped call obligation"
+                  inl (diag "mc-call-obl" "ill-typed or ill-scoped AArch64 call obligation")
                 else inr (mk_mc_call_bundle t_ir t_mc call_vars all_vars all_ctx obls)
             end
         end
@@ -2747,9 +3265,7 @@ Definition validate_mc_call_rv64
   (callees : list mc_callee_spec) (opt_pf : option (list lrat_step)) : string + unit :=
   match build_mc_call_bundle_rv64 ir_cfg allowed0 mc_init_ctx insts arg_specs ret_w callees with
   | inl err => inl err
-  | inr b =>
-      if check_mc_loop_obls (mccb_ctx b) (mccb_all_vars b) None (mccb_obls b) opt_pf then inr tt
-      else inl "RV64 call obligation SAT/LRAT check failed"
+  | inr b => check_mc_loop_obls "mc-call" (mccb_ctx b) (mccb_all_vars b) None (mccb_obls b) opt_pf
   end.
 
 Definition validate_mc_call_a64
@@ -2758,9 +3274,7 @@ Definition validate_mc_call_a64
   (callees : list mc_callee_spec) (opt_pf : option (list lrat_step)) : string + unit :=
   match build_mc_call_bundle_a64 ir_cfg allowed0 mc_init_ctx insts arg_specs ret_w callees with
   | inl err => inl err
-  | inr b =>
-      if check_mc_loop_obls (mccb_ctx b) (mccb_all_vars b) None (mccb_obls b) opt_pf then inr tt
-      else inl "AArch64 call obligation SAT/LRAT check failed"
+  | inr b => check_mc_loop_obls "mc-call" (mccb_ctx b) (mccb_all_vars b) None (mccb_obls b) opt_pf
   end.
 
 Definition emit_mc_call_cnf_rv64
@@ -2769,11 +3283,7 @@ Definition emit_mc_call_cnf_rv64
   (callees : list mc_callee_spec) : string + option (positive * cnf) :=
   match build_mc_call_bundle_rv64 ir_cfg allowed0 mc_init_ctx insts arg_specs ret_w callees with
   | inl err => inl err
-  | inr b =>
-      match emit_mc_loop_cnf (mccb_ctx b) (mccb_all_vars b) None (mccb_obls b) with
-      | None => inl "failed to emit CNF for RV64 call obligations"
-      | Some opt_nf => inr opt_nf
-      end
+  | inr b => emit_mc_loop_cnf "mc-call" (mccb_ctx b) (mccb_all_vars b) None (mccb_obls b)
   end.
 
 Definition emit_mc_call_cnf_a64
@@ -2782,11 +3292,7 @@ Definition emit_mc_call_cnf_a64
   (callees : list mc_callee_spec) : string + option (positive * cnf) :=
   match build_mc_call_bundle_a64 ir_cfg allowed0 mc_init_ctx insts arg_specs ret_w callees with
   | inl err => inl err
-  | inr b =>
-      match emit_mc_loop_cnf (mccb_ctx b) (mccb_all_vars b) None (mccb_obls b) with
-      | None => inl "failed to emit CNF for AArch64 call obligations"
-      | Some opt_nf => inr opt_nf
-      end
+  | inr b => emit_mc_loop_cnf "mc-call" (mccb_ctx b) (mccb_all_vars b) None (mccb_obls b)
   end.
 
 (** ** 5. End-to-End Soundness & Caller/Callee Composition Proofs *)
@@ -3084,21 +3590,21 @@ Qed.
 (** *** 5.2 Concrete Path Execution Witnesses for RV64 & AArch64 *)
 
 Lemma rv_sym_read_call_args_from_sound {Pa : Params} :
-  forall (penv : param_env Pa) foracle rf0 sp0 vrf rf idx n aes,
+  forall pc cname (penv : param_env Pa) foracle rf0 sp0 vrf rf idx n aes,
     rv_val_regs_agrees penv foracle rf0 sp0 vrf rf ->
-    rv_sym_read_call_args_from idx n vrf = Some aes ->
+    rv_sym_read_call_args_from pc cname idx n vrf = inr aes ->
     Forall2 (fun e64 v64 =>
       eval_closed_cert_expr penv foracle e64 =
       raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive v64)))
       aes
       (List.map (fun k => rv_read_reg (idx + N.of_nat k) rf) (seq 0 n)).
 Proof.
-  intros penv foracle rf0 sp0 vrf rf idx n; revert idx;
+  intros pc cname penv foracle rf0 sp0 vrf rf idx n; revert idx;
     induction n as [| n' IH]; intros idx aes Hag Hrd;
     cbn [rv_sym_read_call_args_from seq List.map] in *;
     [inversion Hrd; constructor |].
   destruct (rv_val_read idx vrf) as [| e64 | |] eqn:Er; try discriminate Hrd.
-  destruct (rv_sym_read_call_args_from (N.succ idx) n' vrf) as [rest |] eqn:Hr; [| discriminate Hrd].
+  destruct (rv_sym_read_call_args_from pc cname (N.succ idx) n' vrf) as [| rest] eqn:Hr; [discriminate Hrd |].
   inversion Hrd; subst aes; clear Hrd.
   constructor.
   - pose proof (Hag idx) as Hi; rewrite Er in Hi; cbn [mc_sym_val_agrees] in Hi.
@@ -3111,21 +3617,21 @@ Proof.
 Qed.
 
 Lemma a64_sym_read_call_args_from_sound {Pa : Params} :
-  forall (penv : param_env Pa) foracle rf0 sp0 vrf rf idx n aes,
+  forall pc cname (penv : param_env Pa) foracle rf0 sp0 vrf rf idx n aes,
     a64_val_regs_agrees penv foracle rf0 sp0 vrf rf ->
-    a64_sym_read_call_args_from idx n vrf = Some aes ->
+    a64_sym_read_call_args_from pc cname idx n vrf = inr aes ->
     Forall2 (fun e64 v64 =>
       eval_closed_cert_expr penv foracle e64 =
       raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive v64)))
       aes
       (List.map (fun k => a64_read_reg (idx + N.of_nat k) rf) (seq 0 n)).
 Proof.
-  intros penv foracle rf0 sp0 vrf rf idx n; revert idx;
+  intros pc cname penv foracle rf0 sp0 vrf rf idx n; revert idx;
     induction n as [| n' IH]; intros idx aes Hag Hrd;
     cbn [a64_sym_read_call_args_from seq List.map] in *;
     [inversion Hrd; constructor |].
   destruct (a64_val_read idx vrf) as [| e64 | |] eqn:Er; try discriminate Hrd.
-  destruct (a64_sym_read_call_args_from (N.succ idx) n' vrf) as [rest |] eqn:Hr; [| discriminate Hrd].
+  destruct (a64_sym_read_call_args_from pc cname (N.succ idx) n' vrf) as [| rest] eqn:Hr; [discriminate Hrd |].
   inversion Hrd; subst aes; clear Hrd.
   constructor.
   - pose proof (Hag idx) as Hi; rewrite Er in Hi; cbn [mc_sym_val_agrees] in Hi.
@@ -3252,7 +3758,7 @@ Lemma summarize_rv64_call_at_exec {Pa : Params} :
        forall k' w', (cid <= k')%nat -> nm <> mc_call_ret_var k' w' /\ nm <> mc_call_hi_var k') ->
     rv_val_regs_agrees penv0 dummy_freeze_oracle rf0 (rv_read_reg 2%N rf0) vrf rf ->
     mc_sym_stack_agrees penv0 dummy_freeze_oracle (fun r => rv_read_reg r rf0) (rv_read_reg 2%N rf0) astk mstk ->
-    summarize_rv64_call_at fuel im callees visited pc cid sp_off vrf astk ret_w = Some t_mc ->
+    summarize_rv64_call_at fuel im callees visited pc cid sp_off vrf astk ret_w = inr t_mc ->
     exists tr_mc new_binds rf_end mstk_end,
       NoDup (List.map fst new_binds) /\
       binds_disjoint_from allowed new_binds /\
@@ -3311,14 +3817,14 @@ Proof.
       destruct i; cbn [rv_exec_one_nonret] in Hexec1; try discriminate Hexec1;
         rewrite ?Hexec1; exact Hexec.
     + destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) tpc cid sp_off vrf astk ret_w)
-        as [dt |] eqn:Hdt; [| discriminate Hsum].
+        as [| dt] eqn:Hdt; [discriminate Hsum |].
       destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) npc cid sp_off vrf astk ret_w)
-        as [df |] eqn:Hdf; [| discriminate Hsum].
+        as [| df] eqn:Hdf; [discriminate Hsum |].
       inversion Hsum; subst t_mc; clear Hsum.
       destruct Hwf_step as (Hwt_c & Hbw_c & Hlf_c & Hsub_c).
       destruct Hsd_step as [b [Hevc Hexec1]].
       assert (Hnext_p : summarize_rv64_call_at fuel' im callees (pt_add_n pc visited)
-                          (if b then tpc else npc) cid sp_off vrf astk ret_w = Some (if b then dt else df))
+                          (if b then tpc else npc) cid sp_off vrf astk ret_w = inr (if b then dt else df))
         by (destruct b; [exact Hdt | exact Hdf]).
       destruct (IH callees (pt_add_n pc visited) (if b then tpc else npc) cid sp_off vrf astk ret_w
                    allowed (if b then dt else df) O penv0 rf0 rf mstk
@@ -3349,14 +3855,14 @@ Proof.
         unfold eval_closed_cert_expr in *; erewrite mcc_eval_cert_expr_penv_agree; [exact Hevr | exact Hlf_r |].
         intros nm w Hnm; pose proof (vars_subset_b_incl _ _ Hsub_r _ Hnm) as Hal.
         cbn [app]; exact (overlay_penv_disjoint_allowed extra penv0 allowed Hdx nm w Hal).
-  - destruct (mc_sp_aligned16 sp_off) eqn:Esp_al; [| discriminate Hsum].
+  - destruct (mc_sp_aligned16 sp_off) eqn:Esp_al; cbn [negb] in Hsum; [| discriminate Hsum].
     destruct (find_callee_spec callees cname) as [c |] eqn:Efc; [| discriminate Hsum].
-    destruct (rv_sym_read_call_args_from 10%N (List.length (mcs_args c)) vrf) as [aes |] eqn:Eargs;
-      [| discriminate Hsum].
+    destruct (rv_sym_read_call_args_from pc cname 10%N (List.length (mcs_args c)) vrf) as [| aes] eqn:Eargs;
+      [discriminate Hsum |].
     destruct (mc_post_call_ret_expr cid (mcs_ret_width c) (mcs_ret_ext c)) as [ret_e64 opt_hi] eqn:Epc.
     destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited)
                 (pc + drci_len dec)%N (S cid) sp_off (rv_post_call_vrf cid c vrf) astk ret_w)
-      as [cont |] eqn:Ect; [| discriminate Hsum].
+      as [| cont] eqn:Ect; [discriminate Hsum |].
     inversion Hsum; subst t_mc; clear Hsum.
     pose proof (find_callee_spec_in _ _ _ Efc) as [Hc_in Hc_nm].
     pose proof (Hcws c Hc_in) as Hcrw.
@@ -3518,9 +4024,9 @@ Proof.
           destruct (N.eqb (10%N + N.of_nat j) 0%N) eqn:E0; [reflexivity |].
           destruct (N.eqb (10%N + N.of_nat j) 1%N) eqn:E1; [apply N.eqb_eq in E1; lia | reflexivity]. }
         rewrite Hrf_arg_eq.
-        pose proof (rv_sym_read_call_args_from_sound penv0 dummy_freeze_oracle rf0 (rv_read_reg 2%N rf0) vrf rf 10%N
+        pose proof (rv_sym_read_call_args_from_sound pc cname penv0 dummy_freeze_oracle rf0 (rv_read_reg 2%N rf0) vrf rf 10%N
                       (List.length (mcs_args c)) aes Hag_rf Eargs) as Hs_args.
-        pose proof (rv_sym_read_call_args_from_wf allowed 10%N (List.length (mcs_args c)) vrf aes Hvrf Eargs) as Hwf_args.
+        pose proof (rv_sym_read_call_args_from_wf pc cname allowed 10%N (List.length (mcs_args c)) vrf aes Hvrf Eargs) as Hwf_args.
         assert (Hfa_ev : forall e64 v64,
           wf_sym_expr allowed 64%positive e64 ->
           eval_closed_cert_expr penv0 dummy_freeze_oracle e64 = raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive v64)) ->
@@ -3599,7 +4105,7 @@ Lemma summarize_a64_call_at_exec {Pa : Params} :
     a64_val_regs_agrees penv0 dummy_freeze_oracle rf0 sp0 vrf rf ->
     mc_sym_stack_agrees penv0 dummy_freeze_oracle (fun r0 => a64_read_reg r0 rf0) sp0 astk mstk ->
     (fl_def = true -> sym_flags_agree penv0 dummy_freeze_oracle sfl fl) ->
-    summarize_a64_call_at fuel im callees visited pc cid sp_off vrf astk sfl fl_def ret_w = Some t_mc ->
+    summarize_a64_call_at fuel im callees visited pc cid sp_off vrf astk sfl fl_def ret_w = inr t_mc ->
     exists tr_mc new_binds rf_end fl_end mstk_end,
       NoDup (List.map fst new_binds) /\
       binds_disjoint_from allowed new_binds /\
@@ -3662,13 +4168,13 @@ Proof.
       destruct Hcw as (_ & _ & Hlf_c & Hsub_c).
       destruct Hsd_step as (b & Hevc & Hexec1 & _).
       destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited) tpc cid sp_off vrf astk sfl fl_def' ret_w)
-        as [dt |] eqn:Hdt; [| discriminate Hsum].
+        as [| dt] eqn:Hdt; [discriminate Hsum |].
       destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited) npc cid sp_off vrf astk sfl fl_def' ret_w)
-        as [df |] eqn:Hdf; [| discriminate Hsum].
+        as [| df] eqn:Hdf; [discriminate Hsum |].
       inversion Hsum; subst t_mc; clear Hsum.
       assert (Hnext_p : summarize_a64_call_at fuel' im callees (pt_add_n pc visited)
                           (if b then tpc else npc) cid sp_off vrf astk sfl fl_def' ret_w =
-                        Some (if b then dt else df))
+                        inr (if b then dt else df))
         by (destruct b; [exact Hdt | exact Hdf]).
       destruct (IH callees (pt_add_n pc visited) (if b then tpc else npc) cid sp_off vrf astk sfl fl_def' ret_w
                    allowed (if b then dt else df) O penv0 rf0 sp0 rf sp fl mstk
@@ -3699,14 +4205,14 @@ Proof.
         unfold eval_closed_cert_expr in *; erewrite mcc_eval_cert_expr_penv_agree; [exact Hevr | exact Hlf_r |].
         intros nm w Hnm; pose proof (vars_subset_b_incl _ _ Hsub_r _ Hnm) as Hal.
         cbn [app]; exact (overlay_penv_disjoint_allowed extra penv0 allowed Hdx nm w Hal).
-  - destruct (mc_sp_aligned16 sp_off) eqn:Esp_al; [| discriminate Hsum].
+  - destruct (mc_sp_aligned16 sp_off) eqn:Esp_al; cbn [negb] in Hsum; [| discriminate Hsum].
     destruct (find_callee_spec callees cname) as [c |] eqn:Efc; [| discriminate Hsum].
-    destruct (a64_sym_read_call_args_from 0%N (List.length (mcs_args c)) vrf) as [aes |] eqn:Eargs;
-      [| discriminate Hsum].
+    destruct (a64_sym_read_call_args_from pc cname 0%N (List.length (mcs_args c)) vrf) as [| aes] eqn:Eargs;
+      [discriminate Hsum |].
     destruct (mc_post_call_ret_expr cid (mcs_ret_width c) (mcs_ret_ext c)) as [ret_e64 opt_hi] eqn:Epc.
     destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited)
                 (pc + 4%N)%N (S cid) sp_off (a64_post_call_vrf cid c vrf) astk sfl false ret_w)
-      as [cont |] eqn:Ect; [| discriminate Hsum].
+      as [| cont] eqn:Ect; [discriminate Hsum |].
     inversion Hsum; subst t_mc; clear Hsum.
     pose proof (find_callee_spec_in _ _ _ Efc) as [Hc_in Hc_nm].
     destruct (Hcws c Hc_in) as [Hcrw Hclen].
@@ -3861,12 +4367,12 @@ Proof.
           destruct (N.leb 31%N (N.of_nat j)) eqn:E31; [reflexivity |].
           destruct (N.eqb (N.of_nat j) 30%N) eqn:E30; [apply N.eqb_eq in E30; lia | reflexivity]. }
         rewrite Hrf_arg_eq.
-        pose proof (a64_sym_read_call_args_from_sound penv0 dummy_freeze_oracle rf0 sp0 vrf rf 0%N
+        pose proof (a64_sym_read_call_args_from_sound pc cname penv0 dummy_freeze_oracle rf0 sp0 vrf rf 0%N
                       (List.length (mcs_args c)) aes Hag_rf Eargs) as Hs_args.
         replace (List.map (fun k => a64_read_reg (0%N + N.of_nat k) rf) (seq 0 (List.length (mcs_args c))))
           with (List.map (fun k => a64_read_reg (N.of_nat k) rf) (seq 0 (List.length (mcs_args c)))) in Hs_args
           by (apply map_ext; intro k; reflexivity).
-        pose proof (a64_sym_read_call_args_from_wf allowed 0%N (List.length (mcs_args c)) vrf aes Hvrf Eargs) as Hwf_args.
+        pose proof (a64_sym_read_call_args_from_wf pc cname allowed 0%N (List.length (mcs_args c)) vrf aes Hvrf Eargs) as Hwf_args.
         assert (Hfa_ev : forall e64 v64,
           wf_sym_expr allowed 64%positive e64 ->
           eval_closed_cert_expr penv0 dummy_freeze_oracle e64 = raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive v64)) ->
@@ -3981,11 +4487,11 @@ Proof.
 Qed.
 
 Lemma denote_call_args_step {Pa : Params} (genv : raw_id -> @dvalue Pa) :
-  forall allowed (penv : param_env Pa) lmap env specs args aes msg,
+  forall cname arg_idx allowed (penv : param_env Pa) lmap env specs args aes msg,
     wf_pure_lmap allowed lmap ->
     wf_param_env_for allowed penv ->
     lmap_matches_env penv lmap env ->
-    reify_ir_call_args lmap specs args = Some aes ->
+    reify_ir_call_args cname arg_idx lmap specs args = inr aes ->
     (forall sigma, cfg_call_steps_to_ub genv sigma env (denote_call_args args msg) []) \/
     exists dvs,
       pure_cfg_steps env (denote_call_args args msg) env dvs /\
@@ -3994,17 +4500,17 @@ Lemma denote_call_args_step {Pa : Params} (genv : raw_id -> @dvalue Pa) :
         wf_scalar_dvalue w dv /\
         (need_def = false -> dvalue_well_defined dv = true)) aes dvs.
 Proof.
-  intros allowed penv lmap env specs; induction specs as [| sp srest IH];
-    intros [| [[aty ae] pas] arest] aes msg Hlmap Hpenv Henv Hra;
+  intros cname arg_idx allowed penv lmap env specs; revert arg_idx;
+    induction specs as [| sp srest IH];
+    intros arg_idx [| [[aty ae] pas] arest] aes msg Hlmap Hpenv Henv Hra;
     cbn [reify_ir_call_args] in Hra; try discriminate Hra.
   - inversion Hra; subst aes; right; exists []; split; [apply PCS_Ret; reflexivity | constructor].
-  - destruct (dtyp_eqb aty (DTYPE_Base (DTYPE_I (ras_width sp))) && pattrs_no_value_poison pas) eqn:Ehd;
-      [| discriminate Hra].
-    apply andb_true_iff in Ehd as [Hdt Hnp].
+  - destruct (dtyp_eqb aty (DTYPE_Base (DTYPE_I (ras_width sp)))) eqn:Hdt; cbn [negb] in Hra; [| discriminate Hra].
+    destruct (pattrs_no_value_poison pas) eqn:Hnp; cbn [negb] in Hra; [| discriminate Hra].
     destruct (reify_pure_exp lmap (Some aty) ae) as [[w0 ce] |] eqn:Ere; [| discriminate Hra].
-    destruct (ub_free_expr ce && negb (expr_has_freeze ce)) eqn:Euf; [| discriminate Hra].
-    apply andb_true_iff in Euf as [Hub Hnf]; apply negb_true_iff in Hnf.
-    destruct (reify_ir_call_args lmap srest arest) as [rest |] eqn:Hrr; [| discriminate Hra].
+    destruct (ub_free_expr ce) eqn:Hub; cbn [negb] in Hra; [| discriminate Hra].
+    destruct (expr_has_freeze ce) eqn:Hnf; [discriminate Hra |].
+    destruct (reify_ir_call_args cname (S arg_idx) lmap srest arest) as [| rest] eqn:Hrr; [discriminate Hra |].
     inversion Hra; subst aes; clear Hra.
     pose proof (reify_pure_exp_top_width ae lmap (Some aty) w0 ce Ere) as Htw.
     unfold dtyp_eqb in Hdt; destruct (dtyp_eq_dec aty (DTYPE_Base (DTYPE_I (ras_width sp))));
@@ -4027,7 +4533,7 @@ Proof.
     + destruct (apply_attrs_scalar_step genv default_draw_strat env pas msg (ras_width sp)
                   (DVALUE_Base (@DVALUE_I Pa (ras_width sp) iv)) Hnp (or_intror (ex_intro _ iv eq_refl)))
         as [_ Hret_a].
-      destruct (IH arest rest msg Hlmap Hpenv Henv Hrr) as [Hub_r | (dvs_r & Hst_r & Hfa_r)].
+      destruct (IH (S arg_idx) arest rest msg Hlmap Hpenv Henv Hrr) as [Hub_r | (dvs_r & Hst_r & Hfa_r)].
       * left; intro sigma.
         change [] with ([] ++ @nil (@mc_call_event Pa)); eapply cfg_call_steps_to_ub_bind_r.
         -- change [] with ([] ++ @nil (@mc_call_event Pa)); eapply cfg_call_steps_to_ret_bind;
@@ -4043,7 +4549,7 @@ Proof.
            split; [exact Hev | split; [right; exists iv; reflexivity | intro; reflexivity]].
     + destruct (apply_attrs_scalar_step genv default_draw_strat env pas msg (ras_width sp)
                   (DVALUE_Base DVALUE_Poison) Hnp (or_introl eq_refl)) as [_ Hret_a].
-      destruct (IH arest rest msg Hlmap Hpenv Henv Hrr) as [Hub_r | (dvs_r & Hst_r & Hfa_r)].
+      destruct (IH (S arg_idx) arest rest msg Hlmap Hpenv Henv Hrr) as [Hub_r | (dvs_r & Hst_r & Hfa_r)].
       * left; intro sigma.
         change [] with ([] ++ @nil (@mc_call_event Pa)); eapply cfg_call_steps_to_ub_bind_r.
         -- change [] with ([] ++ @nil (@mc_call_event Pa)); eapply cfg_call_steps_to_ret_bind;
@@ -4060,7 +4566,7 @@ Proof.
     + destruct (apply_attrs_scalar_step genv default_draw_strat env pas msg (ras_width sp)
                   (DVALUE_Base (@DVALUE_I Pa (ras_width sp) iv)) Hnp (or_intror (ex_intro _ iv eq_refl)))
         as [_ Hret_a].
-      destruct (IH arest rest msg Hlmap Hpenv Henv Hrr) as [Hub_r | (dvs_r & Hst_r & Hfa_r)].
+      destruct (IH (S arg_idx) arest rest msg Hlmap Hpenv Henv Hrr) as [Hub_r | (dvs_r & Hst_r & Hfa_r)].
       * left; intro sigma.
         change [] with ([] ++ @nil (@mc_call_event Pa)); eapply cfg_call_steps_to_ub_bind_r.
         -- change [] with ([] ++ @nil (@mc_call_event Pa)); eapply cfg_call_steps_to_ret_bind;
@@ -4099,21 +4605,32 @@ Proof.
     [apply pure_cfg_steps_to_call_ret; exact (Hret (or_intror eq_refl)) | apply CCSR_Ret; reflexivity].
 Qed.
 
-Lemma build_call_arg_obls_length :
-  forall arch path specs ir_args mc_args64 obls,
-    build_call_arg_obls arch path specs ir_args mc_args64 = Some obls ->
+Lemma build_call_arg_obls_from_length :
+  forall cname arg_idx arch path specs ir_args mc_args64 obls,
+    build_call_arg_obls_from cname arg_idx arch path specs ir_args mc_args64 = inr obls ->
     List.length ir_args = List.length specs /\
     List.length mc_args64 = List.length specs.
 Proof.
-  intros arch path specs; induction specs as [| sp sr IH];
-    intros [| [[nd w] e] ir] [| m mr] obls Hbao;
-    try (cbn [build_call_arg_obls build_call_arg_obls_acc] in Hbao; discriminate Hbao);
+  intros cname arg_idx arch path specs; revert arg_idx;
+    induction specs as [| sp sr IH];
+    intros arg_idx [| [[nd w] e] ir] [| m mr] obls Hbao;
+    try (cbn [build_call_arg_obls_from build_call_arg_obls_acc] in Hbao; discriminate Hbao);
     [split; reflexivity |].
-  rewrite build_call_arg_obls_cons in Hbao.
+  rewrite build_call_arg_obls_from_cons in Hbao.
   destruct (Pos.eqb w (ras_width sp)); [| discriminate].
-  destruct (build_call_arg_cmp arch path sp w e m); [| discriminate].
-  destruct (build_call_arg_obls arch path sr ir mr) as [rest |] eqn:Er; cbn [option_map] in Hbao; [| discriminate].
-  destruct (IH _ _ _ Er) as [H1 H2]; cbn; split; f_equal; assumption.
+  destruct (build_call_arg_cmp cname arg_idx arch path sp w e m); [discriminate |].
+  destruct (build_call_arg_obls_from cname (S arg_idx) arch path sr ir mr) as [| rest] eqn:Er;
+    cbn [mcc_sum_map] in Hbao; [discriminate |].
+  destruct (IH _ _ _ _ Er) as [H1 H2]; cbn; split; f_equal; assumption.
+Qed.
+
+Lemma build_call_arg_obls_length :
+  forall cname arch path specs ir_args mc_args64 obls,
+    build_call_arg_obls cname arch path specs ir_args mc_args64 = inr obls ->
+    List.length ir_args = List.length specs /\
+    List.length mc_args64 = List.length specs.
+Proof.
+  intros cname; exact (build_call_arg_obls_from_length cname 0%nat).
 Qed.
 
 Lemma rv_supported_arg_width_lt32 : forall w,
@@ -4134,12 +4651,12 @@ Proof.
 Qed.
 
 Lemma build_call_arg_obls_rv64_matches {Pa : Params} :
-  forall (penv : param_env Pa) (path : list (bool * cert_expr)) specs ir_args mc_args64 obls arg_vals vs_ir rf,
+  forall cname (penv : param_env Pa) (path : list (bool * cert_expr)) specs ir_args mc_args64 obls arg_vals vs_ir rf,
     (forall (b : bool) c, In (b, c) path ->
        eval_closed_cert_expr penv dummy_freeze_oracle c =
        raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if b then @Integers.one 1%positive else @Integers.zero 1%positive)))) ->
     Forall (mc_obl_holds penv dummy_freeze_oracle None false) obls ->
-    build_call_arg_obls EA_Riscv64 path specs ir_args mc_args64 = Some obls ->
+    build_call_arg_obls cname EA_Riscv64 path specs ir_args mc_args64 = inr obls ->
     Forall rv_valid_arg_spec specs ->
     NoDup (List.map ras_name specs) ->
     Forall2 (fun '(need_def, w, ce) dv =>
@@ -4153,10 +4670,10 @@ Lemma build_call_arg_obls_rv64_matches {Pa : Params} :
     rv_rf_matches_args (build_param_env (List.map ras_name specs) vs_ir) specs rf /\
     List.length vs_ir = List.length specs.
 Proof.
-  intros penv path specs ir_args mc_args64 obls arg_vals vs_ir rf
+  intros cname penv path specs ir_args mc_args64 obls arg_vals vs_ir rf
          Hpath Hobls Hbao Hvs Hnd Hfir Hfmc Harg_eq.
   assert (Hlen : List.length vs_ir = List.length specs)
-    by (destruct (build_call_arg_obls_length _ _ _ _ _ _ Hbao) as [Hl1 _];
+    by (destruct (build_call_arg_obls_length _ _ _ _ _ _ _ Hbao) as [Hl1 _];
         pose proof (Forall2_length Hfir); congruence).
   split; [| exact Hlen].
   assert (Hitem : forall k sp v_mc,
@@ -4173,14 +4690,16 @@ Proof.
            | RAE_SignExt | RAE_None => @Integers.repr 64%positive (@Integers.signed (ras_width sp) v)
            end)).
   { clear Hnd Hlen Harg_eq.
-    revert ir_args mc_args64 obls arg_vals vs_ir Hobls Hbao Hvs Hfir Hfmc.
-    induction specs as [| sp0 srest IH]; intros [| [[nd0 w0] e0] irest] [| m0 mrest] ob0 avs vs0 Hob0 Hb0 Hvs0 Hfi0 Hfm0 k sp v_mc Hsp0_n Hav_n;
+    unfold build_call_arg_obls in Hbao; revert Hbao; generalize 0%nat as arg_idx.
+    revert ir_args mc_args64 obls arg_vals vs_ir Hobls Hvs Hfir Hfmc.
+    induction specs as [| sp0 srest IH]; intros ir_args mc_args64 ob0 avs vs0 Hob0 Hvs0 Hfi0 Hfm0 arg_idx Hb0 k sp v_mc Hsp0_n Hav_n;
       try (destruct k; discriminate Hsp0_n);
-      try (cbn [build_call_arg_obls build_call_arg_obls_acc] in Hb0; discriminate Hb0).
-    rewrite build_call_arg_obls_cons in Hb0; cbn [build_call_arg_cmp] in Hb0.
+      destruct ir_args as [| [[nd0 w0] e0] irest]; destruct mc_args64 as [| m0 mrest];
+      try (cbn [build_call_arg_obls_from build_call_arg_obls_acc] in Hb0; discriminate Hb0).
+    rewrite build_call_arg_obls_from_cons in Hb0; cbn [build_call_arg_cmp] in Hb0.
     destruct (Pos.eqb w0 (ras_width sp0)) eqn:Epw; [apply Pos.eqb_eq in Epw; subst w0 | discriminate Hb0].
-    destruct (build_call_arg_obls EA_Riscv64 path srest irest mrest) as [rest_o |] eqn:Erest;
-      cbn [option_map] in Hb0; [| discriminate Hb0].
+    destruct (build_call_arg_obls_from cname (S arg_idx) EA_Riscv64 path srest irest mrest) as [| rest_o] eqn:Erest;
+      cbn [mcc_sum_map] in Hb0; [discriminate Hb0 |].
     inversion Hb0; subst ob0; clear Hb0.
     destruct avs as [| vm0 av_r]; [inversion Hfm0 |].
     destruct vs0 as [| dv0 vs_r]; [inversion Hfi0 |].
@@ -4216,7 +4735,7 @@ Proof.
           rewrite Hm0 in Href; cbn in Href; destruct Href as [Hbad | Heq]; [discriminate Hbad | apply dvalue_i_inj in Heq; exact Heq].
         * erewrite eval_ce_zext in Href by (first [exact Hltb | exact Hev0]).
           rewrite Hm0 in Href; cbn in Href; destruct Href as [Hbad | Heq]; [discriminate Hbad | apply dvalue_i_inj in Heq; exact Heq].
-    - exact (IH irest mrest rest_o av_r vs_r Hrest_o Erest Hvs_r Hfi_r Hfm_r k' sp v_mc Hsp0_n Hav_n). }
+    - exact (IH irest mrest rest_o av_r vs_r Hrest_o Hvs_r Hfi_r Hfm_r (S arg_idx) Erest k' sp v_mc Hsp0_n Hav_n). }
   intros k sp Hkl Hsp_n.
   assert (Hnth_av : nth_error arg_vals k = Some (rv_read_reg (10%N + N.of_nat k) rf)).
   { rewrite Harg_eq, nth_error_map, nth_error_seq; apply Nat.ltb_lt in Hkl as Hltb_k; rewrite Hltb_k; cbn [option_map Nat.add]; reflexivity. }
@@ -4229,12 +4748,12 @@ Proof.
 Qed.
 
 Lemma build_call_arg_obls_a64_matches {Pa : Params} :
-  forall (penv : param_env Pa) (path : list (bool * cert_expr)) specs ir_args mc_args64 obls arg_vals vs_ir rf,
+  forall cname (penv : param_env Pa) (path : list (bool * cert_expr)) specs ir_args mc_args64 obls arg_vals vs_ir rf,
     (forall (b : bool) c, In (b, c) path ->
        eval_closed_cert_expr penv dummy_freeze_oracle c =
        raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if b then @Integers.one 1%positive else @Integers.zero 1%positive)))) ->
     Forall (mc_obl_holds penv dummy_freeze_oracle None false) obls ->
-    build_call_arg_obls EA_AArch64 path specs ir_args mc_args64 = Some obls ->
+    build_call_arg_obls cname EA_AArch64 path specs ir_args mc_args64 = inr obls ->
     Forall rv_valid_arg_spec specs ->
     NoDup (List.map ras_name specs) ->
     Forall2 (fun '(need_def, w, ce) dv =>
@@ -4248,10 +4767,10 @@ Lemma build_call_arg_obls_a64_matches {Pa : Params} :
     a64_rf_matches_args (build_param_env (List.map ras_name specs) vs_ir) specs rf /\
     List.length vs_ir = List.length specs.
 Proof.
-  intros penv path specs ir_args mc_args64 obls arg_vals vs_ir rf
+  intros cname penv path specs ir_args mc_args64 obls arg_vals vs_ir rf
          Hpath Hobls Hbao Hvs Hnd Hfir Hfmc Harg_eq.
   assert (Hlen : List.length vs_ir = List.length specs)
-    by (destruct (build_call_arg_obls_length _ _ _ _ _ _ Hbao) as [Hl1 _];
+    by (destruct (build_call_arg_obls_length _ _ _ _ _ _ _ Hbao) as [Hl1 _];
         pose proof (Forall2_length Hfir); congruence).
   split; [| exact Hlen].
   assert (Hitem : forall k sp v_mc,
@@ -4273,17 +4792,19 @@ Proof.
       | _, _ => False
       end).
   { clear Hnd Hlen Harg_eq.
-    revert ir_args mc_args64 obls arg_vals vs_ir Hobls Hbao Hvs Hfir Hfmc.
-    induction specs as [| sp0 srest IH]; intros [| [[nd0 w0] e0] irest] [| m0 mrest] ob0 avs vs0 Hob0 Hb0 Hvs0 Hfi0 Hfm0 k sp v_mc Hsp0_n Hav_n;
+    unfold build_call_arg_obls in Hbao; revert Hbao; generalize 0%nat as arg_idx.
+    revert ir_args mc_args64 obls arg_vals vs_ir Hobls Hvs Hfir Hfmc.
+    induction specs as [| sp0 srest IH]; intros ir_args mc_args64 ob0 avs vs0 Hob0 Hvs0 Hfi0 Hfm0 arg_idx Hb0 k sp v_mc Hsp0_n Hav_n;
       try (destruct k; discriminate Hsp0_n);
-      try (cbn [build_call_arg_obls build_call_arg_obls_acc] in Hb0; discriminate Hb0).
-    rewrite build_call_arg_obls_cons in Hb0; cbn [build_call_arg_cmp] in Hb0.
+      destruct ir_args as [| [[nd0 w0] e0] irest]; destruct mc_args64 as [| m0 mrest];
+      try (cbn [build_call_arg_obls_from build_call_arg_obls_acc] in Hb0; discriminate Hb0).
+    rewrite build_call_arg_obls_from_cons in Hb0; cbn [build_call_arg_cmp] in Hb0.
     destruct (Pos.eqb w0 (ras_width sp0)) eqn:Epw; [apply Pos.eqb_eq in Epw; subst w0 | discriminate Hb0].
     match type of Hb0 with
-    | context [match ?x with Some _ => _ | None => _ end] => destruct x as [cmp0 |] eqn:Ecmp0; [| discriminate Hb0]
+    | context [match ?x with inl _ => _ | inr _ => _ end] => destruct x as [| cmp0] eqn:Ecmp0; [discriminate Hb0 |]
     end.
-    destruct (build_call_arg_obls EA_AArch64 path srest irest mrest) as [rest_o |] eqn:Erest;
-      cbn [option_map] in Hb0; [| discriminate Hb0].
+    destruct (build_call_arg_obls_from cname (S arg_idx) EA_AArch64 path srest irest mrest) as [| rest_o] eqn:Erest;
+      cbn [mcc_sum_map] in Hb0; [discriminate Hb0 |].
     inversion Hb0; subst ob0; clear Hb0.
     destruct avs as [| vm0 av_r]; [inversion Hfm0 |].
     destruct vs0 as [| dv0 vs_r]; [inversion Hfi0 |].
@@ -4339,7 +4860,7 @@ Proof.
                    exact (rv_supported_arg_width_lt32 _ Hsup Ew64 Ew32)).
              erewrite eval_ce_zext in Href by (first [exact Hlt32 | exact Hev0]).
              cbn in Href; destruct Href as [Hbad | Heq]; [discriminate Hbad | apply dvalue_i_inj in Heq; exact Heq].
-    - exact (IH irest mrest rest_o av_r vs_r Hrest_o Erest Hvs_r Hfi_r Hfm_r k' sp v_mc Hsp0_n Hav_n). }
+    - exact (IH irest mrest rest_o av_r vs_r Hrest_o Hvs_r Hfi_r Hfm_r (S arg_idx) Erest k' sp v_mc Hsp0_n Hav_n). }
   intros k sp Hkl Hsp_n.
   assert (Hnth_av : nth_error arg_vals k = Some (a64_read_reg (N.of_nat k) rf)).
   { rewrite Harg_eq, nth_error_map, nth_error_seq; apply Nat.ltb_lt in Hkl as Hltb_k; rewrite Hltb_k; cbn [option_map Nat.add]; reflexivity. }
@@ -4551,7 +5072,7 @@ Section IrTreeDenote.
 End IrTreeDenote.
 
 Lemma reify_ir_code_calls_exec {Pa : Params} :
-  forall (genv : raw_id -> @dvalue Pa) (penv : param_env Pa)
+  forall cur_bid (genv : raw_id -> @dvalue Pa) (penv : param_env Pa)
          callees c cid allowed lmap env ret_w k_end t
          (ctx : cfg_bind_ctxt unit (@dvalue Pa)),
     wf_pure_lmap allowed lmap ->
@@ -4562,12 +5083,12 @@ Lemma reify_ir_code_calls_exec {Pa : Params} :
        wf_pure_lmap allowed' lmap' ->
        wf_param_env_for allowed' penv ->
        lmap_matches_env penv lmap' env' ->
-       k_end cid' lmap' = Some t' ->
+       k_end cid' lmap' = inr t' ->
        ir_tree_denotes genv penv ret_w env' (apply_cfg_ctxt ctx (Ret tt)) t') ->
-    reify_ir_code_calls callees c cid lmap k_end = Some t ->
+    reify_ir_code_calls cur_bid callees c cid lmap k_end = inr t ->
     ir_tree_denotes genv penv ret_w env (apply_cfg_ctxt ctx (denote_code c None)) t.
 Proof.
-  intros genv penv callees c; induction c as [| [[iid ins] md] rest IH];
+  intros cur_bid genv penv callees c; induction c as [| [[iid ins] md] rest IH];
     intros cid allowed lmap env ret_w k_end t ctx Hlmap Hpenv Henv Hk Hrc;
     cbn [reify_ir_code_calls] in Hrc.
   - eapply ir_tree_denotes_prepend_tau_pure with (env1 := env) (t1 := apply_cfg_ctxt ctx (Ret tt)).
@@ -4579,8 +5100,8 @@ Proof.
   - destruct iid as [id | vid].
     + destruct ins; try discriminate Hrc.
       * destruct (reify_pure_exp lmap None op) as [[w ce] |] eqn:Ere; [| discriminate Hrc].
-        destruct (ub_free_expr ce && negb (expr_has_freeze ce)) eqn:Euf; [| discriminate Hrc].
-        apply andb_true_iff in Euf as [Hub Hnf]; apply negb_true_iff in Hnf.
+        destruct (ub_free_expr ce) eqn:Hub; cbn [negb] in Hrc; [| discriminate Hrc].
+        destruct (expr_has_freeze ce) eqn:Hnf; [discriminate Hrc |].
         destruct (reify_pure_exp_typing op allowed lmap None w ce Hlmap Ere) as (_ & Hwt & Hbw & Hlf & Hfv).
         destruct (eval_reified_pure_exp_no_ub allowed penv lmap env op None w ce Hlmap Hpenv Henv Ere Hub Hnf)
           as (dv & Hev & Hsc & Hst).
@@ -4603,14 +5124,14 @@ Proof.
       * destruct (match_pure_int_intrinsic_call (INSTR_Call fn args anns obs)) as [pic |] eqn:Epic.
         -- pose proof (match_pure_int_intrinsic_call_inv _ _ Epic) as Hinv.
            destruct pic as [op w a0 a1 | w a0 flag]; destruct fn as [dt_fn fn_e].
-           ++ destruct (match metadata_range md with None => true | Some _ => false end) eqn:Emr; [| discriminate Hrc].
+           ++ destruct (match metadata_range md with None => true | Some _ => false end) eqn:Emr; cbn [negb] in Hrc; [| discriminate Hrc].
               assert (Hmr_none : metadata_range md = None) by (destruct (metadata_range md); [discriminate | reflexivity]).
               destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I w))) a0) as [[wa ca] |] eqn:Ea0; [| discriminate Hrc].
               destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I w))) a1) as [[wb cb] |] eqn:Ea1; [| discriminate Hrc].
-              destruct (ub_free_expr ca && ub_free_expr cb && negb (expr_has_freeze ca) && negb (expr_has_freeze cb)) eqn:Euf;
-                [| discriminate Hrc].
-              rewrite !andb_true_iff in Euf; destruct Euf as (((Huba & Hubb) & Hnfa) & Hnfb);
-                apply negb_true_iff in Hnfa; apply negb_true_iff in Hnfb.
+              destruct (ub_free_expr ca && ub_free_expr cb) eqn:Eub; cbn [negb] in Hrc; [| discriminate Hrc].
+              destruct (expr_has_freeze ca || expr_has_freeze cb) eqn:Efr; [discriminate Hrc |].
+              apply andb_true_iff in Eub as [Huba Hubb].
+              apply orb_false_iff in Efr as [Hnfa Hnfb].
               destruct (reify_pure_exp_typing a0 allowed lmap (Some (DTYPE_Base (DTYPE_I w))) wa ca Hlmap Ea0)
                 as (_ & Hwt0 & Hbw0 & Hlf0 & Hfv0).
               pose proof (reify_pure_exp_top_width a0 lmap (Some (DTYPE_Base (DTYPE_I w))) wa ca Ea0) as Htw0.
@@ -4660,11 +5181,11 @@ Proof.
                               (pure_mcfg_to_mcfg_ret sigma _ _ _ _ Hst1)
                               Hpi)
                     | exact Hs].
-           ++ destruct (match metadata_range md with None => true | Some _ => false end) eqn:Emr; [| discriminate Hrc].
+           ++ destruct (match metadata_range md with None => true | Some _ => false end) eqn:Emr; cbn [negb] in Hrc; [| discriminate Hrc].
               assert (Hmr_none : metadata_range md = None) by (destruct (metadata_range md); [discriminate | reflexivity]).
               destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I w))) a0) as [[wa ca] |] eqn:Ea0; [| discriminate Hrc].
-              destruct (ub_free_expr ca && negb (expr_has_freeze ca)) eqn:Euf; [| discriminate Hrc].
-              rewrite andb_true_iff in Euf; destruct Euf as [Huba Hnfa]; apply negb_true_iff in Hnfa.
+              destruct (ub_free_expr ca) eqn:Huba; cbn [negb] in Hrc; [| discriminate Hrc].
+              destruct (expr_has_freeze ca) eqn:Hnfa; [discriminate Hrc |].
               destruct (reify_pure_exp_typing a0 allowed lmap (Some (DTYPE_Base (DTYPE_I w))) wa ca Hlmap Ea0)
                 as (_ & Hwt0 & Hbw0 & Hlf0 & Hfv0).
               pose proof (reify_pure_exp_top_width a0 lmap (Some (DTYPE_Base (DTYPE_I w))) wa ca Ea0) as Htw0.
@@ -4705,29 +5226,30 @@ Proof.
                               (pure_mcfg_to_mcfg_ret sigma _ _ _ _ Hst0)
                               Hpi)
                     | exact Hs].
-        -- destruct fn as [[[rw | | | | | | | | | |] | |] fn_e]; try discriminate Hrc;
-             destruct fn_e; try discriminate Hrc; destruct id0 as [[cname | | ] | ?]; try discriminate Hrc;
-             destruct obs; try discriminate Hrc;
-             destruct (match @intrinsic_exp dtyp (EXP_Ident (ID_Global (Name cname))) with None => true | Some _ => false end &&
-                       cconv_eqb (anns_cconv anns) CC_Ccc &&
-                       match metadata_range md with None => true | Some _ => false end &&
-                       fattrs_call_ok (ann_fun_attributes anns) &&
-                       pattrs_no_value_poison (ann_ret_attributes anns) &&
-                       is_supported_bit_width rw) eqn:Eg; [| discriminate Hrc];
-             rewrite !andb_true_iff in Eg; destruct Eg as (((((Hintr & Hcc) & Hmr_b) & Hfa) & Hra) & Hsup);
-             assert (Hintr_none : @intrinsic_exp dtyp (EXP_Ident (ID_Global (Name cname))) = None)
-               by (destruct (@intrinsic_exp dtyp (EXP_Ident (ID_Global (Name cname)))); [discriminate | reflexivity]);
-             assert (Hmr_none : metadata_range md = None)
-               by (destruct (metadata_range md); [discriminate | reflexivity]);
-             destruct (find_callee_spec callees cname) as [sp |]; [| discriminate Hrc];
-             destruct (Pos.eqb rw (mcs_ret_width sp)); [| discriminate Hrc];
-             destruct (reify_ir_call_args lmap (mcs_args sp) args) as [aes |] eqn:Eaes; [| discriminate Hrc];
-             destruct (reify_ir_code_calls callees rest (S cid)
-                         (RM.add id (rw, CE_Var (mc_call_ret_var cid rw) rw) lmap) k_end)
-               as [cont |] eqn:Ect; [| discriminate Hrc];
-             inversion Hrc; subst t; clear Hrc;
-             cbn [ir_tree_denotes];
-             destruct (denote_call_args_step genv allowed penv lmap env (mcs_args sp) args aes
+        -- destruct fn as [dt_ret fn_e].
+           destruct dt_ret as [bdt | |]; [destruct bdt as [rw | | | | | | | | | |] | |];
+             destruct fn_e;
+             try match goal with iv : ident |- _ => destruct iv as [[cname | | ] | ?] end;
+             destruct obs; try discriminate Hrc.
+           destruct (match @intrinsic_exp dtyp (EXP_Ident (ID_Global (Name cname))) with None => true | Some _ => false end) eqn:Hintr; cbn [negb] in Hrc; [| discriminate Hrc].
+           destruct (cconv_eqb (anns_cconv anns) CC_Ccc) eqn:Hcc; cbn [negb] in Hrc; [| discriminate Hrc].
+           destruct (match metadata_range md with None => true | Some _ => false end) eqn:Hmr_b; cbn [negb] in Hrc; [| discriminate Hrc].
+           destruct (fattrs_call_ok (ann_fun_attributes anns)) eqn:Hfa; cbn [negb] in Hrc; [| discriminate Hrc].
+           destruct (pattrs_no_value_poison (ann_ret_attributes anns)) eqn:Hra; cbn [negb] in Hrc; [| discriminate Hrc].
+           destruct (is_supported_bit_width rw) eqn:Hsup; cbn [negb] in Hrc; [| discriminate Hrc].
+           assert (Hintr_none : @intrinsic_exp dtyp (EXP_Ident (ID_Global (Name cname))) = None)
+             by (destruct (@intrinsic_exp dtyp (EXP_Ident (ID_Global (Name cname)))); [discriminate | reflexivity]).
+           assert (Hmr_none : metadata_range md = None)
+             by (destruct (metadata_range md); [discriminate | reflexivity]).
+           destruct (find_callee_spec callees cname) as [sp |]; [| discriminate Hrc].
+           destruct (Pos.eqb rw (mcs_ret_width sp)); [| discriminate Hrc].
+           destruct (reify_ir_call_args cname 0%nat lmap (mcs_args sp) args) as [| aes] eqn:Eaes; [discriminate Hrc |].
+           destruct (reify_ir_code_calls cur_bid callees rest (S cid)
+                       (RM.add id (rw, CE_Var (mc_call_ret_var cid rw) rw) lmap) k_end)
+             as [| cont] eqn:Ect; [discriminate Hrc |].
+           inversion Hrc; subst t; clear Hrc;
+           cbn [ir_tree_denotes];
+             destruct (denote_call_args_step genv cname 0%nat allowed penv lmap env (mcs_args sp) args aes
                          ((set_loc (get_file_info md) ++ location_error_string md) ++ ": Call argument violates noundef.")%string
                          Hlmap Hpenv Henv Eaes) as [Hub_a | (dvs & Hst_a & Hfa_a)];
              [left; intro sigma;
@@ -4834,7 +5356,7 @@ Lemma reify_ir_call_at_exec {Pa : Params} :
     wf_pure_lmap allowed lmap ->
     wf_param_env_for allowed penv ->
     lmap_matches_env penv lmap env ->
-    reify_ir_call_at fuel callees bmap ret_w visited is_entry bid_from cur_bid cid lmap = Some t ->
+    reify_ir_call_at fuel callees bmap ret_w visited is_entry bid_from cur_bid cid lmap = inr t ->
     ir_tree_denotes genv penv ret_w env (@denote_cfg_from Pa bmap None (bid_from, cur_bid)) t.
 Proof.
   intro fuel; induction fuel as [| fuel' IH];
@@ -4843,32 +5365,27 @@ Proof.
     cbn [reify_ir_call_at] in Hrec;
     destruct (raw_id_in_list cur_bid visited); try discriminate Hrec.
   destruct (RM.find cur_bid bmap) as [b |] eqn:Efind; [| discriminate Hrec].
-  set (lmap_phis :=
-    if is_entry then match blk_phis b with [] => Some lmap | _ :: _ => None end
-    else match reify_pure_phis bid_from lmap (blk_phis b) with
-         | None => None
-         | Some pevals =>
-             if pevals_ub_free pevals && forallb (fun '(_, _, ce) => negb (expr_has_freeze ce)) pevals
-             then Some (apply_reified_phis lmap pevals) else None
-         end) in *.
-  destruct lmap_phis as [lmap1 |] eqn:El1; [| discriminate Hrec].
+  match type of Hrec with
+  | match ?x with inl _ => _ | inr _ => _ end = _ => destruct x as [| lmap1] eqn:El1
+  end; [discriminate Hrec |].
   assert (Hphis :
     wf_pure_lmap allowed lmap1 /\
     exists env1,
       lmap_matches_env penv lmap1 env1 /\
       pure_cfg_steps env (denote_phis bid_from (blk_phis b)) env1 tt).
-  { unfold lmap_phis in El1; destruct is_entry.
+  { destruct is_entry.
     - destruct (blk_phis b) eqn:Ebp; inversion El1; subst; split; [exact Hlmap |].
       exists env; split; [exact Henv | unfold denote_phis; cbn [map_monad];
         eapply pure_cfg_steps_bind; [apply PCS_Ret; reflexivity | eapply pure_cfg_steps_bind; [apply PCS_Ret; reflexivity | apply PCS_Ret; reflexivity]]].
     - destruct (reify_pure_phis bid_from lmap (blk_phis b)) as [pevals |] eqn:Erp; [| discriminate El1].
-      destruct (pevals_ub_free pevals && forallb (fun '(_, _, ce) => negb (expr_has_freeze ce)) pevals) eqn:Euf;
+      destruct (pevals_ub_free pevals) eqn:Eub; cbn [negb] in El1; [| discriminate El1].
+      destruct (forallb (fun '(_, _, ce) => negb (expr_has_freeze ce)) pevals) eqn:Efr; cbn [negb] in El1;
         inversion El1; subst.
       pose proof (reify_pure_phis_typing (blk_phis b) allowed bid_from lmap pevals Hlmap Erp) as Htp_p.
       split; [exact (apply_reified_phis_wf _ _ _ Hlmap Htp_p) |].
       destruct (pure_phis_denote_step (blk_phis b) penv bid_from lmap env pevals Henv Erp)
         as [[_ (ce & msg & Hin_c & Hev_ub)] | [dvs [Hpm Hst_p]]].
-      + unfold pevals_ub_free in Euf; apply andb_true_iff in Euf as [Eub _]; rewrite forallb_forall in Eub.
+      + unfold pevals_ub_free in Eub; rewrite forallb_forall in Eub.
         unfold peval_exprs in Hin_c; apply in_map_iff in Hin_c as [[[id_p w_p] ce_p] [<- Hin_p]].
         pose proof (Eub _ Hin_p) as Hce_ub.
         rewrite Forall_forall in Htp_p; destruct (Htp_p _ Hin_p) as (_ & _ & (Hwt_p & Hlf_p & Hfv_p)).
@@ -4906,27 +5423,34 @@ Proof.
      | TERM_Ret (DTYPE_Base (DTYPE_I rw), op) =>
          if Pos.eqb rw ret_w then
            match reify_pure_exp lmap' (Some (DTYPE_Base (DTYPE_I rw))) op with
-           | Some (_, ret_e) => if ub_free_expr ret_e && negb (expr_has_freeze ret_e) then Some (ICT_Ret rw ret_e) else None
-           | None => None
+           | Some (_, ret_e) =>
+               if negb (ub_free_expr ret_e) then inl (diag "mc-call-ir" ("non-UB-free return expression in block '" ++ cert_raw_id_bare cur_bid ++ "' (from '" ++ cert_raw_id_bare bid_from ++ "')"))
+               else if expr_has_freeze ret_e then inl (diag "mc-call-ir" ("freeze expression not allowed in return of block '" ++ cert_raw_id_bare cur_bid ++ "' (from '" ++ cert_raw_id_bare bid_from ++ "')"))
+               else inr (ICT_Ret rw ret_e)
+           | None => inl (diag "mc-call-ir" ("unsupported return operand in block '" ++ cert_raw_id_bare cur_bid ++ "' (from '" ++ cert_raw_id_bare bid_from ++ "')"))
            end
-         else None
+         else inl (diag "mc-call-ir" ("return width i" ++ diag_pos_dec rw ++ " mismatches expected i" ++ diag_pos_dec ret_w ++ " in block '" ++ cert_raw_id_bare cur_bid ++ "' (from '" ++ cert_raw_id_bare bid_from ++ "')"))
      | TERM_Br (DTYPE_Base (DTYPE_I 1%positive), op) br1 br2 =>
          match reify_pure_exp lmap' (Some (DTYPE_Base (DTYPE_I 1%positive))) op with
          | Some (_, cond_e) =>
-             if ub_free_expr cond_e && negb (expr_has_freeze cond_e) then
-               match reify_ir_call_at fuel' callees bmap ret_w (cur_bid :: visited) false cur_bid br1 cid' lmap',
-                     reify_ir_call_at fuel' callees bmap ret_w (cur_bid :: visited) false cur_bid br2 cid' lmap' with
-               | Some dt, Some df => Some (ICT_Branch cond_e dt df)
-               | _, _ => None
+             if negb (ub_free_expr cond_e) then inl (diag "mc-call-ir" ("non-UB-free branch condition in block '" ++ cert_raw_id_bare cur_bid ++ "' (from '" ++ cert_raw_id_bare bid_from ++ "')"))
+             else if expr_has_freeze cond_e then inl (diag "mc-call-ir" ("freeze expression not allowed in branch condition of block '" ++ cert_raw_id_bare cur_bid ++ "' (from '" ++ cert_raw_id_bare bid_from ++ "')"))
+             else
+               match reify_ir_call_at fuel' callees bmap ret_w (cur_bid :: visited) false cur_bid br1 cid' lmap' with
+               | inl err => inl err
+               | inr dt =>
+                   match reify_ir_call_at fuel' callees bmap ret_w (cur_bid :: visited) false cur_bid br2 cid' lmap' with
+                   | inl err => inl err
+                   | inr df => inr (ICT_Branch cond_e dt df)
+                   end
                end
-             else None
-         | None => None
+         | None => inl (diag "mc-call-ir" ("unsupported branch condition in block '" ++ cert_raw_id_bare cur_bid ++ "' (from '" ++ cert_raw_id_bare bid_from ++ "')"))
          end
      | TERM_Br_1 next_bid =>
          reify_ir_call_at fuel' callees bmap ret_w (cur_bid :: visited) false cur_bid next_bid cid' lmap'
-     | TERM_Unreachable => Some ICT_UB
-     | _ => None
-     end) = Some t' ->
+     | TERM_Unreachable => inr ICT_UB
+     | _ => inl (diag "mc-call-ir" ("unsupported terminator in block '" ++ cert_raw_id_bare cur_bid ++ "' (from '" ++ cert_raw_id_bare bid_from ++ "')"))
+     end) = inr t' ->
     ir_tree_denotes genv penv ret_w env' (apply_cfg_ctxt ctx_code (Ret tt)) t').
   { intros cid' allowed' lmap' env' t' _ Hlmap' Hpenv' Henv' Ht'.
     assert (Hlift_t :
@@ -4945,8 +5469,8 @@ Proof.
       destruct (Pos.eqb rw ret_w) eqn:Erw; [apply Pos.eqb_eq in Erw; subst rw | discriminate Ht'].
       destruct (reify_pure_exp lmap' (Some (DTYPE_Base (DTYPE_I ret_w))) op) as [[wa ret_e] |] eqn:Eop;
         [| discriminate Ht'].
-      destruct (ub_free_expr ret_e && negb (expr_has_freeze ret_e)) eqn:Euf; [| discriminate Ht'].
-      rewrite andb_true_iff in Euf; destruct Euf as [Hub_r Hnf_r]; apply negb_true_iff in Hnf_r.
+      destruct (ub_free_expr ret_e) eqn:Hub_r; cbn [negb] in Ht'; [| discriminate Ht'].
+      destruct (expr_has_freeze ret_e) eqn:Hnf_r; [discriminate Ht' |].
       inversion Ht'; subst t'; clear Ht'.
       destruct (eval_reified_pure_exp_no_ub allowed' penv lmap' env' op
                   (Some (DTYPE_Base (DTYPE_I ret_w))) wa ret_e Hlmap' Hpenv' Henv' Eop Hub_r Hnf_r)
@@ -4971,12 +5495,12 @@ Proof.
       destruct w; try discriminate Ht'.
       destruct (reify_pure_exp lmap' (Some (DTYPE_Base (DTYPE_I 1%positive))) op) as [[wc cond_e] |] eqn:Eop;
         [| discriminate Ht'].
-      destruct (ub_free_expr cond_e && negb (expr_has_freeze cond_e)) eqn:Euf; [| discriminate Ht'].
-      rewrite andb_true_iff in Euf; destruct Euf as [Hub_c Hnf_c]; apply negb_true_iff in Hnf_c.
+      destruct (ub_free_expr cond_e) eqn:Hub_c; cbn [negb] in Ht'; [| discriminate Ht'].
+      destruct (expr_has_freeze cond_e) eqn:Hnf_c; [discriminate Ht' |].
       destruct (reify_ir_call_at fuel' callees bmap ret_w (cur_bid :: visited) false cur_bid br1 cid' lmap')
-        as [dt1 |] eqn:Edt; [| discriminate Ht'].
+        as [| dt1] eqn:Edt; [discriminate Ht' |].
       destruct (reify_ir_call_at fuel' callees bmap ret_w (cur_bid :: visited) false cur_bid br2 cid' lmap')
-        as [df1 |] eqn:Edf; [| discriminate Ht'].
+        as [| df1] eqn:Edf; [discriminate Ht' |].
       inversion Ht'; subst t'; clear Ht'.
       destruct (eval_reified_pure_exp_no_ub allowed' penv lmap' env' op
                   (Some (DTYPE_Base (DTYPE_I 1%positive))) wc cond_e Hlmap' Hpenv' Henv' Eop Hub_c Hnf_c)
@@ -5046,7 +5570,7 @@ Proof.
       intro sigma; unfold ctx_term; rewrite Etb; cbn [denote_terminator].
       apply cfg_call_steps_to_ub_ctxt; eapply CCSU_UB; unfold raiseUB, trigger_cast', ITree.trigger; rewrite observe_bind; reflexivity. }
   rewrite <- Etb in Hrec.
-  pose proof (@reify_ir_code_calls_exec Pa genv penv callees (blk_code b) cid allowed lmap1 env1 ret_w
+  pose proof (@reify_ir_code_calls_exec Pa cur_bid genv penv callees (blk_code b) cid allowed lmap1 env1 ret_w
                 _ t ctx_code Hlmap1 Hpenv Henv1 Hk Hrec) as Hcode.
   eapply ir_tree_denotes_prepend_tau_pure with (env1 := env1) (t1 := apply_cfg_ctxt ctx_code (denote_code (blk_code b) None));
     [| | exact Hcode].
@@ -5089,7 +5613,7 @@ Lemma reify_ir_call_tree_exec {Pa : Params} :
     (forall nm, In nm (List.map cert_reg_name (args ir_cfg)) ->
        penv nm = build_param_env (List.map cert_reg_name (args ir_cfg)) vs nm) ->
     wf_param_env_for allowed penv ->
-    reify_ir_call_tree ir_cfg arg_specs callees ret_w = Some t_ir ->
+    reify_ir_call_tree ir_cfg arg_specs callees ret_w = inr t_ir ->
     ir_tree_denotes genv penv ret_w (init_cfg_locals (args ir_cfg) vs) (@denote_cfg Pa ir_cfg None) t_ir.
 Proof.
   intros genv penv ir_cfg arg_specs callees ret_w allowed arg_dtys vs t_ir
@@ -5120,7 +5644,7 @@ Lemma summarize_rv64_call_tree_wfsym :
     forallb rv_call_inst_no_word_mulh insts = true ->
     forallb rv_valid_arg_spec arg_specs = true ->
     (forall sp, In sp arg_specs -> In (ras_name sp, ras_width sp) allowed) ->
-    summarize_rv64_call_tree insts callees arg_specs ret_w = Some t_mc ->
+    summarize_rv64_call_tree insts callees arg_specs ret_w = inr t_mc ->
     mc_call_tree_wf allowed ret_w t_mc.
 Proof.
   intros insts callees arg_specs ret_w allowed t_mc Hrw Hcws Hmul Hws Hargs_al Hsum.
@@ -5154,7 +5678,7 @@ Lemma summarize_a64_call_tree_wfsym :
     forallb a64_valid_arg_spec arg_specs = true ->
     (forall sp, In sp arg_specs -> In (ras_name sp, ras_width sp) allowed) ->
     (forall nv, In nv (a64_hi_vars arg_specs) -> In nv allowed) ->
-    summarize_a64_call_tree insts callees arg_specs ret_w = Some t_mc ->
+    summarize_a64_call_tree insts callees arg_specs ret_w = inr t_mc ->
     mc_call_tree_wf allowed ret_w t_mc.
 Proof.
   intros insts callees arg_specs ret_w allowed t_mc Hrw Hcws Hval Hws Hargs_al Hhi_al Hsum.
@@ -5184,12 +5708,12 @@ Proof.
 Qed.
 
 Lemma build_call_arg_obls_list_matches {Pa : Params} :
-  forall arch (penv : param_env Pa) (path : list (bool * cert_expr)) specs ir_args mc_args64 obls arg_vals vs_ir,
+  forall cname arch (penv : param_env Pa) (path : list (bool * cert_expr)) specs ir_args mc_args64 obls arg_vals vs_ir,
     (forall (b : bool) c, In (b, c) path ->
        eval_closed_cert_expr penv dummy_freeze_oracle c =
        raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if b then @Integers.one 1%positive else @Integers.zero 1%positive)))) ->
     Forall (mc_obl_holds penv dummy_freeze_oracle None false) obls ->
-    build_call_arg_obls arch path specs ir_args mc_args64 = Some obls ->
+    build_call_arg_obls cname arch path specs ir_args mc_args64 = inr obls ->
     Forall rv_valid_arg_spec specs ->
     NoDup (List.map ras_name specs) ->
     Forall2 (fun '(need_def, w, ce) dv =>
@@ -5233,13 +5757,13 @@ Lemma build_call_arg_obls_list_matches {Pa : Params} :
              end
          end).
 Proof.
-  intros arch penv path specs ir_args mc_args64 obls arg_vals vs_ir
+  intros cname arch penv path specs ir_args mc_args64 obls arg_vals vs_ir
          Hpath Hobls Hbao Hvs Hnd Hfir Hfmc.
   assert (Hlen_av : List.length arg_vals = List.length specs)
-    by (destruct (build_call_arg_obls_length _ _ _ _ _ _ Hbao) as [_ Hl2];
+    by (destruct (build_call_arg_obls_length _ _ _ _ _ _ _ Hbao) as [_ Hl2];
         pose proof (Forall2_length Hfmc); congruence).
   assert (Hlen_vs : List.length vs_ir = List.length specs)
-    by (destruct (build_call_arg_obls_length _ _ _ _ _ _ Hbao) as [Hl1 _];
+    by (destruct (build_call_arg_obls_length _ _ _ _ _ _ _ Hbao) as [Hl1 _];
         pose proof (Forall2_length Hfir); congruence).
   repeat split; [exact Hlen_vs | exact Hlen_av |].
   assert (Hitem : forall k sp v_mc,
@@ -5273,17 +5797,20 @@ Proof.
           end
       end).
   { clear Hnd Hlen_av Hlen_vs.
-    revert ir_args mc_args64 obls arg_vals vs_ir Hobls Hbao Hvs Hfir Hfmc.
+    unfold build_call_arg_obls in Hbao; revert Hbao; generalize 0%nat as arg_idx.
+    revert ir_args mc_args64 obls arg_vals vs_ir Hobls Hvs Hfir Hfmc.
     induction specs as [| sp0 srest IH];
-      intros [| [[nd0 w0] e0] irest] [| m0 mrest] ob0 avs vs0 Hob0 Hb0 Hvs0 Hfi0 Hfm0 k sp v_mc Hsp0_n Hav_n;
-      try (destruct k; discriminate Hsp0_n); cbn [build_call_arg_obls build_call_arg_obls_acc] in Hb0; try discriminate Hb0.
+      intros ir_args mc_args64 ob0 avs vs0 Hob0 Hvs0 Hfi0 Hfm0 arg_idx Hb0 k sp v_mc Hsp0_n Hav_n;
+      try (destruct k; discriminate Hsp0_n);
+      destruct ir_args as [| [[nd0 w0] e0] irest]; destruct mc_args64 as [| m0 mrest];
+      try (cbn [build_call_arg_obls_from build_call_arg_obls_acc] in Hb0; discriminate Hb0).
+    rewrite build_call_arg_obls_from_cons in Hb0.
     destruct (Pos.eqb w0 (ras_width sp0)) eqn:Epw; [apply Pos.eqb_eq in Epw; subst w0 | discriminate Hb0].
     match type of Hb0 with
-    | context [match ?x with Some _ => _ | None => _ end] => destruct x as [cmp0 |] eqn:Ecmp0; [| discriminate Hb0]
+    | context [match ?x with inl _ => _ | inr _ => _ end] => destruct x as [| cmp0] eqn:Ecmp0; [discriminate Hb0 |]
     end.
-    rewrite build_call_arg_obls_acc_shift in Hb0.
-    destruct (build_call_arg_obls arch path srest irest mrest) as [rest_o |] eqn:Erest;
-      cbn [option_map] in Hb0; [| discriminate Hb0].
+    destruct (build_call_arg_obls_from cname (S arg_idx) arch path srest irest mrest) as [| rest_o] eqn:Erest;
+      cbn [mcc_sum_map] in Hb0; [discriminate Hb0 |].
     inversion Hb0; subst ob0; clear Hb0.
     destruct avs as [| vm0 av_r]; [inversion Hfm0 |].
     destruct vs0 as [| dv0 vs_r]; [inversion Hfi0 |].
@@ -5355,7 +5882,7 @@ Proof.
                       exact (rv_supported_arg_width_lt32 _ Hsup Ew64 Ew32)).
                 erewrite eval_ce_zext in Href by (first [exact Hlt32 | exact Hev0]).
                 cbn in Href; destruct Href as [Hbad | Heq]; [discriminate Hbad | apply dvalue_i_inj in Heq; exact Heq].
-    - exact (IH irest mrest rest_o av_r vs_r Hrest_o Erest Hvs_r Hfi_r Hfm_r k' sp v_mc Hsp0_n Hav_n). }
+    - exact (IH irest mrest rest_o av_r vs_r Hrest_o Hvs_r Hfi_r Hfm_r (S arg_idx) Erest k' sp v_mc Hsp0_n Hav_n). }
   intros k sp v_mc Hsp_n Hav_n.
   destruct (Hitem k sp v_mc Hsp_n Hav_n) as (v & Hvs_n & Hvmc).
   exists v; split; [| exact Hvmc].
@@ -5372,23 +5899,24 @@ Lemma collect_call_obls_mct_branch :
     collect_call_obls arch callees ret_w p t_ir (MCT_Branch c mt mf) =
     match collect_call_obls arch callees ret_w ((true, c) :: p) t_ir mt,
           collect_call_obls arch callees ret_w ((false, c) :: p) t_ir mf with
-    | Some o1, Some o2 => Some (o2 ++ o1)
-    | _, _ => None
+    | inr o1, inr o2 => inr (o2 ++ o1)
+    | inl err, _ => inl err
+    | _, inl err => inl err
     end.
 Proof.
   intros arch callees ret_w p t_ir c mt mf Hub Hbr; unfold collect_call_obls;
     destruct t_ir as [rw e_ir | | cond dt df | cn_ir args_ir rw_ir rv_ir c_ir].
   - cbn [collect_call_obls_acc collect_call_obls_ret_acc].
-    destruct (collect_call_obls_ret_acc ret_w rw e_ir ((true, c) :: p) mt []) as [o1 |]; [| reflexivity].
+    destruct (collect_call_obls_ret_acc ret_w rw e_ir ((true, c) :: p) mt []) as [| o1]; [reflexivity |].
     rewrite collect_call_obls_ret_acc_shift.
-    destruct (collect_call_obls_ret_acc ret_w rw e_ir ((false, c) :: p) mf []) as [o2 |]; reflexivity.
+    destruct (collect_call_obls_ret_acc ret_w rw e_ir ((false, c) :: p) mf []) as [| o2]; reflexivity.
   - exfalso; exact (Hub eq_refl).
   - exfalso; exact (Hbr _ _ _ eq_refl).
   - rewrite collect_call_obls_acc_ict_call_branch.
-    destruct (collect_call_obls_acc arch callees ret_w ((true, c) :: p) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mt []) as [o1 |];
-      [| reflexivity].
+    destruct (collect_call_obls_acc arch callees ret_w ((true, c) :: p) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mt []) as [| o1];
+      [reflexivity |].
     rewrite collect_call_obls_acc_shift; unfold collect_call_obls.
-    destruct (collect_call_obls_acc arch callees ret_w ((false, c) :: p) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mf []) as [o2 |];
+    destruct (collect_call_obls_acc arch callees ret_w ((false, c) :: p) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mf []) as [| o2];
       reflexivity.
 Qed.
 
@@ -5397,16 +5925,17 @@ Lemma collect_call_obls_ict_branch :
     collect_call_obls arch callees ret_w p (ICT_Branch cond dt df) m =
     match collect_call_obls arch callees ret_w ((true, cond) :: p) dt m,
           collect_call_obls arch callees ret_w ((false, cond) :: p) df m with
-    | Some o1, Some o2 => Some (o2 ++ o1)
-    | _, _ => None
+    | inr o1, inr o2 => inr (o2 ++ o1)
+    | inl err, _ => inl err
+    | _, inl err => inl err
     end.
 Proof.
   intros arch callees ret_w p cond dt df m; unfold collect_call_obls;
     cbn [collect_call_obls_acc];
-    destruct (collect_call_obls_acc arch callees ret_w ((true, cond) :: p) dt m []) as [o1 |];
-    [| reflexivity];
+    destruct (collect_call_obls_acc arch callees ret_w ((true, cond) :: p) dt m []) as [| o1];
+    [reflexivity |];
     rewrite collect_call_obls_acc_shift; unfold collect_call_obls;
-    destruct (collect_call_obls_acc arch callees ret_w ((false, cond) :: p) df m []) as [o2 |];
+    destruct (collect_call_obls_acc arch callees ret_w ((false, cond) :: p) df m []) as [| o2];
     reflexivity.
 Qed.
 
@@ -5420,7 +5949,7 @@ Lemma ir_mc_call_trees_sound {Pa : Params} :
        eval_closed_cert_expr penv dummy_freeze_oracle c =
        raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if b then @Integers.one 1%positive else @Integers.zero 1%positive)))) ->
     Forall (mc_obl_holds penv dummy_freeze_oracle None false) obls ->
-    collect_call_obls arch callees ret_w path t_ir t_mc = Some obls ->
+    collect_call_obls arch callees ret_w path t_ir t_mc = inr obls ->
     ir_call_tree_wf allowed_ir ret_w t_ir ->
     ir_tree_denotes genv penv ret_w env_cur it_cur t_ir ->
     mc_tree_path_ok penv ret_w path t_mc evs_mc v_mc_ret ->
@@ -5494,27 +6023,29 @@ Proof.
       cbn [refine_eou_dvalue] in Href; rewrite Hev_ir, Hev_mc in Href.
       right; exists [], env_out, dv_ir; repeat split; [constructor | exact (Hst default_draw_strat) | exact Href].
     + rewrite collect_call_obls_mct_branch in Hco by ltac:(discriminate).
-      destruct (collect_call_obls arch callees ret_w ((true, cond0) :: p0) (ICT_Ret rw e_ir) mt) as [o1 |] eqn:Eo1;
-        [| discriminate Hco].
-      destruct (collect_call_obls arch callees ret_w ((false, cond0) :: p0) (ICT_Ret rw e_ir) mf) as [o2 |] eqn:Eo2;
-        [| discriminate Hco].
+      destruct (collect_call_obls arch callees ret_w ((true, cond0) :: p0) (ICT_Ret rw e_ir) mt) as [| o1] eqn:Eo1;
+        [discriminate Hco |].
+      destruct (collect_call_obls arch callees ret_w ((false, cond0) :: p0) (ICT_Ret rw e_ir) mf) as [| o2] eqn:Eo2;
+        [discriminate Hco |].
       inversion Hco; subst obls; rewrite Forall_app in Hobls; destruct Hobls as [Ho2 Ho1].
       assert (Hpath' : forall b0 c0, In (b0, c0) ((b, cond0) :: p0) ->
         eval_closed_cert_expr penv dummy_freeze_oracle c0 =
         raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if b0 then @Integers.one 1%positive else @Integers.zero 1%positive)))).
       { intros b0 c0 [Heq | Hin]; [inversion Heq; subst; exact Hev_c | exact (Hpath b0 c0 Hin)]. }
       destruct b; [exact (IHm Hpath' _ Ho1 Eo1) | exact (IHm Hpath' _ Ho2 Eo2)].
-    + cbn [collect_call_obls collect_call_obls_acc collect_call_obls_ret_acc] in Hco; rewrite app_nil_r in Hco; inversion Hco; subst obls.
-      exfalso; exact (imposs_obl_absurd penv dummy_freeze_oracle None false p0 (fun C => ltac:(discriminate C)) Hpath Hobls).
+    + cbn [collect_call_obls collect_call_obls_acc collect_call_obls_ret_acc] in Hco;
+        destruct p0; [discriminate Hco |].
+      rewrite app_nil_r in Hco; inversion Hco; subst obls.
+      exfalso; exact (imposs_obl_absurd penv dummy_freeze_oracle None false _ (fun C => ltac:(discriminate C)) Hpath Hobls).
   - (* ICT_UB *)
     cbn [ir_tree_denotes] in Hden.
     left; exists []; split; [constructor | exact (Hden default_draw_strat)].
   - (* ICT_Branch *)
     rewrite collect_call_obls_ict_branch in Hco.
-    destruct (collect_call_obls arch callees ret_w ((true, cond) :: path) dt t_mc) as [o1 |] eqn:Eo1;
-      [| discriminate Hco].
-    destruct (collect_call_obls arch callees ret_w ((false, cond) :: path) df t_mc) as [o2 |] eqn:Eo2;
-      [| discriminate Hco].
+    destruct (collect_call_obls arch callees ret_w ((true, cond) :: path) dt t_mc) as [| o1] eqn:Eo1;
+      [discriminate Hco |].
+    destruct (collect_call_obls arch callees ret_w ((false, cond) :: path) df t_mc) as [| o2] eqn:Eo2;
+      [discriminate Hco |].
     inversion Hco; subst obls; rewrite Forall_app in Hobls; destruct Hobls as [Ho2 Ho1].
     cbn [ir_call_tree_wf] in Hwf_ir; destruct Hwf_ir as [_ [Hwf_t Hwf_f]].
     cbn [ir_tree_denotes] in Hden; destruct Hden as [[_ Hub] | [b [Hev Hb]]].
@@ -5533,13 +6064,15 @@ Proof.
     induction Hmt as [p0 ret_e v0 Hev_mc | p0 cond0 mt mf b tr_v v0 Hev_c Hmt_r IHm
                      | p0 cn_m aes rw_m rext rv_m ohi cont avals a0r vc tr_v v0 Hfa_mc Hrv_m Hvc_eq Hmt_cont _];
       intros obls Hobls Hco.
-    + unfold collect_call_obls in Hco; rewrite collect_call_obls_acc_ict_call_ret in Hco; rewrite app_nil_r in Hco; inversion Hco; subst obls.
-      exfalso; exact (imposs_obl_absurd penv dummy_freeze_oracle None false p0 (fun C => ltac:(discriminate C)) Hpath Hobls).
+    + unfold collect_call_obls in Hco; rewrite collect_call_obls_acc_ict_call_ret in Hco;
+        destruct p0; [discriminate Hco |].
+      rewrite app_nil_r in Hco; inversion Hco; subst obls.
+      exfalso; exact (imposs_obl_absurd penv dummy_freeze_oracle None false _ (fun C => ltac:(discriminate C)) Hpath Hobls).
     + rewrite collect_call_obls_mct_branch in Hco by ltac:(discriminate).
       destruct (collect_call_obls arch callees ret_w ((true, cond0) :: p0) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mt)
-        as [o1 |] eqn:Eo1; [| discriminate Hco].
+        as [| o1] eqn:Eo1; [discriminate Hco |].
       destruct (collect_call_obls arch callees ret_w ((false, cond0) :: p0) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mf)
-        as [o2 |] eqn:Eo2; [| discriminate Hco].
+        as [| o2] eqn:Eo2; [discriminate Hco |].
       inversion Hco; subst obls; rewrite Forall_app in Hobls; destruct Hobls as [Ho2 Ho1].
       assert (Hpath' : forall b0 c0, In (b0, c0) ((b, cond0) :: p0) ->
         eval_closed_cert_expr penv dummy_freeze_oracle c0 =
@@ -5553,10 +6086,10 @@ Proof.
         destruct (find_callee_spec callees cn_ir) as [sp |] eqn:Efc; [| discriminate Hco].
         destruct (Pos.eqb rw_ir (mcs_ret_width sp)) eqn:Ewrw; [apply Pos.eqb_eq in Ewrw | discriminate Hco].
         unfold build_call_arg_obls in *;
-          destruct (build_call_arg_obls_acc arch p0 (mcs_args sp) args_ir aes []) as [aobls |] eqn:Ebao; [| discriminate Hco].
+          destruct (build_call_arg_obls_acc cn_ir 0%nat arch p0 (mcs_args sp) args_ir aes []) as [| aobls] eqn:Ebao; [discriminate Hco |].
         rewrite collect_call_obls_acc_shift in Hco; unfold collect_call_obls in Hco.
-        destruct (collect_call_obls_acc arch callees ret_w p0 c_ir cont []) as [cobls |] eqn:Eco;
-          cbn [option_map] in Hco; [| discriminate Hco].
+        destruct (collect_call_obls_acc arch callees ret_w p0 c_ir cont []) as [| cobls] eqn:Eco;
+          cbn [mcc_sum_map] in Hco; [discriminate Hco |].
         inversion Hco; subst obls; rewrite Forall_app in Hobls; destruct Hobls as [Hcobls Haobls].
         pose proof (find_callee_spec_in _ _ _ Efc) as [Hin_sp Hstrip].
         destruct (Hcs sp Hin_sp) as [Hvs_sp Hnd_sp].
@@ -5566,7 +6099,7 @@ Proof.
         -- left; exists []; split; [constructor | exact (Hub default_draw_strat)].
         -- assert (Herv : penv rv_ir = Some (DVALUE_Base (@DVALUE_I Pa rw_ir vc))) by exact Hrv_m.
            destruct (Hk vc Herv) as (env1 & t1 & Hret1 & Hub1 & Hden1).
-           destruct (@build_call_arg_obls_list_matches Pa arch penv p0 (mcs_args sp) args_ir aes aobls avals dvs
+           destruct (@build_call_arg_obls_list_matches Pa cn_ir arch penv p0 (mcs_args sp) args_ir aes aobls avals dvs
                        Hpath Haobls Ebao Hvs_f Hnd_sp Hfa_ir Hfa_mc)
              as (Hlen_v & Hlen_a & Hitem).
            assert (Hrel_hd :
@@ -5583,65 +6116,66 @@ Proof.
               ** exact (Hub1 default_draw_strat tr_pre Hub_t).
            ++ right; exists ((cn_ir, dvs, DVALUE_Base (@DVALUE_I Pa rw_ir vc)) :: tr_t), env_out, dv_ir;
                 repeat split; [constructor; [exact Hrel_hd | exact Hfa_t] | exact (Hret1 default_draw_strat tr_t default_draw_strat env_out dv_ir Hret_t) | exact Href_t].
-      * rewrite app_nil_r in Hco; inversion Hco; subst obls.
-        exfalso; exact (imposs_obl_absurd penv dummy_freeze_oracle None false p0 (fun C => ltac:(discriminate C)) Hpath Hobls).
+      * destruct p0; [discriminate Hco |].
+        rewrite app_nil_r in Hco; inversion Hco; subst obls.
+        exfalso; exact (imposs_obl_absurd penv dummy_freeze_oracle None false _ (fun C => ltac:(discriminate C)) Hpath Hobls).
 Qed.
 
 (** *** 5.5 Ghost Call-Variable Filling & End-to-End Call Validator Soundness *)
 
 Lemma reify_ir_code_calls_vars_bang :
-  forall callees c cid lmap k_end t,
-    (forall cid' lmap' t', k_end cid' lmap' = Some t' ->
+  forall cur_bid callees c cid lmap k_end t,
+    (forall cid' lmap' t', k_end cid' lmap' = inr t' ->
        forall nm w, In (nm, w) (collect_ir_call_vars t') -> mc_starts_with_bang nm = true) ->
-    reify_ir_code_calls callees c cid lmap k_end = Some t ->
+    reify_ir_code_calls cur_bid callees c cid lmap k_end = inr t ->
     forall nm w, In (nm, w) (collect_ir_call_vars t) -> mc_starts_with_bang nm = true.
 Proof.
-  intros callees c; induction c as [| [[iid ins] md] rest IH];
+  intros cur_bid callees c; induction c as [| [[iid ins] md] rest IH];
     intros cid lmap k_end t Hk Hrc nm w Hin; cbn [reify_ir_code_calls] in Hrc.
   - exact (Hk cid lmap t Hrc nm w Hin).
   - destruct iid as [id | vid];
       [| destruct ins; try discriminate Hrc; exact (IH cid lmap k_end t Hk Hrc nm w Hin)].
     destruct ins; try discriminate Hrc.
     + destruct (reify_pure_exp lmap None op) as [[? ?] |]; [| discriminate Hrc].
-      destruct (ub_free_expr _ && negb (expr_has_freeze _)); [| discriminate Hrc].
+      destruct (ub_free_expr _); cbn [negb] in Hrc; [| discriminate Hrc].
+      destruct (expr_has_freeze _); [discriminate Hrc |].
       exact (IH cid _ k_end t Hk Hrc nm w Hin).
     + destruct fn as [dt_ret fn_e].
       destruct (match_pure_int_intrinsic_call (INSTR_Call (dt_ret, fn_e) args anns obs)) as [[op wi a0 a1 | wi a0 fl] |] eqn:Epic.
-      * destruct (match metadata_range md with None => true | Some _ => false end) eqn:Emr; [| discriminate Hrc].
+      * destruct (match metadata_range md with None => true | Some _ => false end) eqn:Emr; cbn [negb] in Hrc; [| discriminate Hrc].
         destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I wi))) a0) as [[? ?] |] eqn:Ea0; [| discriminate Hrc].
         destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I wi))) a1) as [[? ?] |] eqn:Ea1; [| discriminate Hrc].
-        destruct (ub_free_expr _ && ub_free_expr _ && negb (expr_has_freeze _) && negb (expr_has_freeze _)) eqn:Euf;
-          [| discriminate Hrc].
+        destruct (ub_free_expr _ && ub_free_expr _) eqn:Euf; cbn [negb] in Hrc; [| discriminate Hrc].
+        destruct (expr_has_freeze _ || expr_has_freeze _); [discriminate Hrc |].
         exact (IH cid _ k_end t Hk Hrc nm w Hin).
-      * destruct (match metadata_range md with None => true | Some _ => false end) eqn:Emr; [| discriminate Hrc].
+      * destruct (match metadata_range md with None => true | Some _ => false end) eqn:Emr; cbn [negb] in Hrc; [| discriminate Hrc].
         destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I wi))) a0) as [[? ?] |] eqn:Ea0; [| discriminate Hrc].
-        destruct (ub_free_expr _ && negb (expr_has_freeze _)) eqn:Euf; [| discriminate Hrc].
+        destruct (ub_free_expr _) eqn:Euf; cbn [negb] in Hrc; [| discriminate Hrc].
+        destruct (expr_has_freeze _); [discriminate Hrc |].
         exact (IH cid _ k_end t Hk Hrc nm w Hin).
-      * destruct dt_ret; try discriminate Hrc;
-          match goal with d : dtyp_base |- _ => destruct d; try discriminate Hrc end;
-          match goal with rw : positive |- _ =>
-            destruct fn_e; try discriminate Hrc; destruct id0 as [[cname | | ] | ?]; try discriminate Hrc;
-            destruct obs; try discriminate Hrc;
-            destruct (match @intrinsic_exp dtyp (EXP_Ident (ID_Global (Name cname))) with None => true | Some _ => false end &&
-                      cconv_eqb (anns_cconv anns) CC_Ccc &&
-                      match metadata_range md with None => true | Some _ => false end &&
-                      fattrs_call_ok (ann_fun_attributes anns) &&
-                      pattrs_no_value_poison (ann_ret_attributes anns) &&
-                      is_supported_bit_width rw) eqn:Eg; [| discriminate Hrc];
-            destruct (find_callee_spec callees cname) as [sp |] eqn:Efc; [| discriminate Hrc];
-            destruct (Pos.eqb rw (mcs_ret_width sp)) eqn:Erw; [| discriminate Hrc];
-            destruct (reify_ir_call_args lmap (mcs_args sp) args) as [aes |] eqn:Eaes; [| discriminate Hrc];
-            destruct (reify_ir_code_calls callees rest (S cid) _ k_end) as [cont |] eqn:Ect; [| discriminate Hrc];
-            inversion Hrc; subst t; clear Hrc;
-            unfold collect_ir_call_vars in Hin; cbn [collect_ir_call_vars_acc] in Hin;
-            rewrite collect_ir_call_vars_acc_shift in Hin; apply in_app_iff in Hin as [Hr | [Heq | []]];
-            [exact (IH _ _ _ _ Hk Ect nm w Hr) | inversion Heq; subst; apply mc_call_ret_var_bang]
-          end.
+      * destruct dt_ret as [bdt | |]; [destruct bdt as [rw | | | | | | | | | |] | |];
+          destruct fn_e;
+          try match goal with iv : ident |- _ => destruct iv as [[cname | | ] | ?] end;
+          destruct obs; try discriminate Hrc.
+        destruct (match @intrinsic_exp dtyp (EXP_Ident (ID_Global (Name cname))) with None => true | Some _ => false end); cbn [negb] in Hrc; [| discriminate Hrc].
+        destruct (cconv_eqb (anns_cconv anns) CC_Ccc); cbn [negb] in Hrc; [| discriminate Hrc].
+        destruct (match metadata_range md with None => true | Some _ => false end); cbn [negb] in Hrc; [| discriminate Hrc].
+        destruct (fattrs_call_ok (ann_fun_attributes anns)); cbn [negb] in Hrc; [| discriminate Hrc].
+        destruct (pattrs_no_value_poison (ann_ret_attributes anns)); cbn [negb] in Hrc; [| discriminate Hrc].
+        destruct (is_supported_bit_width rw); cbn [negb] in Hrc; [| discriminate Hrc].
+        destruct (find_callee_spec callees cname) as [sp |] eqn:Efc; [| discriminate Hrc].
+        destruct (Pos.eqb rw (mcs_ret_width sp)) eqn:Erw; [| discriminate Hrc].
+        destruct (reify_ir_call_args cname 0%nat lmap (mcs_args sp) args) as [| aes] eqn:Eaes; [discriminate Hrc |].
+        destruct (reify_ir_code_calls cur_bid callees rest (S cid) _ k_end) as [| cont] eqn:Ect; [discriminate Hrc |].
+        inversion Hrc; subst t; clear Hrc;
+        unfold collect_ir_call_vars in Hin; cbn [collect_ir_call_vars_acc] in Hin;
+        rewrite collect_ir_call_vars_acc_shift in Hin; apply in_app_iff in Hin as [Hr | [Heq | []]];
+        [exact (IH _ _ _ _ Hk Ect nm w Hr) | inversion Heq; subst; apply mc_call_ret_var_bang].
 Qed.
 
 Lemma reify_ir_call_at_vars_bang :
   forall fuel callees bmap ret_w visited is_entry bid_from cur_bid cid lmap t,
-    reify_ir_call_at fuel callees bmap ret_w visited is_entry bid_from cur_bid cid lmap = Some t ->
+    reify_ir_call_at fuel callees bmap ret_w visited is_entry bid_from cur_bid cid lmap = inr t ->
     forall nm w, In (nm, w) (collect_ir_call_vars t) -> mc_starts_with_bang nm = true.
 Proof.
   intro fuel; induction fuel as [| fuel' IH];
@@ -5649,7 +6183,9 @@ Proof.
     cbn [reify_ir_call_at] in Hrec;
     destruct (raw_id_in_list cur_bid visited); try discriminate Hrec.
   destruct (RM.find cur_bid bmap) as [b |]; [| discriminate Hrec].
-  destruct (if is_entry then _ else _); [| discriminate Hrec].
+  match type of Hrec with
+  | match ?x with inl _ => _ | inr _ => _ end = _ => destruct x as [| lmap1]; [discriminate Hrec |]
+  end.
   eapply reify_ir_code_calls_vars_bang; [| exact Hrec].
   intros cid' lmap' t' Ht' nm w Hin.
   destruct (fst (blk_term b)) as [_ term]; destruct term; try discriminate Ht';
@@ -5657,13 +6193,15 @@ Proof.
   - match goal with x : texp dtyp |- _ => destruct x as [[[rw | | | | | | | | | |] | |] op] end; try discriminate Ht'.
     destruct (Pos.eqb rw ret_w); [| discriminate Ht'].
     destruct (reify_pure_exp lmap' _ op) as [[? ret_e] |]; [| discriminate Ht'].
-    destruct (ub_free_expr ret_e && negb (expr_has_freeze ret_e)); inversion Ht'; subst t'; contradiction Hin.
+    destruct (ub_free_expr ret_e); cbn [negb] in Ht'; [| discriminate Ht'].
+    destruct (expr_has_freeze ret_e); inversion Ht'; subst t'; contradiction Hin.
   - match goal with x : texp dtyp |- _ => destruct x as [[[w0 | | | | | | | | | |] | |] e_cond] end; try discriminate Ht'.
     destruct w0; try discriminate Ht'.
     destruct (reify_pure_exp lmap' _ e_cond) as [[? cond_e] |]; [| discriminate Ht'].
-    destruct (ub_free_expr cond_e && negb (expr_has_freeze cond_e)); [| discriminate Ht'].
-    destruct (reify_ir_call_at fuel' callees bmap ret_w (cur_bid :: visited) false cur_bid br1 cid' lmap') as [dt1 |] eqn:Edt; [| discriminate Ht'].
-    destruct (reify_ir_call_at fuel' callees bmap ret_w (cur_bid :: visited) false cur_bid br2 cid' lmap') as [df1 |] eqn:Edf; [| discriminate Ht'].
+    destruct (ub_free_expr cond_e); cbn [negb] in Ht'; [| discriminate Ht'].
+    destruct (expr_has_freeze cond_e); [discriminate Ht' |].
+    destruct (reify_ir_call_at fuel' callees bmap ret_w (cur_bid :: visited) false cur_bid br1 cid' lmap') as [| dt1] eqn:Edt; [discriminate Ht' |].
+    destruct (reify_ir_call_at fuel' callees bmap ret_w (cur_bid :: visited) false cur_bid br2 cid' lmap') as [| df1] eqn:Edf; [discriminate Ht' |].
     inversion Ht'; subst t';
       unfold collect_ir_call_vars in Hin; cbn [collect_ir_call_vars_acc] in Hin;
       rewrite collect_ir_call_vars_acc_shift in Hin; apply in_app_iff in Hin as [Hin | Hin];
@@ -5673,7 +6211,7 @@ Qed.
 
 Lemma summarize_rv64_call_at_vars_bang :
   forall fuel im callees visited pc cid sp_off vrf astk ret_w t,
-    summarize_rv64_call_at fuel im callees visited pc cid sp_off vrf astk ret_w = Some t ->
+    summarize_rv64_call_at fuel im callees visited pc cid sp_off vrf astk ret_w = inr t ->
     forall nm w, In (nm, w) (collect_mc_call_vars t) -> mc_starts_with_bang nm = true.
 Proof.
   intro fuel; induction fuel as [| fuel' IH];
@@ -5685,19 +6223,19 @@ Proof.
   - destruct (rv_sym_step_one (mk_decoded_rv (drci_off dec) (drci_len dec) i) pc sp_off vrf astk ret_w)
       as [[npc sp' vrf' astk' | cond tpc npc | ret_e] |] eqn:Est; try discriminate Hsum.
     + exact (IH _ _ _ _ _ _ _ _ _ _ Hsum nm w Hin).
-    + destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) tpc cid sp_off vrf astk ret_w) as [dt |] eqn:Hdt; [| discriminate Hsum].
-      destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) npc cid sp_off vrf astk ret_w) as [df |] eqn:Hdf; [| discriminate Hsum].
+    + destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) tpc cid sp_off vrf astk ret_w) as [| dt] eqn:Hdt; [discriminate Hsum |].
+      destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) npc cid sp_off vrf astk ret_w) as [| df] eqn:Hdf; [discriminate Hsum |].
       inversion Hsum; subst t;
         unfold collect_mc_call_vars in Hin; cbn [collect_mc_call_vars_acc] in Hin;
         rewrite collect_mc_call_vars_acc_shift in Hin; apply in_app_iff in Hin as [H | H];
         [exact (IH _ _ _ _ _ _ _ _ _ _ Hdf nm w H) | exact (IH _ _ _ _ _ _ _ _ _ _ Hdt nm w H)].
     + inversion Hsum; subst t; contradiction Hin.
-  - destruct (mc_sp_aligned16 sp_off); [| discriminate Hsum].
+  - destruct (mc_sp_aligned16 sp_off); cbn [negb] in Hsum; [| discriminate Hsum].
     destruct (find_callee_spec callees cname) as [c |]; [| discriminate Hsum].
-    destruct (rv_sym_read_call_args_from 10%N (List.length (mcs_args c)) vrf); [| discriminate Hsum].
+    destruct (rv_sym_read_call_args_from pc cname 10%N (List.length (mcs_args c)) vrf); [discriminate Hsum |].
     destruct (mc_post_call_ret_expr cid (mcs_ret_width c) (mcs_ret_ext c)) as [ret_e64 opt_hi] eqn:Epc.
     destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) (pc + drci_len dec)%N (S cid) sp_off (rv_post_call_vrf cid c vrf) astk ret_w)
-      as [cont |] eqn:Ect; [| discriminate Hsum].
+      as [| cont] eqn:Ect; [discriminate Hsum |].
     inversion Hsum; subst t;
       unfold collect_mc_call_vars in Hin; cbn [collect_mc_call_vars_acc] in Hin;
       rewrite collect_mc_call_vars_acc_shift in Hin; apply in_app_iff in Hin as [Hr | Hh];
@@ -5712,7 +6250,7 @@ Qed.
 
 Lemma summarize_a64_call_at_vars_bang :
   forall fuel im callees visited pc cid sp_off vrf astk sfl fl_def ret_w t,
-    summarize_a64_call_at fuel im callees visited pc cid sp_off vrf astk sfl fl_def ret_w = Some t ->
+    summarize_a64_call_at fuel im callees visited pc cid sp_off vrf astk sfl fl_def ret_w = inr t ->
     forall nm w, In (nm, w) (collect_mc_call_vars t) -> mc_starts_with_bang nm = true.
 Proof.
   intro fuel; induction fuel as [| fuel' IH];
@@ -5724,19 +6262,19 @@ Proof.
   - destruct (a64_sym_step_one (mk_decoded_a64_inst (daci_off dec) i) pc sp_off vrf astk sfl fl_def ret_w)
       as [[npc sp' vrf' astk' sfl' fl_def' | cond tpc npc fl_def' | ret_e] |] eqn:Est; try discriminate Hsum.
     + exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Hsum nm w Hin).
-    + destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited) tpc cid sp_off vrf astk sfl fl_def' ret_w) as [dt |] eqn:Hdt; [| discriminate Hsum].
-      destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited) npc cid sp_off vrf astk sfl fl_def' ret_w) as [df |] eqn:Hdf; [| discriminate Hsum].
+    + destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited) tpc cid sp_off vrf astk sfl fl_def' ret_w) as [| dt] eqn:Hdt; [discriminate Hsum |].
+      destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited) npc cid sp_off vrf astk sfl fl_def' ret_w) as [| df] eqn:Hdf; [discriminate Hsum |].
       inversion Hsum; subst t;
         unfold collect_mc_call_vars in Hin; cbn [collect_mc_call_vars_acc] in Hin;
         rewrite collect_mc_call_vars_acc_shift in Hin; apply in_app_iff in Hin as [H | H];
         [exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Hdf nm w H) | exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Hdt nm w H)].
     + inversion Hsum; subst t; contradiction Hin.
-  - destruct (mc_sp_aligned16 sp_off); [| discriminate Hsum].
+  - destruct (mc_sp_aligned16 sp_off); cbn [negb] in Hsum; [| discriminate Hsum].
     destruct (find_callee_spec callees cname) as [c |]; [| discriminate Hsum].
-    destruct (a64_sym_read_call_args_from 0%N (List.length (mcs_args c)) vrf); [| discriminate Hsum].
+    destruct (a64_sym_read_call_args_from pc cname 0%N (List.length (mcs_args c)) vrf); [discriminate Hsum |].
     destruct (mc_post_call_ret_expr cid (mcs_ret_width c) (mcs_ret_ext c)) as [ret_e64 opt_hi] eqn:Epc.
     destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited) (pc + 4%N)%N (S cid) sp_off (a64_post_call_vrf cid c vrf) astk sfl false ret_w)
-      as [cont |] eqn:Ect; [| discriminate Hsum].
+      as [| cont] eqn:Ect; [discriminate Hsum |].
     inversion Hsum; subst t;
       unfold collect_mc_call_vars in Hin; cbn [collect_mc_call_vars_acc] in Hin;
       rewrite collect_mc_call_vars_acc_shift in Hin; apply in_app_iff in Hin as [Hr | Hh];
@@ -5906,9 +6444,9 @@ Proof.
                               forallb rv_valid_arg_spec (mcs_args c) &&
                               mc_no_dup_strings (List.map ras_name (mcs_args c))) callees) eqn:Hcal_b;
     cbn [negb] in Hval; [| discriminate Hval].
-  destruct (reify_ir_call_tree ir_cfg arg_specs callees ret_w) as [t_ir |] eqn:Eir; [| discriminate Hval].
-  destruct (summarize_rv64_call_tree insts callees arg_specs ret_w) as [t_mc |] eqn:Emc; [| discriminate Hval].
-  destruct (collect_call_obls EA_Riscv64 callees ret_w [] t_ir t_mc) as [obls |] eqn:Eco; [| discriminate Hval].
+  destruct (reify_ir_call_tree ir_cfg arg_specs callees ret_w) as [| t_ir] eqn:Eir; [discriminate Hval |].
+  destruct (summarize_rv64_call_tree insts callees arg_specs ret_w) as [| t_mc] eqn:Emc; [discriminate Hval |].
+  destruct (collect_call_obls EA_Riscv64 callees ret_w [] t_ir t_mc) as [| obls] eqn:Eco; [discriminate Hval |].
   set (raw_cvars := collect_ir_call_vars_acc t_ir (collect_mc_call_vars_acc t_mc [])) in *.
   set (call_vars := dedup_typed_vars raw_cvars) in *.
   set (all_vars := dedup_typed_vars_acc allowed0 call_vars) in *.
@@ -5917,8 +6455,8 @@ Proof.
   apply andb_true_iff in Evwc as [Evwc_al Evwc_cv].
   destruct (forallb (obl_wf_exprs all_vars) obls) eqn:Ewf_o; cbn [negb] in Hval; [| discriminate Hval].
   cbn [mccb_ctx mccb_all_vars mccb_obls] in Hval.
-  destruct (check_mc_loop_obls (mc_init_ctx ++ List.map (fun '(nm, w) => UBA_ParamNoUndef nm w) call_vars)
-              all_vars None obls opt_pf) eqn:Hchk; [| discriminate Hval].
+  destruct (check_mc_loop_obls "mc-call" (mc_init_ctx ++ List.map (fun '(nm, w) => UBA_ParamNoUndef nm w) call_vars)
+              all_vars None obls opt_pf) as [| []] eqn:Hchk; [discriminate Hval |].
   clear Hval.
   assert (Hnb_al : forall nm w, In (nm, w) allowed0 -> mc_starts_with_bang nm = false).
   { intros nm w Hin; rewrite forallb_forall in Hnb_al_b; pose proof (Hnb_al_b (nm, w) Hin) as Hn; apply negb_true_iff in Hn; exact Hn. }
@@ -5971,7 +6509,7 @@ Proof.
   set (penv_full := overlay_penv (new_binds ++ extra_binds) penv0) in *.
   assert (Hctx_all : ub_ctx_holds penv_full dummy_freeze_oracle (mc_init_ctx ++ List.map (fun '(nm, w) => UBA_ParamNoUndef nm w) call_vars))
     by (apply Forall_app; split; [exact (Hctx0 penv_full Hpres_nb) | exact Hctx_call]).
-  pose proof (check_mc_loop_obls_sound _ _ _ _ _ penv_full dummy_freeze_oracle false Hchk Hwf_full Hctx_all) as Hobls_ok.
+  pose proof (check_mc_loop_obls_sound _ _ _ _ _ _ penv_full dummy_freeze_oracle false Hchk Hwf_full Hctx_all) as Hobls_ok.
   assert (Hpenv_ir_eq : forall nm, In nm (List.map cert_reg_name (args ir_cfg)) ->
     penv_full nm = build_param_env (List.map cert_reg_name (args ir_cfg)) vs nm).
   { intros nm Hin; rewrite (Hpres_nb nm), (Hpenv_eq nm Hin); [reflexivity |].
@@ -6081,9 +6619,9 @@ Proof.
                               forallb rv_valid_arg_spec (mcs_args c) &&
                               mc_no_dup_strings (List.map ras_name (mcs_args c))) callees) eqn:Hcal_b;
     cbn [negb] in Hval; [| discriminate Hval].
-  destruct (reify_ir_call_tree ir_cfg arg_specs callees ret_w) as [t_ir |] eqn:Eir; [| discriminate Hval].
-  destruct (summarize_a64_call_tree insts callees arg_specs ret_w) as [t_mc |] eqn:Emc; [| discriminate Hval].
-  destruct (collect_call_obls EA_AArch64 callees ret_w [] t_ir t_mc) as [obls |] eqn:Eco; [| discriminate Hval].
+  destruct (reify_ir_call_tree ir_cfg arg_specs callees ret_w) as [| t_ir] eqn:Eir; [discriminate Hval |].
+  destruct (summarize_a64_call_tree insts callees arg_specs ret_w) as [| t_mc] eqn:Emc; [discriminate Hval |].
+  destruct (collect_call_obls EA_AArch64 callees ret_w [] t_ir t_mc) as [| obls] eqn:Eco; [discriminate Hval |].
   set (raw_cvars := collect_ir_call_vars_acc t_ir (collect_mc_call_vars_acc t_mc [])) in *.
   set (call_vars := dedup_typed_vars raw_cvars) in *.
   set (all_vars := dedup_typed_vars_acc allowed0 call_vars) in *.
@@ -6092,8 +6630,8 @@ Proof.
   apply andb_true_iff in Evwc as [Evwc_al Evwc_cv].
   destruct (forallb (obl_wf_exprs all_vars) obls) eqn:Ewf_o; cbn [negb] in Hval; [| discriminate Hval].
   cbn [mccb_ctx mccb_all_vars mccb_obls] in Hval.
-  destruct (check_mc_loop_obls (mc_init_ctx ++ List.map (fun '(nm, w) => UBA_ParamNoUndef nm w) call_vars)
-              all_vars None obls opt_pf) eqn:Hchk; [| discriminate Hval].
+  destruct (check_mc_loop_obls "mc-call" (mc_init_ctx ++ List.map (fun '(nm, w) => UBA_ParamNoUndef nm w) call_vars)
+              all_vars None obls opt_pf) as [| []] eqn:Hchk; [discriminate Hval |].
   clear Hval.
   assert (Hnb_al : forall nm w, In (nm, w) allowed0 -> mc_starts_with_bang nm = false).
   { intros nm w Hin; rewrite forallb_forall in Hnb_al_b; pose proof (Hnb_al_b (nm, w) Hin) as Hn; apply negb_true_iff in Hn; exact Hn. }
@@ -6162,7 +6700,7 @@ Proof.
   set (penv_full := overlay_penv (new_binds ++ extra_binds) penv0) in *.
   assert (Hctx_all : ub_ctx_holds penv_full dummy_freeze_oracle (mc_init_ctx ++ List.map (fun '(nm, w) => UBA_ParamNoUndef nm w) call_vars))
     by (apply Forall_app; split; [exact (Hctx0 penv_full Hpres_nb) | exact Hctx_call]).
-  pose proof (check_mc_loop_obls_sound _ _ _ _ _ penv_full dummy_freeze_oracle false Hchk Hwf_full Hctx_all) as Hobls_ok.
+  pose proof (check_mc_loop_obls_sound _ _ _ _ _ _ penv_full dummy_freeze_oracle false Hchk Hwf_full Hctx_all) as Hobls_ok.
   assert (Hpenv_ir_eq : forall nm, In nm (List.map cert_reg_name (args ir_cfg)) ->
     penv_full nm = build_param_env (List.map cert_reg_name (args ir_cfg)) vs nm).
   { intros nm Hin; rewrite (Hpres_nb nm), (Hpenv_eq nm Hin); [reflexivity |].

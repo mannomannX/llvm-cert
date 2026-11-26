@@ -45,6 +45,9 @@ From Vellvm Require Import
   Semantics.Operations.Conversion
   Semantics.Operations.Select.
 
+From CertValidator.common Require Import
+  Diag.
+
 From CertValidator Require Import
   CertFormat
   AigLrat
@@ -7221,58 +7224,67 @@ Proof.
 Qed.
 
 Fixpoint summarize_a64_seg_at
-  (fuel : nat) (im : pos_trie decoded_a64_inst) (cut_pc : N)
+  (seg_name : string) (fuel : nat) (im : pos_trie decoded_a64_inst) (cut_pc : N)
   (req_step : bool) (visited : pos_trie unit)
   (pc : N) (sp_off : Z) (vrf : a64_val_regs) (astk : mc_sym_stack)
   (sfl : a64_sym_flags) (fl_def : bool) (ret_w : positive)
-  {struct fuel} : option a64_seg_tree :=
+  {struct fuel} : string + a64_seg_tree :=
+  let loc (_ : unit) : string :=
+    ("aarch64 " ++ seg_name ++ " segment at pc=" ++ diag_N_hex pc ++
+     " cut=" ++ diag_N_hex cut_pc ++ " sp-off=" ++ diag_Z_dec sp_off)%string
+  in
   if negb req_step && N.eqb pc cut_pc then
-    Some (AST_Cut sp_off vrf astk)
-  else if pt_has_n pc visited then None
+    inr (AST_Cut sp_off vrf astk)
+  else if pt_has_n pc visited then
+    inl (diag "mc-loop-mc" ("cycle detected in " ++ loc tt))
   else
     match fuel with
-    | O => None
+    | O => inl (diag "mc-loop-mc" ("fuel exhausted summarizing " ++ loc tt))
     | S fuel' =>
         match pt_get (N.succ_pos pc) im with
-        | None => None
+        | None => inl (diag "mc-loop-mc" ("execution escaped function slice in " ++ loc tt))
         | Some dec =>
             let visited' := pt_add_n pc visited in
             match a64_sym_step_one dec pc sp_off vrf astk sfl fl_def ret_w with
-            | None => None
+            | None =>
+                inl (diag "mc-loop-mc" ("unsupported instruction or invalid frame access in " ++ loc tt))
             | Some (ASSR_Next next_pc sp_off' vrf' astk' sfl' fl_def') =>
-                summarize_a64_seg_at fuel' im cut_pc false visited' next_pc sp_off' vrf' astk' sfl' fl_def' ret_w
+                summarize_a64_seg_at seg_name fuel' im cut_pc false visited' next_pc sp_off' vrf' astk' sfl' fl_def' ret_w
             | Some (ASSR_Branch cond tgt_pc next_pc fl_def') =>
-                match summarize_a64_seg_at fuel' im cut_pc false visited' tgt_pc sp_off vrf astk sfl fl_def' ret_w,
-                      summarize_a64_seg_at fuel' im cut_pc false visited' next_pc sp_off vrf astk sfl fl_def' ret_w with
-                | Some dt, Some df => Some (AST_Branch cond dt df)
-                | _, _ => None
+                match summarize_a64_seg_at seg_name fuel' im cut_pc false visited' tgt_pc sp_off vrf astk sfl fl_def' ret_w with
+                | inl err => inl err
+                | inr dt =>
+                    match summarize_a64_seg_at seg_name fuel' im cut_pc false visited' next_pc sp_off vrf astk sfl fl_def' ret_w with
+                    | inl err => inl err
+                    | inr df => inr (AST_Branch cond dt df)
+                    end
                 end
-            | Some (ASSR_Ret ret_e) => Some (AST_Ret ret_e)
+            | Some (ASSR_Ret ret_e) => inr (AST_Ret ret_e)
             end
         end
     end.
 
 Definition summarize_a64_seg
-  (fuel : nat) (insts : list decoded_a64_inst) (cut_pc : N)
+  (seg_name : string) (fuel : nat) (insts : list decoded_a64_inst) (cut_pc : N)
   (req_step : bool) (visited : list N)
   (pc : N) (sp_off : Z) (vrf : a64_val_regs) (astk : mc_sym_stack)
   (sfl : a64_sym_flags) (fl_def : bool) (ret_w : positive)
-  : option a64_seg_tree :=
-  summarize_a64_seg_at fuel (pt_of_list_first dai_off insts) cut_pc req_step
+  : string + a64_seg_tree :=
+  summarize_a64_seg_at seg_name fuel (pt_of_list_first dai_off insts) cut_pc req_step
     (pt_of_visited visited) pc sp_off vrf astk sfl fl_def ret_w.
 
 Theorem summarize_a64_seg_at_wf :
-  forall fuel insts im cut_pc req_step visited pc allowed sp_off vrf astk sfl fl_def ret_w seg,
+  forall seg_name fuel insts im cut_pc req_step visited pc allowed sp_off vrf astk sfl fl_def ret_w seg,
     (forall q, pt_get (N.succ_pos q) im = lookup_a64_inst insts q) ->
     rv_supported_arg_width ret_w = true ->
     (- mc_frame_cap <= sp_off <= 0)%Z ->
     wf_a64_val_regs allowed vrf ->
     mc_sym_stack_wf allowed sp_off astk ->
     (fl_def = true -> wf_sym_flags allowed sfl) ->
-    summarize_a64_seg_at fuel im cut_pc req_step visited pc sp_off vrf astk sfl fl_def ret_w = Some seg ->
+    summarize_a64_seg_at seg_name fuel im cut_pc req_step visited pc sp_off vrf astk sfl fl_def ret_w = inr seg ->
     a64_seg_wf allowed ret_w seg.
 Proof.
-  intros fuel insts im cut_pc req_step visited pc allowed sp_off vrf astk sfl fl_def ret_w seg Him.
+  intros seg_name fuel insts im cut_pc req_step visited pc allowed sp_off vrf astk sfl fl_def ret_w seg Him.
   revert cut_pc req_step visited pc allowed sp_off vrf astk sfl fl_def ret_w seg.
   induction fuel as [| fuel' IH];
     intros cut_pc req_step visited pc allowed sp_off vrf astk sfl fl_def ret_w seg
@@ -7289,8 +7301,8 @@ Proof.
     destruct res.
     + destruct Hres as (Hrng' & Hwf' & Hstk' & Hfl').
       exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hrng' Hwf' Hstk' Hfl' Hsum).
-    + destruct (summarize_a64_seg_at fuel' im cut_pc false (pt_add_n pc visited) tgt_pc sp_off vrf astk sfl fl_def' ret_w) as [dt |] eqn:Edt; [| discriminate Hsum].
-      destruct (summarize_a64_seg_at fuel' im cut_pc false (pt_add_n pc visited) next_pc sp_off vrf astk sfl fl_def' ret_w) as [df |] eqn:Edf; [| discriminate Hsum].
+    + destruct (summarize_a64_seg_at seg_name fuel' im cut_pc false (pt_add_n pc visited) tgt_pc sp_off vrf astk sfl fl_def' ret_w) as [| dt] eqn:Edt; [discriminate Hsum |].
+      destruct (summarize_a64_seg_at seg_name fuel' im cut_pc false (pt_add_n pc visited) next_pc sp_off vrf astk sfl fl_def' ret_w) as [| df] eqn:Edf; [discriminate Hsum |].
       destruct Hres as [Hres Hfd]; inversion Hsum; subst; split;
         [exact Hres
         | split; [exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hrng Hwf Hstk (fun Hf => Hfl (Hfd Hf)) Edt)
@@ -7299,16 +7311,16 @@ Proof.
 Qed.
 
 Theorem summarize_a64_seg_wf :
-  forall fuel insts cut_pc req_step visited pc allowed sp_off vrf astk sfl fl_def ret_w seg,
+  forall seg_name fuel insts cut_pc req_step visited pc allowed sp_off vrf astk sfl fl_def ret_w seg,
     rv_supported_arg_width ret_w = true ->
     (- mc_frame_cap <= sp_off <= 0)%Z ->
     wf_a64_val_regs allowed vrf ->
     mc_sym_stack_wf allowed sp_off astk ->
     (fl_def = true -> wf_sym_flags allowed sfl) ->
-    summarize_a64_seg fuel insts cut_pc req_step visited pc sp_off vrf astk sfl fl_def ret_w = Some seg ->
+    summarize_a64_seg seg_name fuel insts cut_pc req_step visited pc sp_off vrf astk sfl fl_def ret_w = inr seg ->
     a64_seg_wf allowed ret_w seg.
 Proof.
-  intros fuel insts cut_pc req_step visited pc allowed sp_off vrf astk sfl fl_def ret_w seg
+  intros seg_name fuel insts cut_pc req_step visited pc allowed sp_off vrf astk sfl fl_def ret_w seg
          Hrw Hrng Hwf Hstk Hfl Hsum.
   eapply summarize_a64_seg_at_wf with (insts := insts);
     [exact (pt_of_list_first_lookup_a64 insts)
@@ -7364,7 +7376,7 @@ Proof.
 Qed.
 
 Theorem summarize_a64_seg_at_sound :
-  forall {Pa : Params} fuel insts im cut_pc req_step visited pc sp_off vrf astk sfl fl_def ret_w seg
+  forall {Pa : Params} seg_name fuel insts im cut_pc req_step visited pc sp_off vrf astk sfl fl_def ret_w seg
          penv foracle rf0 sp0 rf sp fl mstk,
     (forall q, pt_get (N.succ_pos q) im = lookup_a64_inst insts q) ->
     rv_supported_arg_width ret_w = true ->
@@ -7375,10 +7387,10 @@ Theorem summarize_a64_seg_at_sound :
     a64_val_regs_agrees penv foracle rf0 sp0 vrf rf ->
     mc_sym_stack_agrees penv foracle (fun r0 => a64_read_reg r0 rf0) sp0 astk mstk ->
     (fl_def = true -> sym_flags_agree penv foracle sfl fl) ->
-    summarize_a64_seg_at fuel im cut_pc req_step visited pc sp_off vrf astk sfl fl_def ret_w = Some seg ->
+    summarize_a64_seg_at seg_name fuel im cut_pc req_step visited pc sp_off vrf astk sfl fl_def ret_w = inr seg ->
     a64_seg_exec_spec penv foracle insts cut_pc req_step pc rf0 sp0 rf sp fl mstk ret_w seg.
 Proof.
-  intros Pa fuel insts im cut_pc req_step visited pc sp_off vrf astk sfl fl_def ret_w seg
+  intros Pa seg_name fuel insts im cut_pc req_step visited pc sp_off vrf astk sfl fl_def ret_w seg
          penv foracle rf0 sp0 rf sp fl mstk Him.
   revert cut_pc req_step visited pc sp_off vrf astk sfl fl_def ret_w seg penv foracle rf0 sp0 rf sp fl mstk.
   induction fuel as [| fuel' IH];
@@ -7409,8 +7421,8 @@ Proof.
           by (cbn [a64_exec_steps]; rewrite Elook, Hone; reflexivity).
         eapply a64_seg_exec_spec_step_front; [exact H1 |].
         exact (IH _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hval Hsp0 Hrng' Hsp' Hag' Hastk' Hfl' Hsum).
-      * destruct (summarize_a64_seg_at fuel' im cut_pc false (pt_add_n pc visited) tgt_pc sp_off vrf astk sfl fl_def' ret_w) as [dt |] eqn:Edt; [| discriminate Hsum].
-        destruct (summarize_a64_seg_at fuel' im cut_pc false (pt_add_n pc visited) next_pc sp_off vrf astk sfl fl_def' ret_w) as [df |] eqn:Edf; [| discriminate Hsum].
+      * destruct (summarize_a64_seg_at seg_name fuel' im cut_pc false (pt_add_n pc visited) tgt_pc sp_off vrf astk sfl fl_def' ret_w) as [| dt] eqn:Edt; [discriminate Hsum |].
+        destruct (summarize_a64_seg_at seg_name fuel' im cut_pc false (pt_add_n pc visited) next_pc sp_off vrf astk sfl fl_def' ret_w) as [| df] eqn:Edf; [discriminate Hsum |].
         inversion Hsum; subst seg; clear Hsum.
         destruct Hres as [b [Hbc [Hone Hfd]]].
         cbn [a64_seg_exec_spec]; exists b; split; [exact Hbc |].
@@ -7428,7 +7440,7 @@ Proof.
 Qed.
 
 Theorem summarize_a64_seg_sound :
-  forall {Pa : Params} fuel insts cut_pc req_step visited pc sp_off vrf astk sfl fl_def ret_w seg
+  forall {Pa : Params} seg_name fuel insts cut_pc req_step visited pc sp_off vrf astk sfl fl_def ret_w seg
          penv foracle rf0 sp0 rf sp fl mstk,
     rv_supported_arg_width ret_w = true ->
     forallb a64_inst_valid insts = true ->
@@ -7438,10 +7450,10 @@ Theorem summarize_a64_seg_sound :
     a64_val_regs_agrees penv foracle rf0 sp0 vrf rf ->
     mc_sym_stack_agrees penv foracle (fun r0 => a64_read_reg r0 rf0) sp0 astk mstk ->
     (fl_def = true -> sym_flags_agree penv foracle sfl fl) ->
-    summarize_a64_seg fuel insts cut_pc req_step visited pc sp_off vrf astk sfl fl_def ret_w = Some seg ->
+    summarize_a64_seg seg_name fuel insts cut_pc req_step visited pc sp_off vrf astk sfl fl_def ret_w = inr seg ->
     a64_seg_exec_spec penv foracle insts cut_pc req_step pc rf0 sp0 rf sp fl mstk ret_w seg.
 Proof.
-  intros Pa fuel insts cut_pc req_step visited pc sp_off vrf astk sfl fl_def ret_w seg
+  intros Pa seg_name fuel insts cut_pc req_step visited pc sp_off vrf astk sfl fl_def ret_w seg
          penv foracle rf0 sp0 rf sp fl mstk Hrw Hval Hsp0 Hrng Hsp Hag Hastk Hfl Hsum.
   eapply summarize_a64_seg_at_sound with (insts := insts);
     [exact (pt_of_list_first_lookup_a64 insts)

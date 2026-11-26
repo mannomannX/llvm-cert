@@ -1857,9 +1857,9 @@ Definition validate_mc_mcfg_with_cert
               match mc_loop mcert with
               | Some _ => inl "combining calls and loop in one certificate is not supported"
               | None =>
-                  if negb (check_mc_callee_contracts (m_type_defs ir_m) ir_m (mc_arch mcert) callees) then
-                    inl "callee IR prototype or ABI contract check failed"
-                  else
+                  match check_mc_callee_contracts_diag (m_type_defs ir_m) ir_m (mc_arch mcert) callees with
+                  | inl err => inl err
+                  | inr tt =>
                     match elf64_extract_func_with_calls raw_elf (mc_arch mcert) (mc_elf_kind mcert) fn_bare
                             (List.map (fun c => mc_strip_leading_at (mcs_name c)) callees) with
                     | inl err => inl err
@@ -1892,6 +1892,7 @@ Definition validate_mc_mcfg_with_cert
                                 end
                           end
                     end
+                  end
               end
           end
     end.
@@ -2666,8 +2667,9 @@ Proof.
     cbn iota in Hval.
     destruct (mc_loop mcert) eqn:Eloop; [discriminate Hval |].
     cbn iota in Hval.
-    destruct (check_mc_callee_contracts tenv ir_m (mc_arch mcert) (c0 :: c_rest)) eqn:Hcal;
-      cbn [negb] in Hval; [| discriminate Hval].
+    destruct (check_mc_callee_contracts_diag tenv ir_m (mc_arch mcert) (c0 :: c_rest)) as [| []] eqn:Hcal_d;
+      [discriminate Hval |].
+    pose proof (check_mc_callee_contracts_diag_sound _ _ _ _ Hcal_d) as Hcal.
     destruct (elf64_extract_func_with_calls raw_elf (mc_arch mcert) (mc_elf_kind mcert)
                 (strip_leading_at (mc_fn_name mcert))
                 (List.map (fun c => mc_strip_leading_at (mcs_name c)) (c0 :: c_rest)))
@@ -2977,9 +2979,9 @@ Definition emit_mc_dimacs_cnf_str
                   match mc_loop mcert with
                   | Some _ => inl "combining calls and loop in one certificate is not supported"
                   | None =>
-                      if negb (check_mc_callee_contracts (m_type_defs ir_m) ir_m (mc_arch mcert) callees) then
-                        inl "callee IR prototype or ABI contract check failed"
-                      else
+                      match check_mc_callee_contracts_diag (m_type_defs ir_m) ir_m (mc_arch mcert) callees with
+                      | inl err => inl err
+                      | inr tt =>
                         let callee_names := List.map (fun c => mc_strip_leading_at (mcs_name c)) callees in
                         match elf64_extract_func_with_calls raw_elf (mc_arch mcert) (mc_elf_kind mcert) fn_bare callee_names with
                         | inl err => inl err
@@ -3020,6 +3022,7 @@ Definition emit_mc_dimacs_cnf_str
                                     end
                               end
                         end
+                      end
                   end
               end
         end
