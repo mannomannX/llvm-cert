@@ -14,6 +14,8 @@
     Evaluated under [rocq check -o] and audited via [Print Assumptions] in CI to
     enforce that zero unapproved axioms enter the proof dependency closure. *)
 
+Set Default Goal Selector "!".
+
 From CertPasses Require
   Pipeline
   McfgExport

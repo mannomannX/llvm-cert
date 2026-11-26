@@ -43,8 +43,7 @@ From Vellvm Require Import
 
 From CertValidator Require Import
   CertFormat
-  AlgRules
-  CertValidator.
+  AlgRules.
 
 Unset Implicit Arguments.
 Unset Strict Implicit.

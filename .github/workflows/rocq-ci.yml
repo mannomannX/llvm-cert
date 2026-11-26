@@ -145,13 +145,17 @@ jobs:
             sudo systemd-run --scope --quiet -p MemoryHigh=11G -p MemoryMax=12500M -p MemorySwapMax=2G -- \
               sudo -u "$(id -un)" -g "$(id -gn)" \
               env PATH="$PATH" HOME="$HOME" OPAMROOT="${OPAMROOT:-$HOME/.opam}" OCAMLRUNPARAM="$OCAMLRUNPARAM" \
-              opam exec -- rocq check -o -R rocq Vellvm -R ../../passes CertPasses -R ../../validator CertValidator \
-                Vellvm.Semantics.TopLevel Vellvm.Theory.Equational CertPasses.Pipeline CertPasses.McfgExport \
+              opam exec -- rocq check -o -R rocq Vellvm -Q ../../passes CertPasses -Q ../../validator CertValidator \
+                Vellvm.Semantics.TopLevel Vellvm.Theory.Equational \
+                CertValidator.common.Options CertValidator.common.CoreTactics CertValidator.common.BvTactics CertValidator.common.IntBvTactics CertValidator.common.EouTactics CertPasses.common.ItreeTactics \
+                CertPasses.Pipeline CertPasses.McfgExport \
                 CertPasses.ModuleMerge CertValidator.CertValidator CertValidator.Elf64Spec \
                 CertValidator.McFormat CertValidator.Rv64Sem CertValidator.A64CoreSem CertValidator.McLoop CertValidator.McCall CertValidator.McValidator CertValidator.CheckAssumptions
           else
-            (ulimit -v 13107200 && exec opam exec -- rocq check -o -R rocq Vellvm -R ../../passes CertPasses -R ../../validator CertValidator \
-              Vellvm.Semantics.TopLevel Vellvm.Theory.Equational CertPasses.Pipeline CertPasses.McfgExport \
+            (ulimit -v 13107200 && exec opam exec -- rocq check -o -R rocq Vellvm -Q ../../passes CertPasses -Q ../../validator CertValidator \
+              Vellvm.Semantics.TopLevel Vellvm.Theory.Equational \
+              CertValidator.common.Options CertValidator.common.CoreTactics CertValidator.common.BvTactics CertValidator.common.IntBvTactics CertValidator.common.EouTactics CertPasses.common.ItreeTactics \
+              CertPasses.Pipeline CertPasses.McfgExport \
               CertPasses.ModuleMerge CertValidator.CertValidator CertValidator.Elf64Spec \
               CertValidator.McFormat CertValidator.Rv64Sem CertValidator.A64CoreSem CertValidator.McLoop CertValidator.McCall CertValidator.McValidator CertValidator.CheckAssumptions)
           fi
@@ -192,7 +196,7 @@ jobs:
           Redirect "$PA_DIR/mc_compose_a64" Print Assumptions CertValidator.McCall.compose_a64_caller_callee_sound.
           Redirect "$PA_DIR/mc_val" Print Assumptions CertValidator.McValidator.validate_mc_tle_with_cert_str_sound.
           EOF
-          (cd vellvm/src && opam exec -- rocq top -q -w none -R rocq Vellvm -R ../../passes CertPasses -R ../../validator CertValidator -batch -load-vernac-source "$PA_DIR/audit.v")
+          (cd vellvm/src && opam exec -- rocq top -q -w none -R rocq Vellvm -Q ../../passes CertPasses -Q ../../validator CertValidator -batch -load-vernac-source "$PA_DIR/audit.v")
           python3 - "$PA_DIR" <<'PY'
           import pathlib, sys
 

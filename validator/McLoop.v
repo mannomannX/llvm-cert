@@ -1281,19 +1281,19 @@ Definition obl_wf_exprs (allowed : list (string * positive)) (o : mc_loop_obl) :
   forallb (fun '(_, c) =>
     wt_cert_expr [] c && Pos.eqb (cert_expr_bit_width c) 1%positive &&
     is_let_free_expr c && ub_free_expr c &&
-    AlgRules.vars_subset_b (collect_free_vars [] c) allowed) (obl_path o) &&
+    vars_subset_b (collect_free_vars [] c) allowed) (obl_path o) &&
   match o with
   | MLO_Refine _ _ w s t =>
       wt_cert_expr [] s && wt_cert_expr [] t &&
       Pos.eqb (cert_expr_bit_width s) w && Pos.eqb (cert_expr_bit_width t) w &&
       is_let_free_expr s && is_let_free_expr t &&
       ub_free_expr s && ub_free_expr t &&
-      AlgRules.vars_subset_b (collect_free_vars [] s) allowed &&
-      AlgRules.vars_subset_b (collect_free_vars [] t) allowed
+      vars_subset_b (collect_free_vars [] s) allowed &&
+      vars_subset_b (collect_free_vars [] t) allowed
   | MLO_Defined _ _ w e =>
       wt_cert_expr [] e && Pos.eqb (cert_expr_bit_width e) w &&
       is_let_free_expr e && ub_free_expr e &&
-      AlgRules.vars_subset_b (collect_free_vars [] e) allowed
+      vars_subset_b (collect_free_vars [] e) allowed
   end.
 
 Lemma blast_refinement_cex_opt_gates_step :
@@ -1463,7 +1463,7 @@ Definition build_mc_loop_cnf
       | Some inv_e =>
           if wt_cert_expr [] inv_e && Pos.eqb (cert_expr_bit_width inv_e) 1%positive &&
              is_let_free_expr inv_e && ub_free_expr inv_e &&
-             AlgRules.vars_subset_b (collect_free_vars [] inv_e) known_vars
+             vars_subset_b (collect_free_vars [] inv_e) known_vars
           then
             match blast_cert_expr ctx [] (mc_ms_opt inv_e) inv_e env0 with
             | None => None
@@ -1555,7 +1555,7 @@ Lemma emit_path_lits_sat {Pa : Params} :
     forallb (fun '(_, c) =>
       wt_cert_expr [] c && Pos.eqb (cert_expr_bit_width c) 1%positive &&
       is_let_free_expr c && ub_free_expr c &&
-      AlgRules.vars_subset_b (collect_free_vars [] c) known_vars) path = true ->
+      vars_subset_b (collect_free_vars [] c) known_vars) path = true ->
     wf_param_env_for known_vars penv ->
     ub_ctx_holds penv foracle ctx ->
     sat_blast_env penv foracle asg env ->
@@ -1813,7 +1813,7 @@ Proof.
     by (split; [exact init_blast_state_sat | split; intros; discriminate]).
   destruct (blast_ub_ctx_sat ctx known_vars ctx penv foracle (fun _ => true) init_env
               Hctx Hctx Hpenv Hinit_env) as [asg0 Henv0].
-  set (hyp_res := match opt_inv with None => Some (lit_true, env0) | Some inv_e => if wt_cert_expr [] inv_e && Pos.eqb (cert_expr_bit_width inv_e) 1%positive && is_let_free_expr inv_e && ub_free_expr inv_e && AlgRules.vars_subset_b (collect_free_vars [] inv_e) known_vars then match blast_cert_expr ctx [] (mc_ms_opt inv_e) inv_e env0 with Some (ri, env_i) => let b0 := match rbv_bits ri with x :: _ => x | [] => lit_false end in let '(hlit, st1) := emit_and2_opt (neg_lit (rbv_psn ri)) b0 (be_st env_i) in Some (hlit, mk_blast_env st1 (be_vars env_i) (be_freezes env_i)) | None => None end else None end) in *.
+  set (hyp_res := match opt_inv with None => Some (lit_true, env0) | Some inv_e => if wt_cert_expr [] inv_e && Pos.eqb (cert_expr_bit_width inv_e) 1%positive && is_let_free_expr inv_e && ub_free_expr inv_e && vars_subset_b (collect_free_vars [] inv_e) known_vars then match blast_cert_expr ctx [] (mc_ms_opt inv_e) inv_e env0 with Some (ri, env_i) => let b0 := match rbv_bits ri with x :: _ => x | [] => lit_false end in let '(hlit, st1) := emit_and2_opt (neg_lit (rbv_psn ri)) b0 (be_st env_i) in Some (hlit, mk_blast_env st1 (be_vars env_i) (be_freezes env_i)) | None => None end else None end) in *.
   destruct hyp_res as [[body_hyp_lit env1] |] eqn:Ehyp; [| discriminate Ebld].
   assert (Hhyp_sat : exists asg1,
     sat_blast_env penv foracle asg1 env1 /\
@@ -1827,7 +1827,7 @@ Proof.
      end ->
      eval_lit asg1 body_hyp_lit = true)).
   { unfold hyp_res in Ehyp; destruct opt_inv as [inv_e |].
-    - destruct (wt_cert_expr [] inv_e && Pos.eqb (cert_expr_bit_width inv_e) 1%positive && is_let_free_expr inv_e && ub_free_expr inv_e && AlgRules.vars_subset_b (collect_free_vars [] inv_e) known_vars) eqn:Ewi; [| discriminate Ehyp].
+    - destruct (wt_cert_expr [] inv_e && Pos.eqb (cert_expr_bit_width inv_e) 1%positive && is_let_free_expr inv_e && ub_free_expr inv_e && vars_subset_b (collect_free_vars [] inv_e) known_vars) eqn:Ewi; [| discriminate Ehyp].
       rewrite !andb_true_iff in Ewi; destruct Ewi as ((((Hwti & Hbwi) & _) & _) & Hsubi); apply Pos.eqb_eq in Hbwi.
       destruct (blast_cert_expr ctx [] (mc_ms_opt inv_e) inv_e env0) as [[ri env_i] |] eqn:Ebi; [| discriminate Ehyp].
       destruct (blast_cert_expr_sat inv_e ctx [] [] (mc_ms_opt inv_e) penv [] foracle asg0 env0 env_i ri
@@ -3471,11 +3471,11 @@ Record mc_loop_ir_prep : Type := mk_mc_loop_ir_prep {
 }.
 
 Definition check_ls_exprs_vars (allowed : list (string * positive)) (ls : mc_loop_spec) : bool :=
-  forallb (fun rb => AlgRules.vars_subset_b (collect_free_vars [] (mlr_expr rb)) allowed) (ml_regs ls) &&
-  forallb (fun sb => match sb with MLS_Expr _ _ e => AlgRules.vars_subset_b (collect_free_vars [] e) allowed | MLS_SavedReg _ _ => true end) (ml_slots ls) &&
+  forallb (fun rb => vars_subset_b (collect_free_vars [] (mlr_expr rb)) allowed) (ml_regs ls) &&
+  forallb (fun sb => match sb with MLS_Expr _ _ e => vars_subset_b (collect_free_vars [] e) allowed | MLS_SavedReg _ _ => true end) (ml_slots ls) &&
   match ml_inv ls with
   | None => true
-  | Some inv => AlgRules.vars_subset_b (collect_free_vars [] inv) allowed
+  | Some inv => vars_subset_b (collect_free_vars [] inv) allowed
   end.
 
 Definition find_hdr_block_id (hdr_name : string) (blks : list (block dtyp)) : option block_id :=
@@ -4552,16 +4552,6 @@ Proof.
   repeat split; assumption.
 Qed.
 
-Lemma alg_vars_subset_b_incl : forall sub sup,
-  AlgRules.vars_subset_b sub sup = true -> incl sub sup.
-Proof.
-  induction sub as [| [nm w] rest IH]; intros sup H [x wx] Hin; cbn in Hin; [contradiction |].
-  cbn [AlgRules.vars_subset_b] in H; apply andb_true_iff in H as [Hhd Htl].
-  destruct Hin as [Heq | Hr]; [| exact (IH sup Htl (x, wx) Hr)].
-  inversion Heq; subst x wx; apply existsb_exists in Hhd as [[nm' w'] [Hin_s Heqb]].
-  apply andb_true_iff in Heqb as [Hsn Hsw]; apply String.eqb_eq in Hsn; apply Pos.eqb_eq in Hsw; subst; exact Hin_s.
-Qed.
-
 Lemma build_next_cut_penvs_sound {Pa : Params} :
   forall arch ls allowed0 mc_init_ctx (penv0 penv_ir_prev penv_mc_prev : param_env Pa)
          hdr_ws phis_ir dvs (read_reg : N -> @Integers.bit_int 64%positive) mstk opt_inv is_body path,
@@ -4572,9 +4562,9 @@ Lemma build_next_cut_penvs_sound {Pa : Params} :
        (forall nm, mc_starts_with_bang nm = false -> penv' nm = penv0 nm) ->
        ub_ctx_holds penv' dummy_freeze_oracle mc_init_ctx) ->
     (forall nm, mc_starts_with_bang nm = false -> penv_ir_prev nm = penv0 nm /\ penv_mc_prev nm = penv0 nm) ->
-    AlgRules.vars_subset_b (collect_free_vars [] (match ml_inv ls with None => CE_BvConst 1%positive 1%N | Some inv => inv end)) (allowed0 ++ cut_vars_from_ws 0%nat hdr_ws) = true ->
-    (forall rb, In rb (ml_regs ls) -> AlgRules.vars_subset_b (collect_free_vars [] (mlr_expr rb)) (allowed0 ++ cut_vars_from_ws 0%nat hdr_ws) = true) ->
-    (forall off sz e, In (MLS_Expr off sz e) (ml_slots ls) -> AlgRules.vars_subset_b (collect_free_vars [] e) (allowed0 ++ cut_vars_from_ws 0%nat hdr_ws) = true) ->
+    vars_subset_b (collect_free_vars [] (match ml_inv ls with None => CE_BvConst 1%positive 1%N | Some inv => inv end)) (allowed0 ++ cut_vars_from_ws 0%nat hdr_ws) = true ->
+    (forall rb, In rb (ml_regs ls) -> vars_subset_b (collect_free_vars [] (mlr_expr rb)) (allowed0 ++ cut_vars_from_ws 0%nat hdr_ws) = true) ->
+    (forall off sz e, In (MLS_Expr off sz e) (ml_slots ls) -> vars_subset_b (collect_free_vars [] e) (allowed0 ++ cut_vars_from_ws 0%nat hdr_ws) = true) ->
     Forall2 (fun w '(wp, _) => w = wp) hdr_ws phis_ir ->
     Forall2 (fun '(wp, ce) '(_, dv) =>
       eval_closed_cert_expr penv_ir_prev dummy_freeze_oracle ce = raise_ret dv /\
@@ -4765,14 +4755,14 @@ Proof.
       cbn [ub_assumption_holds]; intros dv Hdv; rewrite (Hhi_lookup rb Hrb Hw32) in Hdv; inversion Hdv; discriminate. }
   assert (Hsubst_non_ptol : forall e,
     is_let_free_expr e = true ->
-    AlgRules.vars_subset_b (collect_free_vars [] e) (allowed0 ++ cut_vars_from_ws 0%nat hdr_ws) = true ->
+    vars_subset_b (collect_free_vars [] e) (allowed0 ++ cut_vars_from_ws 0%nat hdr_ws) = true ->
     (forall k w, nth_error hdr_ws k = Some w -> cut_var_ptol ls k w = true ->
        forall w0, ~ In (mc_cut_var_name k, w0) (collect_free_vars [] e)) ->
     eval_closed_cert_expr penv_mc_next dummy_freeze_oracle e =
     eval_closed_cert_expr penv_mc_prev dummy_freeze_oracle (subst_cert_expr (build_phi_subst 0%nat phis_ir) e)).
   { intros e Hlf Hsub Hav; apply subst_cert_expr_eval; [exact dummy_freeze_oracle_const | exact Hlf |].
     intros nm wn Hfn.
-    pose proof (alg_vars_subset_b_incl _ _ Hsub _ Hfn) as Hin_all.
+    pose proof (vars_subset_b_incl _ _ Hsub _ Hfn) as Hin_all.
     apply in_app_iff in Hin_all as [Hal | Hcut].
     - pose proof (Hnb_al nm wn Hal) as Hnb.
       rewrite (lookup_phi_subst_none_non_bang 0%nat phis_ir nm Hnb).
@@ -4972,9 +4962,9 @@ Qed.
 
 Lemma check_ls_exprs_vars_split : forall allowed ls,
   check_ls_exprs_vars allowed ls = true ->
-  AlgRules.vars_subset_b (collect_free_vars [] (match ml_inv ls with None => CE_BvConst 1%positive 1%N | Some inv => inv end)) allowed = true /\
-  (forall rb, In rb (ml_regs ls) -> AlgRules.vars_subset_b (collect_free_vars [] (mlr_expr rb)) allowed = true) /\
-  (forall off sz e, In (MLS_Expr off sz e) (ml_slots ls) -> AlgRules.vars_subset_b (collect_free_vars [] e) allowed = true).
+  vars_subset_b (collect_free_vars [] (match ml_inv ls with None => CE_BvConst 1%positive 1%N | Some inv => inv end)) allowed = true /\
+  (forall rb, In rb (ml_regs ls) -> vars_subset_b (collect_free_vars [] (mlr_expr rb)) allowed = true) /\
+  (forall off sz e, In (MLS_Expr off sz e) (ml_slots ls) -> vars_subset_b (collect_free_vars [] e) allowed = true).
 Proof.
   intros allowed ls H; unfold check_ls_exprs_vars in H; rewrite !andb_true_iff in H; destruct H as [[Hr Hs] Hi].
   repeat split.

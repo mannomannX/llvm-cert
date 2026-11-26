@@ -1,6 +1,6 @@
 -R rocq Vellvm
--R ../../passes CertPasses
--R ../../validator CertValidator
+-Q ../../passes CertPasses
+-Q ../../validator CertValidator
 -docroot LLVMCert
 
 -arg -w -arg -masking-absolute-name
@@ -102,6 +102,13 @@
 ./rocq/Theory/I2F/I2F_toplevel.v
 
 ./rocq/Theory/Equational.v
+
+../../validator/common/Options.v
+../../validator/common/CoreTactics.v
+../../validator/common/BvTactics.v
+../../validator/common/IntBvTactics.v
+../../validator/common/EouTactics.v
+../../passes/common/ItreeTactics.v
 
 ../../passes/PassCommon.v
 ../../passes/SimplifyCFG.v

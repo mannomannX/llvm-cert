@@ -47,6 +47,7 @@ Import Logic.
 
 #[local] Existing Instance MemoryModelStateV.
 #[local] Existing Instance MemoryModelPrimitivesV.
+Set Default Goal Selector "!".
 Unset Implicit Arguments.
 
 (** Canonical multi-stage optimization pipeline over [CFG.mcfg dtyp]:
@@ -84,12 +85,12 @@ Theorem optimize_mcfg_refines :
 Proof.
   intros IP IPT IPWB M.
   unfold optimize_mcfg.
-  eapply prog_refines_trans. apply mem2reg_mcfg_refines.
-  eapply prog_refines_trans. apply inline_mcfg_refines.
-  eapply prog_refines_trans. apply mem2reg_mcfg_refines.
-  eapply prog_refines_trans. apply sccp_mcfg_refines.
-  eapply prog_refines_trans. apply simplifycfg_mcfg_refines.
-  eapply prog_refines_trans. apply dce_mcfg_refines.
+  eapply prog_refines_trans; [apply mem2reg_mcfg_refines |].
+  eapply prog_refines_trans; [apply inline_mcfg_refines |].
+  eapply prog_refines_trans; [apply mem2reg_mcfg_refines |].
+  eapply prog_refines_trans; [apply sccp_mcfg_refines |].
+  eapply prog_refines_trans; [apply simplifycfg_mcfg_refines |].
+  eapply prog_refines_trans; [apply dce_mcfg_refines |].
   apply simplifycfg_mcfg_refines.
 Qed.
 

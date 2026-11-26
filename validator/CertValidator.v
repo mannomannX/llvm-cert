@@ -2770,38 +2770,6 @@ Proof.
   - exact (IH idx' x y Hx Hy).
 Qed.
 
-Definition var_pair_eqb (u1 u2 : string * positive) : bool :=
-  String.eqb (fst u1) (fst u2) && Pos.eqb (snd u1) (snd u2).
-
-Lemma var_pair_eqb_eq : forall u1 u2,
-  var_pair_eqb u1 u2 = true <-> u1 = u2.
-Proof.
-  intros [s1 w1] [s2 w2]; unfold var_pair_eqb; cbn.
-  rewrite andb_true_iff, String.eqb_eq, Pos.eqb_eq.
-  split; [intros [-> ->]; reflexivity | intros H; inversion H; auto].
-Qed.
-
-Fixpoint var_pair_in (u : string * positive) (us : list (string * positive))
-  {struct us} : bool :=
-  match us with
-  | [] => false
-  | x :: rx => var_pair_eqb u x || var_pair_in u rx
-  end.
-
-Lemma var_pair_in_spec : forall u us,
-  var_pair_in u us = true <-> In u us.
-Proof.
-  intros u us; induction us as [| x rx IH]; cbn; [split; [discriminate | contradiction] |].
-  destruct (var_pair_eqb u x) eqn:E.
-  - apply var_pair_eqb_eq in E; subst; split; [intros _; left; reflexivity | intros _; reflexivity].
-  - rewrite IH; split; [intros H; right; exact H | intros [-> | H]; [
-      assert (Hr : var_pair_eqb u u = true) by (apply var_pair_eqb_eq; reflexivity);
-      rewrite Hr in E; discriminate | exact H]].
-Qed.
-
-Definition vars_subset_b (vs allowed : list (string * positive)) : bool :=
-  forallb (fun u => var_pair_in u allowed) vs.
-
 Lemma vars_subset_b_wf_param {Pa : Params} :
   forall vs allowed (penv : param_env Pa),
     vars_subset_b vs allowed = true ->
@@ -4453,14 +4421,6 @@ Fixpoint wf_cfg_dag (allowed : list (string * positive)) (d : cfg_dag)
       wf_cfg_dag allowed on_true &&
       wf_cfg_dag allowed on_false
   end.
-
-Lemma incl_vars_subset_b :
-  forall vs allowed,
-    incl vs allowed -> vars_subset_b vs allowed = true.
-Proof.
-  intros vs allowed Hinc; unfold vars_subset_b; apply forallb_forall.
-  intros u Hu; apply var_pair_in_spec; exact (Hinc u Hu).
-Qed.
 
 Lemma wf_smap_entries_empty :
   forall allowed defs seen uf,
@@ -8893,14 +8853,6 @@ Qed.
 
 (** *** 5.6 Source UB Assumption Discharge, Target UB-Safety & Certificate Obligation Checker *)
 
-Lemma vars_subset_b_incl :
-  forall vs allowed,
-    vars_subset_b vs allowed = true -> incl vs allowed.
-Proof.
-  intros vs allowed H u Hu; unfold vars_subset_b in H.
-  rewrite forallb_forall in H; apply var_pair_in_spec; exact (H u Hu).
-Qed.
-
 Fixpoint spine_is_unreachable (d : cfg_dag) {struct d} : bool :=
   match d with
   | CD_Unreachable => true
@@ -11376,7 +11328,7 @@ Proof.
   - destruct c as [| | | | pr ss wc a b | | | |]; try discriminate Hlk.
     destruct ss; [discriminate Hlk |].
     destruct (ub_free_expr a && ub_free_expr b) eqn:Eub; [| discriminate Hlk].
-    Ltac solve_cmp_from_rel allowed path_ctx penv foracle Hph Hrel :=
+    Local Ltac solve_cmp_from_rel allowed path_ctx penv foracle Hph Hrel :=
       destruct (path_implies_signed_rel_sound allowed _ path_ctx _ _ penv foracle Hph Hrel)
         as (w & ia & ib & _ & _ & _ & _ & Ea & Eb & Hcmp);
       unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
@@ -11466,7 +11418,7 @@ Proof.
     cbn [simplify_select_signed_minmax] in Hsm; try discriminate.
   destruct ss; [discriminate |].
   destruct (Pos.eqb wc w) eqn:Ewc; [apply Pos.eqb_eq in Ewc; subst wc | discriminate].
-  Ltac solve_minmax_arm allowed path_ctx penv foracle w res t f Hbwt Hbwf Hph Hcmp Heqt Hres :=
+  Local Ltac solve_minmax_arm allowed path_ctx penv foracle w res t f Hbwt Hbwf Hph Hcmp Heqt Hres :=
     apply andb_true_iff in Heqt as [E1 E2];
     apply cert_expr_eqb_eq in E1; apply cert_expr_eqb_eq in E2;
     destruct (path_implies_signed_rel_sound allowed false path_ctx _ _ penv foracle Hph Hcmp)

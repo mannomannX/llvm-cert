@@ -62,6 +62,8 @@ From Vellvm Require Import
   Semantics.InterpretationStack
   Semantics.TopLevel
   Semantics.Libraries.
+From CertPasses.common Require Export
+  ItreeTactics.
 Export LLVMAst.
 Import Logic.
 
@@ -580,13 +582,6 @@ Variant cutNone {E : Type -> Type} : forall [A : Type], E A -> Prop := .
 
 Variant cutUB_rel {E : Type -> Type} `{UBE -< E} : forall [A : Type], E A -> Prop :=
   | CutUB_rel u : cutUB_rel (subevent _ (ThrowUB u)).
-
-Ltac destruct_sum1 e :=
-  repeat (let Te := type of e in
-          let Te' := eval hnf in Te in
-          match Te' with
-          | (_ +' _) _ => destruct e as [e | e]
-          end).
 
 Ltac destruct_sum2 e1 e2 HE :=
   repeat (let Te := type of e1 in
@@ -5101,7 +5096,7 @@ Section ModelSemantics.
     apply Hmain; left; exists u1, u2; split; [reflexivity | split; [reflexivity | exact Hsim]].
   Qed.
 
-  (** ***Lowering [mcfg_stack_sim] to [interp_state interp_vellvm_prov_h] *)
+  (** *** Lowering [mcfg_stack_sim] to [interp_state interp_vellvm_prov_h] *)
 
   Definition sf_match (e1 e2 : @local_env (@ParamsV IP IPT))
     (sf1 sf2 : @stack_frame (@ParamsV IP IPT)) : Prop :=

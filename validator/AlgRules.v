@@ -53,6 +53,9 @@ From Vellvm Require Import
   Semantics.Operations.Conversion
   Semantics.Operations.Select.
 
+From CertValidator.common Require Import
+  CoreTactics.
+
 From CertValidator Require Import
   CertFormat
   AigLrat.
@@ -6562,19 +6565,6 @@ Proof.
   intros fl; reflexivity.
 Qed.
 
-#[local] Ltac split_bool_ifs :=
-  repeat (cbn [andb orb negb];
-          match goal with
-          | |- context [if ?b then _ else _] =>
-              let rec d_atom e :=
-                match e with
-                | ?x && _ => d_atom x
-                | ?x || _ => d_atom x
-                | negb ?x => d_atom x
-                | _ => destruct e
-                end in d_atom b
-          end).
-
 Lemma eval_iop_non_div_rem_monotone :
   forall {Pa : Params} op fl1 fl2 w (vl1 vl2 vr1 vr2 : @dvalue Pa),
     is_div_or_rem_op op = false ->
@@ -10644,28 +10634,14 @@ Qed.
 
 (** *** 7.6 [ub_ctx] Assumption Clause Encoding & Top-Level Refinement Entrypoint *)
 
-Fixpoint vars_subset_b (sub sup : list (string * positive)) {struct sub} : bool :=
-  match sub with
-  | [] => true
-  | (nm, w) :: rest =>
-      existsb (fun '(nm', w') => String.eqb nm nm' && Pos.eqb w w') sup &&
-      vars_subset_b rest sup
-  end.
-
 Lemma vars_subset_b_wf_param_env :
   forall {Pa : Params} sub sup (penv : param_env Pa),
     vars_subset_b sub sup = true ->
     wf_param_env_for sup penv ->
     wf_param_env_for sub penv.
 Proof.
-  induction sub as [| [nm w] rest IH]; intros sup penv Hsub Hsup nm0 w0 Hin; [contradiction |].
-  cbn [vars_subset_b] in Hsub; apply andb_true_iff in Hsub as [Hhd Htl].
-  destruct Hin as [Heq | Hrest]; [| exact (IH sup penv Htl Hsup nm0 w0 Hrest)].
-  inversion Heq; subst nm0 w0; clear Heq.
-  apply existsb_exists in Hhd as [[nm' w'] [Hin_sup Heqb]].
-  apply andb_true_iff in Heqb as [Hs Hw].
-  apply String.eqb_eq in Hs; apply Pos.eqb_eq in Hw; subst nm' w'.
-  exact (Hsup nm w Hin_sup).
+  intros Pa sub sup penv Hsub Hsup nm0 w0 Hin.
+  exact (Hsup nm0 w0 (vars_subset_b_incl _ _ Hsub (nm0, w0) Hin)).
 Qed.
 
 Lemma eval_let_free_ret_wf_param_env :

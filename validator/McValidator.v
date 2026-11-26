@@ -2830,14 +2830,6 @@ Qed.
 Definition push_str_rev_chars (acc : list ascii) (s : string) : list ascii :=
   str_to_chars_rev_acc acc s.
 
-Fixpoint format_clause_rev_chars (acc : list ascii) (cl : clause) {struct cl} : list ascii :=
-  match cl with
-  | [] => push_str_rev_chars acc "0" ++ [ascii_of_nat 10]
-  | l :: rest =>
-      let acc1 := push_str_rev_chars acc (show_Z_dec l) in
-      format_clause_rev_chars (ascii_of_nat 32 :: acc1) rest
-  end.
-
 Fixpoint format_cnf_clauses_rev (acc : list ascii) (f : cnf) {struct f} : list ascii :=
   match f with
   | [] => acc

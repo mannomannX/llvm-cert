@@ -62,6 +62,7 @@ From Vellvm Require Import
   Semantics.Libraries.
 
 From CertPasses Require Import PassCommon.
+From CertPasses.common Require Import ItreeTactics.
 Import Logic.
 
 Set Default Goal Selector "!".
@@ -2255,25 +2256,6 @@ Section InliningSemantics.
   #[local] Existing Instance MemoryModelStateV.
   #[local] Existing Instance MemoryModelPrimitivesV.
   #[local] Hint Resolve refine_prov__mon : paco.
-
-  #[local] Ltac norm_subevent :=
-    repeat (progress (
-      try unfold subevent;
-      try unfold resum;
-      try unfold ReSum_id;
-      try unfold ReSum_sum;
-      try unfold ReSum_inl;
-      try unfold ReSum_inr;
-      try unfold cat;
-      try unfold Cat_IFun;
-      try unfold inl_;
-      try unfold inr_;
-      try unfold Inl_sum1;
-      try unfold Inr_sum1;
-      try unfold id_;
-      try unfold Id_IFun;
-      cbn [case_ Case_sum1 case_sum1];
-      cbv beta iota)).
 
   (** ** 7A. Nested Induction Principles for [dvalue] and [exp] *)
 
@@ -6218,7 +6200,7 @@ Section InliningSemantics.
     - apply mcfg_inline_sim_trigger_refl; reflexivity.
   Qed.
 
-  Transparent defined_intrinsics extra_fp_intrinsics extra_int_intrinsics
+  #[local] Transparent defined_intrinsics extra_fp_intrinsics extra_int_intrinsics
     mk_int_unop_defs mk_int_unop_flag_defs mk_int_binop_defs
     mk_expect_int_defs mk_int_ternop_defs mk_int_ovf_binop_defs.
 

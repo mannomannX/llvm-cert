@@ -5,7 +5,7 @@ PASSESDIR = ../../passes
 VALIDATORDIR = ../../validator
 EXTRACTDIR = ml/extracted
 
-ROCQINCLUDES=$(foreach d, $(ROCQDIR), -R $(d) Vellvm) -R $(PASSESDIR) CertPasses -R $(VALIDATORDIR) CertValidator -R $(EXTRACTDIR) Extract
+ROCQINCLUDES=$(foreach d, $(ROCQDIR), -R $(d) Vellvm) -Q $(PASSESDIR) CertPasses -Q $(VALIDATORDIR) CertValidator -R $(EXTRACTDIR) Extract
 ROCQEXEC="$(ROCQBIN)rocq" top -q -w none $(ROCQINCLUDES) -batch -load-vernac-source
 ROCQMAKEFILE="$(ROCQBIN)rocq" makefile
 
@@ -15,8 +15,8 @@ ROCQFILES_FRONTEND := Syntax/ShowAST Syntax/ReprAST Utils/ParserHelper Syntax/LL
 ROCQFILES_EXEC := $(ROCQFILES_FRONTEND) Semantics
 FRONTEND_VOFILES := $(ROCQFILES_FRONTEND:%=rocq/%.vo)
 EXEC_VOFILES := $(ROCQFILES_EXEC:%=rocq/%.vo)
-PASS_VOFILES := $(PASSESDIR)/Pipeline.vo $(PASSESDIR)/McfgExport.vo $(PASSESDIR)/ModuleMerge.vo
-VALIDATOR_VOFILES := $(VALIDATORDIR)/CertFormat.vo $(VALIDATORDIR)/AigLrat.vo $(VALIDATORDIR)/AlgRules.vo $(VALIDATORDIR)/CertValidator.vo $(VALIDATORDIR)/Elf64Spec.vo $(VALIDATORDIR)/McFrameMem.vo $(VALIDATORDIR)/Rv64Sem.vo $(VALIDATORDIR)/A64CoreSem.vo $(VALIDATORDIR)/McFormat.vo $(VALIDATORDIR)/McLoop.vo $(VALIDATORDIR)/McCall.vo $(VALIDATORDIR)/McValidator.vo $(VALIDATORDIR)/CheckAssumptions.vo
+PASS_VOFILES := $(PASSESDIR)/common/ItreeTactics.vo $(PASSESDIR)/Pipeline.vo $(PASSESDIR)/McfgExport.vo $(PASSESDIR)/ModuleMerge.vo
+VALIDATOR_VOFILES := $(VALIDATORDIR)/common/Options.vo $(VALIDATORDIR)/common/CoreTactics.vo $(VALIDATORDIR)/common/BvTactics.vo $(VALIDATORDIR)/common/IntBvTactics.vo $(VALIDATORDIR)/common/EouTactics.vo $(VALIDATORDIR)/CertFormat.vo $(VALIDATORDIR)/AigLrat.vo $(VALIDATORDIR)/AlgRules.vo $(VALIDATORDIR)/CertValidator.vo $(VALIDATORDIR)/Elf64Spec.vo $(VALIDATORDIR)/McFrameMem.vo $(VALIDATORDIR)/Rv64Sem.vo $(VALIDATORDIR)/A64CoreSem.vo $(VALIDATORDIR)/McFormat.vo $(VALIDATORDIR)/McLoop.vo $(VALIDATORDIR)/McCall.vo $(VALIDATORDIR)/McValidator.vo $(VALIDATORDIR)/CheckAssumptions.vo
 
 .DEFAULT_GOAL := all
 
