@@ -117,7 +117,7 @@ Fixpoint flatten_mc_dag_to_expr (ret_w : positive) (d : cfg_dag) {struct d}
   | CD_Branch cond dt df =>
       match flatten_mc_dag_to_expr ret_w dt, flatten_mc_dag_to_expr ret_w df with
       | Some et, Some ef =>
-          if ub_free_expr cond && ub_free_expr et && ub_free_expr ef
+          if ub_free_expr cond
           then Some (CE_Select ret_w cond et ef)
           else None
       | _, _ => None
@@ -148,14 +148,12 @@ Proof.
     repeat split; try assumption; exact (vars_subset_b_incl _ _ Hfv).
   - destruct (flatten_mc_dag_to_expr ret_w dt) as [et |] eqn:Ert; [| discriminate Hf].
     destruct (flatten_mc_dag_to_expr ret_w df) as [ef |] eqn:Erf; [| discriminate Hf].
-    destruct (ub_free_expr cond && ub_free_expr et && ub_free_expr ef) eqn:Eub;
-      [| discriminate Hf].
-    rewrite !andb_true_iff in Eub; destruct Eub as ([Hubc Hubt] & Hubf).
+    destruct (ub_free_expr cond) eqn:Hubc; [| discriminate Hf].
     inversion Hf; subst e; clear Hf.
     rewrite !andb_true_iff in Hwf.
     destruct Hwf as (((((Hwtc & Hbwc) & Hlfc) & Hfvc) & Hwft) & Hwff).
-    destruct (IHt et Hwft eq_refl) as (Hwtt & Hbwt & Hlft & _ & Hfvt).
-    destruct (IHf ef Hwff eq_refl) as (Hwtf & Hbwf & Hlff & _ & Hfvf).
+    destruct (IHt et Hwft eq_refl) as (Hwtt & Hbwt & Hlft & Hubt & Hfvt).
+    destruct (IHf ef Hwff eq_refl) as (Hwtf & Hbwf & Hlff & Hubf & Hfvf).
     cbn [wt_cert_expr cert_expr_bit_width is_let_free_expr ub_free_expr collect_free_vars].
     rewrite Hwtc, Hwtt, Hwtf, Hbwc, Hbwt, Hbwf, !Pos.eqb_refl,
             Hlfc, Hlft, Hlff, Hubc, Hubt, Hubf.
@@ -185,9 +183,7 @@ Proof.
   - rewrite !andb_true_iff in Hwf; destruct Hwf as (((((_ & _) & _) & _) & Hwft) & Hwff).
     destruct (flatten_mc_dag_to_expr ret_w dt) as [et |] eqn:Ert; [| discriminate Hf].
     destruct (flatten_mc_dag_to_expr ret_w df) as [ef |] eqn:Erf; [| discriminate Hf].
-    destruct (ub_free_expr cond && ub_free_expr et && ub_free_expr ef) eqn:Eub;
-      [| discriminate Hf].
-    rewrite !andb_true_iff in Eub; destruct Eub as ([_ Hubt] & Hubf).
+    destruct (ub_free_expr cond) eqn:Hubc; [| discriminate Hf].
     inversion Hf; subst e; clear Hf.
     destruct (eval_closed_cert_expr penv foracle cond) as [| | | dvc] eqn:Ec;
       try discriminate Hevd.
@@ -195,9 +191,9 @@ Proof.
     destruct dbc as [| wc cbit | | | | | |]; try discriminate Hevd.
     destruct wc as [| |]; try discriminate Hevd.
     destruct (flatten_mc_dag_to_expr_typing allowed ret_w dt et Hwft Ert)
-      as (Hwtt & _ & _ & _ & Hfvt).
+      as (Hwtt & _ & _ & Hubt & Hfvt).
     destruct (flatten_mc_dag_to_expr_typing allowed ret_w df ef Hwff Erf)
-      as (Hwtf & _ & _ & _ & Hfvf).
+      as (Hwtf & _ & _ & Hubf & Hfvf).
     assert (Hpt : wf_param_env_for (collect_free_vars [] et) penv)
       by (intros x wx Hx; exact (Hpenv x wx (Hfvt (x, wx) Hx))).
     assert (Hpf : wf_param_env_for (collect_free_vars [] ef) penv)
@@ -701,20 +697,23 @@ Definition is_nonblastable_mul (e : cert_expr) : bool :=
   | _ => false
   end.
 
-Fixpoint collect_nonblastable_muls (e : cert_expr) {struct e}
+Fixpoint collect_nonblastable_muls_acc
+  (acc : list (positive * cert_expr)) (e : cert_expr) {struct e}
   : list (positive * cert_expr) :=
-  let here := if is_nonblastable_mul e then [(cert_expr_bit_width e, e)] else [] in
-  here ++
+  let acc1 := if is_nonblastable_mul e then (cert_expr_bit_width e, e) :: acc else acc in
   match e with
-  | CE_BvConst _ _ | CE_Poison _ | CE_Var _ _ | CE_Let _ _ => []
+  | CE_BvConst _ _ | CE_Poison _ | CE_Var _ _ | CE_Let _ _ => acc1
   | CE_BinOp _ _ _ l r | CE_ICmp _ _ _ l r =>
-      collect_nonblastable_muls l ++ collect_nonblastable_muls r
-  | CE_Cast _ _ _ _ o | CE_Freeze _ o => collect_nonblastable_muls o
+      collect_nonblastable_muls_acc (collect_nonblastable_muls_acc acc1 l) r
+  | CE_Cast _ _ _ _ o | CE_Freeze _ o => collect_nonblastable_muls_acc acc1 o
   | CE_Select _ c t f =>
-      collect_nonblastable_muls c ++
-      collect_nonblastable_muls t ++
-      collect_nonblastable_muls f
+      collect_nonblastable_muls_acc
+        (collect_nonblastable_muls_acc (collect_nonblastable_muls_acc acc1 c) t) f
   end.
+
+Definition collect_nonblastable_muls (e : cert_expr)
+  : list (positive * cert_expr) :=
+  collect_nonblastable_muls_acc [] e.
 
 Fixpoint subst_subexpr (target repl e : cert_expr) {struct e} : cert_expr :=
   if cert_expr_eqb e target then repl
@@ -1293,12 +1292,12 @@ Fixpoint abstract_shared_muls
       end
   end.
 
-Lemma collect_nonblastable_muls_vars :
-  forall e w m,
-    In (w, m) (collect_nonblastable_muls e) ->
-    incl (collect_free_vars [] m) (collect_free_vars [] e).
+Lemma collect_nonblastable_muls_acc_vars :
+  forall e acc w m,
+    In (w, m) (collect_nonblastable_muls_acc acc e) ->
+    In (w, m) acc \/ incl (collect_free_vars [] m) (collect_free_vars [] e).
 Proof.
-  intros e w m.
+  intros e acc w m; revert acc.
   induction e as
     [ w0 val0 | w0 | nm0 w0
     | op w0 fl l IHl r IHr
@@ -1307,34 +1306,50 @@ Proof.
     | w0 c IHc t IHt f IHf
     | w0 o IHo
     | bs body _ _ ] using cert_expr_ind_nested;
-    intros Hin; cbn [collect_nonblastable_muls] in Hin;
-    destruct (is_nonblastable_mul _) eqn:Em; cbn [app] in Hin;
-    try (destruct Hin as [Heq | Hin]; [inversion Heq; subst m; apply incl_refl |]);
-    try contradiction Hin.
-  - apply in_app_iff in Hin as [Hl | Hr]; cbn [collect_free_vars];
-      [intros x Hx; apply in_app_iff; left; exact (IHl Hl x Hx)
-      | intros x Hx; apply in_app_iff; right; exact (IHr Hr x Hx)].
-  - apply in_app_iff in Hin as [Hl | Hr]; cbn [collect_free_vars];
-      [intros x Hx; apply in_app_iff; left; exact (IHl Hl x Hx)
-      | intros x Hx; apply in_app_iff; right; exact (IHr Hr x Hx)].
-  - apply in_app_iff in Hin as [Hl | Hr]; cbn [collect_free_vars];
-      [intros x Hx; apply in_app_iff; left; exact (IHl Hl x Hx)
-      | intros x Hx; apply in_app_iff; right; exact (IHr Hr x Hx)].
-  - apply in_app_iff in Hin as [Hl | Hr]; cbn [collect_free_vars];
-      [intros x Hx; apply in_app_iff; left; exact (IHl Hl x Hx)
-      | intros x Hx; apply in_app_iff; right; exact (IHr Hr x Hx)].
-  - exact (IHo Hin).
-  - exact (IHo Hin).
-  - apply in_app_iff in Hin as [Hc | Htf]; cbn [collect_free_vars];
-      [intros x Hx; apply in_app_iff; left; exact (IHc Hc x Hx) |].
-    apply in_app_iff in Htf as [Ht | Hf]; intros x Hx; apply in_app_iff; right; apply in_app_iff;
-      [left; exact (IHt Ht x Hx) | right; exact (IHf Hf x Hx)].
-  - apply in_app_iff in Hin as [Hc | Htf]; cbn [collect_free_vars];
-      [intros x Hx; apply in_app_iff; left; exact (IHc Hc x Hx) |].
-    apply in_app_iff in Htf as [Ht | Hf]; intros x Hx; apply in_app_iff; right; apply in_app_iff;
-      [left; exact (IHt Ht x Hx) | right; exact (IHf Hf x Hx)].
-  - exact (IHo Hin).
-  - exact (IHo Hin).
+    intros acc Hin; cbn [collect_nonblastable_muls_acc] in Hin;
+    try match type of Hin with
+        | context [if is_nonblastable_mul ?ee then _ else _] =>
+            assert (Hacc1 :
+              In (w, m) (if is_nonblastable_mul ee then (cert_expr_bit_width ee, ee) :: acc else acc) ->
+              In (w, m) acc \/ incl (collect_free_vars [] m) (collect_free_vars [] ee))
+              by (destruct (is_nonblastable_mul ee);
+                  [intros [Heq | Ha]; [inversion Heq; right; apply incl_refl | left; exact Ha]
+                  | intro Ha; left; exact Ha])
+        end.
+  - left; exact Hin.
+  - left; exact Hin.
+  - left; exact Hin.
+  - destruct (IHr _ Hin) as [Hl | Hr].
+    + destruct (IHl _ Hl) as [Ha1 | Hl0];
+        [first [exact (Hacc1 Ha1) | left; exact Ha1] |].
+      right; cbn [collect_free_vars]; intros x Hx; apply in_app_iff; left; exact (Hl0 x Hx).
+    + right; cbn [collect_free_vars]; intros x Hx; apply in_app_iff; right; exact (Hr x Hx).
+  - destruct (IHr _ Hin) as [Hl | Hr].
+    + destruct (IHl _ Hl) as [Ha1 | Hl0];
+        [first [exact (Hacc1 Ha1) | left; exact Ha1] |].
+      right; cbn [collect_free_vars]; intros x Hx; apply in_app_iff; left; exact (Hl0 x Hx).
+    + right; cbn [collect_free_vars]; intros x Hx; apply in_app_iff; right; exact (Hr x Hx).
+  - destruct (IHo _ Hin) as [Ha1 | Ho];
+      [first [exact (Hacc1 Ha1) | left; exact Ha1] | right; exact Ho].
+  - destruct (IHf _ Hin) as [Ht | Hf].
+    + destruct (IHt _ Ht) as [Hc | Ht0].
+      * destruct (IHc _ Hc) as [Ha1 | Hc0];
+          [first [exact (Hacc1 Ha1) | left; exact Ha1] |].
+        right; cbn [collect_free_vars]; intros x Hx; apply in_app_iff; left; exact (Hc0 x Hx).
+      * right; cbn [collect_free_vars]; intros x Hx; apply in_app_iff; right; apply in_app_iff; left; exact (Ht0 x Hx).
+    + right; cbn [collect_free_vars]; intros x Hx; apply in_app_iff; right; apply in_app_iff; right; exact (Hf x Hx).
+  - destruct (IHo _ Hin) as [Ha1 | Ho];
+      [first [exact (Hacc1 Ha1) | left; exact Ha1] | right; exact Ho].
+  - left; exact Hin.
+Qed.
+
+Lemma collect_nonblastable_muls_vars :
+  forall e w m,
+    In (w, m) (collect_nonblastable_muls e) ->
+    incl (collect_free_vars [] m) (collect_free_vars [] e).
+Proof.
+  intros e w m Hin.
+  destruct (collect_nonblastable_muls_acc_vars e [] w m Hin) as [[] | H]; exact H.
 Qed.
 
 Lemma find_matching_mul_tgt_spec :
@@ -1738,7 +1753,7 @@ Definition mc_decode_and_summarize
       match decode_rv64_bytes rvc bytes with
       | inl err => inl err
       | inr insts =>
-          let rv_fuel := S (2 * List.length insts) in
+          let rv_fuel := S (2 * length_tr insts) in
           match summarize_rv64_dag rv_fuel insts arg_specs ret_w with
           | None => inl "RV64 machine-code symbolic summarization failed"
           | Some d_mc => inr d_mc
@@ -1750,7 +1765,7 @@ Definition mc_decode_and_summarize
         match decode_a64_bytes bytes with
         | inl err => inl err
         | inr insts =>
-            let a64_fuel := S (2 * List.length insts) in
+            let a64_fuel := S (2 * length_tr insts) in
             match summarize_a64_dag a64_fuel insts arg_specs ret_w with
             | None => inl "AArch64 machine-code symbolic summarization failed"
             | Some d_mc => inr d_mc
@@ -2473,6 +2488,7 @@ Proof.
     + (* EA_Riscv64 *)
     destruct (decode_rv64_bytes (mc_rvc mcert) (efs_bytes sl)) as [| insts] eqn:Edec;
       [discriminate Edec_s |].
+    rewrite length_tr_eq in Edec_s.
     set (rv_fuel := S (2 * List.length insts)) in *.
     destruct (summarize_rv64_dag rv_fuel insts (mc_args mcert) (mc_ret_width mcert))
       as [d_mc0 |] eqn:Esum_mc; [| discriminate Edec_s].
@@ -2540,6 +2556,7 @@ Proof.
     split; [reflexivity |].
     destruct (decode_a64_bytes (efs_bytes sl)) as [| insts] eqn:Edec;
       [discriminate Edec_s |].
+    rewrite length_tr_eq in Edec_s.
     set (a64_fuel := S (2 * List.length insts)) in *.
     destruct (summarize_a64_dag a64_fuel insts (mc_args mcert) (mc_ret_width mcert))
       as [d_mc0 |] eqn:Esum_mc; [| discriminate Edec_s].
@@ -2849,8 +2866,10 @@ Fixpoint format_cnf_clauses_rev (acc : list ascii) (f : cnf) {struct f} : list a
   end.
 
 Definition format_dimacs_cnf (num_vars : positive) (f : cnf) : string :=
-  let hdr := ("p cnf " ++ show_Z_dec (Z.pos num_vars) ++ " " ++ show_Z_dec (Z.of_nat (List.length f)) ++ String (ascii_of_nat 10) "")%string in
-  let rev_all := format_cnf_clauses_rev (push_str_rev_chars [] hdr) f in
+  let f_asc := List.rev_append f [] in
+  let nclauses := length_tr f_asc in
+  let hdr := ("p cnf " ++ show_Z_dec (Z.pos num_vars) ++ " " ++ show_Z_dec (Z.of_nat nclauses) ++ String (ascii_of_nat 10) "")%string in
+  let rev_all := format_cnf_clauses_rev (push_str_rev_chars [] hdr) f_asc in
   rev_chars_to_str_acc EmptyString rev_all.
 
 Definition emit_mc_dimacs_cnf_str

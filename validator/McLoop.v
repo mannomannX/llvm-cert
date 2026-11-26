@@ -1873,7 +1873,7 @@ Proof.
       by (intros cl [<- | []]; cbn; rewrite Etrue; reflexivity).
     pose proof (add_clauses_sat_intro asg3 st_or [[any_cex]] Hge3 Ha1_3 Hwf_st3 Hcls_wf Hev_st3 Hcls_sat) as Hsat_fin.
     pose proof (check_cex_unsat_sound _ opt_pf Hchk asg3) as Huns.
-    destruct Hsat_fin as [_ [_ Hsat_cnf]]; unfold add_clauses, bs_cnf in Hsat_cnf, Huns; cbn [append_clauses fst snd] in Hsat_cnf.
+    destruct Hsat_fin as [_ [_ Hsat_cnf]]; unfold add_clauses, bs_cnf in Hsat_cnf, Huns; cbn [prepend_clauses_rev fst snd] in Hsat_cnf.
     rewrite Huns in Hsat_cnf; discriminate Hsat_cnf. }
   apply Hsound; intros l Hl.
   rewrite Hev_any, existsb_id_map_eval_lit in Hany_false.
@@ -2684,7 +2684,7 @@ Lemma rv_cut_vrf_agrees {Pa : Params} :
 Proof.
   intros penv foracle ls rf0 rf Hwf Hsp Hrng Hunsp Hregs r.
   unfold wf_mc_loop_spec in Hwf; rewrite !andb_true_iff in Hwf.
-  destruct Hwf as (((((((_ & _) & _) & Hnd) & Hwbr) & _) & _) & _).
+  destruct Hwf as (((((((_ & _) & _) & Hnd) & Hwbr) & _) & _) & _); rewrite mc_map_tr_eq in Hnd.
   apply rv_fold_write_agrees; try assumption; [apply no_dup_N_to_NoDup; exact Hnd | |].
   - intro Hnin; exact (rv_cut_base_vrf_agrees penv foracle ls rf0 rf r Hsp Hrng Hnin Hunsp).
   - intros rb Hrb; destruct (Hregs rb Hrb) as [Hev Hhi].
@@ -2709,7 +2709,7 @@ Lemma rv_skel_vrf_agrees {Pa : Params} :
 Proof.
   intros penv foracle ls rf0 rf Hwf Hsp Hrng Hunsp Hregs r.
   unfold wf_mc_loop_spec in Hwf; rewrite !andb_true_iff in Hwf.
-  destruct Hwf as (((((((_ & _) & _) & Hnd) & Hwbr) & _) & _) & _).
+  destruct Hwf as (((((((_ & _) & _) & Hnd) & Hwbr) & _) & _) & _); rewrite mc_map_tr_eq in Hnd.
   apply rv_fold_write_agrees; try assumption; [apply no_dup_N_to_NoDup; exact Hnd | |].
   - intro Hnin; exact (rv_cut_base_vrf_agrees penv foracle ls rf0 rf r Hsp Hrng Hnin Hunsp).
   - intros rb Hrb; unfold eval_closed_cert_expr; cbn [eval_cert_expr lookup_let_val]; rewrite (Hregs rb Hrb); cbn [check_scalar_width]; rewrite Pos.eqb_refl; reflexivity.
@@ -2779,7 +2779,7 @@ Lemma a64_cut_vrf_agrees {Pa : Params} :
 Proof.
   intros penv foracle ls rf0 sp0 rf Hwf Hunsp Hregs r.
   unfold wf_mc_loop_spec in Hwf; rewrite !andb_true_iff in Hwf.
-  destruct Hwf as (((((((_ & _) & _) & Hnd) & Hwbr) & _) & _) & _).
+  destruct Hwf as (((((((_ & _) & _) & Hnd) & Hwbr) & _) & _) & _); rewrite mc_map_tr_eq in Hnd.
   apply a64_fold_write_agrees; try assumption; [apply no_dup_N_to_NoDup; exact Hnd | |].
   - intro Hnin; exact (a64_cut_base_vrf_agrees penv foracle ls rf0 sp0 rf r Hnin Hunsp).
   - intros rb Hrb; destruct (Hregs rb Hrb) as [Hev Hhi].
@@ -2802,7 +2802,7 @@ Lemma a64_skel_vrf_agrees {Pa : Params} :
 Proof.
   intros penv foracle ls rf0 sp0 rf Hwf Hunsp Hregs r.
   unfold wf_mc_loop_spec in Hwf; rewrite !andb_true_iff in Hwf.
-  destruct Hwf as (((((((_ & _) & _) & Hnd) & Hwbr) & _) & _) & _).
+  destruct Hwf as (((((((_ & _) & _) & Hnd) & Hwbr) & _) & _) & _); rewrite mc_map_tr_eq in Hnd.
   apply a64_fold_write_agrees; try assumption; [apply no_dup_N_to_NoDup; exact Hnd | |].
   - intro Hnin; exact (a64_cut_base_vrf_agrees penv foracle ls rf0 sp0 rf r Hnin Hunsp).
   - intros rb Hrb; unfold eval_closed_cert_expr; cbn [eval_cert_expr lookup_let_val]; rewrite (Hregs rb Hrb); cbn [check_scalar_width]; rewrite Pos.eqb_refl; reflexivity.
@@ -3835,7 +3835,7 @@ Proof.
   pose proof (wf_mc_loop_spec_sp_bounds _ _ Hwf) as Hrng.
   assert (Hnd : NoDup (List.map mlr_reg (ml_regs ls))).
   { unfold wf_mc_loop_spec in Hwf; rewrite !andb_true_iff in Hwf.
-    destruct Hwf as (((((((_ & _) & _) & Hnd_b) & _) & _) & _) & _); exact (no_dup_N_to_NoDup _ Hnd_b). }
+    destruct Hwf as (((((((_ & _) & _) & Hnd_b) & _) & _) & _) & _); rewrite mc_map_tr_eq in Hnd_b; exact (no_dup_N_to_NoDup _ Hnd_b). }
   set (binds := @skel_reg_binds Pa (fun r => rv_read_reg r rf) (ml_regs ls) ++ skel_slot_binds mstk 0%nat (ml_slots ls)).
   set (penv_s := overlay_penv binds (fun _ => None)).
   assert (Hnd_b : NoDup (List.map fst binds)) by exact (skel_binds_nodup _ mstk ls Hnd).
@@ -3918,7 +3918,7 @@ Proof.
   pose proof (wf_mc_loop_spec_sp_bounds _ _ Hwf) as Hrng.
   assert (Hnd : NoDup (List.map mlr_reg (ml_regs ls))).
   { unfold wf_mc_loop_spec in Hwf; rewrite !andb_true_iff in Hwf.
-    destruct Hwf as (((((((_ & _) & _) & Hnd_b) & _) & _) & _) & _); exact (no_dup_N_to_NoDup _ Hnd_b). }
+    destruct Hwf as (((((((_ & _) & _) & Hnd_b) & _) & _) & _) & _); rewrite mc_map_tr_eq in Hnd_b; exact (no_dup_N_to_NoDup _ Hnd_b). }
   set (binds := @skel_reg_binds Pa (fun r => a64_read_reg r rf) (ml_regs ls) ++ skel_slot_binds mstk 0%nat (ml_slots ls)).
   set (penv_s := overlay_penv binds (fun _ => None)).
   assert (Hnd_b : NoDup (List.map fst binds)) by exact (skel_binds_nodup _ mstk ls Hnd).
@@ -4640,7 +4640,7 @@ Proof.
   intros ir_binds mc_binds penv_ir_next penv_mc_next.
   assert (Hnd_r : NoDup (List.map mlr_reg (ml_regs ls))).
   { unfold wf_mc_loop_spec in Hwf; rewrite !andb_true_iff in Hwf.
-    destruct Hwf as (((((((_ & _) & _) & Hnd_b) & _) & _) & _) & _); exact (no_dup_N_to_NoDup _ Hnd_b). }
+    destruct Hwf as (((((((_ & _) & _) & Hnd_b) & _) & _) & _) & _); rewrite mc_map_tr_eq in Hnd_b; exact (no_dup_N_to_NoDup _ Hnd_b). }
   assert (Hnd_ir : NoDup (List.map fst ir_binds)) by exact (build_cut_ir_binds_nodup 0%nat hdr_ws dvs).
   assert (Hnd_mc : NoDup (List.map fst mc_binds)) by exact (build_cut_mc_hi_nodup ls penv_mc_prev read_reg mstk 0%nat hdr_ws phis_ir dvs Hnd_r).
   assert (Hnb_next : forall nm, mc_starts_with_bang nm = false -> penv_ir_next nm = penv0 nm /\ penv_mc_next nm = penv0 nm).
@@ -4938,7 +4938,7 @@ Proof.
   intros ls ws penv0 allowed0 mc_init_ctx Hwf Hnb Hpenv0 Hctx0 ghost penv_ext.
   assert (Hnd_r : NoDup (List.map mlr_reg (ml_regs ls))).
   { destruct Hwf as [Hw | Hw]; unfold wf_mc_loop_spec in Hw; rewrite !andb_true_iff in Hw;
-      destruct Hw as (((((((_ & _) & _) & Hnd_b) & _) & _) & _) & _); exact (no_dup_N_to_NoDup _ Hnd_b). }
+      destruct Hw as (((((((_ & _) & _) & Hnd_b) & _) & _) & _) & _); rewrite mc_map_tr_eq in Hnd_b; exact (no_dup_N_to_NoDup _ Hnd_b). }
   assert (Hnd_g : NoDup (List.map fst (@zero_ghost_binds Pa ghost))) by exact (zero_ghost_binds_nodup ls ws Hnd_r).
   assert (Hgb : forall nm w, In (nm, w) ghost -> mc_starts_with_bang nm = true).
   { intros nm w Hg; unfold ghost in Hg; apply in_app_iff in Hg as [Hc | Hh].

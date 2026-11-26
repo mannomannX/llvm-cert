@@ -3936,7 +3936,7 @@ Proof.
   destruct (Hitem k sp _ Hsp_n Hnth_av) as (v & Hvs_n & Hvmc).
   exists v; split; [| rewrite <- Hvmc; reflexivity].
   destruct (build_param_env_nth (List.map ras_name specs) vs_ir k (ras_name sp) Hnd) as [dv [Hdv Hbp]].
-  - rewrite List.map_length; symmetry; exact Hlen.
+  - rewrite List.length_map; symmetry; exact Hlen.
   - erewrite nth_error_map, Hsp_n; reflexivity.
   - rewrite Hvs_n in Hdv; inversion Hdv; subst dv; exact Hbp.
 Qed.
@@ -4054,7 +4054,7 @@ Proof.
   destruct (Hitem k sp _ Hsp_n Hnth_av) as (v & Hvs_n & Hvmc).
   exists v; split; [| exact Hvmc].
   destruct (build_param_env_nth (List.map ras_name specs) vs_ir k (ras_name sp) Hnd) as [dv [Hdv Hbp]].
-  - rewrite List.map_length; symmetry; exact Hlen.
+  - rewrite List.length_map; symmetry; exact Hlen.
   - erewrite nth_error_map, Hsp_n; reflexivity.
   - rewrite Hvs_n in Hdv; inversion Hdv; subst dv; exact Hbp.
 Qed.
@@ -5060,7 +5060,7 @@ Proof.
   destruct (Hitem k sp v_mc Hsp_n Hav_n) as (v & Hvs_n & Hvmc).
   exists v; split; [| exact Hvmc].
   destruct (build_param_env_nth (List.map ras_name specs) vs_ir k (ras_name sp) Hnd) as [dv [Hdv Hbp]].
-  - rewrite List.map_length; symmetry; exact Hlen_vs.
+  - rewrite List.length_map; symmetry; exact Hlen_vs.
   - erewrite nth_error_map, Hsp_n; reflexivity.
   - rewrite Hvs_n in Hdv; inversion Hdv; subst dv; exact Hbp.
 Qed.

@@ -3413,7 +3413,7 @@ Section InliningSemantics.
       destruct db as [| | | | | | | sz bv]; unfold freeze_base;
         try first [apply Hfmap_ret | apply model_hoare_ret; intros s Hs; exact Hs].
       + apply model_hoare_draw_preserve.
-      + destruct bv as [bi | p ix | bits];
+      + destruct bv as [| | bits];
           try first [apply Hfmap_ret | apply model_hoare_ret; intros s Hs; exact Hs].
         destruct (existsb is_poison_bit bits).
         * eapply model_hoare_bind; [apply model_hoare_draw_preserve |].
@@ -3691,13 +3691,13 @@ Section InliningSemantics.
                end;
         cbn [Memory_stack_memory].
         assert (Hlen_pos : (1 <= List.length (memory_bytes_to_bytes aid pbytes))%nat).
-        { unfold memory_bytes_to_bytes; rewrite map_acc_eq, map_length.
+        { unfold memory_bytes_to_bytes; rewrite map_acc_eq, length_map.
           unfold pbytes; rewrite concat_acc_eq.
           set (gb := generate_poison_bytes (DTYPE_Base DTYPE_Pointer)).
           replace (repeatN 1%N gb) with [gb] by reflexivity.
           cbn [List.concat]; rewrite app_nil_r.
           unfold gb, generate_poison_bytes, generate_num_poison_bytes, generate_num_poison_bytes_h.
-          rewrite seq_map_acc_eq, map_length, Nseq_length, N_to_nat_safe_eq.
+          rewrite seq_map_acc_eq, length_map, Nseq_length, N_to_nat_safe_eq.
           pose proof (@store_size_dtyp_ptr_pos (@SIZE PaV) (@SIZET PaV)) as Hptr.
           lia. }
         split.

@@ -66,15 +66,37 @@ Definition mc_string_to_bytes (s : string) : list N :=
 Lemma mc_string_to_bytes_acc_spec : forall s acc,
   mc_string_to_bytes_acc acc s = List.rev_append acc (string_to_bytes s).
 Proof.
-  induction s as [| c rest IH]; intros acc; cbn [mc_string_to_bytes_acc string_to_bytes].
-  - reflexivity.
-  - rewrite (IH (Ascii.N_of_ascii c :: acc)); reflexivity.
+  induction s as [| c rest IH]; intros acc; cbn [mc_string_to_bytes_acc].
+  - rewrite string_to_bytes_nil; reflexivity.
+  - rewrite string_to_bytes_cons, (IH (Ascii.N_of_ascii c :: acc)); reflexivity.
 Qed.
 
 Lemma mc_string_to_bytes_eq : forall s,
   mc_string_to_bytes s = string_to_bytes s.
 Proof.
   intros s; unfold mc_string_to_bytes; exact (mc_string_to_bytes_acc_spec s []).
+Qed.
+
+Fixpoint mc_map_tr_acc {A B : Type} (f : A -> B) (acc : list B) (xs : list A) {struct xs} : list B :=
+  match xs with
+  | [] => List.rev_append acc []
+  | x :: rest => mc_map_tr_acc f (f x :: acc) rest
+  end.
+
+Definition mc_map_tr {A B : Type} (f : A -> B) (xs : list A) : list B :=
+  mc_map_tr_acc f [] xs.
+
+Lemma mc_map_tr_acc_eq : forall {A B : Type} (f : A -> B) (acc : list B) (xs : list A),
+  mc_map_tr_acc f acc xs = List.rev_append acc (List.map f xs).
+Proof.
+  intros A B f acc xs; revert acc; induction xs as [| x rest IH]; intros acc;
+    cbn [mc_map_tr_acc List.map]; [reflexivity | rewrite IH; reflexivity].
+Qed.
+
+Lemma mc_map_tr_eq : forall {A B : Type} (f : A -> B) (xs : list A),
+  mc_map_tr f xs = List.map f xs.
+Proof.
+  intros A B f xs; unfold mc_map_tr; exact (mc_map_tr_acc_eq f [] xs).
 Qed.
 
 (** ** 2. Canonical [mc-cert-v1] AST & Well-Formedness *)
@@ -204,10 +226,10 @@ Definition wf_mc_loop_spec (arch : elf_arch) (ls : mc_loop_spec) : bool :=
   | EA_Riscv64 => N.eqb (N.modulo (ml_mc_pc ls) 2%N) 0%N
   | EA_AArch64 => N.eqb (N.modulo (ml_mc_pc ls) 4%N) 0%N
   end &&
-  no_dup_N (List.map mlr_reg (ml_regs ls)) &&
+  no_dup_N (mc_map_tr mlr_reg (ml_regs ls)) &&
   forallb (wf_mc_loop_reg_bind arch) (ml_regs ls) &&
   forallb (wf_mc_loop_slot_bind arch (ml_sp_off ls)) (ml_slots ls) &&
-  mc_intervals_pairwise_disjoint (List.map mc_loop_slot_interval (ml_slots ls)) &&
+  mc_intervals_pairwise_disjoint (mc_map_tr mc_loop_slot_interval (ml_slots ls)) &&
   match ml_inv ls with
   | None => true
   | Some inv =>
@@ -223,13 +245,13 @@ Definition wf_mc_callee_spec (c : mc_callee_spec) : bool :=
   Nat.leb (List.length (mcs_args c)) 8 &&
   forallb rv_valid_arg_spec (mcs_args c) &&
   forallb (fun sp => negb (mc_format_starts_with_bang (ras_name sp))) (mcs_args c) &&
-  mc_no_dup_strings (List.map ras_name (mcs_args c)).
+  mc_no_dup_strings (mc_map_tr ras_name (mcs_args c)).
 
 Definition wf_mc_calls (fn_name : string) (cs : list mc_callee_spec) : bool :=
   let fn_bare := mc_strip_leading_at fn_name in
   forallb wf_mc_callee_spec cs &&
   forallb (fun c => negb (String.eqb (mc_strip_leading_at (mcs_name c)) fn_bare)) cs &&
-  mc_no_dup_strings (List.map (fun c => mc_strip_leading_at (mcs_name c)) cs).
+  mc_no_dup_strings (mc_map_tr (fun c => mc_strip_leading_at (mcs_name c)) cs).
 
 Definition wf_mc_cert (c : mc_certificate) : bool :=
   negb (String.eqb (mc_fn_name c) "") &&

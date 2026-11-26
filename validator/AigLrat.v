@@ -608,6 +608,28 @@ Proof.
   rewrite Z2Nat.id by lia; reflexivity.
 Qed.
 
+Fixpoint length_tr_acc {A : Type} (acc : nat) (xs : list A) {struct xs} : nat :=
+  match xs with
+  | [] => acc
+  | _ :: rest => length_tr_acc (S acc) rest
+  end.
+
+Definition length_tr {A : Type} (xs : list A) : nat :=
+  length_tr_acc O xs.
+
+Lemma length_tr_acc_eq : forall {A : Type} (acc : nat) (xs : list A),
+  length_tr_acc acc xs = (acc + List.length xs)%nat.
+Proof.
+  intros A acc xs; revert acc; induction xs as [| x rest IH]; intro acc; cbn;
+    [lia | rewrite IH; lia].
+Qed.
+
+Lemma length_tr_eq : forall {A : Type} (xs : list A),
+  length_tr xs = List.length xs.
+Proof.
+  intros A xs; unfold length_tr; rewrite length_tr_acc_eq; reflexivity.
+Qed.
+
 (** ** 4. Monotone Tseitin Gate Builder & Verified 2-Rail Encodings *)
 
 (** Variable [1] is pinned to [true] via initial unit clause [(1, [1])],
@@ -646,18 +668,51 @@ Definition alloc_var (st : blast_state) : lit * blast_state :=
   (Z.pos (bs_next_var st),
    mk_blast_state (Pos.succ (bs_next_var st)) (bs_next_cid st) (bs_cnf st)).
 
-Fixpoint append_clauses (cid : positive) (cls : list clause)
+Fixpoint prepend_clauses_rev (cid : positive) (cls : list clause) (acc : cnf)
   {struct cls} : positive * cnf :=
   match cls with
-  | [] => (cid, [])
-  | c :: rest =>
-      let '(cid', tail_cnf) := append_clauses (Pos.succ cid) rest in
-      (cid', (cid, c) :: tail_cnf)
+  | [] => (cid, acc)
+  | c :: rest => prepend_clauses_rev (Pos.succ cid) rest ((cid, c) :: acc)
   end.
 
 Definition add_clauses (cls : list clause) (st : blast_state) : blast_state :=
-  let '(cid', new_cnf) := append_clauses (bs_next_cid st) cls in
-  mk_blast_state (bs_next_var st) cid' (bs_cnf st ++ new_cnf).
+  let '(cid', new_cnf) := prepend_clauses_rev (bs_next_cid st) cls (bs_cnf st) in
+  mk_blast_state (bs_next_var st) cid' new_cnf.
+
+Lemma prepend_clauses_rev_pref : forall cid cls acc cid' out,
+  prepend_clauses_rev cid cls acc = (cid', out) ->
+  exists d, out = d ++ acc.
+Proof.
+  intros cid cls; revert cid; induction cls as [| c rest IH];
+    intros cid acc cid' out H; cbn [prepend_clauses_rev] in H.
+  - inversion H; subst; exists []; reflexivity.
+  - destruct (IH (Pos.succ cid) ((cid, c) :: acc) cid' out H) as [d Hd].
+    exists (d ++ [(cid, c)]); rewrite Hd, <- app_assoc; reflexivity.
+Qed.
+
+Lemma add_clauses_pref : forall cls st,
+  exists d, bs_cnf (add_clauses cls st) = d ++ bs_cnf st.
+Proof.
+  intros cls st; unfold add_clauses.
+  destruct (prepend_clauses_rev (bs_next_cid st) cls (bs_cnf st)) as [cid' out] eqn:Hp.
+  cbn [bs_cnf]; exact (prepend_clauses_rev_pref _ _ _ _ _ Hp).
+Qed.
+
+Lemma prepend_clauses_rev_sat_split : forall assign cls cid acc cid' out,
+  prepend_clauses_rev cid cls acc = (cid', out) ->
+  eval_cnf assign out = true ->
+  eval_cnf assign acc = true /\
+  forall c, In c cls -> eval_clause assign c = true.
+Proof.
+  intros assign cls; induction cls as [| c0 cr IH];
+    intros cid acc cid' out H Hsat; cbn [prepend_clauses_rev] in H.
+  - inversion H; subst; split; [exact Hsat | intros c []].
+  - destruct (IH (Pos.succ cid) ((cid, c0) :: acc) cid' out H Hsat) as [Hacc Hcr].
+    unfold eval_cnf in Hacc; cbn [forallb] in Hacc.
+    apply andb_true_iff in Hacc as [Hc0 Hacc0].
+    split; [exact Hacc0 |].
+    intros c [<- | Hrest]; [exact Hc0 | exact (Hcr c Hrest)].
+Qed.
 
 Lemma add_clauses_sat_split : forall assign cls st,
   eval_cnf assign (bs_cnf (add_clauses cls st)) = true ->
@@ -665,20 +720,8 @@ Lemma add_clauses_sat_split : forall assign cls st,
   forall c, In c cls -> eval_clause assign c = true.
 Proof.
   intros assign cls st H; unfold add_clauses in H.
-  destruct (append_clauses (bs_next_cid st) cls) as [cid' new_cnf] eqn:Happ.
-  cbn [bs_cnf] in H; rewrite eval_cnf_app in H; apply andb_true_iff in H as [Hst Hnew].
-  split; [exact Hst |].
-  clear Hst; revert st cid' new_cnf Happ Hnew.
-  induction cls as [| c0 cr IH]; intros st cid' new_cnf Happ Hnew c Hin.
-  - inversion Hin.
-  - cbn in Happ.
-    destruct (append_clauses (Pos.succ (bs_next_cid st)) cr) as [cid2 tail_cnf] eqn:Hcr.
-    inversion Happ; subst; clear Happ.
-    cbn in Hnew; apply andb_true_iff in Hnew as [Hc0 Htail].
-    destruct Hin as [<- | Hrest].
-    + exact Hc0.
-    + exact (IH (mk_blast_state (bs_next_var st) (Pos.succ (bs_next_cid st)) (bs_cnf st))
-                cid' tail_cnf Hcr Htail c Hrest).
+  destruct (prepend_clauses_rev (bs_next_cid st) cls (bs_cnf st)) as [cid' out] eqn:Happ.
+  cbn [bs_cnf] in H; exact (prepend_clauses_rev_sat_split assign cls _ _ cid' out Happ H).
 Qed.
 
 (** *** 4.1 Verified Tseitin Gate Primitives ([AND], [OR], [XOR], [MUX], [EQ]) *)
@@ -905,32 +948,42 @@ Fixpoint map2_emit
   | _, _ => ([], st)
   end.
 
+Lemma eval_cnf_pref_rem : forall assign c1 c2 rem d,
+  c2 = d ++ c1 ->
+  eval_cnf assign (c2 ++ rem) = true ->
+  eval_cnf assign (c1 ++ rem) = true.
+Proof.
+  intros assign c1 c2 rem d -> H.
+  rewrite <- app_assoc, eval_cnf_app, andb_true_iff in H.
+  exact (proj2 H).
+Qed.
+
 Lemma bs_cnf_prefix_step :
   forall (gate : lit -> lit -> blast_state -> lit * blast_state)
          (Hpref : forall x y st z st1, gate x y st = (z, st1) ->
-                  exists delta, bs_cnf st1 = bs_cnf st ++ delta)
+                  exists delta, bs_cnf st1 = delta ++ bs_cnf st)
          xs ys st zs st',
     map2_emit gate xs ys st = (zs, st') ->
-    exists delta, bs_cnf st' = bs_cnf st ++ delta.
+    exists delta, bs_cnf st' = delta ++ bs_cnf st.
 Proof.
   intros gate Hpref xs.
   induction xs as [| x rx IH]; intros [| y ry] st zs st' Hm; cbn in Hm.
-  - inversion Hm; subst; exists []; rewrite app_nil_r; reflexivity.
-  - inversion Hm; subst; exists []; rewrite app_nil_r; reflexivity.
-  - inversion Hm; subst; exists []; rewrite app_nil_r; reflexivity.
+  - inversion Hm; subst; exists []; reflexivity.
+  - inversion Hm; subst; exists []; reflexivity.
+  - inversion Hm; subst; exists []; reflexivity.
   - destruct (gate x y st) as [z st1] eqn:Hg.
     destruct (map2_emit gate rx ry st1) as [zr st2] eqn:Hmr.
     inversion Hm; subst; clear Hm.
     destruct (Hpref x y st z st1 Hg) as [d1 Hd1].
     destruct (IH ry st1 zr st' Hmr) as [d2 Hd2].
-    exists (d1 ++ d2); rewrite Hd2, Hd1, app_assoc; reflexivity.
+    exists (d2 ++ d1); rewrite Hd2, Hd1, app_assoc; reflexivity.
 Qed.
 
 Lemma map2_emit_sound :
   forall (gate : lit -> lit -> blast_state -> lit * blast_state)
          (f_bool : bool -> bool -> bool)
          (Hpref : forall x y st z st1, gate x y st = (z, st1) ->
-                  exists delta, bs_cnf st1 = bs_cnf st ++ delta)
+                  exists delta, bs_cnf st1 = delta ++ bs_cnf st)
          (Hgate : forall assign x y st z st1,
                     x <> 0%Z -> y <> 0%Z ->
                     gate x y st = (z, st1) ->
@@ -968,30 +1021,33 @@ Proof.
     + cbn; rewrite Hzr_len; reflexivity.
     + constructor; [exact Hz | exact Hzr_wf].
     + intros rem [| k'] Hk Hsat; cbn [List.map List.nth].
-      * apply (Hz_ev (d2 ++ rem)).
-        rewrite app_assoc, <- Hd2; exact Hsat.
+      * apply (Hz_ev rem).
+        exact (eval_cnf_pref_rem assign _ _ rem d2 Hd2 Hsat).
       * apply (Hzr_ev rem); [cbn in Hk; lia | exact Hsat].
 Qed.
 
 Lemma emit_and2_pref : forall x y st z st1,
-  emit_and2 x y st = (z, st1) -> exists d, bs_cnf st1 = bs_cnf st ++ d.
+  emit_and2 x y st = (z, st1) -> exists d, bs_cnf st1 = d ++ bs_cnf st.
 Proof.
-  intros x y st z st1 H; unfold emit_and2 in H; cbn in H; inversion H; subst; cbn.
-  eexists; reflexivity.
+  intros x y st z st1 H; unfold emit_and2 in H; destruct (alloc_var st) as [out st0] eqn:Ha;
+    inversion H; subst; clear H; unfold alloc_var in Ha; inversion Ha; subst;
+    exact (add_clauses_pref _ _).
 Qed.
 
 Lemma emit_or2_pref : forall x y st z st1,
-  emit_or2 x y st = (z, st1) -> exists d, bs_cnf st1 = bs_cnf st ++ d.
+  emit_or2 x y st = (z, st1) -> exists d, bs_cnf st1 = d ++ bs_cnf st.
 Proof.
-  intros x y st z st1 H; unfold emit_or2 in H; cbn in H; inversion H; subst; cbn.
-  eexists; reflexivity.
+  intros x y st z st1 H; unfold emit_or2 in H; destruct (alloc_var st) as [out st0] eqn:Ha;
+    inversion H; subst; clear H; unfold alloc_var in Ha; inversion Ha; subst;
+    exact (add_clauses_pref _ _).
 Qed.
 
 Lemma emit_xor2_pref : forall x y st z st1,
-  emit_xor2 x y st = (z, st1) -> exists d, bs_cnf st1 = bs_cnf st ++ d.
+  emit_xor2 x y st = (z, st1) -> exists d, bs_cnf st1 = d ++ bs_cnf st.
 Proof.
-  intros x y st z st1 H; unfold emit_xor2 in H; cbn in H; inversion H; subst; cbn.
-  eexists; reflexivity.
+  intros x y st z st1 H; unfold emit_xor2 in H; destruct (alloc_var st) as [out st0] eqn:Ha;
+    inversion H; subst; clear H; unfold alloc_var in Ha; inversion Ha; subst;
+    exact (add_clauses_pref _ _).
 Qed.
 
 Definition blast_and_rail (sz : positive) (a b : rail_bv) (st : blast_state)
@@ -1018,8 +1074,8 @@ Proof.
   destruct (emit_or2_pref _ _ _ _ _ Hp) as [dp Hdp].
   destruct (emit_or2_sound assign _ _ _ _ _ Hpa Hpb Hp) as [Hpsn_nz Hpsn_ev].
   destruct (Hpsn_ev rem Hsat) as [_ Hpsn_eq].
-  assert (Hsat1 : eval_cnf assign (bs_cnf st1 ++ dp ++ rem) = true)
-    by (rewrite app_assoc, <- Hdp; exact Hsat).
+  assert (Hsat1 : eval_cnf assign (bs_cnf st1 ++ rem) = true)
+    by exact (eval_cnf_pref_rem assign _ _ rem dp Hdp Hsat).
   assert (Hlen_ab : List.length (rbv_bits a) = List.length (rbv_bits b)) by congruence.
   destruct (map2_emit_sound emit_and2 andb emit_and2_pref
               (fun asg x y s0 z s1 Hx Hy Hg =>
@@ -1035,7 +1091,7 @@ Proof.
   - apply @Integers.same_bits_eq; intros i Hi.
     rewrite @Integers.bits_and by exact Hi.
     rewrite !eval_rail_val_testbit by exact Hi.
-    cbn [rbv_bits]; apply (Hbev (dp ++ rem) (Z.to_nat i)); [| exact Hsat1].
+    cbn [rbv_bits]; apply (Hbev rem (Z.to_nat i)); [| exact Hsat1].
     rewrite Hla; unfold Integers.zwordsize in Hi; lia.
 Qed.
 
@@ -1063,8 +1119,8 @@ Proof.
   destruct (emit_or2_pref _ _ _ _ _ Hp) as [dp Hdp].
   destruct (emit_or2_sound assign _ _ _ _ _ Hpa Hpb Hp) as [Hpsn_nz Hpsn_ev].
   destruct (Hpsn_ev rem Hsat) as [_ Hpsn_eq].
-  assert (Hsat1 : eval_cnf assign (bs_cnf st1 ++ dp ++ rem) = true)
-    by (rewrite app_assoc, <- Hdp; exact Hsat).
+  assert (Hsat1 : eval_cnf assign (bs_cnf st1 ++ rem) = true)
+    by exact (eval_cnf_pref_rem assign _ _ rem dp Hdp Hsat).
   assert (Hlen_ab : List.length (rbv_bits a) = List.length (rbv_bits b)) by congruence.
   destruct (map2_emit_sound emit_or2 orb emit_or2_pref
               (fun asg x y s0 z s1 Hx Hy Hg =>
@@ -1080,7 +1136,7 @@ Proof.
   - apply @Integers.same_bits_eq; intros i Hi.
     rewrite @Integers.bits_or by exact Hi.
     rewrite !eval_rail_val_testbit by exact Hi.
-    cbn [rbv_bits]; apply (Hbev (dp ++ rem) (Z.to_nat i)); [| exact Hsat1].
+    cbn [rbv_bits]; apply (Hbev rem (Z.to_nat i)); [| exact Hsat1].
     rewrite Hla; unfold Integers.zwordsize in Hi; lia.
 Qed.
 
@@ -1108,8 +1164,8 @@ Proof.
   destruct (emit_or2_pref _ _ _ _ _ Hp) as [dp Hdp].
   destruct (emit_or2_sound assign _ _ _ _ _ Hpa Hpb Hp) as [Hpsn_nz Hpsn_ev].
   destruct (Hpsn_ev rem Hsat) as [_ Hpsn_eq].
-  assert (Hsat1 : eval_cnf assign (bs_cnf st1 ++ dp ++ rem) = true)
-    by (rewrite app_assoc, <- Hdp; exact Hsat).
+  assert (Hsat1 : eval_cnf assign (bs_cnf st1 ++ rem) = true)
+    by exact (eval_cnf_pref_rem assign _ _ rem dp Hdp Hsat).
   assert (Hlen_ab : List.length (rbv_bits a) = List.length (rbv_bits b)) by congruence.
   destruct (map2_emit_sound emit_xor2 xorb emit_xor2_pref
               (fun asg x y s0 z s1 Hx Hy Hg =>
@@ -1125,31 +1181,64 @@ Proof.
   - apply @Integers.same_bits_eq; intros i Hi.
     rewrite @Integers.bits_xor by exact Hi.
     rewrite !eval_rail_val_testbit by exact Hi.
-    cbn [rbv_bits]; apply (Hbev (dp ++ rem) (Z.to_nat i)); [| exact Hsat1].
+    cbn [rbv_bits]; apply (Hbev rem (Z.to_nat i)); [| exact Hsat1].
     rewrite Hla; unfold Integers.zwordsize in Hi; lia.
 Qed.
 
-Fixpoint emit_or_list (ls : list lit) (st : blast_state)
+Fixpoint emit_or_list_acc (acc : lit) (ls : list lit) (st : blast_state)
   {struct ls} : lit * blast_state :=
   match ls with
-  | [] => (lit_false, st)
-  | [x] => (x, st)
+  | [] => (acc, st)
   | x :: rest =>
-      let '(sub, st1) := emit_or_list rest st in
-      emit_or2 x sub st1
+      let '(acc1, st1) := emit_or2 acc x st in
+      emit_or_list_acc acc1 rest st1
   end.
 
-Lemma emit_or_list_pref : forall ls st out st',
-  emit_or_list ls st = (out, st') -> exists d, bs_cnf st' = bs_cnf st ++ d.
+Definition emit_or_list (ls : list lit) (st : blast_state) : lit * blast_state :=
+  match ls with
+  | [] => (lit_false, st)
+  | x :: rest => emit_or_list_acc x rest st
+  end.
+
+Lemma emit_or_list_acc_pref : forall ls acc st out st',
+  emit_or_list_acc acc ls st = (out, st') -> exists d, bs_cnf st' = d ++ bs_cnf st.
 Proof.
-  induction ls as [| x [| y r] IH]; intros st out st' H.
-  - cbn in H; inversion H; subst; exists []; rewrite app_nil_r; reflexivity.
-  - cbn in H; inversion H; subst; exists []; rewrite app_nil_r; reflexivity.
-  - change ((let '(sub, st1) := emit_or_list (y :: r) st in emit_or2 x sub st1) = (out, st')) in H.
-    destruct (emit_or_list (y :: r) st) as [sub st1] eqn:Hs.
-    destruct (IH st sub st1 Hs) as [d1 Hd1].
-    destruct (emit_or2_pref x sub st1 out st' H) as [d2 Hd2].
-    exists (d1 ++ d2); rewrite Hd2, Hd1, app_assoc; reflexivity.
+  induction ls as [| x rest IH]; intros acc st out st' H; cbn [emit_or_list_acc] in H.
+  - inversion H; subst; exists []; reflexivity.
+  - destruct (emit_or2 acc x st) as [acc1 st1] eqn:He.
+    destruct (emit_or2_pref acc x st acc1 st1 He) as [d1 Hd1].
+    destruct (IH acc1 st1 out st' H) as [d2 Hd2].
+    exists (d2 ++ d1); rewrite Hd2, Hd1, app_assoc; reflexivity.
+Qed.
+
+Lemma emit_or_list_pref : forall ls st out st',
+  emit_or_list ls st = (out, st') -> exists d, bs_cnf st' = d ++ bs_cnf st.
+Proof.
+  intros [| x rest] st out st' H; cbn [emit_or_list] in H.
+  - inversion H; subst; exists []; reflexivity.
+  - exact (emit_or_list_acc_pref rest x st out st' H).
+Qed.
+
+Lemma emit_or_list_acc_sound : forall assign ls acc st out st' rem,
+  acc <> 0%Z ->
+  wf_lits_nonzero ls ->
+  emit_or_list_acc acc ls st = (out, st') ->
+  eval_cnf assign (bs_cnf st' ++ rem) = true ->
+  out <> 0%Z /\
+  eval_lit assign out = (eval_lit assign acc || existsb (eval_lit assign) ls).
+Proof.
+  intros assign ls; induction ls as [| x rest IH]; intros acc st out st' rem Hacc Hwf Hemit Hsat;
+    cbn [emit_or_list_acc] in Hemit.
+  - inversion Hemit; subst; split; [exact Hacc | cbn; rewrite orb_false_r; reflexivity].
+  - inversion Hwf as [| ? ? Hx Hwfr]; subst.
+    destruct (emit_or2 acc x st) as [acc1 st1] eqn:He.
+    destruct (emit_or_list_acc_pref rest acc1 st1 out st' Hemit) as [d2 Hd2].
+    assert (Hsat1 : eval_cnf assign (bs_cnf st1 ++ rem) = true)
+      by exact (eval_cnf_pref_rem assign _ _ rem d2 Hd2 Hsat).
+    destruct (emit_or2_sound assign acc x st acc1 st1 Hacc Hx He) as [Hacc1_nz Hacc1_ev].
+    destruct (IH acc1 st1 out st' rem Hacc1_nz Hwfr Hemit Hsat) as [Hout_nz Hout_ev].
+    split; [exact Hout_nz |].
+    rewrite Hout_ev, (proj2 (Hacc1_ev rem Hsat1)); cbn [existsb]; rewrite orb_assoc; reflexivity.
 Qed.
 
 Lemma emit_or_list_sound : forall assign ls st out st' rem,
@@ -1160,21 +1249,10 @@ Lemma emit_or_list_sound : forall assign ls st out st' rem,
   out <> 0%Z /\
   eval_lit assign out = existsb (eval_lit assign) ls.
 Proof.
-  intros assign ls.
-  induction ls as [| x [| y r] IH]; intros st out st' rem Hlf Hwf Hemit Hsat.
-  - cbn in Hemit; inversion Hemit; subst; split; [discriminate | exact Hlf].
-  - cbn in Hemit; inversion Hemit; subst; inversion Hwf as [| ? ? Hx _]; subst.
-    split; [exact Hx | cbn; rewrite orb_false_r; reflexivity].
-  - change ((let '(sub, st1) := emit_or_list (y :: r) st in emit_or2 x sub st1) = (out, st')) in Hemit.
-    inversion Hwf as [| ? ? Hx Hwfr]; subst.
-    destruct (emit_or_list (y :: r) st) as [sub st1] eqn:Hsub.
-    destruct (emit_or2_pref x sub st1 out st' Hemit) as [d2 Hd2].
-    assert (Hsat1 : eval_cnf assign (bs_cnf st1 ++ d2 ++ rem) = true)
-      by (rewrite app_assoc, <- Hd2; exact Hsat).
-    destruct (IH st sub st1 (d2 ++ rem) Hlf Hwfr Hsub Hsat1) as [Hsub_nz Hsub_ev].
-    destruct (emit_or2_sound assign x sub st1 out st' Hx Hsub_nz Hemit) as [Hout_nz Hout_ev].
-    split; [exact Hout_nz |].
-    rewrite (proj2 (Hout_ev rem Hsat)), Hsub_ev; reflexivity.
+  intros assign [| x rest] st out st' rem Hlf Hwf Hemit Hsat; cbn [emit_or_list] in Hemit.
+  - inversion Hemit; subst; split; [unfold lit_false; discriminate | exact Hlf].
+  - inversion Hwf as [| ? ? Hx Hwfr]; subst.
+    exact (emit_or_list_acc_sound assign rest x st out st' rem Hx Hwfr Hemit Hsat).
 Qed.
 
 (** *** 4.3 Equality, Select, and Freeze 2-Rail Encoders *)
@@ -1221,21 +1299,23 @@ Definition blast_freeze_rail (sz : positive) (op : rail_bv) (st : blast_state)
   (mk_rail_bv sz bits lit_false, st2).
 
 Lemma mux_bits_list_pref : forall sel ts fs st ms st',
-  mux_bits_list sel ts fs st = (ms, st') -> exists d, bs_cnf st' = bs_cnf st ++ d.
+  mux_bits_list sel ts fs st = (ms, st') -> exists d, bs_cnf st' = d ++ bs_cnf st.
 Proof.
   intros sel ts.
   induction ts as [| t rt IH]; intros [| f rf] st ms st' H; cbn [mux_bits_list] in H.
-  - inversion H; subst; exists []; rewrite app_nil_r; reflexivity.
-  - inversion H; subst; exists []; rewrite app_nil_r; reflexivity.
-  - inversion H; subst; exists []; rewrite app_nil_r; reflexivity.
+  - inversion H; subst; exists []; reflexivity.
+  - inversion H; subst; exists []; reflexivity.
+  - inversion H; subst; exists []; reflexivity.
   - destruct (emit_mux2 sel t f st) as [m st1] eqn:Hm.
     destruct (mux_bits_list sel rt rf st1) as [mr st2] eqn:Hmr.
     inversion H; subst; clear H.
-    assert (Hd1 : exists d1, bs_cnf st1 = bs_cnf st ++ d1).
-    { unfold emit_mux2 in Hm; cbn in Hm; inversion Hm; subst; cbn; eexists; reflexivity. }
+    assert (Hd1 : exists d1, bs_cnf st1 = d1 ++ bs_cnf st).
+    { unfold emit_mux2 in Hm; destruct (alloc_var st) as [out st0] eqn:Ha;
+        inversion Hm; subst; clear Hm; unfold alloc_var in Ha; inversion Ha; subst;
+        exact (add_clauses_pref _ _). }
     destruct Hd1 as [d1 Hd1].
     destruct (IH rf st1 mr st' Hmr) as [d2 Hd2].
-    exists (d1 ++ d2); rewrite Hd2, Hd1, app_assoc; reflexivity.
+    exists (d2 ++ d1); rewrite Hd2, Hd1, app_assoc; reflexivity.
 Qed.
 
 Lemma mux_bits_list_sound : forall assign sel ts fs st ms st' rem,
@@ -1262,15 +1342,15 @@ Proof.
     destruct (mux_bits_list sel rt rf st1) as [mr st2] eqn:Hmr.
     inversion Hm; subst; clear Hm.
     destruct (mux_bits_list_pref sel rt rf st1 mr st' Hmr) as [d2 Hd2].
-    assert (Hs1 : eval_cnf assign (bs_cnf st1 ++ d2 ++ rem) = true)
-      by (rewrite app_assoc, <- Hd2; exact Hsat).
+    assert (Hs1 : eval_cnf assign (bs_cnf st1 ++ rem) = true)
+      by exact (eval_cnf_pref_rem assign _ _ rem d2 Hd2 Hsat).
     destruct (emit_mux2_sound assign sel t f st m st1 Hsel Ht Hf He) as [Hm_nz Hm_ev].
     destruct (IH rf st1 mr st' rem Hsel Hlen' Hwrt Hwrf Hmr Hsat)
       as (Hmr_len & Hmr_wf & Hmr_ev).
     repeat split.
     + cbn; rewrite Hmr_len; reflexivity.
     + constructor; [exact Hm_nz | exact Hmr_wf].
-    + cbn [List.map]; rewrite (proj2 (Hm_ev (d2 ++ rem) Hs1)), Hmr_ev.
+    + cbn [List.map]; rewrite (proj2 (Hm_ev rem Hs1)), Hmr_ev.
       destruct (eval_lit assign sel); reflexivity.
 Qed.
 
@@ -1402,8 +1482,11 @@ Proof.
   destruct (emit_and2 src_no_ub def_bad st4) as [cex_lit st5] eqn:Hcex.
   cbn [snd] in Hgates.
   unfold add_clauses in Hquery_false.
-  cbn [append_clauses bs_cnf] in Hquery_false.
-  rewrite eval_cnf_app, Hgates in Hquery_false; cbn in Hquery_false.
+  cbn [prepend_clauses_rev bs_cnf] in Hquery_false.
+  unfold eval_cnf in Hquery_false; cbn [forallb] in Hquery_false.
+  change (forallb (fun '(_, c) => eval_clause assign c) (bs_cnf st5))
+    with (eval_cnf assign (bs_cnf st5)) in Hquery_false.
+  rewrite Hgates in Hquery_false; cbn in Hquery_false.
   rewrite orb_false_r, andb_true_r in Hquery_false.
   assert (Hlen_st : List.length (rbv_bits src_r) = List.length (rbv_bits tgt_r)) by congruence.
   destruct (map2_emit_sound emit_xor2 xorb emit_xor2_pref
@@ -1416,16 +1499,18 @@ Proof.
   destruct (emit_or2_pref _ _ _ _ _ Hbad) as [d3 Hd3].
   destruct (emit_and2_pref _ _ _ _ _ Hdef) as [d4 Hd4].
   destruct (emit_and2_pref _ _ _ _ _ Hcex) as [d5 Hd5].
-  assert (Hs4 : eval_cnf assign (bs_cnf st4 ++ d5) = true)
-    by (rewrite <- Hd5; exact Hgates).
-  assert (Hs3 : eval_cnf assign (bs_cnf st3 ++ d4 ++ d5) = true)
-    by (rewrite app_assoc, <- Hd4; exact Hs4).
-  assert (Hs2 : eval_cnf assign (bs_cnf st2 ++ d3 ++ d4 ++ d5) = true)
-    by (rewrite app_assoc, <- Hd3; exact Hs3).
-  assert (Hs1 : eval_cnf assign (bs_cnf st1 ++ d2 ++ d3 ++ d4 ++ d5) = true)
-    by (rewrite app_assoc, <- Hd2; exact Hs2).
+  assert (Hs5 : eval_cnf assign (bs_cnf st5 ++ []) = true)
+    by (rewrite app_nil_r; exact Hgates).
+  assert (Hs4 : eval_cnf assign (bs_cnf st4 ++ []) = true)
+    by exact (eval_cnf_pref_rem assign _ _ [] d5 Hd5 Hs5).
+  assert (Hs3 : eval_cnf assign (bs_cnf st3 ++ []) = true)
+    by exact (eval_cnf_pref_rem assign _ _ [] d4 Hd4 Hs4).
+  assert (Hs2 : eval_cnf assign (bs_cnf st2 ++ []) = true)
+    by exact (eval_cnf_pref_rem assign _ _ [] d3 Hd3 Hs3).
+  assert (Hs1 : eval_cnf assign (bs_cnf st1 ++ []) = true)
+    by exact (eval_cnf_pref_rem assign _ _ [] d2 Hd2 Hs2).
   destruct (emit_or_list_sound assign xor_bits st1 val_diff st2
-              (d3 ++ d4 ++ d5) Hlf Hxwf Horl Hs2) as [Hvd_nz Hvd_ev].
+              [] Hlf Hxwf Horl Hs2) as [Hvd_nz Hvd_ev].
   destruct (emit_or2_sound assign (rbv_psn tgt_r) val_diff st2 bad_tgt st3
               Hpt Hvd_nz Hbad) as [Hbt_nz Hbt_ev].
   assert (Hnps_nz : neg_lit (rbv_psn src_r) <> 0%Z)
@@ -1436,15 +1521,15 @@ Proof.
               Hnub Hdb_nz Hcex) as [_ Hcex_ev].
   pose proof (proj2 (Hcex_ev [] (eq_ind_r (fun c => eval_cnf assign c = true)
                                           Hgates (app_nil_r (bs_cnf st5))))) as Hcex_eq.
-  rewrite Hcex_eq, Hno_ub, (proj2 (Hdb_ev d5 Hs4)),
+  rewrite Hcex_eq, Hno_ub, (proj2 (Hdb_ev [] Hs4)),
           (eval_neg_lit_nonzero assign (rbv_psn src_r) Hps) in Hquery_false.
   unfold eval_rail_psn in Hsrc_def; rewrite Hsrc_def in Hquery_false; cbn in Hquery_false.
-  rewrite (proj2 (Hbt_ev (d4 ++ d5) Hs3)), Hvd_ev in Hquery_false.
+  rewrite (proj2 (Hbt_ev [] Hs3)), Hvd_ev in Hquery_false.
   apply orb_false_iff in Hquery_false as [Htgt_def Hxor_false].
   split; [exact Htgt_def |].
   apply (existsb_xor_bits_diff sz assign src_r tgt_r xor_bits
            (conj Hws Hls) (conj Hwt Hlt)); [congruence | | exact Hxor_false].
-  intros k Hk; apply (Hxev (d2 ++ d3 ++ d4 ++ d5) k); [congruence | exact Hs1].
+  intros k Hk; apply (Hxev [] k); [congruence | exact Hs1].
 Qed.
 
 Theorem blast_refinement_cex_unsat_sound :
@@ -1598,16 +1683,19 @@ Fixpoint pick_unassigned_in_clause (trail : pos_trie bool) (cl : clause)
       end
   end.
 
-Fixpoint unassigned_count_clause (trail : pos_trie bool) (cl : clause)
+Fixpoint unassigned_count_clause_acc (trail : pos_trie bool) (acc : nat) (cl : clause)
   {struct cl} : nat :=
   match cl with
-  | [] => O
+  | [] => acc
   | l :: rest =>
       match lit_status trail l with
-      | None => S (unassigned_count_clause trail rest)
-      | Some _ => unassigned_count_clause trail rest
+      | None => unassigned_count_clause_acc trail (S acc) rest
+      | Some _ => unassigned_count_clause_acc trail acc rest
       end
   end.
+
+Definition unassigned_count_clause (trail : pos_trie bool) (cl : clause) : nat :=
+  unassigned_count_clause_acc trail O cl.
 
 Fixpoint pick_branch_var (trail : pos_trie bool) (best : option (nat * positive)) (f : cnf)
   {struct f} : option positive :=
@@ -1638,7 +1726,7 @@ Fixpoint dpll_worklist (fuel : nat) (stack : list (pos_trie bool * cnf))
       match fuel with
       | O => false
       | S fuel' =>
-          match bcp_loop (S (List.length f)) trail f with
+          match bcp_loop (S (length_tr f)) trail f with
           | BCP_LoopConflict => dpll_worklist fuel' rest
           | BCP_LoopOpen trail1 active =>
               match pick_branch_var trail1 None active with
@@ -1663,8 +1751,8 @@ Proof.
     cbn [dpll_worklist] in Hdpll.
     destruct Hin as [Heq | Hin_rest].
     + inversion Heq; subst tr0 f0; clear Heq.
-      pose proof (bcp_loop_sound assign (S (List.length f)) trail f Htr Hf) as Hbl.
-      destruct (bcp_loop (S (List.length f)) trail f) as [| trail1 active]; [exact Hbl |].
+      pose proof (bcp_loop_sound assign (S (length_tr f)) trail f Htr Hf) as Hbl.
+      destruct (bcp_loop (S (length_tr f)) trail f) as [| trail1 active]; [exact Hbl |].
       destruct Hbl as [Htr1 Hact].
       destruct (pick_branch_var trail1 None active) as [v |]; [| discriminate Hdpll].
       destruct (assign v) eqn:Hv.
@@ -1674,7 +1762,7 @@ Proof.
       * apply (IH assign _ Hdpll).
         exists (pt_set v false trail1), active.
         split; [right; left; reflexivity | split; [exact (trail_sound_set assign trail1 v false Htr1 Hv) | exact Hact]].
-    + destruct (bcp_loop (S (List.length f0)) tr0 f0) as [| trail1 active].
+    + destruct (bcp_loop (S (length_tr f0)) tr0 f0) as [| trail1 active].
       * apply (IH assign rest Hdpll).
         exists trail, f; exact (conj Hin_rest (conj Htr Hf)).
       * destruct (pick_branch_var trail1 None active) as [v |]; [| discriminate Hdpll].
@@ -1979,23 +2067,24 @@ Proof.
   intros st st' asg asg' ls (_ & Hag & _) Hls; symmetry; exact (eval_lits_agree _ asg asg' ls Hag Hls).
 Qed.
 
-Lemma append_clauses_sat_intro : forall asg bound cls cid cid' new_cnf,
+Lemma prepend_clauses_rev_sat_intro : forall asg bound cls cid acc cid' out,
+  wf_cnf_bound bound acc ->
+  eval_cnf asg acc = true ->
   Forall (wf_clause_bound bound) cls ->
   (forall cl, In cl cls -> eval_clause asg cl = true) ->
-  append_clauses cid cls = (cid', new_cnf) ->
-  wf_cnf_bound bound new_cnf /\ eval_cnf asg new_cnf = true.
+  prepend_clauses_rev cid cls acc = (cid', out) ->
+  wf_cnf_bound bound out /\ eval_cnf asg out = true.
 Proof.
   intros asg bound cls; induction cls as [| c rest IH];
-    intros cid cid' new_cnf HF Hsat Happ; cbn in Happ.
-  - inversion Happ; subst; split; [constructor | reflexivity].
+    intros cid acc cid' out Hacc Hev HF Hsat Happ; cbn in Happ.
+  - inversion Happ; subst; split; assumption.
   - inversion HF as [| ? ? Hc Hrest]; subst.
-    destruct (append_clauses (Pos.succ cid) rest) as [cid2 tail_cnf] eqn:Htr.
-    inversion Happ; subst; clear Happ.
-    destruct (IH (Pos.succ cid) cid' tail_cnf Hrest
-                (fun cl H => Hsat cl (or_intror H)) Htr) as [Hwf Hev].
-    split.
-    + constructor; [exact Hc | exact Hwf].
+    apply (IH (Pos.succ cid) ((cid, c) :: acc) cid' out).
+    + constructor; [exact Hc | exact Hacc].
     + unfold eval_cnf in Hev |- *; cbn [forallb]; rewrite (Hsat c (or_introl eq_refl)), Hev; reflexivity.
+    + exact Hrest.
+    + intros cl Hin; exact (Hsat cl (or_intror Hin)).
+    + exact Happ.
 Qed.
 
 Lemma add_clauses_sat_intro : forall asg st cls,
@@ -2009,14 +2098,11 @@ Lemma add_clauses_sat_intro : forall asg st cls,
 Proof.
   intros asg st cls Hge2 Ha1 Hwf_st Hwf_cls Hev_st Hcls.
   unfold add_clauses.
-  destruct (append_clauses (bs_next_cid st) cls) as [cid' new_cnf] eqn:Happ.
-  destruct (append_clauses_sat_intro asg (bs_next_var st) cls
-              (bs_next_cid st) cid' new_cnf Hwf_cls Hcls Happ) as [Hwf_new Hev_new].
-  repeat split; cbn -[eval_cnf].
-  - exact Hge2.
-  - apply Forall_app; split; [exact Hwf_st | exact Hwf_new].
-  - exact Ha1.
-  - rewrite eval_cnf_app, Hev_st, Hev_new; reflexivity.
+  destruct (prepend_clauses_rev (bs_next_cid st) cls (bs_cnf st)) as [cid' new_cnf] eqn:Happ.
+  destruct (prepend_clauses_rev_sat_intro asg (bs_next_var st) cls
+              (bs_next_cid st) (bs_cnf st) cid' new_cnf Hwf_st Hev_st Hwf_cls Hcls Happ)
+    as [Hwf_new Hev_new].
+  repeat split; cbn -[eval_cnf]; assumption.
 Qed.
 
 Lemma alloc_var_sat : forall asg st b out st1,
@@ -2097,7 +2183,7 @@ Proof.
   assert (Hbs : bs_next_var (add_clauses
                   [[neg_lit vlit; a]; [neg_lit vlit; b]; [vlit; neg_lit a; neg_lit b]] st1) =
                 bs_next_var st1)
-    by (unfold add_clauses; destruct (append_clauses _ _); reflexivity).
+    by (unfold add_clauses; destruct (prepend_clauses_rev _ _ _); reflexivity).
   assert (Hwa1 : wf_lit_bound (bs_next_var st1) a)
     by exact (wf_lit_bound_mono _ _ a Hle1 Hwa).
   assert (Hwb1 : wf_lit_bound (bs_next_var st1) b)
@@ -2145,7 +2231,7 @@ Proof.
   assert (Hbs : bs_next_var (add_clauses
                   [[vlit; neg_lit a]; [vlit; neg_lit b]; [neg_lit vlit; a; b]] st1) =
                 bs_next_var st1)
-    by (unfold add_clauses; destruct (append_clauses _ _); reflexivity).
+    by (unfold add_clauses; destruct (prepend_clauses_rev _ _ _); reflexivity).
   assert (Hwa1 : wf_lit_bound (bs_next_var st1) a)
     by exact (wf_lit_bound_mono _ _ a Hle1 Hwa).
   assert (Hwb1 : wf_lit_bound (bs_next_var st1) b)
@@ -2194,7 +2280,7 @@ Proof.
                   [[neg_lit vlit; a; b]; [neg_lit vlit; neg_lit a; neg_lit b];
                    [vlit; neg_lit a; b]; [vlit; a; neg_lit b]] st1) =
                 bs_next_var st1)
-    by (unfold add_clauses; destruct (append_clauses _ _); reflexivity).
+    by (unfold add_clauses; destruct (prepend_clauses_rev _ _ _); reflexivity).
   assert (Hwa1 : wf_lit_bound (bs_next_var st1) a)
     by exact (wf_lit_bound_mono _ _ a Hle1 Hwa).
   assert (Hwb1 : wf_lit_bound (bs_next_var st1) b)
@@ -2249,7 +2335,7 @@ Proof.
                    [sel; neg_lit vlit; fl];
                    [sel; vlit; neg_lit fl]] st1) =
                 bs_next_var st1)
-    by (unfold add_clauses; destruct (append_clauses _ _); reflexivity).
+    by (unfold add_clauses; destruct (prepend_clauses_rev _ _ _); reflexivity).
   assert (Hws1 : wf_lit_bound (bs_next_var st1) sel)
     by exact (wf_lit_bound_mono _ _ sel Hle1 Hws).
   assert (Hwt1 : wf_lit_bound (bs_next_var st1) tl)
@@ -2337,6 +2423,34 @@ Proof.
       constructor; [exact (wf_lit_bound_mono _ _ z Hle2 Hz) | exact Hwf_zr].
 Qed.
 
+Lemma emit_or_list_acc_sat : forall ls acc asg st out st',
+  wf_lit_bound (bs_next_var st) acc ->
+  wf_lits_bound (bs_next_var st) ls ->
+  sat_blast_st asg st ->
+  emit_or_list_acc acc ls st = (out, st') ->
+  exists asg',
+    (bs_next_var st <= bs_next_var st')%positive /\
+    agree_below (bs_next_var st) asg asg' /\
+    sat_blast_st asg' st' /\
+    wf_lit_bound (bs_next_var st') out.
+Proof.
+  induction ls as [| x rest IH]; intros acc asg st out st' Hacc Hwf Hsat Hemit;
+    cbn [emit_or_list_acc] in Hemit.
+  - inversion Hemit; subst; exists asg;
+      split; [lia | split; [apply agree_below_refl | split; assumption]].
+  - inversion Hwf as [| ? ? Hx Hwfr]; subst.
+    destruct (emit_or2 acc x st) as [acc1 st1] eqn:He.
+    destruct (emit_or2_sat asg acc x st acc1 st1 Hsat Hacc Hx He)
+      as (asg1 & Hle1 & Hag1 & Hsat1 & Hwf_acc1).
+    destruct (IH acc1 asg1 st1 out st' Hwf_acc1
+                (wf_lits_bound_mono _ _ rest Hle1 Hwfr) Hsat1 Hemit)
+      as (asg2 & Hle2 & Hag2 & Hsat2 & Hwf_out).
+    exists asg2; split; [lia | split].
+    + exact (agree_below_trans _ asg asg1 asg2 Hag1
+               (agree_below_le _ _ asg1 asg2 Hle1 Hag2)).
+    + split; [exact Hsat2 | exact Hwf_out].
+Qed.
+
 Lemma emit_or_list_sat : forall ls asg st out st',
   wf_lits_bound (bs_next_var st) ls ->
   sat_blast_st asg st ->
@@ -2347,25 +2461,12 @@ Lemma emit_or_list_sat : forall ls asg st out st',
     sat_blast_st asg' st' /\
     wf_lit_bound (bs_next_var st') out.
 Proof.
-  induction ls as [| x [| y r] IH]; intros asg st out st' Hwf Hsat Hemit.
-  - cbn in Hemit; inversion Hemit; subst; exists asg;
+  intros [| x rest] asg st out st' Hwf Hsat Hemit; cbn [emit_or_list] in Hemit.
+  - inversion Hemit; subst; exists asg;
       split; [lia | split; [apply agree_below_refl | split; [exact Hsat |
       cbn; pose proof (proj1 (proj1 Hsat)); lia]]].
-  - cbn in Hemit; inversion Hemit; subst; inversion Hwf as [| ? ? Hx _]; subst.
-    exists asg;
-      split; [lia | split; [apply agree_below_refl | split; [exact Hsat | exact Hx]]].
-  - change ((let '(sub, st1) := emit_or_list (y :: r) st in emit_or2 x sub st1) = (out, st')) in Hemit.
-    inversion Hwf as [| ? ? Hx Hwfr]; subst.
-    destruct (emit_or_list (y :: r) st) as [sub st1] eqn:Hsub.
-    destruct (IH asg st sub st1 Hwfr Hsat Hsub)
-      as (asg1 & Hle1 & Hag1 & Hsat1 & Hwf_sub).
-    destruct (emit_or2_sat asg1 x sub st1 out st' Hsat1
-                (wf_lit_bound_mono _ _ x Hle1 Hx) Hwf_sub Hemit)
-      as (asg2 & Hle2 & Hag2 & Hsat2 & Hwf_out).
-    exists asg2; split; [lia | split].
-    + exact (agree_below_trans _ asg asg1 asg2 Hag1
-               (agree_below_le _ _ asg1 asg2 Hle1 Hag2)).
-    + split; [exact Hsat2 | exact Hwf_out].
+  - inversion Hwf as [| ? ? Hx Hwfr]; subst.
+    exact (emit_or_list_acc_sat rest x asg st out st' Hx Hwfr Hsat Hemit).
 Qed.
 
 Lemma mux_bits_list_sat : forall ts fs sel asg st ms st',
@@ -2743,14 +2844,46 @@ Proof.
                      (step_spec_eval_lits st st1 asg asg1 ry Hs1 Hwry); reflexivity.
 Qed.
 
-Fixpoint emit_or_list_opt (ls : list lit) (st : blast_state)
+Fixpoint emit_or_list_opt_acc (acc : lit) (ls : list lit) (st : blast_state)
   {struct ls} : lit * blast_state :=
   match ls with
-  | [] => (lit_false, st)
+  | [] => (acc, st)
   | x :: rest =>
-      let '(sub, st1) := emit_or_list_opt rest st in
-      emit_or2_opt x sub st1
+      let '(acc1, st1) := emit_or2_opt acc x st in
+      emit_or_list_opt_acc acc1 rest st1
   end.
+
+Definition emit_or_list_opt (ls : list lit) (st : blast_state) : lit * blast_state :=
+  match ls with
+  | [] => (lit_false, st)
+  | x :: rest => emit_or_list_opt_acc x rest st
+  end.
+
+Lemma emit_or_list_opt_acc_step : forall ls acc asg st out st',
+  wf_lit_bound (bs_next_var st) acc ->
+  wf_lits_bound (bs_next_var st) ls ->
+  sat_blast_st asg st ->
+  emit_or_list_opt_acc acc ls st = (out, st') ->
+  exists asg',
+    step_spec st st' asg asg' /\
+    wf_lit_bound (bs_next_var st') out /\
+    eval_lit asg' out =
+      (eval_lit asg acc || existsb (fun b : bool => b) (List.map (eval_lit asg) ls)).
+Proof.
+  induction ls as [| x rest IH]; intros acc asg st out st' Hacc Hwf Hsat Hemit;
+    cbn [emit_or_list_opt_acc] in Hemit.
+  - inversion Hemit; subst; exists asg; split;
+      [exact (step_spec_refl _ asg Hsat) | split; [exact Hacc | cbn; rewrite orb_false_r; reflexivity]].
+  - inversion Hwf as [| ? ? Hx Hwfr]; subst.
+    destruct (emit_or2_opt acc x st) as [acc1 st1] eqn:He.
+    destruct (emit_or2_opt_step asg acc x st acc1 st1 Hsat Hacc Hx He)
+      as (asg1 & Hs1 & Hwf_acc1 & Hev_acc1).
+    destruct (IH acc1 asg1 st1 out st' Hwf_acc1
+                (wf_lits_bound_mono _ _ rest (proj1 Hs1) Hwfr) (proj2 (proj2 Hs1)) Hemit)
+      as (asg2 & Hs2 & Hwf_out & Hev_out).
+    exists asg2; split; [exact (step_spec_trans st st1 st' asg asg1 asg2 Hs1 Hs2) | split; [exact Hwf_out |]].
+    cbn [List.map existsb]; rewrite Hev_out, Hev_acc1, (step_spec_eval_lits st st1 asg asg1 rest Hs1 Hwfr), orb_assoc; reflexivity.
+Qed.
 
 Lemma emit_or_list_opt_step : forall ls asg st out st',
   wf_lits_bound (bs_next_var st) ls ->
@@ -2761,18 +2894,12 @@ Lemma emit_or_list_opt_step : forall ls asg st out st',
     wf_lit_bound (bs_next_var st') out /\
     eval_lit asg' out = existsb (fun b : bool => b) (List.map (eval_lit asg) ls).
 Proof.
-  induction ls as [| x rest IH]; intros asg st out st' Hwf Hsat Hemit; cbn [emit_or_list_opt] in Hemit.
+  intros [| x rest] asg st out st' Hwf Hsat Hemit; cbn [emit_or_list_opt] in Hemit.
   - inversion Hemit; subst; exists asg; split;
       [exact (step_spec_refl _ asg Hsat) | split;
        [exact (wf_lit_bound_false _ (proj1 (proj1 Hsat))) | exact (sat_eval_lit_false asg _ Hsat)]].
   - inversion Hwf as [| ? ? Hx Hwfr]; subst.
-    destruct (emit_or_list_opt rest st) as [sub st1] eqn:Hsub.
-    destruct (IH asg st sub st1 Hwfr Hsat Hsub) as (asg1 & Hs1 & Hwf_sub & Hev_sub).
-    destruct (emit_or2_opt_step asg1 x sub st1 out st' (proj2 (proj2 Hs1))
-                (wf_lit_bound_mono _ _ x (proj1 Hs1) Hx) Hwf_sub Hemit)
-      as (asg2 & Hs2 & Hwf_out & Hev_out).
-    exists asg2; split; [exact (step_spec_trans st st1 st' asg asg1 asg2 Hs1 Hs2) | split; [exact Hwf_out |]].
-    cbn; rewrite Hev_out, (step_spec_eval_lit st st1 asg asg1 x Hs1 Hx), Hev_sub; reflexivity.
+    exact (emit_or_list_opt_acc_step rest x asg st out st' Hx Hwfr Hsat Hemit).
 Qed.
 
 Lemma existsb_id_map_eval_lit : forall asg ls,
@@ -2892,8 +3019,11 @@ Proof.
               (wf_lit_bound_mono _ _ _ (proj1 Hs14) Hnub) Hdb_wf Hcex)
     as (asg5 & Hs5 & _ & Hcex_ev).
   pose proof (Hunsat asg5) as Hqf.
-  unfold add_clauses in Hqf; cbn [append_clauses bs_cnf] in Hqf.
-  rewrite eval_cnf_app, (proj2 (proj2 (proj2 (proj2 Hs5)))) in Hqf; cbn in Hqf.
+  unfold add_clauses in Hqf; cbn [prepend_clauses_rev bs_cnf] in Hqf.
+  unfold eval_cnf in Hqf; cbn [forallb] in Hqf.
+  change (forallb (fun '(_, cl) => eval_clause asg5 cl) (bs_cnf st5))
+    with (eval_cnf asg5 (bs_cnf st5)) in Hqf.
+  rewrite (proj2 (proj2 (proj2 (proj2 Hs5)))) in Hqf; cbn in Hqf.
   rewrite orb_false_r, andb_true_r in Hqf.
   rewrite Hcex_ev,
           (step_spec_eval_lit st st4 asg asg4 src_no_ub Hs14 Hnub),

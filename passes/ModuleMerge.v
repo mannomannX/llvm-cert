@@ -704,14 +704,85 @@ Definition mm_fn_attr_nullary_tag (x : fn_attr) : option positive :=
   | _ => None
   end.
 
+Definition mm_fn_attr_from_tag (t : positive) : option fn_attr :=
+  match t with
+  | 1%positive => Some FNATTR_Alwaysinline
+  | 2%positive => Some FNATTR_Builtin
+  | 3%positive => Some FNATTR_Cold
+  | 4%positive => Some FNATTR_Convergent
+  | 5%positive => Some FNATTR_Disable_sanitizer_instrumentation
+  | 6%positive => Some FNATTR_Fn_ret_thunk_extern
+  | 7%positive => Some FNATTR_Hot
+  | 8%positive => Some FNATTR_Inaccessiblememonly
+  | 9%positive => Some FNATTR_Inaccessiblemem_or_argmemonly
+  | 10%positive => Some FNATTR_Inlinehint
+  | 11%positive => Some FNATTR_Jumptable
+  | 12%positive => Some FNATTR_Minsize
+  | 13%positive => Some FNATTR_Naked
+  | 14%positive => Some FNATTR_No_jump_tables
+  | 15%positive => Some FNATTR_Nobuiltin
+  | 16%positive => Some FNATTR_Noduplicate
+  | 17%positive => Some FNATTR_Nofree
+  | 18%positive => Some FNATTR_Noimplicitfloat
+  | 19%positive => Some FNATTR_Noinline
+  | 20%positive => Some FNATTR_Nomerge
+  | 21%positive => Some FNATTR_Nonlazybind
+  | 22%positive => Some FNATTR_Noprofile
+  | 23%positive => Some FNATTR_Noredzone
+  | 24%positive => Some FNATTR_Indirect_tls_seg_refs
+  | 25%positive => Some FNATTR_Noreturn
+  | 26%positive => Some FNATTR_Norecurse
+  | 27%positive => Some FNATTR_Willreturn
+  | 28%positive => Some FNATTR_Nosync
+  | 29%positive => Some FNATTR_Nounwind
+  | 30%positive => Some FNATTR_Nocreateundeforpoison
+  | 31%positive => Some FNATTR_Nosanitize_bounds
+  | 32%positive => Some FNATTR_Nosanitize_coverage
+  | 33%positive => Some FNATTR_Null_pointer_is_valid
+  | 34%positive => Some FNATTR_Optforfuzzing
+  | 35%positive => Some FNATTR_Optnone
+  | 36%positive => Some FNATTR_Optsize
+  | 37%positive => Some FNATTR_Readnone
+  | 38%positive => Some FNATTR_Readonly
+  | 39%positive => Some FNATTR_Writeonly
+  | 40%positive => Some FNATTR_Argmemonly
+  | 41%positive => Some FNATTR_Returns_twice
+  | 42%positive => Some FNATTR_Safestack
+  | 43%positive => Some FNATTR_Sanitize_address
+  | 44%positive => Some FNATTR_Sanitize_memory
+  | 45%positive => Some FNATTR_Sanitize_thread
+  | 46%positive => Some FNATTR_Sanitize_hwaddress
+  | 47%positive => Some FNATTR_Sanitize_memtag
+  | 48%positive => Some FNATTR_Speculative_load_hardening
+  | 49%positive => Some FNATTR_Speculatable
+  | 50%positive => Some FNATTR_Ssp
+  | 51%positive => Some FNATTR_Sspstrong
+  | 52%positive => Some FNATTR_Sspreq
+  | 53%positive => Some FNATTR_Strictfp
+  | 54%positive => Some FNATTR_Tls_load_hoist
+  | 55%positive => Some FNATTR_Nocf_check
+  | 56%positive => Some FNATTR_Shadowcallstack
+  | 57%positive => Some FNATTR_Mustprogress
+  | _ => None
+  end.
+
+Lemma mm_fn_attr_nullary_tag_from (x : fn_attr) (t : positive) :
+  mm_fn_attr_nullary_tag x = Some t ->
+  mm_fn_attr_from_tag t = Some x.
+Proof.
+  destruct x; cbn [mm_fn_attr_nullary_tag]; intro H;
+    try discriminate H; inversion H; reflexivity.
+Qed.
+
 Lemma mm_fn_attr_nullary_tag_inj (x y : fn_attr) (t : positive) :
   mm_fn_attr_nullary_tag x = Some t ->
   mm_fn_attr_nullary_tag y = Some t ->
   x = y.
 Proof.
-  destruct x, y; cbn [mm_fn_attr_nullary_tag]; intros Hx Hy;
-    try discriminate Hx; try discriminate Hy;
-    first [reflexivity | exfalso; congruence].
+  intros Hx Hy.
+  apply mm_fn_attr_nullary_tag_from in Hx.
+  apply mm_fn_attr_nullary_tag_from in Hy.
+  rewrite Hx in Hy; inversion Hy; reflexivity.
 Qed.
 
 Definition mm_fn_attr_eqb (x y : fn_attr) : bool :=

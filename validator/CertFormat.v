@@ -784,12 +784,12 @@ Fixpoint sexp_depth (sx : sexp) : nat :=
   match sx with
   | SAtom _ | SStr _ => 1%nat
   | SList es =>
-      let fix max_d (xs : list sexp) : nat :=
+      let fix max_d_acc (acc : nat) (xs : list sexp) {struct xs} : nat :=
           match xs with
-          | [] => 0%nat
-          | x :: rest => Nat.max (sexp_depth x) (max_d rest)
+          | [] => acc
+          | x :: rest => max_d_acc (Nat.max acc (sexp_depth x)) rest
           end in
-      S (max_d es)
+      S (max_d_acc 0%nat es)
   end.
 
 Variant sexp_tok : Set :=
@@ -1109,11 +1109,13 @@ Definition parse_cert_cast_kind (sx : sexp) : string + cert_cast_kind :=
 Section ParseLetBinds.
   Variable rec_parse : list (string * positive) -> sexp -> string + cert_expr.
 
-  Fixpoint parse_let_binds (cur_env : list (string * positive)) (seen : list string)
-                           (bs : list sexp) {struct bs}
+  Fixpoint parse_let_binds_acc
+    (acc_rev : list (string * cert_expr))
+    (cur_env : list (string * positive)) (seen : list string)
+    (bs : list sexp) {struct bs}
     : string + (list (string * cert_expr) * list (string * positive)) :=
     match bs with
-    | [] => inr ([], cur_env)
+    | [] => inr (List.rev_append acc_rev [], cur_env)
     | b_item :: rest =>
         match b_item with
         | SList [SStr bnm; bexpr_sx] =>
@@ -1122,17 +1124,45 @@ Section ParseLetBinds.
               | inl err => inl err
               | inr be =>
                   let env_next := (bnm, cert_expr_bit_width be) :: cur_env in
-                  match parse_let_binds env_next (bnm :: seen) rest with
-                  | inl err => inl err
-                  | inr (parsed_rest, final_env) =>
-                      inr ((bnm, be) :: parsed_rest, final_env)
-                  end
+                  parse_let_binds_acc ((bnm, be) :: acc_rev) env_next (bnm :: seen) rest
               end
             else inl "invalid or duplicate let binding name"
         | _ => inl "malformed let binding entry"
         end
     end.
+
+  Definition parse_let_binds (cur_env : list (string * positive)) (seen : list string)
+                             (bs : list sexp)
+    : string + (list (string * cert_expr) * list (string * positive)) :=
+    parse_let_binds_acc [] cur_env seen bs.
 End ParseLetBinds.
+
+Lemma parse_let_binds_acc_wf :
+  forall (rec_parse : list (string * positive) -> sexp -> string + cert_expr)
+         (Hrec : forall env sx e, rec_parse env sx = inr e -> wf_cert_expr env e = true)
+         bs env0 seen0 acc_rev cur_env seen parsed_bs final_env,
+    (forall tail env_tail,
+       wf_let_binds_step wf_cert_expr cur_env seen tail = Some env_tail ->
+       wf_let_binds_step wf_cert_expr env0 seen0 (List.rev_append acc_rev tail) = Some env_tail) ->
+    parse_let_binds_acc rec_parse acc_rev cur_env seen bs = inr (parsed_bs, final_env) ->
+    wf_let_binds_step wf_cert_expr env0 seen0 parsed_bs = Some final_env.
+Proof.
+  intros rec_parse Hrec bs env0 seen0.
+  induction bs as [| b_item rest IH]; intros acc_rev cur_env seen parsed_bs final_env Hacc Hp;
+    cbn [parse_let_binds_acc] in Hp.
+  - inversion Hp; subst parsed_bs final_env; clear Hp.
+    exact (Hacc [] cur_env eq_refl).
+  - destruct b_item as [| | [| [| bnm |] [| bexpr_sx [| ? ?]]]]; try discriminate Hp.
+    destruct (is_dollar_let_name bnm && negb (string_in_list bnm seen)) eqn:Hnm; [| discriminate Hp].
+    destruct (rec_parse cur_env bexpr_sx) as [| be] eqn:Hbe; [discriminate Hp |].
+    apply andb_true_iff in Hnm as [Hd Hns].
+    apply (IH ((bnm, be) :: acc_rev)
+              ((bnm, cert_expr_bit_width be) :: cur_env) (bnm :: seen)
+              parsed_bs final_env); [| exact Hp].
+    intros tail env_tail Htail; cbn [List.rev_append].
+    apply Hacc; cbn [wf_let_binds_step].
+    rewrite Hd, Hns, (Hrec cur_env bexpr_sx be Hbe); exact Htail.
+Qed.
 
 Lemma parse_let_binds_wf :
   forall (rec_parse : list (string * positive) -> sexp -> string + cert_expr)
@@ -1141,21 +1171,31 @@ Lemma parse_let_binds_wf :
     parse_let_binds rec_parse cur_env seen bs = inr (parsed_bs, final_env) ->
     wf_let_binds_step wf_cert_expr cur_env seen parsed_bs = Some final_env.
 Proof.
-  intros rec_parse Hrec bs.
-  induction bs as [| b_item rest IH]; intros cur_env seen parsed_bs final_env Hp.
-  - cbn in Hp; inversion Hp; subst; reflexivity.
-  - cbn in Hp.
-    destruct b_item as [| | [| [| bnm |] [| bexpr_sx [| ? ?]]]]; try discriminate.
-    destruct (is_dollar_let_name bnm && negb (string_in_list bnm seen)) eqn:Hnm; [| discriminate].
-    destruct (rec_parse cur_env bexpr_sx) as [| be] eqn:Hbe; [discriminate |].
-    destruct (parse_let_binds rec_parse ((bnm, cert_expr_bit_width be) :: cur_env)
-                              (bnm :: seen) rest)
-      as [| [parsed_rest env_end]] eqn:Hrest; [discriminate |].
-    inversion Hp; subst; clear Hp.
-    cbn [wf_let_binds_step].
-    apply andb_true_iff in Hnm as [Hd Hns].
-    rewrite Hd, Hns, (Hrec cur_env bexpr_sx be Hbe); cbn.
-    exact (IH _ _ _ _ Hrest).
+  intros rec_parse Hrec bs cur_env seen parsed_bs final_env Hp.
+  exact (parse_let_binds_acc_wf rec_parse Hrec bs cur_env seen [] cur_env seen
+           parsed_bs final_env (fun _ _ H => H) Hp).
+Qed.
+
+Lemma rev_append_cons_nonnil : forall {A : Type} (x : A) (acc tail : list A),
+  List.rev_append (x :: acc) tail <> [].
+Proof.
+  intros A x acc; revert x; induction acc as [| y rest IH]; intros x tail; cbn.
+  - discriminate.
+  - exact (IH y (x :: tail)).
+Qed.
+
+Lemma parse_let_binds_acc_nonempty :
+  forall rec_parse bs a acc_rev cur_env seen parsed_bs final_env,
+    parse_let_binds_acc rec_parse (a :: acc_rev) cur_env seen bs = inr (parsed_bs, final_env) ->
+    parsed_bs <> [].
+Proof.
+  intros rec_parse bs; induction bs as [| b_item rest IH];
+    intros a acc_rev cur_env seen parsed_bs final_env Hp; cbn [parse_let_binds_acc] in Hp.
+  - inversion Hp; subst parsed_bs; clear Hp; exact (rev_append_cons_nonnil a acc_rev []).
+  - destruct b_item as [| | [| [| bnm |] [| bexpr_sx [| ? ?]]]]; try discriminate Hp.
+    destruct (is_dollar_let_name bnm && negb (string_in_list bnm seen)); [| discriminate Hp].
+    destruct (rec_parse cur_env bexpr_sx); [discriminate Hp |].
+    exact (IH _ _ _ _ _ _ Hp).
 Qed.
 
 Lemma parse_let_binds_nonempty :
@@ -1163,12 +1203,14 @@ Lemma parse_let_binds_nonempty :
     parse_let_binds rec_parse cur_env seen (b0 :: rest) = inr (parsed_bs, final_env) ->
     parsed_bs <> [].
 Proof.
-  intros rec_parse b0 rest cur_env seen parsed_bs final_env Hp; cbn in Hp.
-  destruct b0 as [| | [| [| bnm |] [| bexpr_sx [| ? ?]]]]; try discriminate.
-  destruct (is_dollar_let_name bnm && negb (string_in_list bnm seen)); [| discriminate].
-  destruct (rec_parse cur_env bexpr_sx) as [| be]; [discriminate |].
-  destruct (parse_let_binds rec_parse _ _ rest) as [| [pr fe]]; [discriminate |].
-  inversion Hp; subst; discriminate.
+  intros rec_parse b0 rest cur_env seen parsed_bs final_env Hp.
+  unfold parse_let_binds in Hp; cbn [parse_let_binds_acc] in Hp.
+  destruct b0 as [| | [| [| bnm |] [| bexpr_sx [| ? ?]]]]; try discriminate Hp.
+  destruct (is_dollar_let_name bnm && negb (string_in_list bnm seen)); [| discriminate Hp].
+  destruct (rec_parse cur_env bexpr_sx) as [| be]; [discriminate Hp |].
+  exact (parse_let_binds_acc_nonempty rec_parse rest (bnm, be) []
+           ((bnm, cert_expr_bit_width be) :: cur_env) (bnm :: seen)
+           parsed_bs final_env Hp).
 Qed.
 
 Fixpoint parse_cert_expr_fueled (fuel : nat) (let_env : list (string * positive)) (sx : sexp)
@@ -3154,62 +3196,96 @@ Record gep_site : Set :=
     gs_idxs : list (dtyp * exp dtyp);
   }.
 
-Fixpoint collect_exp_geps (e : exp dtyp) : list gep_site :=
-  let fix collect_texps (xs : list (dtyp * exp dtyp)) : list gep_site :=
+Fixpoint collect_exp_geps_acc (e : exp dtyp) (acc : list gep_site) {struct e} : list gep_site :=
+  let fix collect_texps (xs : list (dtyp * exp dtyp)) (a : list gep_site) {struct xs} : list gep_site :=
       match xs with
-      | [] => []
-      | (_, x) :: r => collect_exp_geps x ++ collect_texps r
+      | [] => a
+      | (_, x) :: r => collect_texps r (collect_exp_geps_acc x a)
       end in
   match e with
   | EXP_Ident _ | EXP_Integer _ | EXP_Float _ | EXP_Bool _
   | EXP_Null | EXP_Zero_initializer | EXP_Undef | EXP_Poison
-  | EXP_Asm _ _ _ _ _ _ | EXP_BlockAddress _ _ | EXP_Metadata _ => []
+  | EXP_Asm _ _ _ _ _ _ | EXP_BlockAddress _ _ | EXP_Metadata _ => acc
   | EXP_Cstring elts | EXP_Struct elts | EXP_Packed_struct elts
-  | EXP_Array elts | EXP_Vector elts => collect_texps elts
+  | EXP_Array elts | EXP_Vector elts => collect_texps elts acc
   | OP_IBinop _ _ v1 v2 | OP_ICmp _ _ _ v1 v2
   | OP_FBinop _ _ _ v1 v2 | OP_FCmp _ _ _ v1 v2 =>
-      collect_exp_geps v1 ++ collect_exp_geps v2
+      collect_exp_geps_acc v2 (collect_exp_geps_acc v1 acc)
   | OP_Fneg _ (_, v) | OP_Conversion _ _ v _
   | OP_ExtractValue (_, v) _ | OP_Freeze (_, v) | EXP_Splat (_, v) =>
-      collect_exp_geps v
+      collect_exp_geps_acc v acc
   | OP_GetElementPtr gf t ptr idxs =>
-      mk_gep_site gf t ptr idxs :: collect_exp_geps (snd ptr) ++ collect_texps idxs
+      collect_texps idxs (collect_exp_geps_acc (snd ptr) (mk_gep_site gf t ptr idxs :: acc))
   | OP_ExtractElement (_, v1) (_, v2) | OP_InsertValue (_, v1) (_, v2) _ =>
-      collect_exp_geps v1 ++ collect_exp_geps v2
+      collect_exp_geps_acc v2 (collect_exp_geps_acc v1 acc)
   | OP_InsertElement (_, v1) (_, v2) (_, v3)
   | OP_ShuffleVector (_, v1) (_, v2) (_, v3)
   | OP_Select _ (_, v1) (_, v2) (_, v3) =>
-      collect_exp_geps v1 ++ collect_exp_geps v2 ++ collect_exp_geps v3
+      collect_exp_geps_acc v3 (collect_exp_geps_acc v2 (collect_exp_geps_acc v1 acc))
   end.
 
-Definition collect_instr_geps (ins : instr dtyp) : list gep_site :=
+Fixpoint collect_tvalue_args_geps_acc {A : Set}
+  (args : list ((dtyp * exp dtyp) * A)) (acc : list gep_site) {struct args} : list gep_site :=
+  match args with
+  | [] => acc
+  | ((_, ae), _) :: rest => collect_tvalue_args_geps_acc rest (collect_exp_geps_acc ae acc)
+  end.
+
+Definition collect_instr_geps_acc (ins : instr dtyp) (acc : list gep_site) : list gep_site :=
   match ins with
-  | INSTR_Op e => collect_exp_geps e
+  | INSTR_Op e => collect_exp_geps_acc e acc
   | INSTR_Call (_, fn_e) args _ _ =>
-      collect_exp_geps fn_e ++ flat_map (fun '((_, ae), _) => collect_exp_geps ae) args
-  | INSTR_Load _ (_, pe) _ => collect_exp_geps pe
-  | INSTR_Store (_, ve) (_, pe) _ => collect_exp_geps ve ++ collect_exp_geps pe
-  | INSTR_VAArg (_, ve) _ => collect_exp_geps ve
-  | _ => []
+      collect_tvalue_args_geps_acc args (collect_exp_geps_acc fn_e acc)
+  | INSTR_Load _ (_, pe) _ => collect_exp_geps_acc pe acc
+  | INSTR_Store (_, ve) (_, pe) _ =>
+      collect_exp_geps_acc pe (collect_exp_geps_acc ve acc)
+  | INSTR_VAArg (_, ve) _ => collect_exp_geps_acc ve acc
+  | _ => acc
   end.
 
-Definition collect_term_geps (tm : terminator dtyp) : list gep_site :=
+Definition collect_term_geps_acc (tm : terminator dtyp) (acc : list gep_site) : list gep_site :=
   match tm with
   | TERM_Ret (_, e) | TERM_Br (_, e) _ _ | TERM_Switch (_, e) _ _
-  | TERM_IndirectBr (_, e) _ _ | TERM_Resume (_, e) => collect_exp_geps e
+  | TERM_IndirectBr (_, e) _ _ | TERM_Resume (_, e) => collect_exp_geps_acc e acc
   | TERM_Invoke (_, fn_e) args _ _ _ _ =>
-      collect_exp_geps fn_e ++ flat_map (fun '((_, ae), _) => collect_exp_geps ae) args
-  | _ => []
+      collect_tvalue_args_geps_acc args (collect_exp_geps_acc fn_e acc)
+  | _ => acc
   end.
 
-Definition collect_block_geps (b : block dtyp) : list gep_site :=
-  flat_map (fun '(_, Phi _ _ args, _) => flat_map (fun '(_, e) => collect_exp_geps e) args)
-           (blk_phis b) ++
-  flat_map (fun '(_, ins, _) => collect_instr_geps ins) (blk_code b) ++
-  let '(_, tm, _) := blk_term b in collect_term_geps tm.
+Fixpoint collect_phi_args_geps_acc (args : list (block_id * exp dtyp)) (acc : list gep_site)
+  {struct args} : list gep_site :=
+  match args with
+  | [] => acc
+  | (_, e) :: rest => collect_phi_args_geps_acc rest (collect_exp_geps_acc e acc)
+  end.
+
+Fixpoint collect_phis_geps_acc (phis : list (local_id * phi dtyp * list (metadata dtyp)))
+  (acc : list gep_site) {struct phis} : list gep_site :=
+  match phis with
+  | [] => acc
+  | (_, Phi _ _ args, _) :: rest => collect_phis_geps_acc rest (collect_phi_args_geps_acc args acc)
+  end.
+
+Fixpoint collect_code_geps_acc (c : code dtyp) (acc : list gep_site) {struct c} : list gep_site :=
+  match c with
+  | [] => acc
+  | (_, ins, _) :: rest => collect_code_geps_acc rest (collect_instr_geps_acc ins acc)
+  end.
+
+Definition collect_block_geps_acc (b : block dtyp) (acc : list gep_site) : list gep_site :=
+  let acc1 := collect_phis_geps_acc (blk_phis b) acc in
+  let acc2 := collect_code_geps_acc (blk_code b) acc1 in
+  let '(_, tm, _) := blk_term b in collect_term_geps_acc tm acc2.
+
+Fixpoint collect_blocks_geps_acc (bs : list (block dtyp)) (acc : list gep_site)
+  {struct bs} : list gep_site :=
+  match bs with
+  | [] => acc
+  | b :: rest => collect_blocks_geps_acc rest (collect_block_geps_acc b acc)
+  end.
 
 Definition collect_cfg_geps (G : CFG.cfg dtyp) : list gep_site :=
-  flat_map collect_block_geps (blks G).
+  collect_blocks_geps_acc (blks G) [].
 
 Definition gep_operands_match_b (g1 g2 : gep_site) : bool :=
   dtyp_eqb (gs_base_ty g1) (gs_base_ty g2) &&
@@ -3331,64 +3407,98 @@ Record bitcast_site : Set :=
     bcs_to : dtyp;
   }.
 
-Fixpoint collect_exp_bitcasts (e : exp dtyp) {struct e} : list bitcast_site :=
-  let fix collect_texps (xs : list (dtyp * exp dtyp)) {struct xs} : list bitcast_site :=
+Fixpoint collect_exp_bitcasts_acc (e : exp dtyp) (acc : list bitcast_site) {struct e} : list bitcast_site :=
+  let fix collect_texps (xs : list (dtyp * exp dtyp)) (a : list bitcast_site) {struct xs} : list bitcast_site :=
       match xs with
-      | [] => []
-      | (_, x) :: r => collect_exp_bitcasts x ++ collect_texps r
+      | [] => a
+      | (_, x) :: r => collect_texps r (collect_exp_bitcasts_acc x a)
       end in
   match e with
   | EXP_Ident _ | EXP_Integer _ | EXP_Float _ | EXP_Bool _
   | EXP_Null | EXP_Zero_initializer | EXP_Undef | EXP_Poison
-  | EXP_Asm _ _ _ _ _ _ | EXP_BlockAddress _ _ | EXP_Metadata _ => []
+  | EXP_Asm _ _ _ _ _ _ | EXP_BlockAddress _ _ | EXP_Metadata _ => acc
   | EXP_Cstring elts | EXP_Struct elts | EXP_Packed_struct elts
-  | EXP_Array elts | EXP_Vector elts => collect_texps elts
+  | EXP_Array elts | EXP_Vector elts => collect_texps elts acc
   | OP_IBinop _ _ v1 v2 | OP_ICmp _ _ _ v1 v2
   | OP_FBinop _ _ _ v1 v2 | OP_FCmp _ _ _ v1 v2 =>
-      collect_exp_bitcasts v1 ++ collect_exp_bitcasts v2
+      collect_exp_bitcasts_acc v2 (collect_exp_bitcasts_acc v1 acc)
   | OP_Conversion CONV_Bitcast tf v tt_ty =>
-      mk_bitcast_site tf v tt_ty :: collect_exp_bitcasts v
+      collect_exp_bitcasts_acc v (mk_bitcast_site tf v tt_ty :: acc)
   | OP_Fneg _ (_, v) | OP_Conversion _ _ v _
   | OP_ExtractValue (_, v) _ | OP_Freeze (_, v) | EXP_Splat (_, v) =>
-      collect_exp_bitcasts v
+      collect_exp_bitcasts_acc v acc
   | OP_GetElementPtr _ _ (_, pv) idxs =>
-      collect_exp_bitcasts pv ++ collect_texps idxs
+      collect_texps idxs (collect_exp_bitcasts_acc pv acc)
   | OP_ExtractElement (_, v1) (_, v2) | OP_InsertValue (_, v1) (_, v2) _ =>
-      collect_exp_bitcasts v1 ++ collect_exp_bitcasts v2
+      collect_exp_bitcasts_acc v2 (collect_exp_bitcasts_acc v1 acc)
   | OP_InsertElement (_, v1) (_, v2) (_, v3)
   | OP_ShuffleVector (_, v1) (_, v2) (_, v3)
   | OP_Select _ (_, v1) (_, v2) (_, v3) =>
-      collect_exp_bitcasts v1 ++ collect_exp_bitcasts v2 ++ collect_exp_bitcasts v3
+      collect_exp_bitcasts_acc v3 (collect_exp_bitcasts_acc v2 (collect_exp_bitcasts_acc v1 acc))
   end.
 
-Definition collect_instr_bitcasts (ins : instr dtyp) : list bitcast_site :=
+Fixpoint collect_tvalue_args_bitcasts_acc {A : Set}
+  (args : list ((dtyp * exp dtyp) * A)) (acc : list bitcast_site) {struct args} : list bitcast_site :=
+  match args with
+  | [] => acc
+  | ((_, ae), _) :: rest => collect_tvalue_args_bitcasts_acc rest (collect_exp_bitcasts_acc ae acc)
+  end.
+
+Definition collect_instr_bitcasts_acc (ins : instr dtyp) (acc : list bitcast_site) : list bitcast_site :=
   match ins with
-  | INSTR_Op e => collect_exp_bitcasts e
+  | INSTR_Op e => collect_exp_bitcasts_acc e acc
   | INSTR_Call (_, fn_e) args _ _ =>
-      collect_exp_bitcasts fn_e ++ flat_map (fun '((_, ae), _) => collect_exp_bitcasts ae) args
-  | INSTR_Load _ (_, pe) _ => collect_exp_bitcasts pe
-  | INSTR_Store (_, ve) (_, pe) _ => collect_exp_bitcasts ve ++ collect_exp_bitcasts pe
-  | INSTR_VAArg (_, ve) _ => collect_exp_bitcasts ve
-  | _ => []
+      collect_tvalue_args_bitcasts_acc args (collect_exp_bitcasts_acc fn_e acc)
+  | INSTR_Load _ (_, pe) _ => collect_exp_bitcasts_acc pe acc
+  | INSTR_Store (_, ve) (_, pe) _ =>
+      collect_exp_bitcasts_acc pe (collect_exp_bitcasts_acc ve acc)
+  | INSTR_VAArg (_, ve) _ => collect_exp_bitcasts_acc ve acc
+  | _ => acc
   end.
 
-Definition collect_term_bitcasts (tm : terminator dtyp) : list bitcast_site :=
+Definition collect_term_bitcasts_acc (tm : terminator dtyp) (acc : list bitcast_site) : list bitcast_site :=
   match tm with
   | TERM_Ret (_, e) | TERM_Br (_, e) _ _ | TERM_Switch (_, e) _ _
-  | TERM_IndirectBr (_, e) _ _ | TERM_Resume (_, e) => collect_exp_bitcasts e
+  | TERM_IndirectBr (_, e) _ _ | TERM_Resume (_, e) => collect_exp_bitcasts_acc e acc
   | TERM_Invoke (_, fn_e) args _ _ _ _ =>
-      collect_exp_bitcasts fn_e ++ flat_map (fun '((_, ae), _) => collect_exp_bitcasts ae) args
-  | _ => []
+      collect_tvalue_args_bitcasts_acc args (collect_exp_bitcasts_acc fn_e acc)
+  | _ => acc
   end.
 
-Definition collect_block_bitcasts (b : block dtyp) : list bitcast_site :=
-  flat_map (fun '(_, Phi _ _ args, _) => flat_map (fun '(_, e) => collect_exp_bitcasts e) args)
-           (blk_phis b) ++
-  flat_map (fun '(_, ins, _) => collect_instr_bitcasts ins) (blk_code b) ++
-  let '(_, tm, _) := blk_term b in collect_term_bitcasts tm.
+Fixpoint collect_phi_args_bitcasts_acc (args : list (block_id * exp dtyp)) (acc : list bitcast_site)
+  {struct args} : list bitcast_site :=
+  match args with
+  | [] => acc
+  | (_, e) :: rest => collect_phi_args_bitcasts_acc rest (collect_exp_bitcasts_acc e acc)
+  end.
+
+Fixpoint collect_phis_bitcasts_acc (phis : list (local_id * phi dtyp * list (metadata dtyp)))
+  (acc : list bitcast_site) {struct phis} : list bitcast_site :=
+  match phis with
+  | [] => acc
+  | (_, Phi _ _ args, _) :: rest => collect_phis_bitcasts_acc rest (collect_phi_args_bitcasts_acc args acc)
+  end.
+
+Fixpoint collect_code_bitcasts_acc (c : code dtyp) (acc : list bitcast_site) {struct c} : list bitcast_site :=
+  match c with
+  | [] => acc
+  | (_, ins, _) :: rest => collect_code_bitcasts_acc rest (collect_instr_bitcasts_acc ins acc)
+  end.
+
+Definition collect_block_bitcasts_acc (b : block dtyp) (acc : list bitcast_site) : list bitcast_site :=
+  let acc1 := collect_phis_bitcasts_acc (blk_phis b) acc in
+  let acc2 := collect_code_bitcasts_acc (blk_code b) acc1 in
+  let '(_, tm, _) := blk_term b in collect_term_bitcasts_acc tm acc2.
+
+Fixpoint collect_blocks_bitcasts_acc (bs : list (block dtyp)) (acc : list bitcast_site)
+  {struct bs} : list bitcast_site :=
+  match bs with
+  | [] => acc
+  | b :: rest => collect_blocks_bitcasts_acc rest (collect_block_bitcasts_acc b acc)
+  end.
 
 Definition collect_cfg_bitcasts (G : CFG.cfg dtyp) : list bitcast_site :=
-  flat_map collect_block_bitcasts (blks G).
+  collect_blocks_bitcasts_acc (blks G) [].
 
 Definition bitcast_site_eqb (b1 b2 : bitcast_site) : bool :=
   dtyp_eqb (bcs_from b1) (bcs_from b2) &&
@@ -3881,7 +3991,7 @@ Fixpoint parse_dimacs_lines
       match cur_rev with
       | _ :: _ => inl "unterminated clause without trailing 0 in DIMACS CNF"
       | [] =>
-          if N.eqb (N.of_nat (List.length acc_rev)) expected_clauses then
+          if N.eqb (N.pred (N.pos next_cid)) expected_clauses then
             inr (rev_tr acc_rev)
           else inl "DIMACS clause count does not match 'p cnf' header"
       end

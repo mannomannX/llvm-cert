@@ -568,8 +568,8 @@ Definition expand_lets (e : cert_expr) : cert_expr :=
 
 (** *** Bounded-Node [CE_Let] Expansion ([F-63] DoS Protection) *)
 
-Definition default_let_expand_budget : nat := 8192%nat.
-Definition norm_let_expand_budget : nat := 4096%nat.
+Definition default_let_expand_budget : nat := N.to_nat 8192%N.
+Definition norm_let_expand_budget : nat := N.to_nat 4096%N.
 #[local] Opaque default_let_expand_budget norm_let_expand_budget.
 
 Fixpoint consume_fuel (cost fuel : nat) {struct cost} : option nat :=
@@ -10822,7 +10822,7 @@ Proof.
       as Hsat3.
     assert (Hbs3 : bs_next_var (add_clauses [[neg_lit (rbv_psn r_d)]; [nz_lit]] st2) =
                    bs_next_var st2)
-      by (unfold add_clauses; destruct (append_clauses _ _); reflexivity).
+      by (unfold add_clauses; destruct (prepend_clauses_rev _ _ _); reflexivity).
     exists asg2.
     exact (sat_blast_env_step penv foracle asg2 asg2
              (mk_blast_env st2 (be_vars env1) (be_freezes env1))
@@ -10866,7 +10866,7 @@ Proof.
       as Hsat2.
     assert (Hbs2 : bs_next_var (add_clauses [[neg_lit (rbv_psn r_c)]] (be_st env1)) =
                    bs_next_var (be_st env1))
-      by (unfold add_clauses; destruct (append_clauses _ _); reflexivity).
+      by (unfold add_clauses; destruct (prepend_clauses_rev _ _ _); reflexivity).
     exists asg1.
     exact (sat_blast_env_step penv foracle asg1 asg1 env1
              (add_clauses [[neg_lit (rbv_psn r_c)]] (be_st env1))

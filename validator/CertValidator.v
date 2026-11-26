@@ -6038,7 +6038,7 @@ Fixpoint reify_code
   match c with
   | [] => Some ([], smap, seen)
   | i1 :: rest1 =>
-      let do_single :=
+      let do_single := fun (_ : unit) =>
         match reify_code_step uf params src_pnames defs smap seen i1 with
         | Some (opt_ev, smap1, seen1) =>
             match reify_code uf params src_pnames defs smap1 seen1 rest1 with
@@ -6067,9 +6067,9 @@ Fixpoint reify_code
                   end
               | None => None
               end
-          | None => do_single
+          | None => do_single tt
           end
-      | [] => do_single
+      | [] => do_single tt
       end
   end.
 
@@ -19344,27 +19344,54 @@ Qed.
 
 (** ** 6. Extraction-Ready Module & String-Level CLI Entrypoints *)
 
+Fixpoint find_unique_defn_by_name_tr
+  (fn_name : string)
+  (found : option (definition typ (CFG.cfg typ)))
+  (ds : list (definition typ (CFG.cfg typ)))
+  {struct ds} : option (definition typ (CFG.cfg typ)) :=
+  match ds with
+  | [] => found
+  | d :: rest =>
+      if cert_fn_matches_raw_id fn_name (dc_name (df_prototype d)) then
+        match found with
+        | None => find_unique_defn_by_name_tr fn_name (Some d) rest
+        | Some _ => None
+        end
+      else find_unique_defn_by_name_tr fn_name found rest
+  end.
+
 Definition find_unique_defn_by_name
   (fn_name : string)
   (ds : list (definition typ (CFG.cfg typ)))
   : option (definition typ (CFG.cfg typ)) :=
-  match List.filter (fun d => cert_fn_matches_raw_id fn_name (dc_name (df_prototype d))) ds with
-  | [d] => Some d
-  | _ => None
-  end.
+  find_unique_defn_by_name_tr fn_name None ds.
+
+Lemma find_unique_defn_by_name_tr_in :
+  forall fn_name ds found d,
+    find_unique_defn_by_name_tr fn_name found ds = Some d ->
+    (match found with
+     | Some f => f = d
+     | None => In d ds /\ cert_fn_matches_raw_id fn_name (dc_name (df_prototype d)) = true
+     end).
+Proof.
+  intros fn_name ds; induction ds as [| d0 rest IH]; intros [f |] d H;
+    cbn [find_unique_defn_by_name_tr] in H.
+  - inversion H; subst; reflexivity.
+  - discriminate H.
+  - destruct (cert_fn_matches_raw_id fn_name (dc_name (df_prototype d0))); [discriminate H |].
+    exact (IH (Some f) d H).
+  - destruct (cert_fn_matches_raw_id fn_name (dc_name (df_prototype d0))) eqn:Em.
+    + specialize (IH (Some d0) d H); cbn in IH; subst d0; split; [left; reflexivity | exact Em].
+    + destruct (IH None d H) as [Hin Hmatch]; split; [right; exact Hin | exact Hmatch].
+Qed.
 
 Lemma find_unique_defn_by_name_in :
   forall fn_name ds d,
     find_unique_defn_by_name fn_name ds = Some d ->
     In d ds /\ cert_fn_matches_raw_id fn_name (dc_name (df_prototype d)) = true.
 Proof.
-  intros fn_name ds d H; unfold find_unique_defn_by_name in H.
-  destruct (List.filter (fun d0 => cert_fn_matches_raw_id fn_name (dc_name (df_prototype d0))) ds)
-    as [| d0 [| ? ?]] eqn:Hf; try discriminate H.
-  inversion H; subst d0.
-  assert (Hin : In d (List.filter (fun d0 => cert_fn_matches_raw_id fn_name (dc_name (df_prototype d0))) ds))
-    by (rewrite Hf; left; reflexivity).
-  apply filter_In in Hin; exact Hin.
+  intros fn_name ds d H.
+  exact (find_unique_defn_by_name_tr_in fn_name ds None d H).
 Qed.
 
 Definition validate_mcfg_with_cert_lrat
