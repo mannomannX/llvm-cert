@@ -56,6 +56,9 @@ From Vellvm Require Import
   Semantics.Operations.Freeze
   Semantics.LLVMEvents.
 
+From CertValidator.common Require Import
+  Diag.
+
 From CertValidator Require Import
   AigLrat
   CertFormat
@@ -110,25 +113,34 @@ Local Open Scope list_scope.
 (** ** 1. Pure Machine-Code DAG Flattening ([flatten_mc_dag_to_expr]) *)
 
 Fixpoint flatten_mc_dag_to_expr (ret_w : positive) (d : cfg_dag) {struct d}
-  : option cert_expr :=
+  : string + cert_expr :=
   match d with
   | CD_RetScalar w e =>
-      if Pos.eqb w ret_w && ub_free_expr e then Some e else None
+      if negb (Pos.eqb w ret_w) then
+        inl (diag "mc-dag-flatten"
+          ("MC DAG return width " ++ diag_pos_dec w ++ " does not match expected " ++ diag_pos_dec ret_w))
+      else if negb (ub_free_expr e) then
+        inl (diag "mc-dag-flatten" "MC DAG return expression failed UB-freedom check")
+      else inr e
   | CD_Branch cond dt df =>
-      match flatten_mc_dag_to_expr ret_w dt, flatten_mc_dag_to_expr ret_w df with
-      | Some et, Some ef =>
-          if ub_free_expr cond
-          then Some (CE_Select ret_w cond et ef)
-          else None
-      | _, _ => None
+      match flatten_mc_dag_to_expr ret_w dt with
+      | inl err => inl err
+      | inr et =>
+          match flatten_mc_dag_to_expr ret_w df with
+          | inl err => inl err
+          | inr ef =>
+              if ub_free_expr cond
+              then inr (CE_Select ret_w cond et ef)
+              else inl (diag "mc-dag-flatten" "MC DAG branch condition failed UB-freedom check")
+          end
       end
-  | _ => None
+  | _ => inl (diag "mc-dag-flatten" "unsupported non-scalar or side-effecting node in MC DAG")
   end.
 
 Lemma flatten_mc_dag_to_expr_typing :
   forall allowed ret_w d e,
     wf_cfg_dag allowed d = true ->
-    flatten_mc_dag_to_expr ret_w d = Some e ->
+    flatten_mc_dag_to_expr ret_w d = inr e ->
     wt_cert_expr [] e = true /\
     cert_expr_bit_width e = ret_w /\
     is_let_free_expr e = true /\
@@ -139,15 +151,15 @@ Proof.
   induction d as [| | w' ret_e | ws step_e next IH | uas next IH | cond dt IHt df IHf];
     intros e Hwf Hf; cbn [wf_cfg_dag flatten_mc_dag_to_expr] in Hwf, Hf;
     try discriminate Hf.
-  - destruct (Pos.eqb w' ret_w && ub_free_expr ret_e) eqn:Eok; [| discriminate Hf].
-    apply andb_true_iff in Eok as [Ebw Eub].
+  - destruct (Pos.eqb w' ret_w) eqn:Ebw; cbn [negb] in Hf; [| discriminate Hf].
+    destruct (ub_free_expr ret_e) eqn:Eub; cbn [negb] in Hf; [| discriminate Hf].
     apply Pos.eqb_eq in Ebw; subst w'.
     inversion Hf; subst e; clear Hf.
     rewrite !andb_true_iff in Hwf; destruct Hwf as (((Hwt & Hbw) & Hlf) & Hfv).
     apply Pos.eqb_eq in Hbw.
     repeat split; try assumption; exact (vars_subset_b_incl _ _ Hfv).
-  - destruct (flatten_mc_dag_to_expr ret_w dt) as [et |] eqn:Ert; [| discriminate Hf].
-    destruct (flatten_mc_dag_to_expr ret_w df) as [ef |] eqn:Erf; [| discriminate Hf].
+  - destruct (flatten_mc_dag_to_expr ret_w dt) as [| et] eqn:Ert; [discriminate Hf |].
+    destruct (flatten_mc_dag_to_expr ret_w df) as [| ef] eqn:Erf; [discriminate Hf |].
     destruct (ub_free_expr cond) eqn:Hubc; [| discriminate Hf].
     inversion Hf; subst e; clear Hf.
     rewrite !andb_true_iff in Hwf.
@@ -167,7 +179,7 @@ Lemma flatten_mc_dag_to_expr_sound {Pa : Params} :
   forall allowed ret_w d e (penv : param_env Pa) foracle dv,
     wf_cfg_dag allowed d = true ->
     wf_param_env_for allowed penv ->
-    flatten_mc_dag_to_expr ret_w d = Some e ->
+    flatten_mc_dag_to_expr ret_w d = inr e ->
     eval_cfg_dag penv foracle d = DO_Ret dv ->
     eval_closed_cert_expr penv foracle e = raise_ret dv.
 Proof.
@@ -176,13 +188,13 @@ Proof.
     intros e penv foracle dv Hwf Hpenv Hf Hevd;
     cbn [wf_cfg_dag flatten_mc_dag_to_expr eval_cfg_dag] in Hwf, Hf, Hevd;
     try discriminate Hf; try discriminate Hevd.
-  - destruct (Pos.eqb w' ret_w && ub_free_expr ret_e); [| discriminate Hf].
+  - destruct (Pos.eqb w' ret_w), (ub_free_expr ret_e); cbn [negb] in Hf; try discriminate Hf.
     inversion Hf; subst e; clear Hf.
     destruct (eval_closed_cert_expr penv foracle ret_e) as [| | | dv0]; try discriminate Hevd.
     inversion Hevd; subst dv0; reflexivity.
   - rewrite !andb_true_iff in Hwf; destruct Hwf as (((((_ & _) & _) & _) & Hwft) & Hwff).
-    destruct (flatten_mc_dag_to_expr ret_w dt) as [et |] eqn:Ert; [| discriminate Hf].
-    destruct (flatten_mc_dag_to_expr ret_w df) as [ef |] eqn:Erf; [| discriminate Hf].
+    destruct (flatten_mc_dag_to_expr ret_w dt) as [| et] eqn:Ert; [discriminate Hf |].
+    destruct (flatten_mc_dag_to_expr ret_w df) as [| ef] eqn:Erf; [discriminate Hf |].
     destruct (ub_free_expr cond) eqn:Hubc; [| discriminate Hf].
     inversion Hf; subst e; clear Hf.
     destruct (eval_closed_cert_expr penv foracle cond) as [| | | dvc] eqn:Ec;
@@ -1513,11 +1525,134 @@ Definition prepare_mc_expr_pair
     List.map fst (collect_free_vars [] e_mc) in
   abstract_shared_muls 4%nat ctx avoid 0%nat e_ir1 e_mc.
 
+Definition check_blast_pair_diag
+  (phase : string) (ctx : ub_ctx) (s t : cert_expr) (opt_pf : option (list lrat_step))
+  : string + unit :=
+  let sz := cert_expr_bit_width s in
+  let known_vars := collect_free_vars [] s ++ collect_free_vars [] t in
+  let env0 := blast_ub_ctx ctx known_vars ctx (mk_blast_env (init_blast_state 2%positive) [] []) in
+  let ms_s := if expr_has_freeze s then Some ([], default_let_expand_budget) else None in
+  let ms_t := if expr_has_freeze t then Some ([], default_let_expand_budget) else None in
+  match blast_cert_expr ctx [] ms_s s env0 with
+  | None =>
+      inl (diag "mc-refine"
+        (phase ++ ": failed to bit-blast source IR expression (width " ++ diag_pos_dec sz ++ ")"))
+  | Some (src_r, env1) =>
+      match blast_cert_expr ctx [] ms_t t env1 with
+      | None =>
+          inl (diag "mc-refine"
+            (phase ++ ": failed to bit-blast target MC expression (width " ++ diag_pos_dec sz ++ ")"))
+      | Some (tgt_r, env2) =>
+          let cex := blast_refinement_cex_opt sz lit_true src_r tgt_r (be_st env2) in
+          if check_cex_unsat cex opt_pf then inr tt
+          else
+            match opt_pf with
+            | Some pf =>
+                inl (diag "lrat-check"
+                  (phase ++ ": LRAT proof (" ++ diag_nat_dec (length_tr pf) ++
+                   " step(s)) failed to refute bit-blasted MC-to-IR refinement counterexample"))
+            | None =>
+                inl (diag "mc-refine"
+                  (phase ++ ": bounded SAT solver failed to discharge bit-blasted MC-to-IR refinement obligation (no LRAT proof provided)"))
+            end
+      end
+  end.
+
+Lemma check_blast_pair_diag_sound :
+  forall phase ctx s t opt_pf,
+    check_blast_pair_diag phase ctx s t opt_pf = inr tt ->
+    check_blast_pair ctx s t opt_pf = true.
+Proof.
+  intros phase ctx s t opt_pf H.
+  unfold check_blast_pair_diag in H; unfold check_blast_pair.
+  destruct (blast_cert_expr _ [] _ s _) as [[src_r env1] |]; [| discriminate H].
+  destruct (blast_cert_expr _ [] _ t _) as [[tgt_r env2] |]; [| discriminate H].
+  destruct (check_cex_unsat _ opt_pf); [reflexivity | destruct opt_pf; discriminate H].
+Qed.
+
+Definition check_expr_refines_with_lrat_diag
+  (ctx : ub_ctx) (src tgt : cert_expr) (opt_pf : option (list lrat_step)) : string + unit :=
+  if check_expr_refines ctx src tgt then inr tt
+  else
+    let ws := cert_expr_bit_width src in
+    let wt := cert_expr_bit_width tgt in
+    if negb (Pos.eqb ws wt) then
+      inl (diag "mc-refine"
+        ("bit-width mismatch between IR expression (" ++ diag_pos_dec ws ++
+         ") and MC expression (" ++ diag_pos_dec wt ++ ")"))
+    else if negb (wt_cert_expr [] src) then
+      inl (diag "mc-refine" "source IR expression failed well-typedness check")
+    else if negb (wt_cert_expr [] tgt) then
+      inl (diag "mc-refine" "target MC expression failed well-typedness check")
+    else
+      match check_blast_pair_diag "direct" ctx src tgt opt_pf with
+      | inr tt => inr tt
+      | inl direct_err =>
+          if check_wf_let_dag_fast norm_let_expand_budget src &&
+             check_wf_let_dag_fast norm_let_expand_budget tgt
+          then
+            match expand_lets_fueled norm_let_expand_budget src,
+                  expand_lets_fueled norm_let_expand_budget tgt with
+            | Some es, Some et =>
+                let ns := normalize_cert_expr ctx es in
+                let nt := normalize_cert_expr ctx et in
+                if cert_expr_eqb src ns && cert_expr_eqb tgt nt then inl direct_err
+                else check_blast_pair_diag "normalized" ctx ns nt opt_pf
+            | _, _ => inl direct_err
+            end
+          else inl direct_err
+      end.
+
+Lemma check_expr_refines_with_lrat_diag_sound :
+  forall ctx src tgt opt_pf,
+    check_expr_refines_with_lrat_diag ctx src tgt opt_pf = inr tt ->
+    check_expr_refines_with_lrat ctx src tgt opt_pf = true.
+Proof.
+  intros ctx src tgt opt_pf H.
+  unfold check_expr_refines_with_lrat_diag in H; cbn zeta in H.
+  unfold check_expr_refines_with_lrat; cbn zeta.
+  destruct (check_expr_refines ctx src tgt); [reflexivity |].
+  destruct (Pos.eqb (cert_expr_bit_width src) (cert_expr_bit_width tgt));
+    cbn [negb] in H; [| discriminate H].
+  destruct (wt_cert_expr [] src); cbn [negb] in H; [| discriminate H].
+  destruct (wt_cert_expr [] tgt); cbn [negb] in H; [| discriminate H].
+  change (negb (true && true && true)) with false; cbv iota.
+  destruct (check_blast_pair_diag "direct" ctx src tgt opt_pf) as [direct_err | []] eqn:Ebd.
+  - destruct (check_blast_pair ctx src tgt opt_pf); [reflexivity |].
+    destruct (check_wf_let_dag_fast norm_let_expand_budget src &&
+              check_wf_let_dag_fast norm_let_expand_budget tgt); [| discriminate H].
+    cbv iota.
+    destruct (expand_lets_fueled norm_let_expand_budget src) as [es |]; [| discriminate H].
+    destruct (expand_lets_fueled norm_let_expand_budget tgt) as [et |]; [| discriminate H].
+    destruct (cert_expr_eqb src (normalize_cert_expr ctx es) &&
+              cert_expr_eqb tgt (normalize_cert_expr ctx et)); [discriminate H |].
+    cbv iota.
+    exact (check_blast_pair_diag_sound _ _ _ _ _ H).
+  - rewrite (check_blast_pair_diag_sound _ _ _ _ _ Ebd); reflexivity.
+Qed.
+
 Definition check_mc_expr_refines
   (ctx : ub_ctx) (allowed : list (string * positive)) (e_ir e_mc : cert_expr)
   (opt_pf : option (list lrat_step)) : bool :=
   let '(es', et') := prepare_mc_expr_pair ctx allowed e_ir e_mc in
   check_expr_refines_with_lrat ctx es' et' opt_pf.
+
+Definition check_mc_expr_refines_diag
+  (ctx : ub_ctx) (allowed : list (string * positive)) (e_ir e_mc : cert_expr)
+  (opt_pf : option (list lrat_step)) : string + unit :=
+  let '(es', et') := prepare_mc_expr_pair ctx allowed e_ir e_mc in
+  check_expr_refines_with_lrat_diag ctx es' et' opt_pf.
+
+Lemma check_mc_expr_refines_diag_sound :
+  forall ctx allowed e_ir e_mc opt_pf,
+    check_mc_expr_refines_diag ctx allowed e_ir e_mc opt_pf = inr tt ->
+    check_mc_expr_refines ctx allowed e_ir e_mc opt_pf = true.
+Proof.
+  intros ctx allowed e_ir e_mc opt_pf H.
+  unfold check_mc_expr_refines_diag in H; unfold check_mc_expr_refines.
+  destruct (prepare_mc_expr_pair ctx allowed e_ir e_mc) as [es' et'].
+  exact (check_expr_refines_with_lrat_diag_sound _ _ _ _ H).
+Qed.
 
 Lemma prepare_mc_expr_pair_sound {Pa : Params} :
   forall ctx allowed e_ir e_mc opt_pf (penv : param_env Pa) foracle,
@@ -1570,42 +1705,35 @@ Definition attr_is_zeroext (a : param_attr) : bool :=
   | _ => false
   end.
 
-Definition check_one_mc_arg
-  (arch : elf_arch) (pnm : string) (dt : dtyp) (attrs : list param_attr) (sp : rv_arg_spec) : bool :=
-  String.eqb (ras_name sp) pnm &&
-  rv_valid_arg_spec sp &&
-  dtyp_eqb dt (DTYPE_Base (DTYPE_I (ras_width sp))) &&
+Definition check_mc_arg_ext
+  (arch : elf_arch) (w : positive) (attrs : list param_attr) (ext : rv_arg_ext) : bool :=
   match arch with
   | EA_Riscv64 =>
-      if Pos.eqb (ras_width sp) 64%positive then
-        match ras_ext sp with
-        | RAE_None => true
-        | _ => false
-        end
+      if Pos.eqb w 64%positive then
+        match ext with RAE_None => true | _ => false end
       else
-        match ras_ext sp with
+        match ext with
         | RAE_SignExt => existsb attr_is_signext attrs
         | RAE_ZeroExt => existsb attr_is_zeroext attrs
         | RAE_None => false
         end
   | EA_AArch64 =>
-      if Pos.eqb (ras_width sp) 64%positive then
-        match ras_ext sp with
-        | RAE_None => true
-        | _ => false
-        end
-      else if Pos.eqb (ras_width sp) 32%positive then
-        match ras_ext sp with
-        | RAE_None => true
-        | _ => false
-        end
+      if Pos.eqb w 64%positive || Pos.eqb w 32%positive then
+        match ext with RAE_None => true | _ => false end
       else
-        match ras_ext sp with
+        match ext with
         | RAE_SignExt => existsb attr_is_signext attrs
         | RAE_ZeroExt => existsb attr_is_zeroext attrs
         | RAE_None => true
         end
   end.
+
+Definition check_one_mc_arg
+  (arch : elf_arch) (pnm : string) (dt : dtyp) (attrs : list param_attr) (sp : rv_arg_spec) : bool :=
+  String.eqb (ras_name sp) pnm &&
+  rv_valid_arg_spec sp &&
+  dtyp_eqb dt (DTYPE_Base (DTYPE_I (ras_width sp))) &&
+  check_mc_arg_ext arch (ras_width sp) attrs (ras_ext sp).
 
 Fixpoint check_mc_arg_specs
   (arch : elf_arch) (pnms : list string) (dts : list dtyp) (pattrs : list (list param_attr))
@@ -1616,6 +1744,77 @@ Fixpoint check_mc_arg_specs
       check_one_mc_arg arch p d a s && check_mc_arg_specs arch rp rd ra rs
   | _, _, _, _ => false
   end.
+
+Definition check_one_mc_arg_diag
+  (arch : elf_arch) (idx : nat) (pnm : string) (dt : dtyp)
+  (attrs : list param_attr) (sp : rv_arg_spec) : string + unit :=
+  bind_err
+    (guard_err (String.eqb (ras_name sp) pnm)
+      (fun _ => diag "mc-ir-abi"
+        ("arg #" ++ diag_nat_dec idx ++ ": mc-cert-v1 name '" ++ ras_name sp ++
+         "' does not match IR param '" ++ pnm ++ "'")))
+    (fun _ =>
+  bind_err
+    (guard_err (rv_valid_arg_spec sp)
+      (fun _ => diag "mc-ir-abi"
+        ("arg #" ++ diag_nat_dec idx ++ " ('" ++ pnm ++
+         "'): invalid mc-cert-v1 arg spec width " ++ diag_pos_dec (ras_width sp))))
+    (fun _ =>
+  bind_err
+    (guard_err (dtyp_eqb dt (DTYPE_Base (DTYPE_I (ras_width sp))))
+      (fun _ => diag "mc-ir-abi"
+        ("arg #" ++ diag_nat_dec idx ++ " ('" ++ pnm ++
+         "'): IR parameter type disagrees with mc-cert-v1 i" ++ diag_pos_dec (ras_width sp))))
+    (fun _ =>
+  guard_err (check_mc_arg_ext arch (ras_width sp) attrs (ras_ext sp))
+    (fun _ => diag "mc-ir-abi"
+      ("arg #" ++ diag_nat_dec idx ++ " ('" ++ pnm ++ "', i" ++ diag_pos_dec (ras_width sp) ++
+       "): signext/zeroext ABI extension mismatch for " ++ elf_arch_name arch))))).
+
+Lemma check_one_mc_arg_diag_sound :
+  forall arch idx pnm dt attrs sp,
+    check_one_mc_arg_diag arch idx pnm dt attrs sp = inr tt ->
+    check_one_mc_arg arch pnm dt attrs sp = true.
+Proof.
+  intros arch idx pnm dt attrs sp H.
+  unfold check_one_mc_arg_diag in H; unfold check_one_mc_arg.
+  destruct (String.eqb (ras_name sp) pnm); cbn [guard_err bind_err] in H; [| discriminate H].
+  destruct (rv_valid_arg_spec sp); cbn [guard_err bind_err] in H; [| discriminate H].
+  destruct (dtyp_eqb dt (DTYPE_Base (DTYPE_I (ras_width sp))));
+    cbn [guard_err bind_err] in H; [| discriminate H].
+  destruct (check_mc_arg_ext arch (ras_width sp) attrs (ras_ext sp));
+    cbn [guard_err] in H; [reflexivity | discriminate H].
+Qed.
+
+Fixpoint check_mc_arg_specs_idx_diag
+  (arch : elf_arch) (idx : nat) (pnms : list string) (dts : list dtyp)
+  (pattrs : list (list param_attr)) (specs : list rv_arg_spec)
+  {struct pnms} : string + unit :=
+  match pnms, dts, pattrs, specs with
+  | [], [], [], [] => inr tt
+  | p :: rp, d :: rd, a :: ra, s :: rs =>
+      bind_err (check_one_mc_arg_diag arch idx p d a s)
+        (fun _ => check_mc_arg_specs_idx_diag arch (S idx) rp rd ra rs)
+  | _, _, _, _ =>
+      inl (diag "mc-ir-abi"
+        ("argument count mismatch (at index " ++ diag_nat_dec idx ++
+         "): mc-cert-v1 args must match IR parameter count"))
+  end.
+
+Lemma check_mc_arg_specs_idx_diag_sound :
+  forall arch idx pnms dts pattrs specs,
+    check_mc_arg_specs_idx_diag arch idx pnms dts pattrs specs = inr tt ->
+    check_mc_arg_specs arch pnms dts pattrs specs = true.
+Proof.
+  intros arch idx pnms; revert idx;
+    induction pnms as [| p rp IH];
+    intros idx [| d rd] [| a ra] [| s rs] H;
+    cbn [check_mc_arg_specs_idx_diag check_mc_arg_specs] in *;
+    try discriminate H; [reflexivity |].
+  destruct (check_one_mc_arg_diag arch idx p d a s) as [| []] eqn:E1;
+    cbn [bind_err] in H; [discriminate H |].
+  rewrite (check_one_mc_arg_diag_sound _ _ _ _ _ _ E1), (IH _ _ _ _ H); reflexivity.
+Qed.
 
 Lemma check_mc_arg_specs_len : forall arch pnms dts pattrs specs,
   check_mc_arg_specs arch pnms dts pattrs specs = true ->
@@ -1692,6 +1891,53 @@ Definition check_mc_ir_syntax_gates (G : CFG.cfg dtyp) : bool :=
   list_empty_b (cfg_alloca_slot_names G) &&
   bmap_varargs_irrel (ocfg_map (blks G)).
 
+Definition check_mc_ir_syntax_gates_diag (G : CFG.cfg dtyp) : string + unit :=
+  bind_err
+    (guard_err (cfg_no_fast_math G)
+      (fun _ => diag "mc-ir-syntax" "unsupported fast-math flags in IR CFG"))
+    (fun _ =>
+  bind_err
+    (guard_err (cfg_no_concurrency G)
+      (fun _ => diag "mc-ir-syntax" "unsupported volatile/atomic/fence operation in IR CFG"))
+    (fun _ =>
+  bind_err
+    (guard_err (cfg_supported_abi G)
+      (fun _ => diag "mc-ir-syntax" "unsupported calling convention or ABI feature in IR CFG"))
+    (fun _ =>
+  bind_err
+    (guard_err (cfg_intrinsics_allowlisted G)
+      (fun _ => diag "mc-ir-syntax" "unsupported LLVM intrinsic call in IR CFG"))
+    (fun _ =>
+  bind_err
+    (guard_err (cfg_no_vaarg G)
+      (fun _ => diag "mc-ir-syntax" "unsupported varargs/va_arg operation in IR CFG"))
+    (fun _ =>
+  bind_err
+    (guard_err (cfg_no_exceptions G)
+      (fun _ => diag "mc-ir-syntax" "unsupported exception-handling instruction in IR CFG"))
+    (fun _ =>
+  bind_err
+    (guard_err (list_empty_b (cfg_alloca_slot_names G))
+      (fun _ => diag "mc-ir-syntax" "stack alloca instructions are not supported in MC mode"))
+    (fun _ =>
+  guard_err (bmap_varargs_irrel (ocfg_map (blks G)))
+    (fun _ => diag "mc-ir-syntax" "unsupported bmap/varargs metadata in IR CFG")))))))).
+
+Lemma check_mc_ir_syntax_gates_diag_sound :
+  forall G,
+    check_mc_ir_syntax_gates_diag G = inr tt ->
+    check_mc_ir_syntax_gates G = true.
+Proof.
+  intros G H; unfold check_mc_ir_syntax_gates_diag in H; unfold check_mc_ir_syntax_gates.
+  repeat (match type of H with
+          | bind_err (guard_err ?c _) _ = inr tt =>
+              destruct c; cbn [guard_err bind_err] in H; [| discriminate H]
+          | guard_err ?c _ = inr tt =>
+              destruct c; cbn [guard_err] in H; [| discriminate H]
+          end).
+  reflexivity.
+Qed.
+
 Definition check_mc_ir_proto_contract
   (tenv : list (ident * typ)) (defn : definition typ (CFG.cfg typ)) (mcert : mc_certificate)
   : bool :=
@@ -1726,6 +1972,119 @@ Definition check_mc_ir_proto_contract
   | _ => false
   end.
 
+Definition check_mc_ir_proto_contract_diag
+  (tenv : list (ident * typ)) (defn : definition typ (CFG.cfg typ)) (mcert : mc_certificate)
+  : string + unit :=
+  let proto := df_prototype defn in
+  let fnm := mc_fn_name mcert in
+  let ir_cfg := convert_typ tenv (df_instrs defn) in
+  let ir_pnames := List.map cert_reg_name (args ir_cfg) in
+  let '(s_rattrs, s_pattrs) := dc_param_attrs proto in
+  bind_err
+    (guard_err (cert_fn_matches_raw_id fnm (dc_name proto))
+      (fun _ => diag "mc-ir-proto" ("IR prototype name mismatch for '" ++ fnm ++ "'")))
+    (fun _ =>
+  match dc_type proto with
+  | TYPE_Function ret_ty arg_tys false =>
+      let arg_dtys := List.map (typ_to_dtyp tenv) arg_tys in
+      bind_err
+        (guard_err (dtyp_eqb (typ_to_dtyp tenv ret_ty) (DTYPE_Base (DTYPE_I (mc_ret_width mcert))))
+          (fun _ => diag "mc-ir-proto"
+            ("function '" ++ fnm ++ "': IR return type does not match mc-cert-v1 ret-width " ++
+             diag_pos_dec (mc_ret_width mcert))))
+        (fun _ =>
+      bind_err
+        (guard_err (rv_supported_arg_width (mc_ret_width mcert))
+          (fun _ => diag "mc-ir-proto"
+            ("function '" ++ fnm ++ "': unsupported return width " ++ diag_pos_dec (mc_ret_width mcert))))
+        (fun _ =>
+      bind_err
+        (guard_err (forallb decl_ann_supported (dc_annotations proto))
+          (fun _ => diag "mc-ir-proto"
+            ("function '" ++ fnm ++ "': unsupported declaration annotation on IR function")))
+        (fun _ =>
+      bind_err
+        (guard_err
+          (forallb (fun a => negb (is_unmodeled_fn_attr a))
+            (dc_attrs proto ++ ann_fun_attributes (dc_annotations proto)))
+          (fun _ => diag "mc-ir-proto"
+            ("function '" ++ fnm ++ "': unmodeled function attribute on IR function")))
+        (fun _ =>
+      bind_err
+        (guard_err (forallb (fun a => negb (is_unmodeled_param_attr a)) s_rattrs)
+          (fun _ => diag "mc-ir-proto"
+            ("function '" ++ fnm ++ "': unmodeled return attribute on IR function")))
+        (fun _ =>
+      bind_err
+        (guard_err (forallb (forallb (fun a => negb (is_unmodeled_param_attr a))) s_pattrs)
+          (fun _ => diag "mc-ir-proto"
+            ("function '" ++ fnm ++ "': unmodeled parameter attribute on IR function")))
+        (fun _ =>
+      bind_err
+        (guard_err (forallb2 attr_preserves_dtyp_b arg_dtys s_pattrs)
+          (fun _ => diag "mc-ir-proto"
+            ("function '" ++ fnm ++ "': parameter count or attribute/dtyp preservation mismatch")))
+        (fun _ =>
+      bind_err
+        (guard_err (forallb2 raw_id_eqb (df_args defn) (args ir_cfg))
+          (fun _ => diag "mc-ir-proto"
+            ("function '" ++ fnm ++ "': definition vs CFG parameter ID list mismatch")))
+        (fun _ =>
+      bind_err
+        (guard_err (no_dup_raw_ids (args ir_cfg))
+          (fun _ => diag "mc-ir-proto"
+            ("function '" ++ fnm ++ "': duplicate raw parameter IDs in IR CFG")))
+        (fun _ =>
+      bind_err
+        (guard_err (no_dup_strings ir_pnames)
+          (fun _ => diag "mc-ir-proto"
+            ("function '" ++ fnm ++ "': duplicate formatted parameter names in IR CFG")))
+        (fun _ =>
+      bind_err
+        (check_mc_arg_specs_idx_diag (mc_arch mcert) 0 ir_pnames arg_dtys s_pattrs (mc_args mcert))
+        (fun _ =>
+      bind_err
+        (guard_err
+          (match mc_arch mcert with
+           | EA_Riscv64 => true
+           | EA_AArch64 =>
+               forallb (fun sp => negb (existsb (String.eqb (a64_hi_var_name (ras_name sp))) ir_pnames))
+                 (mc_args mcert)
+           end)
+          (fun _ => diag "mc-ir-abi"
+            ("function '" ++ fnm ++ "': AArch64 parameter name collides with reserved __a64_hi_* symbol")))
+        (fun _ =>
+      bind_err
+        (guard_err (cfg_param_dtyp_compatible ir_cfg arg_dtys)
+          (fun _ => diag "mc-ir-proto"
+            ("function '" ++ fnm ++ "': IR CFG parameter uses disagree with prototype types")))
+        (fun _ => check_mc_ir_syntax_gates_diag ir_cfg)))))))))))))
+  | _ => inl (diag "mc-ir-proto" ("function '" ++ fnm ++ "': varargs or non-function prototype unsupported"))
+  end).
+
+Lemma check_mc_ir_proto_contract_diag_sound :
+  forall tenv defn mcert,
+    check_mc_ir_proto_contract_diag tenv defn mcert = inr tt ->
+    check_mc_ir_proto_contract tenv defn mcert = true.
+Proof.
+  intros tenv defn mcert H.
+  unfold check_mc_ir_proto_contract_diag in H; unfold check_mc_ir_proto_contract.
+  destruct (dc_param_attrs (df_prototype defn)) as [s_rattrs s_pattrs].
+  destruct (cert_fn_matches_raw_id (mc_fn_name mcert) (dc_name (df_prototype defn))) eqn:Hfn;
+    cbn [guard_err bind_err] in H; [| discriminate H].
+  destruct (dc_type (df_prototype defn)) as [| | | | | | | | | | | ret_ty arg_tys [|] | | | | |] eqn:Edct;
+    try discriminate H.
+  repeat match type of H with
+  | bind_err (guard_err ?c _) _ = inr tt =>
+      destruct c; cbn [guard_err bind_err] in H; [| discriminate H]
+  | bind_err (check_mc_arg_specs_idx_diag _ _ _ _ _ _) _ = inr tt =>
+      let E := fresh "Eargs" in
+      destruct (check_mc_arg_specs_idx_diag _ _ _ _ _ _) as [| []] eqn:E;
+        cbn [bind_err] in H; [discriminate H | rewrite (check_mc_arg_specs_idx_diag_sound _ _ _ _ _ _ E)]
+  end.
+  rewrite (check_mc_ir_syntax_gates_diag_sound _ H); reflexivity.
+Qed.
+
 Definition mc_build_init_ctx
   (arch : elf_arch) (ir_pnames : list string) (arg_dtys : list dtyp)
   (s_pattrs : list (list param_attr)) (specs : list rv_arg_spec)
@@ -1745,6 +2104,68 @@ Definition mc_build_init_ctx
     end in
   (proto_vars ++ arg_vars ++ extra_vars, proto_ctx ++ mc_ctx ++ extra_ctx).
 
+Definition check_mc_cert_wf_diag (c : mc_certificate) : string + unit :=
+  bind_err
+    (guard_err (negb (String.eqb (mc_fn_name c) ""))
+      (fun _ => diag "mc-cert-wf" "empty mc-cert-v1 function name"))
+    (fun _ =>
+  bind_err
+    (guard_err (rv_supported_arg_width (mc_ret_width c))
+      (fun _ => diag "mc-cert-wf"
+        ("unsupported mc-cert-v1 ret-width " ++ diag_pos_dec (mc_ret_width c))))
+    (fun _ =>
+  bind_err
+    (guard_err (Nat.leb (List.length (mc_args c)) 8)
+      (fun _ => diag "mc-cert-wf"
+        ("too many mc-cert-v1 arguments (" ++ diag_nat_dec (List.length (mc_args c)) ++ " > 8)")))
+    (fun _ =>
+  bind_err
+    (check_forall_idx_diag_acc
+      (fun idx sp =>
+        guard_err (rv_valid_arg_spec sp)
+          (fun _ => diag "mc-cert-wf"
+            ("mc-cert-v1 arg #" ++ diag_nat_dec idx ++ " ('" ++ ras_name sp ++
+             "'): invalid width " ++ diag_pos_dec (ras_width sp) ++ " or disallowed '$' prefix")))
+      0 (mc_args c))
+    (fun _ =>
+  bind_err
+    (check_mc_calls_diag (mc_fn_name c) (mc_calls c))
+    (fun _ =>
+  bind_err
+    (match mc_loop c with
+     | None => inr tt
+     | Some ls => check_mc_loop_spec_diag (mc_arch c) ls
+     end)
+    (fun _ =>
+  match mc_lrat_proof c with
+  | Some [] => inl (diag "mc-cert-wf" "empty LRAT proof in mc-cert-v1 certificate")
+  | _ => inr tt
+  end)))))).
+
+Definition find_unique_mc_defn_diag
+  (fn_name : string) (ds : list (definition typ (CFG.cfg typ)))
+  : string + definition typ (CFG.cfg typ) :=
+  match find_unique_diag (fun d => cert_fn_matches_raw_id fn_name (dc_name (df_prototype d))) ds with
+  | UM_Missing =>
+      inl (diag "ir-fn-lookup" ("function '" ++ fn_name ++ "' not found in IR module"))
+  | UM_Duplicate _ _ =>
+      inl (diag "ir-fn-lookup" ("function '" ++ fn_name ++ "' is defined multiple times in IR module"))
+  | UM_Unique d => inr d
+  end.
+
+Lemma find_unique_mc_defn_diag_in :
+  forall fn_name ds d,
+    find_unique_mc_defn_diag fn_name ds = inr d ->
+    In d ds /\ cert_fn_matches_raw_id fn_name (dc_name (df_prototype d)) = true.
+Proof.
+  intros fn_name ds d H; unfold find_unique_mc_defn_diag in H.
+  destruct (find_unique_diag (fun d0 => cert_fn_matches_raw_id fn_name (dc_name (df_prototype d0))) ds)
+    as [| d0 | d1 d2] eqn:Eu; try discriminate H.
+  inversion H; subst d0.
+  destruct (find_unique_diag_spec _ _ _ Eu) as [Hin [Hm _]].
+  exact (conj Hin Hm).
+Qed.
+
 Definition mc_decode_and_summarize
   (arch : elf_arch) (rvc : bool) (bytes : list N)
   (arg_specs : list rv_arg_spec) (ret_w : positive) : string + cfg_dag :=
@@ -1754,118 +2175,42 @@ Definition mc_decode_and_summarize
       | inl err => inl err
       | inr insts =>
           let rv_fuel := S (2 * length_tr insts) in
-          match summarize_rv64_dag rv_fuel insts arg_specs ret_w with
-          | None => inl "RV64 machine-code symbolic summarization failed"
-          | Some d_mc => inr d_mc
-          end
+          summarize_rv64_dag rv_fuel insts arg_specs ret_w
       end
   | EA_AArch64 =>
-      if rvc then inl "compressed mode not supported for AArch64"
+      if rvc then inl (diag "mc-rvc" "compressed mode (rvc 1) is not supported for AArch64")
       else
         match decode_a64_bytes bytes with
         | inl err => inl err
         | inr insts =>
             let a64_fuel := S (2 * length_tr insts) in
-            match summarize_a64_dag a64_fuel insts arg_specs ret_w with
-            | None => inl "AArch64 machine-code symbolic summarization failed"
-            | Some d_mc => inr d_mc
-            end
+            summarize_a64_dag a64_fuel insts arg_specs ret_w
         end
   end.
 
 Definition validate_mc_mcfg_with_cert
   (ir_m : CFG.mcfg typ) (raw_elf : list N) (mcert : mc_certificate) : string + unit :=
-  if negb (wf_mc_cert mcert) then inl "malformed mc-cert-v1 certificate"
-  else if negb (mcfg_identified_typs_defined ir_m) then
-    inl "undefined identified type in IR module"
-  else
-    match find_unique_defn_by_name (mc_fn_name mcert) (m_definitions ir_m) with
-    | None => inl "function definition not found or ambiguous in IR module"
-    | Some ir_defn =>
-        if negb (check_mc_ir_proto_contract (m_type_defs ir_m) ir_defn mcert) then
-          inl "IR prototype, ABI extension, or syntax contract check failed"
-        else
-          let fn_bare := strip_leading_at (mc_fn_name mcert) in
-          match mc_calls mcert with
-          | [] =>
-              match elf64_extract_func raw_elf (mc_arch mcert) (mc_elf_kind mcert) fn_bare with
-              | inl err => inl err
-              | inr sl =>
-                  if negb (Bool.eqb (mc_rvc mcert) (efs_rvc sl)) then
-                    inl "ELF64 RVC flag mismatch with mc-cert-v1 rvc mode"
-                  else
-                    let tenv := m_type_defs ir_m in
-                    let ir_cfg := convert_typ tenv (df_instrs ir_defn) in
-                    let ir_pnames := List.map cert_reg_name (args ir_cfg) in
-                    let arg_dtys := defn_arg_dtys tenv ir_defn in
-                    let s_pattrs := snd (dc_param_attrs (df_prototype ir_defn)) in
-                    let '(seed_vars, mc_init_ctx) :=
-                        mc_build_init_ctx (mc_arch mcert) ir_pnames arg_dtys s_pattrs (mc_args mcert) in
-                    let allowed := used_src_param_vars ir_cfg ++ seed_vars in
-                    match mc_loop mcert with
-                    | None =>
-                        match mc_decode_and_summarize (mc_arch mcert) (mc_rvc mcert) (efs_bytes sl) (mc_args mcert) (mc_ret_width mcert) with
-                        | inl err => inl err
-                        | inr d_mc =>
-                            match flatten_mc_dag_to_expr (mc_ret_width mcert) d_mc with
-                            | None => inl "MC DAG flattening failed"
-                            | Some e_mc =>
-                                match summarize_cfg_dag_with_uas (fun _ => []) false ir_cfg ir_pnames with
-                                | None => inl "IR CFG symbolic summarization failed"
-                                | Some d_ir =>
-                                    match src_dag_to_expr (mc_ret_width mcert) d_ir with
-                                    | Some e_ir =>
-                                        if check_mc_expr_refines mc_init_ctx allowed e_ir e_mc (mc_lrat_proof mcert)
-                                        then inr tt
-                                        else inl "MC-to-IR scalar refinement obligation failed"
-                                    | None =>
-                                        let dag_fuel := S (dag_node_count d_ir + 1) in
-                                        let ro :=
-                                          RO_ScalarRefines (mc_ret_width mcert)
-                                            (CE_BvConst (mc_ret_width mcert) 0%N)
-                                            (CE_BvConst (mc_ret_width mcert) 0%N) false in
-                                        if check_dag_refines_cert dag_fuel allowed mc_init_ctx ro
-                                             (mc_lrat_proof mcert)
-                                             (spine_src_evals d_ir) (spine_branch_conds d_ir)
-                                             d_ir (CD_RetScalar (mc_ret_width mcert) e_mc)
-                                        then inr tt
-                                        else inl "MC-to-IR DAG refinement obligation failed"
-                                    end
-                                end
-                            end
-                        end
-                    | Some ls =>
-                        match mc_arch mcert with
-                        | EA_Riscv64 =>
-                            match decode_rv64_bytes (mc_rvc mcert) (efs_bytes sl) with
-                            | inl err => inl err
-                            | inr insts =>
-                                validate_mc_loop_rv64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) ls (mc_lrat_proof mcert)
-                            end
-                        | EA_AArch64 =>
-                            if mc_rvc mcert then inl "compressed mode not supported for AArch64"
-                            else
-                              match decode_a64_bytes (efs_bytes sl) with
-                              | inl err => inl err
-                              | inr insts =>
-                                  validate_mc_loop_a64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) ls (mc_lrat_proof mcert)
-                              end
-                        end
-                    end
-              end
-          | callees =>
-              match mc_loop mcert with
-              | Some _ => inl "combining calls and loop in one certificate is not supported"
-              | None =>
-                  match check_mc_callee_contracts_diag (m_type_defs ir_m) ir_m (mc_arch mcert) callees with
-                  | inl err => inl err
-                  | inr tt =>
-                    match elf64_extract_func_with_calls raw_elf (mc_arch mcert) (mc_elf_kind mcert) fn_bare
-                            (List.map (fun c => mc_strip_leading_at (mcs_name c)) callees) with
+  match check_mc_cert_wf_diag mcert with
+  | inl err => inl err
+  | inr tt =>
+      if negb (mcfg_identified_typs_defined ir_m) then
+        inl (diag "ir-type" "undefined identified type in IR module")
+      else
+        match find_unique_mc_defn_diag (mc_fn_name mcert) (m_definitions ir_m) with
+        | inl err => inl err
+        | inr ir_defn =>
+            match check_mc_ir_proto_contract_diag (m_type_defs ir_m) ir_defn mcert with
+            | inl err => inl err
+            | inr tt =>
+                let fn_bare := strip_leading_at (mc_fn_name mcert) in
+                match mc_calls mcert with
+                | [] =>
+                    match elf64_extract_func raw_elf (mc_arch mcert) (mc_elf_kind mcert) fn_bare with
                     | inl err => inl err
-                    | inr (sl, ci) =>
+                    | inr sl =>
                         if negb (Bool.eqb (mc_rvc mcert) (efs_rvc sl)) then
-                          inl "ELF64 RVC flag mismatch with mc-cert-v1 rvc mode"
+                          inl (diag "mc-rvc"
+                            ("ELF64 RVC flag disagrees with mc-cert-v1 rvc mode for '" ++ fn_bare ++ "'"))
                         else
                           let tenv := m_type_defs ir_m in
                           let ir_cfg := convert_typ tenv (df_instrs ir_defn) in
@@ -1875,27 +2220,111 @@ Definition validate_mc_mcfg_with_cert
                           let '(seed_vars, mc_init_ctx) :=
                               mc_build_init_ctx (mc_arch mcert) ir_pnames arg_dtys s_pattrs (mc_args mcert) in
                           let allowed := used_src_param_vars ir_cfg ++ seed_vars in
-                          match mc_arch mcert with
-                          | EA_Riscv64 =>
-                              match decode_rv64_bytes_with_calls (mc_rvc mcert) (mc_elf_kind mcert) (efs_range_lo sl) ci (efs_bytes sl) with
+                          match mc_loop mcert with
+                          | None =>
+                              match mc_decode_and_summarize (mc_arch mcert) (mc_rvc mcert) (efs_bytes sl) (mc_args mcert) (mc_ret_width mcert) with
                               | inl err => inl err
-                              | inr insts =>
-                                  validate_mc_call_rv64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) callees (mc_lrat_proof mcert)
+                              | inr d_mc =>
+                                  match flatten_mc_dag_to_expr (mc_ret_width mcert) d_mc with
+                                  | inl err => inl err
+                                  | inr e_mc =>
+                                      match summarize_cfg_dag_with_uas (fun _ => []) false ir_cfg ir_pnames with
+                                      | None =>
+                                          inl (diag "mc-ir-reify" ("IR CFG symbolic summarization failed for '" ++ fn_bare ++ "'"))
+                                      | Some d_ir =>
+                                          match src_dag_to_expr (mc_ret_width mcert) d_ir with
+                                          | Some e_ir =>
+                                              check_mc_expr_refines_diag mc_init_ctx allowed e_ir e_mc (mc_lrat_proof mcert)
+                                          | None =>
+                                              let dag_fuel := S (dag_node_count d_ir + 1) in
+                                              let ro :=
+                                                RO_ScalarRefines (mc_ret_width mcert)
+                                                  (CE_BvConst (mc_ret_width mcert) 0%N)
+                                                  (CE_BvConst (mc_ret_width mcert) 0%N) false in
+                                              if check_dag_refines_cert dag_fuel allowed mc_init_ctx ro
+                                                   (mc_lrat_proof mcert)
+                                                   (spine_src_evals d_ir) (spine_branch_conds d_ir)
+                                                   d_ir (CD_RetScalar (mc_ret_width mcert) e_mc)
+                                              then inr tt
+                                              else
+                                                match mc_lrat_proof mcert with
+                                                | Some pf =>
+                                                    inl (diag "lrat-check"
+                                                      ("LRAT proof (" ++ diag_nat_dec (length_tr pf) ++
+                                                       " step(s)) failed to discharge MC-to-IR DAG refinement obligation for '" ++ fn_bare ++ "'"))
+                                                | None =>
+                                                    inl (diag "mc-refine"
+                                                      ("MC-to-IR DAG refinement obligation failed for '" ++ fn_bare ++ "'"))
+                                                end
+                                          end
+                                      end
+                                  end
                               end
-                          | EA_AArch64 =>
-                              if mc_rvc mcert then inl "compressed mode not supported for AArch64"
-                              else
-                                match decode_a64_bytes_with_calls (mc_elf_kind mcert) (efs_range_lo sl) ci (efs_bytes sl) with
-                                | inl err => inl err
-                                | inr insts =>
-                                    validate_mc_call_a64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) callees (mc_lrat_proof mcert)
-                                end
+                          | Some ls =>
+                              match mc_arch mcert with
+                              | EA_Riscv64 =>
+                                  match decode_rv64_bytes (mc_rvc mcert) (efs_bytes sl) with
+                                  | inl err => inl err
+                                  | inr insts =>
+                                      validate_mc_loop_rv64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) ls (mc_lrat_proof mcert)
+                                  end
+                              | EA_AArch64 =>
+                                  if mc_rvc mcert then inl (diag "mc-rvc" "compressed mode (rvc 1) is not supported for AArch64")
+                                  else
+                                    match decode_a64_bytes (efs_bytes sl) with
+                                    | inl err => inl err
+                                    | inr insts =>
+                                        validate_mc_loop_a64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) ls (mc_lrat_proof mcert)
+                                    end
+                              end
                           end
                     end
-                  end
-              end
-          end
-    end.
+                | callees =>
+                    match mc_loop mcert with
+                    | Some _ => inl (diag "mc-mode" "combining (calls ...) and (loop ...) in one certificate is not supported")
+                    | None =>
+                        match check_mc_callee_contracts_diag (m_type_defs ir_m) ir_m (mc_arch mcert) callees with
+                        | inl err => inl err
+                        | inr tt =>
+                          match elf64_extract_func_with_calls raw_elf (mc_arch mcert) (mc_elf_kind mcert) fn_bare
+                                  (List.map (fun c => mc_strip_leading_at (mcs_name c)) callees) with
+                          | inl err => inl err
+                          | inr (sl, ci) =>
+                              if negb (Bool.eqb (mc_rvc mcert) (efs_rvc sl)) then
+                                inl (diag "mc-rvc"
+                                  ("ELF64 RVC flag disagrees with mc-cert-v1 rvc mode for '" ++ fn_bare ++ "'"))
+                              else
+                                let tenv := m_type_defs ir_m in
+                                let ir_cfg := convert_typ tenv (df_instrs ir_defn) in
+                                let ir_pnames := List.map cert_reg_name (args ir_cfg) in
+                                let arg_dtys := defn_arg_dtys tenv ir_defn in
+                                let s_pattrs := snd (dc_param_attrs (df_prototype ir_defn)) in
+                                let '(seed_vars, mc_init_ctx) :=
+                                    mc_build_init_ctx (mc_arch mcert) ir_pnames arg_dtys s_pattrs (mc_args mcert) in
+                                let allowed := used_src_param_vars ir_cfg ++ seed_vars in
+                                match mc_arch mcert with
+                                | EA_Riscv64 =>
+                                    match decode_rv64_bytes_with_calls (mc_rvc mcert) (mc_elf_kind mcert) (efs_range_lo sl) ci (efs_bytes sl) with
+                                    | inl err => inl err
+                                    | inr insts =>
+                                        validate_mc_call_rv64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) callees (mc_lrat_proof mcert)
+                                    end
+                                | EA_AArch64 =>
+                                    if mc_rvc mcert then inl (diag "mc-rvc" "compressed mode (rvc 1) is not supported for AArch64")
+                                    else
+                                      match decode_a64_bytes_with_calls (mc_elf_kind mcert) (efs_range_lo sl) ci (efs_bytes sl) with
+                                      | inl err => inl err
+                                      | inr insts =>
+                                          validate_mc_call_a64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) callees (mc_lrat_proof mcert)
+                                      end
+                                end
+                          end
+                        end
+                    end
+                end
+            end
+        end
+  end.
 
 Definition validate_mc_tle_with_cert_str
   (ir_tle : toplevel_entities typ (block typ * list (block typ)))
@@ -2050,7 +2479,7 @@ Qed.
 
 Lemma validate_mc_core_refine_sound {Pa : Params} :
   forall allowed mc_init_ctx ret_w lrat_pf d_ir d_mc e_mc penv dv_ir dv_mc,
-    flatten_mc_dag_to_expr ret_w d_mc = Some e_mc ->
+    flatten_mc_dag_to_expr ret_w d_mc = inr e_mc ->
     (match src_dag_to_expr ret_w d_ir with
      | Some e_ir => check_mc_expr_refines mc_init_ctx allowed e_ir e_mc lrat_pf
      | None =>
@@ -2233,13 +2662,14 @@ Proof.
   destruct (parse_mc_cert cert_str) as [| mcert] eqn:Ecert; [discriminate Hval |].
   pose proof (parse_mc_cert_wf cert_str mcert Ecert) as Hwf_cert.
   unfold validate_mc_mcfg_with_cert in Hval.
-  rewrite Hwf_cert in Hval; cbn [negb] in Hval.
+  destruct (check_mc_cert_wf_diag mcert) as [| []]; [discriminate Hval |].
   destruct (mcfg_identified_typs_defined ir_m); cbn [negb] in Hval; [| discriminate Hval].
-  destruct (find_unique_defn_by_name (mc_fn_name mcert) (m_definitions ir_m)) as [ir_defn |] eqn:Efnd;
-    [| discriminate Hval].
-  destruct (find_unique_defn_by_name_in _ _ _ Efnd) as [Hin_defn _].
-  destruct (check_mc_ir_proto_contract (m_type_defs ir_m) ir_defn mcert) eqn:Hproto;
-    cbn [negb] in Hval; [| discriminate Hval].
+  destruct (find_unique_mc_defn_diag (mc_fn_name mcert) (m_definitions ir_m)) as [| ir_defn] eqn:Efnd;
+    [discriminate Hval |].
+  destruct (find_unique_mc_defn_diag_in _ _ _ Efnd) as [Hin_defn _].
+  destruct (check_mc_ir_proto_contract_diag (m_type_defs ir_m) ir_defn mcert) as [| []] eqn:Hproto_d;
+    [discriminate Hval |].
+  pose proof (check_mc_ir_proto_contract_diag_sound _ _ _ Hproto_d) as Hproto.
   set (tenv := m_type_defs ir_m) in *.
   set (ir_cfg := convert_typ tenv (df_instrs ir_defn)) in *.
   set (ir_pnames := List.map cert_reg_name (args ir_cfg)) in *.
@@ -2462,8 +2892,8 @@ Proof.
   - (* None: existing DAG pipeline *)
     destruct (mc_decode_and_summarize (mc_arch mcert) (mc_rvc mcert) (efs_bytes sl) (mc_args mcert) (mc_ret_width mcert))
       as [| d_mc] eqn:Edec_s; [discriminate Hval |].
-    destruct (flatten_mc_dag_to_expr (mc_ret_width mcert) d_mc) as [e_mc |] eqn:Eflat;
-      [| discriminate Hval].
+    destruct (flatten_mc_dag_to_expr (mc_ret_width mcert) d_mc) as [| e_mc] eqn:Eflat;
+      [discriminate Hval |].
     destruct (summarize_cfg_dag_with_uas (fun _ => []) false ir_cfg ir_pnames)
       as [d_ir |] eqn:Esum_ir; [| discriminate Hval].
     pose proof (summarize_cfg_dag_with_uas_wf (fun _ => []) false ir_cfg ir_pnames (used_src_param_vars ir_cfg) d_ir Hpu_ir Esum_ir)
@@ -2478,12 +2908,13 @@ Proof.
              (RO_ScalarRefines (mc_ret_width mcert) (CE_BvConst (mc_ret_width mcert) 0%N) (CE_BvConst (mc_ret_width mcert) 0%N) false)
              (mc_lrat_proof mcert) (spine_src_evals d_ir) (spine_branch_conds d_ir) d_ir (CD_RetScalar (mc_ret_width mcert) e_mc)
        end) = true).
-    { destruct (src_dag_to_expr (mc_ret_width mcert) d_ir) as [e_ir |];
-        [destruct (check_mc_expr_refines mc_init_ctx allowed e_ir e_mc (mc_lrat_proof mcert))
-        | destruct (check_dag_refines_cert (S (dag_node_count d_ir + 1)) allowed mc_init_ctx
-                      (RO_ScalarRefines (mc_ret_width mcert) (CE_BvConst (mc_ret_width mcert) 0%N) (CE_BvConst (mc_ret_width mcert) 0%N) false)
-                      (mc_lrat_proof mcert) (spine_src_evals d_ir) (spine_branch_conds d_ir) d_ir (CD_RetScalar (mc_ret_width mcert) e_mc))];
-        [reflexivity | discriminate Hval | reflexivity | discriminate Hval]. }
+    { destruct (src_dag_to_expr (mc_ret_width mcert) d_ir) as [e_ir |].
+      - destruct (check_mc_expr_refines_diag mc_init_ctx allowed e_ir e_mc (mc_lrat_proof mcert))
+          as [| []] eqn:Hchk_d; [discriminate Hval | exact (check_mc_expr_refines_diag_sound _ _ _ _ _ Hchk_d)].
+      - destruct (check_dag_refines_cert (S (dag_node_count d_ir + 1)) allowed mc_init_ctx
+                    (RO_ScalarRefines (mc_ret_width mcert) (CE_BvConst (mc_ret_width mcert) 0%N) (CE_BvConst (mc_ret_width mcert) 0%N) false)
+                    (mc_lrat_proof mcert) (spine_src_evals d_ir) (spine_branch_conds d_ir) d_ir (CD_RetScalar (mc_ret_width mcert) e_mc));
+          [reflexivity | destruct (mc_lrat_proof mcert); discriminate Hval]. }
     cbn zeta.
     destruct (mc_arch mcert) eqn:Earch; unfold mc_decode_and_summarize in Edec_s.
     + (* EA_Riscv64 *)
@@ -2492,7 +2923,7 @@ Proof.
     rewrite length_tr_eq in Edec_s.
     set (rv_fuel := S (2 * List.length insts)) in *.
     destruct (summarize_rv64_dag rv_fuel insts (mc_args mcert) (mc_ret_width mcert))
-      as [d_mc0 |] eqn:Esum_mc; [| discriminate Edec_s].
+      as [| d_mc0] eqn:Esum_mc; [discriminate Edec_s |].
     inversion Edec_s; subst d_mc0; clear Edec_s.
     exists insts; split; [reflexivity |].
     intros vs rf0 mstk0 Hty Hnu Hsp0 Hm.
@@ -2560,7 +2991,7 @@ Proof.
     rewrite length_tr_eq in Edec_s.
     set (a64_fuel := S (2 * List.length insts)) in *.
     destruct (summarize_a64_dag a64_fuel insts (mc_args mcert) (mc_ret_width mcert))
-      as [d_mc0 |] eqn:Esum_mc; [| discriminate Edec_s].
+      as [| d_mc0] eqn:Esum_mc; [discriminate Edec_s |].
     inversion Edec_s; subst d_mc0; clear Edec_s.
     exists insts; split; [reflexivity |].
     intros vs rf0 sp0 fl0 mstk0 Hty Hnu Hsp0 Hm.
@@ -2882,112 +3313,27 @@ Definition emit_mc_dimacs_cnf_str
   | inr mcert =>
       let ir_m := mcfg_of_tle (resolve_module_refs ir_tle) in
       let raw_elf := mc_string_to_bytes elf_str in
-      if negb (wf_mc_cert mcert) then inl "malformed mc-cert-v1 certificate"
-      else if negb (mcfg_identified_typs_defined ir_m) then
-        inl "undefined identified type in IR module"
-      else
-        match find_unique_defn_by_name (mc_fn_name mcert) (m_definitions ir_m) with
-        | None => inl "function definition not found or ambiguous in IR module"
-        | Some ir_defn =>
-            if negb (check_mc_ir_proto_contract (m_type_defs ir_m) ir_defn mcert) then
-              inl "IR prototype, ABI extension, or syntax contract check failed"
-            else
-              let fn_bare := strip_leading_at (mc_fn_name mcert) in
-              match mc_calls mcert with
-              | [] =>
-                  match elf64_extract_func raw_elf (mc_arch mcert) (mc_elf_kind mcert) fn_bare with
-                  | inl err => inl err
-                  | inr sl =>
-                      if negb (Bool.eqb (mc_rvc mcert) (efs_rvc sl)) then
-                        inl "ELF64 RVC flag mismatch with mc-cert-v1 rvc mode"
-                      else
-                        let tenv := m_type_defs ir_m in
-                        let ir_cfg := convert_typ tenv (df_instrs ir_defn) in
-                        let ir_pnames := List.map cert_reg_name (args ir_cfg) in
-                        let arg_dtys := defn_arg_dtys tenv ir_defn in
-                        let s_pattrs := snd (dc_param_attrs (df_prototype ir_defn)) in
-                        let '(seed_vars, mc_init_ctx) :=
-                            mc_build_init_ctx (mc_arch mcert) ir_pnames arg_dtys s_pattrs (mc_args mcert) in
-                        let allowed := used_src_param_vars ir_cfg ++ seed_vars in
-                        match mc_loop mcert with
-                        | None =>
-                            match mc_decode_and_summarize (mc_arch mcert) (mc_rvc mcert) (efs_bytes sl) (mc_args mcert) (mc_ret_width mcert) with
-                            | inl err => inl err
-                            | inr d_mc =>
-                                match flatten_mc_dag_to_expr (mc_ret_width mcert) d_mc with
-                                | None => inl "MC DAG flattening failed"
-                                | Some e_mc =>
-                                    match summarize_cfg_dag_with_uas (fun _ => []) false ir_cfg ir_pnames with
-                                    | None => inl "IR CFG symbolic summarization failed"
-                                    | Some d_ir =>
-                                        match src_dag_to_expr (mc_ret_width mcert) d_ir with
-                                        | None => inl "IR DAG could not be flattened to scalar select tree for CNF emission"
-                                        | Some e_ir =>
-                                            let '(es', et') := prepare_mc_expr_pair mc_init_ctx allowed e_ir e_mc in
-                                            if check_expr_refines mc_init_ctx es' et' then
-                                              inr ("c ALGEBRAIC_OK" ++ String (ascii_of_nat 10) "")%string
-                                            else
-                                              let sz := cert_expr_bit_width es' in
-                                              let known_vars := collect_free_vars [] es' ++ collect_free_vars [] et' in
-                                              let env0 := blast_ub_ctx mc_init_ctx known_vars mc_init_ctx
-                                                            (mk_blast_env (init_blast_state 2%positive) [] []) in
-                                              let ms_s := if expr_has_freeze es' then Some ([], default_let_expand_budget) else None in
-                                              let ms_t := if expr_has_freeze et' then Some ([], default_let_expand_budget) else None in
-                                              match blast_cert_expr mc_init_ctx [] ms_s es' env0 with
-                                              | None => inl "failed to bit-blast source IR expression"
-                                              | Some (src_r, env1) =>
-                                                  match blast_cert_expr mc_init_ctx [] ms_t et' env1 with
-                                                  | None => inl "failed to bit-blast target MC expression"
-                                                  | Some (tgt_r, env2) =>
-                                                      let '(cex_lit, st5) := blast_refinement_cex_opt_gates sz lit_true src_r tgt_r (be_st env2) in
-                                                      let st_final := add_clauses [[cex_lit]] st5 in
-                                                      inr (format_dimacs_cnf (Pos.pred (bs_next_var st_final)) (bs_cnf st_final))
-                                                  end
-                                              end
-                                        end
-                                    end
-                                end
-                            end
-                        | Some ls =>
-                            match mc_arch mcert with
-                            | EA_Riscv64 =>
-                                match decode_rv64_bytes (mc_rvc mcert) (efs_bytes sl) with
-                                | inl err => inl err
-                                | inr insts =>
-                                    match emit_mc_loop_cnf_rv64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) ls with
-                                    | inl err => inl err
-                                    | inr None => inr ("c ALGEBRAIC_OK" ++ String (ascii_of_nat 10) "")%string
-                                    | inr (Some (nv, f)) => inr (format_dimacs_cnf nv f)
-                                    end
-                                end
-                            | EA_AArch64 =>
-                                if mc_rvc mcert then inl "compressed mode not supported for AArch64"
-                                else
-                                  match decode_a64_bytes (efs_bytes sl) with
-                                  | inl err => inl err
-                                  | inr insts =>
-                                      match emit_mc_loop_cnf_a64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) ls with
-                                      | inl err => inl err
-                                      | inr None => inr ("c ALGEBRAIC_OK" ++ String (ascii_of_nat 10) "")%string
-                                      | inr (Some (nv, f)) => inr (format_dimacs_cnf nv f)
-                                      end
-                                  end
-                            end
-                        end
-                  end
-              | callees =>
-                  match mc_loop mcert with
-                  | Some _ => inl "combining calls and loop in one certificate is not supported"
-                  | None =>
-                      match check_mc_callee_contracts_diag (m_type_defs ir_m) ir_m (mc_arch mcert) callees with
-                      | inl err => inl err
-                      | inr tt =>
-                        let callee_names := List.map (fun c => mc_strip_leading_at (mcs_name c)) callees in
-                        match elf64_extract_func_with_calls raw_elf (mc_arch mcert) (mc_elf_kind mcert) fn_bare callee_names with
+      match check_mc_cert_wf_diag mcert with
+      | inl err => inl err
+      | inr tt =>
+          if negb (mcfg_identified_typs_defined ir_m) then
+            inl (diag "ir-type" "undefined identified type in IR module")
+          else
+            match find_unique_mc_defn_diag (mc_fn_name mcert) (m_definitions ir_m) with
+            | inl err => inl err
+            | inr ir_defn =>
+                match check_mc_ir_proto_contract_diag (m_type_defs ir_m) ir_defn mcert with
+                | inl err => inl err
+                | inr tt =>
+                    let fn_bare := strip_leading_at (mc_fn_name mcert) in
+                    match mc_calls mcert with
+                    | [] =>
+                        match elf64_extract_func raw_elf (mc_arch mcert) (mc_elf_kind mcert) fn_bare with
                         | inl err => inl err
-                        | inr (sl, ci) =>
+                        | inr sl =>
                             if negb (Bool.eqb (mc_rvc mcert) (efs_rvc sl)) then
-                              inl "ELF64 RVC flag mismatch with mc-cert-v1 rvc mode"
+                              inl (diag "mc-rvc"
+                                ("ELF64 RVC flag disagrees with mc-cert-v1 rvc mode for '" ++ fn_bare ++ "'"))
                             else
                               let tenv := m_type_defs ir_m in
                               let ir_cfg := convert_typ tenv (df_instrs ir_defn) in
@@ -2997,34 +3343,127 @@ Definition emit_mc_dimacs_cnf_str
                               let '(seed_vars, mc_init_ctx) :=
                                   mc_build_init_ctx (mc_arch mcert) ir_pnames arg_dtys s_pattrs (mc_args mcert) in
                               let allowed := used_src_param_vars ir_cfg ++ seed_vars in
-                              match mc_arch mcert with
-                              | EA_Riscv64 =>
-                                  match decode_rv64_bytes_with_calls (mc_rvc mcert) (mc_elf_kind mcert) (efs_range_lo sl) ci (efs_bytes sl) with
+                              match mc_loop mcert with
+                              | None =>
+                                  match mc_decode_and_summarize (mc_arch mcert) (mc_rvc mcert) (efs_bytes sl) (mc_args mcert) (mc_ret_width mcert) with
                                   | inl err => inl err
-                                  | inr insts =>
-                                      match emit_mc_call_cnf_rv64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) callees with
+                                  | inr d_mc =>
+                                      match flatten_mc_dag_to_expr (mc_ret_width mcert) d_mc with
                                       | inl err => inl err
-                                      | inr None => inr ("c ALGEBRAIC_OK" ++ String (ascii_of_nat 10) "")%string
-                                      | inr (Some (nv, f)) => inr (format_dimacs_cnf nv f)
+                                      | inr e_mc =>
+                                          match summarize_cfg_dag_with_uas (fun _ => []) false ir_cfg ir_pnames with
+                                          | None =>
+                                              inl (diag "mc-ir-reify" ("IR CFG symbolic summarization failed for '" ++ fn_bare ++ "'"))
+                                          | Some d_ir =>
+                                              match src_dag_to_expr (mc_ret_width mcert) d_ir with
+                                              | None =>
+                                                  inl (diag "mc-ir-reify" ("IR DAG could not be flattened to scalar select tree for CNF emission ('" ++ fn_bare ++ "')"))
+                                              | Some e_ir =>
+                                                  let '(es', et') := prepare_mc_expr_pair mc_init_ctx allowed e_ir e_mc in
+                                                  if check_expr_refines mc_init_ctx es' et' then
+                                                    inr ("c ALGEBRAIC_OK" ++ String (ascii_of_nat 10) "")%string
+                                                  else
+                                                    let sz := cert_expr_bit_width es' in
+                                                    let known_vars := collect_free_vars [] es' ++ collect_free_vars [] et' in
+                                                    let env0 := blast_ub_ctx mc_init_ctx known_vars mc_init_ctx
+                                                                  (mk_blast_env (init_blast_state 2%positive) [] []) in
+                                                    let ms_s := if expr_has_freeze es' then Some ([], default_let_expand_budget) else None in
+                                                    let ms_t := if expr_has_freeze et' then Some ([], default_let_expand_budget) else None in
+                                                    match blast_cert_expr mc_init_ctx [] ms_s es' env0 with
+                                                    | None => inl (diag "mc-refine" ("failed to bit-blast source IR expression for '" ++ fn_bare ++ "'"))
+                                                    | Some (src_r, env1) =>
+                                                        match blast_cert_expr mc_init_ctx [] ms_t et' env1 with
+                                                        | None => inl (diag "mc-refine" ("failed to bit-blast target MC expression for '" ++ fn_bare ++ "'"))
+                                                        | Some (tgt_r, env2) =>
+                                                            let '(cex_lit, st5) := blast_refinement_cex_opt_gates sz lit_true src_r tgt_r (be_st env2) in
+                                                            let st_final := add_clauses [[cex_lit]] st5 in
+                                                            inr (format_dimacs_cnf (Pos.pred (bs_next_var st_final)) (bs_cnf st_final))
+                                                        end
+                                                    end
+                                              end
+                                          end
                                       end
                                   end
-                              | EA_AArch64 =>
-                                  if mc_rvc mcert then inl "compressed mode not supported for AArch64"
-                                  else
-                                    match decode_a64_bytes_with_calls (mc_elf_kind mcert) (efs_range_lo sl) ci (efs_bytes sl) with
-                                    | inl err => inl err
-                                    | inr insts =>
-                                        match emit_mc_call_cnf_a64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) callees with
+                              | Some ls =>
+                                  match mc_arch mcert with
+                                  | EA_Riscv64 =>
+                                      match decode_rv64_bytes (mc_rvc mcert) (efs_bytes sl) with
+                                      | inl err => inl err
+                                      | inr insts =>
+                                          match emit_mc_loop_cnf_rv64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) ls with
+                                          | inl err => inl err
+                                          | inr None => inr ("c ALGEBRAIC_OK" ++ String (ascii_of_nat 10) "")%string
+                                          | inr (Some (nv, f)) => inr (format_dimacs_cnf nv f)
+                                          end
+                                      end
+                                  | EA_AArch64 =>
+                                      if mc_rvc mcert then inl (diag "mc-rvc" "compressed mode (rvc 1) is not supported for AArch64")
+                                      else
+                                        match decode_a64_bytes (efs_bytes sl) with
                                         | inl err => inl err
-                                        | inr None => inr ("c ALGEBRAIC_OK" ++ String (ascii_of_nat 10) "")%string
-                                        | inr (Some (nv, f)) => inr (format_dimacs_cnf nv f)
+                                        | inr insts =>
+                                            match emit_mc_loop_cnf_a64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) ls with
+                                            | inl err => inl err
+                                            | inr None => inr ("c ALGEBRAIC_OK" ++ String (ascii_of_nat 10) "")%string
+                                            | inr (Some (nv, f)) => inr (format_dimacs_cnf nv f)
+                                            end
                                         end
-                                    end
+                                  end
                               end
                         end
-                      end
-                  end
-              end
-        end
+                    | callees =>
+                        match mc_loop mcert with
+                        | Some _ => inl (diag "mc-mode" "combining (calls ...) and (loop ...) in one certificate is not supported")
+                        | None =>
+                            match check_mc_callee_contracts_diag (m_type_defs ir_m) ir_m (mc_arch mcert) callees with
+                            | inl err => inl err
+                            | inr tt =>
+                              let callee_names := List.map (fun c => mc_strip_leading_at (mcs_name c)) callees in
+                              match elf64_extract_func_with_calls raw_elf (mc_arch mcert) (mc_elf_kind mcert) fn_bare callee_names with
+                              | inl err => inl err
+                              | inr (sl, ci) =>
+                                  if negb (Bool.eqb (mc_rvc mcert) (efs_rvc sl)) then
+                                    inl (diag "mc-rvc"
+                                      ("ELF64 RVC flag disagrees with mc-cert-v1 rvc mode for '" ++ fn_bare ++ "'"))
+                                  else
+                                    let tenv := m_type_defs ir_m in
+                                    let ir_cfg := convert_typ tenv (df_instrs ir_defn) in
+                                    let ir_pnames := List.map cert_reg_name (args ir_cfg) in
+                                    let arg_dtys := defn_arg_dtys tenv ir_defn in
+                                    let s_pattrs := snd (dc_param_attrs (df_prototype ir_defn)) in
+                                    let '(seed_vars, mc_init_ctx) :=
+                                        mc_build_init_ctx (mc_arch mcert) ir_pnames arg_dtys s_pattrs (mc_args mcert) in
+                                    let allowed := used_src_param_vars ir_cfg ++ seed_vars in
+                                    match mc_arch mcert with
+                                    | EA_Riscv64 =>
+                                        match decode_rv64_bytes_with_calls (mc_rvc mcert) (mc_elf_kind mcert) (efs_range_lo sl) ci (efs_bytes sl) with
+                                        | inl err => inl err
+                                        | inr insts =>
+                                            match emit_mc_call_cnf_rv64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) callees with
+                                            | inl err => inl err
+                                            | inr None => inr ("c ALGEBRAIC_OK" ++ String (ascii_of_nat 10) "")%string
+                                            | inr (Some (nv, f)) => inr (format_dimacs_cnf nv f)
+                                            end
+                                        end
+                                    | EA_AArch64 =>
+                                        if mc_rvc mcert then inl (diag "mc-rvc" "compressed mode (rvc 1) is not supported for AArch64")
+                                        else
+                                          match decode_a64_bytes_with_calls (mc_elf_kind mcert) (efs_range_lo sl) ci (efs_bytes sl) with
+                                          | inl err => inl err
+                                          | inr insts =>
+                                              match emit_mc_call_cnf_a64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) callees with
+                                              | inl err => inl err
+                                              | inr None => inr ("c ALGEBRAIC_OK" ++ String (ascii_of_nat 10) "")%string
+                                              | inr (Some (nv, f)) => inr (format_dimacs_cnf nv f)
+                                              end
+                                          end
+                                    end
+                              end
+                            end
+                        end
+                    end
+                end
+            end
+      end
   end.
 

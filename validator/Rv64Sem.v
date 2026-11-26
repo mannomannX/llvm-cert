@@ -464,27 +464,36 @@ Fixpoint decode_rv64_stream_acc
   | [] => inr (elf_rev_tr acc)
   | _ :: _ =>
       match fuel with
-      | O => inl "RV64 decoder fuel exhausted"
+      | O => inl (diag "mc-decode" ("RV64 decoder fuel exhausted at offset " ++ diag_N_hex (N.of_nat cur_off)))
       | S fuel' =>
           match take_u16_le cur with
-          | None => inl "truncated RV64 instruction stream"
+          | None => inl (diag "mc-decode" ("truncated RV64 instruction stream at offset " ++ diag_N_hex (N.of_nat cur_off)))
           | Some (hw, rest2) =>
               if negb (N.eqb (N.modulo hw 4%N) 3%N) then
                 if negb rvc_enabled then
-                  inl "16-bit RVC instruction encountered with RVC disabled"
+                  inl (diag "mc-decode"
+                    ("16-bit RVC instruction " ++ diag_N_hex hw ++ " at offset " ++
+                     diag_N_hex (N.of_nat cur_off) ++ " with RVC disabled"))
                 else
                   match decode_rvc_hw hw with
-                  | None => inl "unsupported 16-bit RVC instruction"
+                  | None =>
+                      inl (diag "mc-decode"
+                        ("unsupported 16-bit RVC instruction " ++ diag_N_hex hw ++
+                         " at offset " ++ diag_N_hex (N.of_nat cur_off)))
                   | Some inst =>
                       let acc' := mk_decoded_rv (N.of_nat cur_off) 2%N inst :: acc in
                       decode_rv64_stream_acc fuel' rvc_enabled rest2 (cur_off + 2) acc'
                   end
               else
                 match take_u32_le cur with
-                | None => inl "truncated 32-bit RV64 instruction"
+                | None =>
+                    inl (diag "mc-decode" ("truncated 32-bit RV64 instruction at offset " ++ diag_N_hex (N.of_nat cur_off)))
                 | Some (w, rest4) =>
                     match decode_rv32_word w with
-                    | None => inl "unsupported 32-bit RV64 instruction"
+                    | None =>
+                        inl (diag "mc-decode"
+                          ("unsupported 32-bit RV64 instruction " ++ diag_N_hex w ++
+                           " at offset " ++ diag_N_hex (N.of_nat cur_off)))
                     | Some inst =>
                         let acc' := mk_decoded_rv (N.of_nat cur_off) 4%N inst :: acc in
                         decode_rv64_stream_acc fuel' rvc_enabled rest4 (cur_off + 4) acc'
@@ -498,9 +507,9 @@ Definition decode_rv64_bytes (rvc_enabled : bool) (code : list N)
   : string + list decoded_rv_inst :=
   let len := elf_length_tr code in
   if Nat.eqb len 0 || negb (Nat.eqb (Nat.modulo len 2) 0) then
-    inl "RV64 function byte length must be positive and even"
+    inl (diag "mc-decode" ("RV64 function byte length " ++ diag_nat_dec len ++ " must be positive and even"))
   else if negb rvc_enabled && negb (Nat.eqb (Nat.modulo len 4) 0) then
-    inl "non-RVC RV64 function length must be a multiple of 4"
+    inl (diag "mc-decode" ("non-RVC RV64 function byte length " ++ diag_nat_dec len ++ " must be a multiple of 4"))
   else
     decode_rv64_stream_acc (Nat.div len 2 + 1) rvc_enabled code 0 [].
 
@@ -1070,14 +1079,18 @@ Definition rv_sym_step_write
 Fixpoint summarize_rv64_dag_at
   (fuel : nat) (im : pos_trie decoded_rv_inst) (visited : pos_trie unit)
   (pc : N) (sp_off : Z) (vrf : rv_val_regs) (astk : mc_sym_stack) (ret_w : positive)
-  {struct fuel} : option cfg_dag :=
-  if pt_has_n pc visited then None
+  {struct fuel} : string + cfg_dag :=
+  let loc (_ : unit) : string :=
+    ("rv64 at pc=" ++ diag_N_hex pc ++ " sp-off=" ++ diag_Z_dec sp_off)%string
+  in
+  if pt_has_n pc visited then
+    inl (diag "mc-exec" ("cycle/loop detected in rv64 acyclic DAG mode (" ++ loc tt ++ "); provide a (loop ...) certificate"))
   else
     match fuel with
-    | O => None
+    | O => inl (diag "mc-exec" ("rv64 symbolic execution fuel exhausted (" ++ loc tt ++ ")"))
     | S fuel' =>
         match pt_get (N.succ_pos pc) im with
-        | None => None
+        | None => inl (diag "mc-exec" ("rv64 execution escaped function slice (" ++ loc tt ++ ")"))
         | Some dec =>
             let next_pc := (pc + dri_len dec)%N in
             let visited' := pt_add_n pc visited in
@@ -1086,7 +1099,7 @@ Fixpoint summarize_rv64_dag_at
                 summarize_rv64_dag_at fuel' im visited' next_pc sp_off vrf astk ret_w
             | RV_Lui rd imm =>
                 match rv_sym_step_write rd (MSV_Expr (ce_bv_z 64%positive imm)) sp_off vrf astk with
-                | None => None
+                | None => inl (diag "mc-frame" ("invalid sp/register write in rv64 lui (" ++ loc tt ++ ")"))
                 | Some (sp_off', vrf', astk') =>
                     summarize_rv64_dag_at fuel' im visited' next_pc sp_off' vrf' astk' ret_w
                 end
@@ -1106,10 +1119,13 @@ Fixpoint summarize_rv64_dag_at
                   end
                 in
                 match sv_opt with
-                | None => None
+                | None =>
+                    inl (diag (if N.eqb rd 2%N || N.eqb rs1 2%N then "mc-frame" else "mc-exec")
+                          ("unsupported alu-imm operand or out-of-frame sp update in rv64 (" ++ loc tt ++ ")"))
                 | Some sv =>
                     match rv_sym_step_write rd sv sp_off vrf astk with
-                    | None => None
+                    | None =>
+                        inl (diag "mc-frame" ("invalid sp update or frame bound violation in rv64 alu-imm (" ++ loc tt ++ ")"))
                     | Some (sp_off', vrf', astk') =>
                         summarize_rv64_dag_at fuel' im visited' next_pc sp_off' vrf' astk' ret_w
                     end
@@ -1129,10 +1145,12 @@ Fixpoint summarize_rv64_dag_at
                     end
                 in
                 match sv_opt with
-                | None => None
+                | None =>
+                    inl (diag "mc-exec" ("undefined or non-expression operand in rv64 alu-reg (" ++ loc tt ++ ")"))
                 | Some sv =>
                     match rv_sym_step_write rd sv sp_off vrf astk with
-                    | None => None
+                    | None =>
+                        inl (diag "mc-frame" ("invalid sp update in rv64 alu-reg (" ++ loc tt ++ ")"))
                     | Some (sp_off', vrf', astk') =>
                         summarize_rv64_dag_at fuel' im visited' next_pc sp_off' vrf' astk' ret_w
                     end
@@ -1143,16 +1161,22 @@ Fixpoint summarize_rv64_dag_at
                     let off := (base_off + imm)%Z in
                     if mc_slot_in_frame sp_off off sz then
                       match mc_sym_stk_load off sz is_signed astk with
-                      | None => None
+                      | None =>
+                          inl (diag "mc-frame" ("rv64 load from uninitialized stack slot sp+" ++ diag_Z_dec off ++ " (" ++ loc tt ++ ")"))
                       | Some sv =>
                           match rv_sym_step_write rd sv sp_off vrf astk with
-                          | None => None
+                          | None =>
+                              inl (diag "mc-frame" ("invalid sp/register write from rv64 load (" ++ loc tt ++ ")"))
                           | Some (sp_off', vrf', astk') =>
                               summarize_rv64_dag_at fuel' im visited' next_pc sp_off' vrf' astk' ret_w
                           end
                       end
-                    else None
-                | _ => None
+                    else
+                      inl (diag "mc-frame"
+                        ("rv64 load at sp+" ++ diag_Z_dec off ++ " (size " ++ diag_Z_dec (mc_mem_bytes_Z sz) ++
+                         ") out of frame bounds (" ++ loc tt ++ ")"))
+                | _ =>
+                    inl (diag "mc-frame" ("rv64 load base register x" ++ diag_N_dec rs1 ++ " is not a stack pointer (" ++ loc tt ++ ")"))
                 end
             | RV_Store sz rs1 rs2 imm =>
                 match rv_val_read rs1 vrf with
@@ -1170,13 +1194,20 @@ Fixpoint summarize_rv64_dag_at
                       if sv_ok then
                         let astk' := mc_sym_stk_store off sz sv astk in
                         summarize_rv64_dag_at fuel' im visited' next_pc sp_off vrf astk' ret_w
-                      else None
-                    else None
-                | _ => None
+                      else
+                        inl (diag "mc-frame"
+                          ("invalid or narrow stack store of register x" ++ diag_N_dec rs2 ++
+                           " at sp+" ++ diag_Z_dec off ++ " (" ++ loc tt ++ ")"))
+                    else
+                      inl (diag "mc-frame"
+                        ("rv64 store at sp+" ++ diag_Z_dec off ++ " (size " ++ diag_Z_dec (mc_mem_bytes_Z sz) ++
+                         ") out of frame bounds (" ++ loc tt ++ ")"))
+                | _ =>
+                    inl (diag "mc-frame" ("rv64 store base register x" ++ diag_N_dec rs1 ++ " is not a stack pointer (" ++ loc tt ++ ")"))
                 end
             | RV_Jal0 rel =>
                 match add_rel_off pc rel with
-                | None => None
+                | None => inl (diag "mc-exec" ("negative rv64 jump target (" ++ loc tt ++ ")"))
                 | Some tgt_pc =>
                     summarize_rv64_dag_at fuel' im visited' tgt_pc sp_off vrf astk ret_w
                 end
@@ -1184,26 +1215,33 @@ Fixpoint summarize_rv64_dag_at
                 match rv_val_read rs1 vrf, rv_val_read rs2 vrf with
                 | MSV_Expr e1, MSV_Expr e2 =>
                     match add_rel_off pc rel with
-                    | None => None
+                    | None => inl (diag "mc-exec" ("negative rv64 branch target (" ++ loc tt ++ ")"))
                     | Some tgt_pc =>
                         let c_e := sym_br_cond cond e1 e2 in
-                        match summarize_rv64_dag_at fuel' im visited' tgt_pc sp_off vrf astk ret_w,
-                              summarize_rv64_dag_at fuel' im visited' next_pc sp_off vrf astk ret_w
-                        with
-                        | Some d_t, Some d_f => Some (CD_Branch c_e d_t d_f)
-                        | _, _ => None
+                        match summarize_rv64_dag_at fuel' im visited' tgt_pc sp_off vrf astk ret_w with
+                        | inl err => inl err
+                        | inr d_t =>
+                            match summarize_rv64_dag_at fuel' im visited' next_pc sp_off vrf astk ret_w with
+                            | inl err => inl err
+                            | inr d_f => inr (CD_Branch c_e d_t d_f)
+                            end
                         end
                     end
-                | _, _ => None
+                | _, _ => inl (diag "mc-exec" ("non-expression branch operand in rv64 (" ++ loc tt ++ ")"))
                 end
             | RV_Ret =>
                 if rv_sym_epilogue_ok sp_off vrf then
                   match rv_val_read 10%N vrf with
                   | MSV_Expr e_ret =>
-                      Some (CD_RetScalar ret_w (rv_trunc_ret_expr ret_w e_ret))
-                  | _ => None
+                      inr (CD_RetScalar ret_w (rv_trunc_ret_expr ret_w e_ret))
+                  | _ =>
+                      inl (diag "mc-exec" ("return register a0/x10 does not hold a value expression at rv64 ret (" ++ loc tt ++ ")"))
                   end
-                else None
+                else
+                  inl (diag "mc-frame"
+                    ((if negb (Z.eqb sp_off 0%Z)
+                      then "unrestored stack pointer"
+                      else "clobbered callee-saved register or ra") ++ " at rv64 ret (" ++ loc tt ++ ")"))
             end
         end
     end.
@@ -1213,10 +1251,13 @@ Definition rv_valid_arg_spec (sp : rv_arg_spec) : bool :=
 
 Definition summarize_rv64_dag
   (fuel : nat) (insts : list decoded_rv_inst)
-  (arg_specs : list rv_arg_spec) (ret_w : positive) : option cfg_dag :=
-  if negb (Nat.leb (List.length arg_specs) 8) then None
-  else if negb (forallb rv_valid_arg_spec arg_specs) then None
-  else if negb (rv_supported_arg_width ret_w) then None
+  (arg_specs : list rv_arg_spec) (ret_w : positive) : string + cfg_dag :=
+  if negb (Nat.leb (List.length arg_specs) 8) then
+    inl (diag "mc-exec" ("too many argument specs (" ++ diag_nat_dec (List.length arg_specs) ++ " > 8)"))
+  else if negb (forallb rv_valid_arg_spec arg_specs) then
+    inl (diag "mc-exec" "invalid argument spec for rv64 symbolic execution")
+  else if negb (rv_supported_arg_width ret_w) then
+    inl (diag "mc-exec" ("unsupported return width " ++ diag_pos_dec ret_w ++ " for rv64 symbolic execution"))
   else
     let vrf0 := rv_build_init_val_regs 10%N arg_specs in
     let im := pt_of_list_first dri_off insts in
@@ -2129,7 +2170,7 @@ Theorem summarize_rv64_dag_at_sound :
     rv_val_read 2%N vrf = MSV_StackPtr sp_off ->
     rv_val_regs_agrees penv foracle rf0 (rv_read_reg 2%N rf0) vrf rf ->
     mc_sym_stack_agrees penv foracle (fun r0 => rv_read_reg r0 rf0) (rv_read_reg 2%N rf0) astk mstk ->
-    summarize_rv64_dag_at fuel im visited pc sp_off vrf astk ret_w = Some d_mc ->
+    summarize_rv64_dag_at fuel im visited pc sp_off vrf astk ret_w = inr d_mc ->
     exists rf_end mstk_end,
       rv_exec_mem fuel insts pc (rv_read_reg 2%N rf0) rf mstk = Some (rf_end, mstk_end) /\
       rv_callee_saved_preserved rf0 rf_end /\
@@ -2331,10 +2372,10 @@ Proof.
       destruct (rv_val_read rs1 vrf) as [| e1 | |] eqn:Er1; try discriminate Hsum.
       destruct (rv_val_read rs2 vrf) as [| e2 | |] eqn:Er2; try discriminate Hsum.
       destruct (add_rel_off pc rel) as [tgt_pc |] eqn:Erel; [| discriminate Hsum].
-      destruct (summarize_rv64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk ret_w) as [dt |] eqn:Edt;
-        [| discriminate Hsum].
-      destruct (summarize_rv64_dag_at fuel' im (pt_add_n pc visited) (pc + dri_len dec)%N sp_off vrf astk ret_w) as [df |] eqn:Edf;
-        [| discriminate Hsum].
+      destruct (summarize_rv64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk ret_w) as [| dt] eqn:Edt;
+        [discriminate Hsum |].
+      destruct (summarize_rv64_dag_at fuel' im (pt_add_n pc visited) (pc + dri_len dec)%N sp_off vrf astk ret_w) as [| df] eqn:Edf;
+        [discriminate Hsum |].
       inversion Hsum; subst d_mc; clear Hsum.
       pose proof (Hag rs1) as H1; rewrite Er1 in H1; cbn [mc_sym_val_agrees] in H1.
       pose proof (Hag rs2) as H2; rewrite Er2 in H2; cbn [mc_sym_val_agrees] in H2.
@@ -2605,7 +2646,7 @@ Theorem summarize_rv64_dag_at_wf :
     rv_val_read 2%N vrf = MSV_StackPtr sp_off ->
     rv_val_regs_wf allowed vrf ->
     mc_sym_stack_wf allowed sp_off astk ->
-    summarize_rv64_dag_at fuel im visited pc sp_off vrf astk ret_w = Some d_mc ->
+    summarize_rv64_dag_at fuel im visited pc sp_off vrf astk ret_w = inr d_mc ->
     wf_cfg_dag allowed d_mc = true.
 Proof.
   intros fuel insts im visited pc allowed sp_off vrf astk ret_w d_mc Him.
@@ -2745,10 +2786,10 @@ Proof.
     + destruct (rv_val_read rs1 vrf) as [| e1 | |] eqn:Er1; try discriminate Hsum.
       destruct (rv_val_read rs2 vrf) as [| e2 | |] eqn:Er2; try discriminate Hsum.
       destruct (add_rel_off pc rel) as [tgt_pc |]; [| discriminate Hsum].
-      destruct (summarize_rv64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk ret_w) as [dt |] eqn:Edt;
-        [| discriminate Hsum].
-      destruct (summarize_rv64_dag_at fuel' im (pt_add_n pc visited) (pc + dri_len dec)%N sp_off vrf astk ret_w) as [df |] eqn:Edf;
-        [| discriminate Hsum].
+      destruct (summarize_rv64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk ret_w) as [| dt] eqn:Edt;
+        [discriminate Hsum |].
+      destruct (summarize_rv64_dag_at fuel' im (pt_add_n pc visited) (pc + dri_len dec)%N sp_off vrf astk ret_w) as [| df] eqn:Edf;
+        [discriminate Hsum |].
       inversion Hsum; subst d_mc; clear Hsum.
       pose proof (Hwf rs1) as H1; rewrite Er1 in H1; pose proof (Hwf rs2) as H2; rewrite Er2 in H2.
       assert (Hbc : wf_sym_expr allowed 1%positive (sym_br_cond cond e1 e2))
@@ -3043,7 +3084,7 @@ Qed.
 Theorem summarize_rv64_dag_wf :
   forall fuel insts arg_specs ret_w d_mc,
     forallb inst_no_word_mulh insts = true ->
-    summarize_rv64_dag fuel insts arg_specs ret_w = Some d_mc ->
+    summarize_rv64_dag fuel insts arg_specs ret_w = inr d_mc ->
     wf_cfg_dag (List.map (fun sp => (ras_name sp, ras_width sp)) arg_specs) d_mc = true.
 Proof.
   intros fuel insts arg_specs ret_w d_mc Hnmul Hsum.
@@ -3066,7 +3107,7 @@ Qed.
 Theorem summarize_rv64_dag_sound :
   forall {Pa : Params} fuel rvc code insts arg_specs ret_w d_mc penv foracle rf0 mstk0,
     decode_rv64_bytes rvc code = inr insts ->
-    summarize_rv64_dag fuel insts arg_specs ret_w = Some d_mc ->
+    summarize_rv64_dag fuel insts arg_specs ret_w = inr d_mc ->
     mc_valid_sp0 (rv_read_reg 2%N rf0) ->
     rv_rf_matches_args penv arg_specs rf0 ->
     exists rf_end mstk_end,

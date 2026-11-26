@@ -564,13 +564,17 @@ Fixpoint decode_a64_stream_acc
   | [] => inr (elf_rev_tr acc)
   | _ :: _ =>
       match fuel with
-      | O => inl "A64 decoder fuel exhausted"
+      | O => inl (diag "mc-decode" ("A64 decoder fuel exhausted at offset " ++ diag_N_hex (N.of_nat cur_off)))
       | S fuel' =>
           match take_u32_le cur with
-          | None => inl "truncated 32-bit A64 instruction"
+          | None =>
+              inl (diag "mc-decode" ("truncated 32-bit A64 instruction at offset " ++ diag_N_hex (N.of_nat cur_off)))
           | Some (w, rest4) =>
               match decode_a64_word w with
-              | None => inl "unsupported or forbidden 32-bit A64 instruction"
+              | None =>
+                  inl (diag "mc-decode"
+                    ("unsupported or forbidden 32-bit A64 instruction " ++ diag_N_hex w ++
+                     " at offset " ++ diag_N_hex (N.of_nat cur_off)))
               | Some inst =>
                   let acc' := mk_decoded_a64_inst (N.of_nat cur_off) inst :: acc in
                   decode_a64_stream_acc fuel' rest4 (cur_off + 4) acc'
@@ -582,7 +586,7 @@ Fixpoint decode_a64_stream_acc
 Definition decode_a64_bytes (code : list N) : string + list decoded_a64_inst :=
   let len := elf_length_tr code in
   if Nat.eqb len 0 || negb (Nat.eqb (Nat.modulo len 4) 0) then
-    inl "AArch64 function byte length must be a positive multiple of 4"
+    inl (diag "mc-decode" ("AArch64 function byte length " ++ diag_nat_dec len ++ " must be a positive multiple of 4"))
   else
     decode_a64_stream_acc (Nat.div len 4 + 1) code 0 [].
 
@@ -1677,14 +1681,18 @@ Fixpoint summarize_a64_dag_at
   (fuel : nat) (im : pos_trie decoded_a64_inst) (visited : pos_trie unit)
   (pc : N) (sp_off : Z) (vrf : a64_val_regs) (astk : mc_sym_stack)
   (sfl : a64_sym_flags) (fl_def : bool) (ret_w : positive)
-  {struct fuel} : option cfg_dag :=
-  if pt_has_n pc visited then None
+  {struct fuel} : string + cfg_dag :=
+  let loc (_ : unit) : string :=
+    ("a64 at pc=" ++ diag_N_hex pc ++ " sp-off=" ++ diag_Z_dec sp_off)%string
+  in
+  if pt_has_n pc visited then
+    inl (diag "mc-exec" ("cycle/loop detected in a64 acyclic DAG mode (" ++ loc tt ++ "); provide a (loop ...) certificate"))
   else
     match fuel with
-    | O => None
+    | O => inl (diag "mc-exec" ("a64 symbolic execution fuel exhausted (" ++ loc tt ++ ")"))
     | S fuel' =>
         match pt_get (N.succ_pos pc) im with
-        | None => None
+        | None => inl (diag "mc-exec" ("a64 execution escaped function slice (" ++ loc tt ++ ")"))
         | Some dec =>
             let next_pc := (pc + 4%N)%N in
             let visited' := pt_add_n pc visited in
@@ -1708,18 +1716,23 @@ Fixpoint summarize_a64_dag_at
                     end
                   in
                   match sv_opt with
-                  | None => None
+                  | None =>
+                      inl (diag (if N.eqb rd 31%N || N.eqb rn 31%N then "mc-frame" else "mc-exec")
+                            ("unsupported add/sub-imm operand or out-of-frame sp update in a64 (" ++ loc tt ++ ")"))
                   | Some sv =>
                       match a64_val_write_sp rd sv sp_off vrf astk with
-                      | None => None
+                      | None =>
+                          inl (diag "mc-frame" ("invalid sp update or frame bound violation in a64 add/sub-imm (" ++ loc tt ++ ")"))
                       | Some (sp_off', vrf', astk') =>
                           summarize_a64_dag_at fuel' im visited' next_pc sp_off' vrf' astk' sfl fl_def ret_w
                       end
                   end
-                else if N.eqb rn 31%N || (negb set_fl && N.eqb rd 31%N) then None
+                else if N.eqb rn 31%N || (negb set_fl && N.eqb rd 31%N) then
+                  inl (diag "mc-frame" ("disallowed sp/xzr access in a64 add/sub-imm (" ++ loc tt ++ ")"))
                 else
                   match a64_val_read_expr_w sf rn vrf with
-                  | None => None
+                  | None =>
+                      inl (diag "mc-exec" ("undefined/non-expression operand x" ++ diag_N_dec rn ++ " in a64 add/sub-imm (" ++ loc tt ++ ")"))
                   | Some lhs =>
                       let rhs := ce_bv_z (a64_w sf) (Z.of_N imm) in
                       let '(res, sfl') := a64_sym_add_sub (a64_w sf) is_sub lhs rhs in
@@ -1735,10 +1748,11 @@ Fixpoint summarize_a64_dag_at
                     summarize_a64_dag_at fuel' im visited' next_pc sp_off
                       (a64_val_write_w sf rd res vrf) astk
                       (if set_fl then sfl' else sfl) (set_fl || fl_def) ret_w
-                | _, _ => None
+                | _, _ => inl (diag "mc-exec" ("undefined/non-expression operand in a64 add/sub-shift (" ++ loc tt ++ ")"))
                 end
             | A64_AddSubExt sf is_sub set_fl rd rn rm ext amt =>
-                if N.eqb rn 31%N || (negb set_fl && N.eqb rd 31%N) then None
+                if N.eqb rn 31%N || (negb set_fl && N.eqb rd 31%N) then
+                  inl (diag "mc-frame" ("disallowed sp/xzr access in a64 add/sub-ext (" ++ loc tt ++ ")"))
                 else
                   match a64_val_read_expr_w sf rn vrf, a64_val_read rm vrf with
                   | Some lhs, MSV_Expr rm64 =>
@@ -1747,13 +1761,14 @@ Fixpoint summarize_a64_dag_at
                       summarize_a64_dag_at fuel' im visited' next_pc sp_off
                         (a64_val_write_w sf rd res vrf) astk
                         (if set_fl then sfl' else sfl) (set_fl || fl_def) ret_w
-                  | _, _ => None
+                  | _, _ => inl (diag "mc-exec" ("undefined/non-expression operand in a64 add/sub-ext (" ++ loc tt ++ ")"))
                   end
             | A64_LogicalImm sf op set_fl rd rn mask =>
-                if negb set_fl && N.eqb rd 31%N then None
+                if negb set_fl && N.eqb rd 31%N then
+                  inl (diag "mc-frame" ("disallowed sp write in a64 logical-imm (" ++ loc tt ++ ")"))
                 else
                   match a64_val_read_expr_w sf rn vrf with
-                  | None => None
+                  | None => inl (diag "mc-exec" ("undefined/non-expression operand x" ++ diag_N_dec rn ++ " in a64 logical-imm (" ++ loc tt ++ ")"))
                   | Some lhs =>
                       let rhs := ce_bv_z (a64_w sf) (Z.of_N mask) in
                       let res := a64_sym_logic_op (a64_w sf) op lhs rhs in
@@ -1764,7 +1779,7 @@ Fixpoint summarize_a64_dag_at
             | A64_LogicalShift sf op inv_rm set_fl rd rn rm sh amt =>
                 if a64_is_orr_mov64 sf op inv_rm set_fl rn sh amt then
                   match a64_val_read rm vrf with
-                  | MSV_Undef => None
+                  | MSV_Undef => inl (diag "mc-exec" ("mov source x" ++ diag_N_dec rm ++ " is undefined in a64 (" ++ loc tt ++ ")"))
                   | sv =>
                       summarize_a64_dag_at fuel' im visited' next_pc sp_off
                         (a64_val_write rd sv vrf) astk sfl fl_def ret_w
@@ -1778,7 +1793,7 @@ Fixpoint summarize_a64_dag_at
                       let sfl' := if set_fl then a64_sym_logic_flags (a64_w sf) res else sfl in
                       summarize_a64_dag_at fuel' im visited' next_pc sp_off
                         (a64_val_write_w sf rd res vrf) astk sfl' (set_fl || fl_def) ret_w
-                  | _, _ => None
+                  | _, _ => inl (diag "mc-exec" ("undefined/non-expression operand in a64 logical-shift (" ++ loc tt ++ ")"))
                   end
             | A64_MoveWide sf kind rd imm16 shift =>
                 let w := a64_w sf in
@@ -1792,7 +1807,7 @@ Fixpoint summarize_a64_dag_at
                       (a64_val_write_w sf rd (a64_sym_not w imm_e) vrf) astk sfl fl_def ret_w
                 | AMW_Movk =>
                     match a64_val_read_expr_w sf rd vrf with
-                    | None => None
+                    | None => inl (diag "mc-exec" ("undefined destination x" ++ diag_N_dec rd ++ " in a64 movk (" ++ loc tt ++ ")"))
                     | Some cur =>
                         let clr := a64_sym_not w (ce_bv_z w (Z.of_N (N.shiftl 65535%N shift))) in
                         let res := CE_BinOp CB_Or w no_binop_flags
@@ -1813,7 +1828,7 @@ Fixpoint summarize_a64_dag_at
                     let res := a64_sym_bitfield (a64_w sf) kind src_e dst_e immr imms in
                     summarize_a64_dag_at fuel' im visited' next_pc sp_off
                       (a64_val_write_w sf rd res vrf) astk sfl fl_def ret_w
-                | _, _ => None
+                | _, _ => inl (diag "mc-exec" ("undefined/non-expression operand in a64 bitfield (" ++ loc tt ++ ")"))
                 end
             | A64_Extr sf rd rn rm lsb =>
                 match a64_val_read_expr_w sf rn vrf, a64_val_read_expr_w sf rm vrf with
@@ -1821,7 +1836,7 @@ Fixpoint summarize_a64_dag_at
                     let res := a64_sym_extr (a64_w sf) hi_e lo_e lsb in
                     summarize_a64_dag_at fuel' im visited' next_pc sp_off
                       (a64_val_write_w sf rd res vrf) astk sfl fl_def ret_w
-                | _, _ => None
+                | _, _ => inl (diag "mc-exec" ("undefined/non-expression operand in a64 extr (" ++ loc tt ++ ")"))
                 end
             | A64_MulAddSub sf is_sub rd rn rm ra =>
                 match a64_val_read_expr_w sf rn vrf,
@@ -1833,7 +1848,7 @@ Fixpoint summarize_a64_dag_at
                     let res := CE_BinOp (if is_sub then CB_Sub else CB_Add) w no_binop_flags ea p in
                     summarize_a64_dag_at fuel' im visited' next_pc sp_off
                       (a64_val_write_w sf rd res vrf) astk sfl fl_def ret_w
-                | _, _, _ => None
+                | _, _, _ => inl (diag "mc-exec" ("undefined/non-expression operand in a64 mul-add/sub (" ++ loc tt ++ ")"))
                 end
             | A64_MulWidening sgn is_sub rd rn rm ra =>
                 match a64_val_read_expr_w false rn vrf,
@@ -1847,7 +1862,7 @@ Fixpoint summarize_a64_dag_at
                     let res := CE_BinOp (if is_sub then CB_Sub else CB_Add) 64%positive no_binop_flags ea p in
                     summarize_a64_dag_at fuel' im visited' next_pc sp_off
                       (a64_val_write rd (MSV_Expr res) vrf) astk sfl fl_def ret_w
-                | _, _, _ => None
+                | _, _, _ => inl (diag "mc-exec" ("undefined/non-expression operand in a64 widening mul (" ++ loc tt ++ ")"))
                 end
             | A64_DataProc2 sf op rd rn rm =>
                 match a64_val_read_expr_w sf rn vrf, a64_val_read_expr_w sf rm vrf with
@@ -1855,33 +1870,36 @@ Fixpoint summarize_a64_dag_at
                     let res := a64_sym_dp2 (a64_w sf) op en em in
                     summarize_a64_dag_at fuel' im visited' next_pc sp_off
                       (a64_val_write_w sf rd res vrf) astk sfl fl_def ret_w
-                | _, _ => None
+                | _, _ => inl (diag "mc-exec" ("undefined/non-expression operand in a64 data-proc2 (" ++ loc tt ++ ")"))
                 end
             | A64_CondSelect sf kind cond rd rn rm =>
-                if negb fl_def then None
+                if negb fl_def then
+                  inl (diag "mc-exec" ("undefined NZCV flags read by a64 csel (" ++ loc tt ++ ")"))
                 else
                   match a64_val_read_expr_w sf rn vrf, a64_val_read_expr_w sf rm vrf with
                   | Some en, Some em =>
                       let res := a64_sym_csel (a64_w sf) kind cond sfl en em in
                       summarize_a64_dag_at fuel' im visited' next_pc sp_off
                         (a64_val_write_w sf rd res vrf) astk sfl fl_def ret_w
-                  | _, _ => None
+                  | _, _ => inl (diag "mc-exec" ("undefined/non-expression operand in a64 csel (" ++ loc tt ++ ")"))
                   end
             | A64_CondCompareReg sf is_sub cond rn rm nzcv =>
-                if negb fl_def then None
+                if negb fl_def then
+                  inl (diag "mc-exec" ("undefined NZCV flags read by a64 ccmp-reg (" ++ loc tt ++ ")"))
                 else
                   match a64_val_read_expr_w sf rn vrf, a64_val_read_expr_w sf rm vrf with
                   | Some en, Some em =>
                       let '(_, csfl) := a64_sym_add_sub (a64_w sf) is_sub en em in
                       let sfl' := a64_sym_ite_flags (a64_sym_cond cond sfl) csfl (a64_sym_flags_of_imm4 nzcv) in
                       summarize_a64_dag_at fuel' im visited' next_pc sp_off vrf astk sfl' true ret_w
-                  | _, _ => None
+                  | _, _ => inl (diag "mc-exec" ("undefined/non-expression operand in a64 ccmp-reg (" ++ loc tt ++ ")"))
                   end
             | A64_CondCompareImm sf is_sub cond rn imm5 nzcv =>
-                if negb fl_def then None
+                if negb fl_def then
+                  inl (diag "mc-exec" ("undefined NZCV flags read by a64 ccmp-imm (" ++ loc tt ++ ")"))
                 else
                   match a64_val_read_expr_w sf rn vrf with
-                  | None => None
+                  | None => inl (diag "mc-exec" ("undefined/non-expression operand x" ++ diag_N_dec rn ++ " in a64 ccmp-imm (" ++ loc tt ++ ")"))
                   | Some en =>
                       let '(_, csfl) := a64_sym_add_sub (a64_w sf) is_sub en (ce_bv_z (a64_w sf) (Z.of_N imm5)) in
                       let sfl' := a64_sym_ite_flags (a64_sym_cond cond sfl) csfl (a64_sym_flags_of_imm4 nzcv) in
@@ -1889,7 +1907,7 @@ Fixpoint summarize_a64_dag_at
                   end
             | A64_LdStImm is_load is_signed sf_dst sz mode rt rn imm =>
                 if (if N.eqb rn 31%N then negb (mc_sp_aligned16 sp_off) else false)
-                then None
+                then inl (diag "mc-frame" ("unaligned stack pointer on a64 ldst-imm (" ++ loc tt ++ ")"))
                 else
                   match a64_val_read_sp rn vrf sp_off with
                   | MSV_StackPtr base_off =>
@@ -1900,7 +1918,8 @@ Fixpoint summarize_a64_dag_at
                         | _ => Z.leb (- mc_frame_cap) wb_off && Z.leb wb_off 0%Z
                         end
                       in
-                      if negb wb_ok then None
+                      if negb wb_ok then
+                        inl (diag "mc-frame" ("out-of-frame writeback sp+" ++ diag_Z_dec wb_off ++ " in a64 ldst-imm (" ++ loc tt ++ ")"))
                       else
                         let '(off, sp_chk) :=
                           match mode with
@@ -1927,7 +1946,11 @@ Fixpoint summarize_a64_dag_at
                               else None
                           in
                           match st_opt with
-                          | None => None
+                          | None =>
+                              inl (diag "mc-frame"
+                                ((if is_load then "uninitialized or incompatible stack load"
+                                  else "invalid or narrow stack store") ++
+                                 " at sp+" ++ diag_Z_dec off ++ " in a64 ldst-imm (" ++ loc tt ++ ")"))
                           | Some (vrf1, astk1) =>
                               let '(sp_off2, vrf2, astk2) :=
                                 match mode with
@@ -1939,12 +1962,16 @@ Fixpoint summarize_a64_dag_at
                               in
                               summarize_a64_dag_at fuel' im visited' next_pc sp_off2 vrf2 astk2 sfl fl_def ret_w
                           end
-                        else None
-                  | _ => None
+                        else
+                          inl (diag "mc-frame"
+                            ("a64 ldst-imm at sp+" ++ diag_Z_dec off ++ " (size " ++ diag_Z_dec (mc_mem_bytes_Z sz) ++
+                             ") out of frame bounds (" ++ loc tt ++ ")"))
+                  | _ =>
+                      inl (diag "mc-frame" ("a64 ldst-imm base register x" ++ diag_N_dec rn ++ " is not a stack pointer (" ++ loc tt ++ ")"))
                   end
             | A64_LdStPair is_load sf mode rt1 rt2 rn imm =>
                 if (if N.eqb rn 31%N then negb (mc_sp_aligned16 sp_off) else false)
-                then None
+                then inl (diag "mc-frame" ("unaligned stack pointer on a64 ldst-pair (" ++ loc tt ++ ")"))
                 else
                   match a64_val_read_sp rn vrf sp_off with
                   | MSV_StackPtr base_off =>
@@ -1955,7 +1982,8 @@ Fixpoint summarize_a64_dag_at
                         | _ => Z.leb (- mc_frame_cap) wb_off && Z.leb wb_off 0%Z
                         end
                       in
-                      if negb wb_ok then None
+                      if negb wb_ok then
+                        inl (diag "mc-frame" ("out-of-frame writeback sp+" ++ diag_Z_dec wb_off ++ " in a64 ldst-pair (" ++ loc tt ++ ")"))
                       else
                         let '(off, sp_chk) :=
                           match mode with
@@ -1986,7 +2014,10 @@ Fixpoint summarize_a64_dag_at
                               else None
                           in
                           match st_opt with
-                          | None => None
+                          | None =>
+                              inl (diag "mc-frame"
+                                ((if is_load then "uninitialized stack load" else "invalid or narrow stack store") ++
+                                 " at sp+" ++ diag_Z_dec off ++ " in a64 ldst-pair (" ++ loc tt ++ ")"))
                           | Some (vrf1, astk1) =>
                               let '(sp_off2, vrf2, astk2) :=
                                 match mode with
@@ -1998,44 +2029,52 @@ Fixpoint summarize_a64_dag_at
                               in
                               summarize_a64_dag_at fuel' im visited' next_pc sp_off2 vrf2 astk2 sfl fl_def ret_w
                           end
-                        else None
-                  | _ => None
+                        else
+                          inl (diag "mc-frame"
+                            ("a64 ldst-pair at sp+" ++ diag_Z_dec off ++ " out of frame bounds (" ++ loc tt ++ ")"))
+                  | _ =>
+                      inl (diag "mc-frame" ("a64 ldst-pair base register x" ++ diag_N_dec rn ++ " is not a stack pointer (" ++ loc tt ++ ")"))
                   end
             | A64_B rel =>
                 match add_rel_off pc rel with
-                | None => None
+                | None => inl (diag "mc-exec" ("negative a64 jump target (" ++ loc tt ++ ")"))
                 | Some tgt_pc =>
                     summarize_a64_dag_at fuel' im visited' tgt_pc sp_off vrf astk sfl fl_def ret_w
                 end
             | A64_BCond cond rel =>
-                if negb fl_def then None
+                if negb fl_def then
+                  inl (diag "mc-exec" ("undefined NZCV flags read by a64 b.cond (" ++ loc tt ++ ")"))
                 else
                   match add_rel_off pc rel with
-                  | None => None
+                  | None => inl (diag "mc-exec" ("negative a64 b.cond target (" ++ loc tt ++ ")"))
                   | Some tgt_pc =>
                       let c_e := a64_sym_cond cond sfl in
-                      match summarize_a64_dag_at fuel' im visited' tgt_pc sp_off vrf astk sfl fl_def ret_w,
-                            summarize_a64_dag_at fuel' im visited' next_pc sp_off vrf astk sfl fl_def ret_w
-                      with
-                      | Some d_t, Some d_f => Some (CD_Branch c_e d_t d_f)
-                      | _, _ => None
+                      match summarize_a64_dag_at fuel' im visited' tgt_pc sp_off vrf astk sfl fl_def ret_w with
+                      | inl err => inl err
+                      | inr d_t =>
+                          match summarize_a64_dag_at fuel' im visited' next_pc sp_off vrf astk sfl fl_def ret_w with
+                          | inl err => inl err
+                          | inr d_f => inr (CD_Branch c_e d_t d_f)
+                          end
                       end
                   end
             | A64_Cbz sf is_nz rt rel =>
                 match a64_val_read_expr_w sf rt vrf with
-                | None => None
+                | None => inl (diag "mc-exec" ("undefined/non-expression operand x" ++ diag_N_dec rt ++ " in a64 cbz/cbnz (" ++ loc tt ++ ")"))
                 | Some rt_e =>
                     match add_rel_off pc rel with
-                    | None => None
+                    | None => inl (diag "mc-exec" ("negative a64 cbz/cbnz target (" ++ loc tt ++ ")"))
                     | Some tgt_pc =>
                         let w := a64_w sf in
                         let c_e := CE_ICmp (if is_nz then CIP_Ne else CIP_Eq) false w
                                      rt_e (CE_BvConst w 0%N) in
-                        match summarize_a64_dag_at fuel' im visited' tgt_pc sp_off vrf astk sfl fl_def ret_w,
-                              summarize_a64_dag_at fuel' im visited' next_pc sp_off vrf astk sfl fl_def ret_w
-                        with
-                        | Some d_t, Some d_f => Some (CD_Branch c_e d_t d_f)
-                        | _, _ => None
+                        match summarize_a64_dag_at fuel' im visited' tgt_pc sp_off vrf astk sfl fl_def ret_w with
+                        | inl err => inl err
+                        | inr d_t =>
+                            match summarize_a64_dag_at fuel' im visited' next_pc sp_off vrf astk sfl fl_def ret_w with
+                            | inl err => inl err
+                            | inr d_f => inr (CD_Branch c_e d_t d_f)
+                            end
                         end
                     end
                 end
@@ -2043,39 +2082,49 @@ Fixpoint summarize_a64_dag_at
                 match a64_val_read rt vrf with
                 | MSV_Expr rt_e =>
                     match add_rel_off pc rel with
-                    | None => None
+                    | None => inl (diag "mc-exec" ("negative a64 tbz/tbnz target (" ++ loc tt ++ ")"))
                     | Some tgt_pc =>
                         let masked := CE_BinOp CB_And 64%positive no_binop_flags
                                         rt_e (CE_BvConst 64%positive (N.shiftl 1%N bit)) in
                         let c_e := CE_ICmp (if is_nz then CIP_Ne else CIP_Eq) false 64%positive
                                      masked (CE_BvConst 64%positive 0%N) in
-                        match summarize_a64_dag_at fuel' im visited' tgt_pc sp_off vrf astk sfl fl_def ret_w,
-                              summarize_a64_dag_at fuel' im visited' next_pc sp_off vrf astk sfl fl_def ret_w
-                        with
-                        | Some d_t, Some d_f => Some (CD_Branch c_e d_t d_f)
-                        | _, _ => None
+                        match summarize_a64_dag_at fuel' im visited' tgt_pc sp_off vrf astk sfl fl_def ret_w with
+                        | inl err => inl err
+                        | inr d_t =>
+                            match summarize_a64_dag_at fuel' im visited' next_pc sp_off vrf astk sfl fl_def ret_w with
+                            | inl err => inl err
+                            | inr d_f => inr (CD_Branch c_e d_t d_f)
+                            end
                         end
                     end
-                | _ => None
+                | _ => inl (diag "mc-exec" ("undefined/non-expression operand x" ++ diag_N_dec rt ++ " in a64 tbz/tbnz (" ++ loc tt ++ ")"))
                 end
             | A64_Ret =>
                 if a64_sym_epilogue_ok sp_off vrf then
                   match a64_val_read 0%N vrf with
                   | MSV_Expr e_ret =>
-                      Some (CD_RetScalar ret_w (rv_trunc_ret_expr ret_w e_ret))
-                  | _ => None
+                      inr (CD_RetScalar ret_w (rv_trunc_ret_expr ret_w e_ret))
+                  | _ =>
+                      inl (diag "mc-exec" ("return register x0 does not hold a value expression at a64 ret (" ++ loc tt ++ ")"))
                   end
-                else None
+                else
+                  inl (diag "mc-frame"
+                    ((if negb (Z.eqb sp_off 0%Z)
+                      then "unrestored stack pointer"
+                      else "clobbered callee-saved register x19..x30") ++ " at a64 ret (" ++ loc tt ++ ")"))
             end
         end
     end.
 
 Definition summarize_a64_dag
   (fuel : nat) (insts : list decoded_a64_inst)
-  (arg_specs : list rv_arg_spec) (ret_w : positive) : option cfg_dag :=
-  if negb (Nat.leb (List.length arg_specs) 8) then None
-  else if negb (forallb a64_valid_arg_spec arg_specs) then None
-  else if negb (rv_supported_arg_width ret_w) then None
+  (arg_specs : list rv_arg_spec) (ret_w : positive) : string + cfg_dag :=
+  if negb (Nat.leb (List.length arg_specs) 8) then
+    inl (diag "mc-exec" ("too many argument specs (" ++ diag_nat_dec (List.length arg_specs) ++ " > 8)"))
+  else if negb (forallb a64_valid_arg_spec arg_specs) then
+    inl (diag "mc-exec" "invalid argument spec for a64 symbolic execution")
+  else if negb (rv_supported_arg_width ret_w) then
+    inl (diag "mc-exec" ("unsupported return width " ++ diag_pos_dec ret_w ++ " for a64 symbolic execution"))
   else
     let vrf0 := a64_build_init_val_regs 0%N arg_specs in
     let im := pt_of_list_first dai_off insts in
@@ -3330,7 +3379,7 @@ Theorem summarize_a64_dag_at_sound :
     a64_val_regs_agrees penv foracle rf0 sp0 vrf rf ->
     mc_sym_stack_agrees penv foracle (fun r0 => a64_read_reg r0 rf0) sp0 astk mstk ->
     (fl_def = true -> sym_flags_agree penv foracle sfl fl) ->
-    summarize_a64_dag_at fuel im visited pc sp_off vrf astk sfl fl_def ret_w = Some d_mc ->
+    summarize_a64_dag_at fuel im visited pc sp_off vrf astk sfl fl_def ret_w = inr d_mc ->
     exists rf_end fl_end mstk_end,
       a64_exec_mem fuel insts pc sp0 rf sp fl mstk = Some (rf_end, sp0, fl_end, mstk_end) /\
       a64_callee_saved_preserved rf0 rf_end /\
@@ -3875,10 +3924,10 @@ Proof.
     + (* A64_BCond *)
       destruct fl_def eqn:Efld; cbn [negb] in Hsum; [| discriminate Hsum].
       destruct (add_rel_off pc rel) as [tgt_pc |]; [| discriminate Hsum].
-      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk sfl true ret_w) as [dt |] eqn:Edt;
-        [| discriminate Hsum].
-      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) (pc + 4%N)%N sp_off vrf astk sfl true ret_w) as [df |] eqn:Edf;
-        [| discriminate Hsum].
+      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk sfl true ret_w) as [| dt] eqn:Edt;
+        [discriminate Hsum |].
+      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) (pc + 4%N)%N sp_off vrf astk sfl true ret_w) as [| df] eqn:Edf;
+        [discriminate Hsum |].
       inversion Hsum; subst d_mc; clear Hsum.
       pose proof (eval_a64_sym_cond_sound penv foracle cond sfl fl (Hfl eq_refl)) as Hc.
       cbn [eval_cfg_dag]; cbn [N.shiftl] in Hc; rewrite Hc.
@@ -3890,10 +3939,10 @@ Proof.
     + (* A64_Cbz *)
       destruct (a64_val_read_expr_w sf rt vrf) as [rt_e |] eqn:Ert; [| discriminate Hsum].
       destruct (add_rel_off pc rel) as [tgt_pc |]; [| discriminate Hsum].
-      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk sfl fl_def ret_w) as [dt |] eqn:Edt;
-        [| discriminate Hsum].
-      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) (pc + 4%N)%N sp_off vrf astk sfl fl_def ret_w) as [df |] eqn:Edf;
-        [| discriminate Hsum].
+      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk sfl fl_def ret_w) as [| dt] eqn:Edt;
+        [discriminate Hsum |].
+      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) (pc + 4%N)%N sp_off vrf astk sfl fl_def ret_w) as [| df] eqn:Edf;
+        [discriminate Hsum |].
       inversion Hsum; subst d_mc; clear Hsum.
       assert (Hc : eval_closed_cert_expr penv foracle
         (CE_ICmp (if is_nz then CIP_Ne else CIP_Eq) false (a64_w sf) rt_e (CE_BvConst (a64_w sf) 0%N)) =
@@ -3914,10 +3963,10 @@ Proof.
     + (* A64_Tbz *)
       destruct (a64_val_read rt vrf) as [| rt_e | |] eqn:Ert; try discriminate Hsum.
       destruct (add_rel_off pc rel) as [tgt_pc |]; [| discriminate Hsum].
-      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk sfl fl_def ret_w) as [dt |] eqn:Edt;
-        [| discriminate Hsum].
-      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) (pc + 4%N)%N sp_off vrf astk sfl fl_def ret_w) as [df |] eqn:Edf;
-        [| discriminate Hsum].
+      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk sfl fl_def ret_w) as [| dt] eqn:Edt;
+        [discriminate Hsum |].
+      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) (pc + 4%N)%N sp_off vrf astk sfl fl_def ret_w) as [| df] eqn:Edf;
+        [discriminate Hsum |].
       inversion Hsum; subst d_mc; clear Hsum.
       unfold a64_inst_valid in Hdec_val; rewrite Ed in Hdec_val; apply N.ltb_lt in Hdec_val.
       pose proof (Hag rt) as Hrt; rewrite Ert in Hrt; cbn [mc_sym_val_agrees] in Hrt.
@@ -4394,7 +4443,7 @@ Theorem summarize_a64_dag_at_wf :
     wf_a64_val_regs allowed vrf ->
     mc_sym_stack_wf allowed sp_off astk ->
     (fl_def = true -> wf_sym_flags allowed sfl) ->
-    summarize_a64_dag_at fuel im visited pc sp_off vrf astk sfl fl_def ret_w = Some d_mc ->
+    summarize_a64_dag_at fuel im visited pc sp_off vrf astk sfl fl_def ret_w = inr d_mc ->
     wf_cfg_dag allowed d_mc = true.
 Proof.
   intros fuel insts im visited pc allowed sp_off vrf astk sfl fl_def ret_w d_mc Him.
@@ -4730,19 +4779,19 @@ Proof.
       exact (IH _ _ _ _ _ _ _ _ _ _ Hrw Hrng Hwf Hstk Hfl Hsum).
     + destruct fl_def eqn:Efld; cbn [negb] in Hsum; [| discriminate Hsum].
       destruct (add_rel_off pc rel) as [tgt_pc |]; [| discriminate Hsum].
-      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk sfl true ret_w) as [dt |] eqn:Edt;
-        [| discriminate Hsum].
-      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) (pc + 4%N)%N sp_off vrf astk sfl true ret_w) as [df |] eqn:Edf;
-        [| discriminate Hsum].
+      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk sfl true ret_w) as [| dt] eqn:Edt;
+        [discriminate Hsum |].
+      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) (pc + 4%N)%N sp_off vrf astk sfl true ret_w) as [| df] eqn:Edf;
+        [discriminate Hsum |].
       inversion Hsum; subst d_mc; clear Hsum.
       exact (wf_cfg_branch allowed _ _ _ (wf_a64_sym_cond allowed cond sfl (Hfl eq_refl))
                (IH _ _ _ _ _ _ _ _ _ _ Hrw Hrng Hwf Hstk Hfl Edt) (IH _ _ _ _ _ _ _ _ _ _ Hrw Hrng Hwf Hstk Hfl Edf)).
     + destruct (a64_val_read_expr_w sf rt vrf) as [rt_e |] eqn:Ert; [| discriminate Hsum].
       destruct (add_rel_off pc rel) as [tgt_pc |]; [| discriminate Hsum].
-      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk sfl fl_def ret_w) as [dt |] eqn:Edt;
-        [| discriminate Hsum].
-      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) (pc + 4%N)%N sp_off vrf astk sfl fl_def ret_w) as [df |] eqn:Edf;
-        [| discriminate Hsum].
+      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk sfl fl_def ret_w) as [| dt] eqn:Edt;
+        [discriminate Hsum |].
+      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) (pc + 4%N)%N sp_off vrf astk sfl fl_def ret_w) as [| df] eqn:Edf;
+        [discriminate Hsum |].
       inversion Hsum; subst d_mc; clear Hsum.
       apply wf_cfg_branch;
         [apply wf_sym_icmp; [exact (wf_a64_val_read_expr_w _ _ _ _ _ Hwf Ert) | apply wf_sym_bv_const]
@@ -4750,10 +4799,10 @@ Proof.
         | exact (IH _ _ _ _ _ _ _ _ _ _ Hrw Hrng Hwf Hstk Hfl Edf)].
     + destruct (a64_val_read rt vrf) as [| rt_e | |] eqn:Ert; try discriminate Hsum.
       destruct (add_rel_off pc rel) as [tgt_pc |]; [| discriminate Hsum].
-      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk sfl fl_def ret_w) as [dt |] eqn:Edt;
-        [| discriminate Hsum].
-      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) (pc + 4%N)%N sp_off vrf astk sfl fl_def ret_w) as [df |] eqn:Edf;
-        [| discriminate Hsum].
+      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk sfl fl_def ret_w) as [| dt] eqn:Edt;
+        [discriminate Hsum |].
+      destruct (summarize_a64_dag_at fuel' im (pt_add_n pc visited) (pc + 4%N)%N sp_off vrf astk sfl fl_def ret_w) as [| df] eqn:Edf;
+        [discriminate Hsum |].
       inversion Hsum; subst d_mc; clear Hsum.
       pose proof (Hwf rt) as Hrt; rewrite Ert in Hrt; cbn [mc_sym_val_wf] in Hrt.
       assert (Hmsk : wf_sym_expr allowed 64%positive (CE_BinOp CB_And 64%positive no_binop_flags rt_e (CE_BvConst 64%positive (N.shiftl 1%N bit))))
@@ -5064,7 +5113,7 @@ Qed.
 Theorem summarize_a64_dag_wf :
   forall fuel insts arg_specs ret_w d_mc,
     forallb a64_inst_valid insts = true ->
-    summarize_a64_dag fuel insts arg_specs ret_w = Some d_mc ->
+    summarize_a64_dag fuel insts arg_specs ret_w = inr d_mc ->
     wf_cfg_dag
       (List.map (fun sp => (ras_name sp, ras_width sp)) arg_specs ++ a64_hi_vars arg_specs)
       d_mc = true.
@@ -5090,7 +5139,7 @@ Theorem summarize_a64_dag_sound :
     decode_a64_bytes raw_bytes = inr insts ->
     NoDup (List.map ras_name arg_specs) ->
     (forall sp, In sp arg_specs -> ~ In (a64_hi_var_name (ras_name sp)) (List.map ras_name arg_specs)) ->
-    summarize_a64_dag fuel insts arg_specs ret_w = Some d_mc ->
+    summarize_a64_dag fuel insts arg_specs ret_w = inr d_mc ->
     mc_valid_sp0 sp0 ->
     a64_rf_matches_args penv arg_specs rf0 ->
     exists rf_end fl_end mstk_end,
