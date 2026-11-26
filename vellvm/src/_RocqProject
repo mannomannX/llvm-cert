@@ -104,6 +104,7 @@
 ./rocq/Theory/Equational.v
 
 ../../validator/common/Options.v
+../../validator/common/Diag.v
 ../../validator/common/CoreTactics.v
 ../../validator/common/BvTactics.v
 ../../validator/common/IntBvTactics.v

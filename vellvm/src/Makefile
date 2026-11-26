@@ -16,7 +16,7 @@ ROCQFILES_EXEC := $(ROCQFILES_FRONTEND) Semantics
 FRONTEND_VOFILES := $(ROCQFILES_FRONTEND:%=rocq/%.vo)
 EXEC_VOFILES := $(ROCQFILES_EXEC:%=rocq/%.vo)
 PASS_VOFILES := $(PASSESDIR)/common/ItreeTactics.vo $(PASSESDIR)/Pipeline.vo $(PASSESDIR)/McfgExport.vo $(PASSESDIR)/ModuleMerge.vo
-VALIDATOR_VOFILES := $(VALIDATORDIR)/common/Options.vo $(VALIDATORDIR)/common/CoreTactics.vo $(VALIDATORDIR)/common/BvTactics.vo $(VALIDATORDIR)/common/IntBvTactics.vo $(VALIDATORDIR)/common/EouTactics.vo $(VALIDATORDIR)/CertFormat.vo $(VALIDATORDIR)/AigLrat.vo $(VALIDATORDIR)/AlgRules.vo $(VALIDATORDIR)/CertValidator.vo $(VALIDATORDIR)/Elf64Spec.vo $(VALIDATORDIR)/McFrameMem.vo $(VALIDATORDIR)/Rv64Sem.vo $(VALIDATORDIR)/A64CoreSem.vo $(VALIDATORDIR)/McFormat.vo $(VALIDATORDIR)/McLoop.vo $(VALIDATORDIR)/McCall.vo $(VALIDATORDIR)/McValidator.vo $(VALIDATORDIR)/CheckAssumptions.vo
+VALIDATOR_VOFILES := $(VALIDATORDIR)/common/Options.vo $(VALIDATORDIR)/common/Diag.vo $(VALIDATORDIR)/common/CoreTactics.vo $(VALIDATORDIR)/common/BvTactics.vo $(VALIDATORDIR)/common/IntBvTactics.vo $(VALIDATORDIR)/common/EouTactics.vo $(VALIDATORDIR)/CertFormat.vo $(VALIDATORDIR)/AigLrat.vo $(VALIDATORDIR)/AlgRules.vo $(VALIDATORDIR)/CertValidator.vo $(VALIDATORDIR)/Elf64Spec.vo $(VALIDATORDIR)/McFrameMem.vo $(VALIDATORDIR)/Rv64Sem.vo $(VALIDATORDIR)/A64CoreSem.vo $(VALIDATORDIR)/McFormat.vo $(VALIDATORDIR)/McLoop.vo $(VALIDATORDIR)/McCall.vo $(VALIDATORDIR)/McValidator.vo $(VALIDATORDIR)/CheckAssumptions.vo
 
 .DEFAULT_GOAL := all
 
