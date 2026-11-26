@@ -229,83 +229,82 @@ Definition decode_rv_jal_ra_call
       end
   else None.
 
-Fixpoint decode_rv64_stream_with_calls
+Fixpoint decode_rv64_stream_with_calls_acc
   (fuel : nat) (rvc_enabled : bool) (kind : elf_kind) (fn_lo : N)
-  (ci : elf_call_info) (code : list N) (cur_off : nat)
+  (ci : elf_call_info) (rem : list N) (cur_off : nat)
+  (acc : list decoded_rv_call_inst)
   {struct fuel} : string + list decoded_rv_call_inst :=
-  if Nat.eqb cur_off (List.length code) then inr []
-  else
-    match fuel with
-    | O => inl "RV64 call decoder fuel exhausted"
-    | S fuel' =>
-        match read_u16_le code cur_off with
-        | None => inl "truncated RV64 instruction stream"
-        | Some hw =>
-            if negb (N.eqb (N.modulo hw 4%N) 3%N) then
-              if negb rvc_enabled then inl "16-bit RVC instruction encountered with RVC disabled"
+  match rem with
+  | [] => inr (elf_rev_tr acc)
+  | _ :: _ =>
+      match fuel with
+      | O => inl "RV64 call decoder fuel exhausted"
+      | S fuel' =>
+          match take_u16_le rem with
+          | None => inl "truncated RV64 instruction stream"
+          | Some (hw, rem2) =>
+              if negb (N.eqb (N.modulo hw 4%N) 3%N) then
+                if negb rvc_enabled then inl "16-bit RVC instruction encountered with RVC disabled"
+                else
+                  match decode_rvc_hw hw with
+                  | None => inl "unsupported 16-bit RVC instruction"
+                  | Some inst =>
+                      decode_rv64_stream_with_calls_acc fuel' rvc_enabled kind fn_lo ci
+                        rem2 (cur_off + 2)
+                        (mk_decoded_rv_call_inst (N.of_nat cur_off) 2%N (RCI_Core inst) :: acc)
+                  end
               else
-                match decode_rvc_hw hw with
-                | None => inl "unsupported 16-bit RVC instruction"
-                | Some inst =>
-                    match decode_rv64_stream_with_calls fuel' rvc_enabled kind fn_lo ci code (cur_off + 2) with
-                    | inl err => inl err
-                    | inr rest =>
-                        inr (mk_decoded_rv_call_inst (N.of_nat cur_off) 2%N (RCI_Core inst) :: rest)
+                match take_u32_le rem with
+                | None => inl "truncated 32-bit RV64 instruction"
+                | Some (w1, rem4) =>
+                    let pair_res :=
+                      match take_u32_le rem4 with
+                      | Some (w2, rem8) =>
+                          match decode_rv_auipc_jalr_call kind fn_lo ci cur_off w1 w2 with
+                          | Some res => Some (res, rem8)
+                          | None => None
+                          end
+                      | None => None
+                      end in
+                    match pair_res with
+                    | Some (inl err, _) => inl err
+                    | Some (inr cname, rem8) =>
+                        decode_rv64_stream_with_calls_acc fuel' rvc_enabled kind fn_lo ci
+                          rem8 (cur_off + 8)
+                          (mk_decoded_rv_call_inst (N.of_nat cur_off) 8%N (RCI_Call cname) :: acc)
+                    | None =>
+                        match decode_rv_jal_ra_call kind fn_lo ci cur_off w1 with
+                        | Some (inl err) => inl err
+                        | Some (inr cname) =>
+                            decode_rv64_stream_with_calls_acc fuel' rvc_enabled kind fn_lo ci
+                              rem4 (cur_off + 4)
+                              (mk_decoded_rv_call_inst (N.of_nat cur_off) 4%N (RCI_Call cname) :: acc)
+                        | None =>
+                            match decode_rv32_word w1 with
+                            | None => inl "unsupported 32-bit RV64 instruction"
+                            | Some inst =>
+                                decode_rv64_stream_with_calls_acc fuel' rvc_enabled kind fn_lo ci
+                                  rem4 (cur_off + 4)
+                                  (mk_decoded_rv_call_inst (N.of_nat cur_off) 4%N (RCI_Core inst) :: acc)
+                            end
+                        end
                     end
                 end
-            else
-              match read_u32_le code cur_off with
-              | None => inl "truncated 32-bit RV64 instruction"
-              | Some w1 =>
-                  let pair_res :=
-                    match read_u32_le code (cur_off + 4) with
-                    | Some w2 => decode_rv_auipc_jalr_call kind fn_lo ci cur_off w1 w2
-                    | None => None
-                    end in
-                  match pair_res with
-                  | Some (inl err) => inl err
-                  | Some (inr cname) =>
-                      match decode_rv64_stream_with_calls fuel' rvc_enabled kind fn_lo ci code (cur_off + 8) with
-                      | inl err => inl err
-                      | inr rest =>
-                          inr (mk_decoded_rv_call_inst (N.of_nat cur_off) 8%N (RCI_Call cname) :: rest)
-                      end
-                  | None =>
-                      match decode_rv_jal_ra_call kind fn_lo ci cur_off w1 with
-                      | Some (inl err) => inl err
-                      | Some (inr cname) =>
-                          match decode_rv64_stream_with_calls fuel' rvc_enabled kind fn_lo ci code (cur_off + 4) with
-                          | inl err => inl err
-                          | inr rest =>
-                              inr (mk_decoded_rv_call_inst (N.of_nat cur_off) 4%N (RCI_Call cname) :: rest)
-                          end
-                      | None =>
-                          match decode_rv32_word w1 with
-                          | None => inl "unsupported 32-bit RV64 instruction"
-                          | Some inst =>
-                              match decode_rv64_stream_with_calls fuel' rvc_enabled kind fn_lo ci code (cur_off + 4) with
-                              | inl err => inl err
-                              | inr rest =>
-                                  inr (mk_decoded_rv_call_inst (N.of_nat cur_off) 4%N (RCI_Core inst) :: rest)
-                              end
-                          end
-                      end
-                  end
-              end
-        end
-    end.
+          end
+      end
+  end.
 
 Definition decode_rv64_bytes_with_calls
   (rvc_enabled : bool) (kind : elf_kind) (fn_lo : N)
   (ci : elf_call_info) (code : list N)
   : string + list decoded_rv_call_inst :=
-  let len := List.length code in
+  let len := elf_length_tr code in
   if Nat.eqb len 0 || negb (Nat.eqb (Nat.modulo len 2) 0) then
     inl "RV64 function byte length must be positive and even"
   else if negb rvc_enabled && negb (Nat.eqb (Nat.modulo len 4) 0) then
     inl "non-RVC RV64 function length must be a multiple of 4"
   else
-    match decode_rv64_stream_with_calls (Nat.div len 2 + 1) rvc_enabled kind fn_lo ci code 0 with
+    match decode_rv64_stream_with_calls_acc (Nat.div len 2 + 1) rvc_enabled kind fn_lo ci code 0 [] with
     | inl err => inl err
     | inr insts =>
         match kind with
@@ -316,57 +315,61 @@ Definition decode_rv64_bytes_with_calls
         end
     end.
 
-Lemma decode_rv64_stream_with_calls_no_word_mulh :
-  forall fuel rvc kind fn_lo ci code cur_off insts,
-    decode_rv64_stream_with_calls fuel rvc kind fn_lo ci code cur_off = inr insts ->
+Local Lemma mcc_forallb_rev {A : Type} (p : A -> bool) (xs : list A) :
+  forallb p (List.rev xs) = forallb p xs.
+Proof.
+  induction xs as [| x xs IH]; [reflexivity |].
+  cbn [List.rev forallb]; rewrite forallb_app, IH; cbn [forallb]; rewrite Bool.andb_true_r, Bool.andb_comm; reflexivity.
+Qed.
+
+Lemma decode_rv64_stream_with_calls_acc_no_word_mulh :
+  forall fuel rvc kind fn_lo ci rem cur_off acc insts,
+    forallb rv_call_inst_no_word_mulh acc = true ->
+    decode_rv64_stream_with_calls_acc fuel rvc kind fn_lo ci rem cur_off acc = inr insts ->
     forallb rv_call_inst_no_word_mulh insts = true.
 Proof.
   intro fuel; induction fuel as [| fuel' IH];
-    intros rvc kind fn_lo ci code cur_off insts Hdec;
-    cbn [decode_rv64_stream_with_calls] in Hdec;
-    destruct (Nat.eqb cur_off (List.length code));
-    try (inversion Hdec; reflexivity).
-  destruct (read_u16_le code cur_off) as [hw |]; [| discriminate Hdec].
+    intros rvc kind fn_lo ci rem cur_off acc insts Hacc Hdec;
+    cbn [decode_rv64_stream_with_calls_acc] in Hdec;
+    destruct rem as [| b0 r0];
+    [inversion Hdec; rewrite elf_rev_tr_eq, mcc_forallb_rev; exact Hacc
+    | discriminate Hdec
+    | inversion Hdec; rewrite elf_rev_tr_eq, mcc_forallb_rev; exact Hacc |].
+  destruct (take_u16_le (b0 :: r0)) as [[hw rem2] |]; [| discriminate Hdec].
   destruct (negb (N.eqb (N.modulo hw 4%N) 3%N)).
   - destruct (negb rvc); [discriminate Hdec |].
     destruct (decode_rvc_hw hw) as [inst |] eqn:Ec; [| discriminate Hdec].
-    destruct (decode_rv64_stream_with_calls fuel' rvc kind fn_lo ci code (cur_off + 2))
-      as [| rest] eqn:Hr; [discriminate Hdec |].
-    inversion Hdec; subst insts; cbn [forallb rv_call_inst_no_word_mulh].
+    eapply IH; [| exact Hdec].
+    cbn [forallb]; rewrite Hacc, Bool.andb_true_r.
     pose proof (decode_rvc_hw_no_word_mulh hw inst Ec) as Hnm.
     assert (Hmul1 : inst_no_word_mulh (mk_decoded_rv (N.of_nat cur_off) 2%N inst) = true).
     { unfold inst_no_word_mulh; cbn [dri_inst]; destruct inst; try reflexivity;
         repeat match goal with o : rv_alu_reg_op |- _ => destruct o | b : bool |- _ => destruct b end;
         try reflexivity; contradiction Hnm. }
-    unfold rv_call_inst_no_word_mulh; cbn [drci_off drci_len drci_inst];
-    rewrite Hmul1; cbn [andb]; exact (IH _ _ _ _ _ _ _ Hr).
-  - destruct (read_u32_le code cur_off) as [w1 |]; [| discriminate Hdec].
-    destruct (match read_u32_le code (cur_off + 4) with
-              | Some w2 => decode_rv_auipc_jalr_call kind fn_lo ci cur_off w1 w2
+    exact Hmul1.
+  - destruct (take_u32_le (b0 :: r0)) as [[w1 rem4] |]; [| discriminate Hdec].
+    destruct (match take_u32_le rem4 with
+              | Some (w2, rem8) =>
+                  match decode_rv_auipc_jalr_call kind fn_lo ci cur_off w1 w2 with
+                  | Some res => Some (res, rem8)
+                  | None => None
+                  end
               | None => None
-              end) as [[| cname] |].
+              end) as [[[| cname] rem8] |].
     + discriminate Hdec.
-    + destruct (decode_rv64_stream_with_calls fuel' rvc kind fn_lo ci code (cur_off + 8))
-        as [| rest] eqn:Hr; [discriminate Hdec |].
-      inversion Hdec; subst insts; cbn [forallb rv_call_inst_no_word_mulh].
-      exact (IH _ _ _ _ _ _ _ Hr).
+    + eapply IH; [| exact Hdec]; cbn [forallb rv_call_inst_no_word_mulh]; exact Hacc.
     + destruct (decode_rv_jal_ra_call kind fn_lo ci cur_off w1) as [[| cname] |].
       * discriminate Hdec.
-      * destruct (decode_rv64_stream_with_calls fuel' rvc kind fn_lo ci code (cur_off + 4))
-          as [| rest] eqn:Hr; [discriminate Hdec |].
-        inversion Hdec; subst insts; cbn [forallb rv_call_inst_no_word_mulh].
-        exact (IH _ _ _ _ _ _ _ Hr).
+      * eapply IH; [| exact Hdec]; cbn [forallb rv_call_inst_no_word_mulh]; exact Hacc.
       * destruct (decode_rv32_word w1) as [inst |] eqn:Ew; [| discriminate Hdec].
-        destruct (decode_rv64_stream_with_calls fuel' rvc kind fn_lo ci code (cur_off + 4))
-          as [| rest] eqn:Hr; [discriminate Hdec |].
-        inversion Hdec; subst insts; cbn [forallb rv_call_inst_no_word_mulh].
+        eapply IH; [| exact Hdec].
+        cbn [forallb]; rewrite Hacc, Bool.andb_true_r.
         pose proof (decode_rv32_word_no_word_mulh w1 inst Ew) as Hnm.
         assert (Hmul1 : inst_no_word_mulh (mk_decoded_rv (N.of_nat cur_off) 4%N inst) = true).
         { unfold inst_no_word_mulh; cbn [dri_inst]; destruct inst; try reflexivity;
             repeat match goal with o : rv_alu_reg_op |- _ => destruct o | b : bool |- _ => destruct b end;
             try reflexivity; contradiction Hnm. }
-        unfold rv_call_inst_no_word_mulh; cbn [drci_off drci_len drci_inst];
-    rewrite Hmul1; cbn [andb]; exact (IH _ _ _ _ _ _ _ Hr).
+        exact Hmul1.
 Qed.
 
 Lemma decode_rv64_bytes_with_calls_no_word_mulh :
@@ -375,12 +378,12 @@ Lemma decode_rv64_bytes_with_calls_no_word_mulh :
     forallb rv_call_inst_no_word_mulh insts = true.
 Proof.
   intros rvc kind fn_lo ci code insts H; unfold decode_rv64_bytes_with_calls in H.
-  destruct (Nat.eqb (List.length code) 0 || negb (Nat.eqb (Nat.modulo (List.length code) 2) 0));
+  destruct (Nat.eqb (elf_length_tr code) 0 || negb (Nat.eqb (Nat.modulo (elf_length_tr code) 2) 0));
     [discriminate H |].
-  destruct (negb rvc && negb (Nat.eqb (Nat.modulo (List.length code) 4) 0));
+  destruct (negb rvc && negb (Nat.eqb (Nat.modulo (elf_length_tr code) 4) 0));
     [discriminate H |].
-  destruct (decode_rv64_stream_with_calls _ _ _ _ _ _ _) as [| xs] eqn:Hs; [discriminate H |].
-  pose proof (decode_rv64_stream_with_calls_no_word_mulh _ _ _ _ _ _ _ _ Hs) as Hmul.
+  destruct (decode_rv64_stream_with_calls_acc _ _ _ _ _ _ _ _) as [| xs] eqn:Hs; [discriminate H |].
+  pose proof (decode_rv64_stream_with_calls_acc_no_word_mulh _ _ _ _ _ _ _ [] xs eq_refl Hs) as Hmul.
   destruct kind;
     [destruct (all_relocs_bound_to_rv_calls (eci_relocs ci) xs); inversion H; subst; exact Hmul
     | inversion H; subst; exact Hmul
@@ -445,46 +448,45 @@ Definition decode_a64_bl_call
       end
   else None.
 
-Fixpoint decode_a64_stream_with_calls
+Fixpoint decode_a64_stream_with_calls_acc
   (fuel : nat) (kind : elf_kind) (fn_lo : N)
-  (ci : elf_call_info) (code : list N) (cur_off : nat)
+  (ci : elf_call_info) (rem : list N) (cur_off : nat)
+  (acc : list decoded_a64_call_inst)
   {struct fuel} : string + list decoded_a64_call_inst :=
-  if Nat.eqb cur_off (List.length code) then inr []
-  else
-    match fuel with
-    | O => inl "AArch64 call decoder fuel exhausted"
-    | S fuel' =>
-        match read_u32_le code cur_off with
-        | None => inl "truncated 32-bit A64 instruction"
-        | Some w =>
-            match decode_a64_bl_call kind fn_lo ci cur_off w with
-            | Some (inl err) => inl err
-            | Some (inr cname) =>
-                match decode_a64_stream_with_calls fuel' kind fn_lo ci code (cur_off + 4) with
-                | inl err => inl err
-                | inr rest => inr (mk_decoded_a64_call_inst (N.of_nat cur_off) (ACI_Call cname) :: rest)
-                end
-            | None =>
-                match decode_a64_word w with
-                | None => inl "unsupported AArch64 instruction"
-                | Some inst =>
-                    match decode_a64_stream_with_calls fuel' kind fn_lo ci code (cur_off + 4) with
-                    | inl err => inl err
-                    | inr rest => inr (mk_decoded_a64_call_inst (N.of_nat cur_off) (ACI_Core inst) :: rest)
-                    end
-                end
-            end
-        end
-    end.
+  match rem with
+  | [] => inr (elf_rev_tr acc)
+  | _ :: _ =>
+      match fuel with
+      | O => inl "AArch64 call decoder fuel exhausted"
+      | S fuel' =>
+          match take_u32_le rem with
+          | None => inl "truncated 32-bit A64 instruction"
+          | Some (w, rem4) =>
+              match decode_a64_bl_call kind fn_lo ci cur_off w with
+              | Some (inl err) => inl err
+              | Some (inr cname) =>
+                  decode_a64_stream_with_calls_acc fuel' kind fn_lo ci rem4 (cur_off + 4)
+                    (mk_decoded_a64_call_inst (N.of_nat cur_off) (ACI_Call cname) :: acc)
+              | None =>
+                  match decode_a64_word w with
+                  | None => inl "unsupported AArch64 instruction"
+                  | Some inst =>
+                      decode_a64_stream_with_calls_acc fuel' kind fn_lo ci rem4 (cur_off + 4)
+                        (mk_decoded_a64_call_inst (N.of_nat cur_off) (ACI_Core inst) :: acc)
+                  end
+              end
+          end
+      end
+  end.
 
 Definition decode_a64_bytes_with_calls
   (kind : elf_kind) (fn_lo : N) (ci : elf_call_info) (code : list N)
   : string + list decoded_a64_call_inst :=
-  let len := List.length code in
+  let len := elf_length_tr code in
   if Nat.eqb len 0 || negb (Nat.eqb (Nat.modulo len 4) 0) then
     inl "AArch64 function byte length must be a positive multiple of 4"
   else
-    match decode_a64_stream_with_calls (Nat.div len 4 + 1) kind fn_lo ci code 0 with
+    match decode_a64_stream_with_calls_acc (Nat.div len 4 + 1) kind fn_lo ci code 0 [] with
     | inl err => inl err
     | inr insts =>
         match kind with
@@ -495,30 +497,28 @@ Definition decode_a64_bytes_with_calls
         end
     end.
 
-Lemma decode_a64_stream_with_calls_valid :
-  forall fuel kind fn_lo ci code cur_off insts,
-    decode_a64_stream_with_calls fuel kind fn_lo ci code cur_off = inr insts ->
+Lemma decode_a64_stream_with_calls_acc_valid :
+  forall fuel kind fn_lo ci rem cur_off acc insts,
+    forallb a64_call_inst_valid acc = true ->
+    decode_a64_stream_with_calls_acc fuel kind fn_lo ci rem cur_off acc = inr insts ->
     forallb a64_call_inst_valid insts = true.
 Proof.
   intro fuel; induction fuel as [| fuel' IH];
-    intros kind fn_lo ci code cur_off insts Hdec;
-    cbn [decode_a64_stream_with_calls] in Hdec;
-    destruct (Nat.eqb cur_off (List.length code));
-    try (inversion Hdec; reflexivity).
-  destruct (read_u32_le code cur_off) as [w |]; [| discriminate Hdec].
+    intros kind fn_lo ci rem cur_off acc insts Hacc Hdec;
+    cbn [decode_a64_stream_with_calls_acc] in Hdec;
+    destruct rem as [| b0 r0];
+    [inversion Hdec; rewrite elf_rev_tr_eq, mcc_forallb_rev; exact Hacc
+    | discriminate Hdec
+    | inversion Hdec; rewrite elf_rev_tr_eq, mcc_forallb_rev; exact Hacc |].
+  destruct (take_u32_le (b0 :: r0)) as [[w rem4] |]; [| discriminate Hdec].
   destruct (decode_a64_bl_call kind fn_lo ci cur_off w) as [[| cname] |].
   - discriminate Hdec.
-  - destruct (decode_a64_stream_with_calls fuel' kind fn_lo ci code (cur_off + 4))
-      as [| rest] eqn:Hr; [discriminate Hdec |].
-    inversion Hdec; subst insts; cbn [forallb a64_call_inst_valid].
-    exact (IH _ _ _ _ _ _ Hr).
+  - eapply IH; [| exact Hdec]; cbn [forallb a64_call_inst_valid]; exact Hacc.
   - destruct (decode_a64_word w) as [inst |] eqn:Ew; [| discriminate Hdec].
-    destruct (decode_a64_stream_with_calls fuel' kind fn_lo ci code (cur_off + 4))
-      as [| rest] eqn:Hr; [discriminate Hdec |].
-    inversion Hdec; subst insts; cbn [forallb a64_call_inst_valid daci_inst].
+    eapply IH; [| exact Hdec].
+    cbn [forallb a64_call_inst_valid daci_inst]; rewrite Hacc, Bool.andb_true_r.
     pose proof (decode_a64_word_valid w inst Ew) as Hv.
-    unfold a64_inst_valid in Hv |- *; cbn [dai_inst] in Hv |- *; rewrite Hv; cbn [andb];
-    exact (IH _ _ _ _ _ _ Hr).
+    unfold a64_inst_valid in Hv; cbn [dai_inst] in Hv; exact Hv.
 Qed.
 
 Lemma decode_a64_bytes_with_calls_valid :
@@ -527,10 +527,10 @@ Lemma decode_a64_bytes_with_calls_valid :
     forallb a64_call_inst_valid insts = true.
 Proof.
   intros kind fn_lo ci code insts H; unfold decode_a64_bytes_with_calls in H.
-  destruct (Nat.eqb (List.length code) 0 || negb (Nat.eqb (Nat.modulo (List.length code) 4) 0));
+  destruct (Nat.eqb (elf_length_tr code) 0 || negb (Nat.eqb (Nat.modulo (elf_length_tr code) 4) 0));
     [discriminate H |].
-  destruct (decode_a64_stream_with_calls _ _ _ _ _ _) as [| xs] eqn:Hs; [discriminate H |].
-  pose proof (decode_a64_stream_with_calls_valid _ _ _ _ _ _ _ Hs) as Hval.
+  destruct (decode_a64_stream_with_calls_acc _ _ _ _ _ _ _) as [| xs] eqn:Hs; [discriminate H |].
+  pose proof (decode_a64_stream_with_calls_acc_valid _ _ _ _ _ _ [] xs eq_refl Hs) as Hval.
   destruct kind;
     [destruct (all_relocs_bound_to_a64_calls (eci_relocs ci) xs); inversion H; subst; exact Hval
     | inversion H; subst; exact Hval
@@ -551,13 +551,31 @@ Definition mc_call_attr_is_zeroext (a : param_attr) : bool :=
   | _ => false
   end.
 
+Fixpoint find_unique_decl_in_list {A : Type}
+  (proj : A -> declaration typ) (cname : string)
+  (xs : list A) (found : option (declaration typ))
+  : option (option (declaration typ)) :=
+  match xs with
+  | [] => Some found
+  | x :: rest =>
+      let d := proj x in
+      if cert_fn_matches_raw_id cname (dc_name d) then
+        match found with
+        | None => find_unique_decl_in_list proj cname rest (Some d)
+        | Some _ => None
+        end
+      else find_unique_decl_in_list proj cname rest found
+  end.
+
 Definition find_unique_callee_decl (ir_m : CFG.mcfg typ) (cname : string)
   : option (declaration typ) :=
-  let all_decls := m_declarations ir_m ++ List.map df_prototype (m_definitions ir_m) in
-  let hits := List.filter (fun d => cert_fn_matches_raw_id cname (dc_name d)) all_decls in
-  match hits with
-  | [d] => Some d
-  | _ => None
+  match find_unique_decl_in_list (fun d => d) cname (m_declarations ir_m) None with
+  | None => None
+  | Some found1 =>
+      match find_unique_decl_in_list df_prototype cname (m_definitions ir_m) found1 with
+      | Some (Some d) => Some d
+      | _ => None
+      end
   end.
 
 Definition check_callee_ret_ext (w : positive) (rattrs : list param_attr) (ext : rv_arg_ext) : bool :=
@@ -1284,21 +1302,56 @@ Inductive mc_call_tree : Type :=
            (ret_w : positive) (ret_ext : rv_arg_ext)
            (ret_var : string) (ret_hi_var : option string) (cont : mc_call_tree).
 
-Fixpoint collect_ir_call_vars (t : ir_call_tree) : list (string * positive) :=
+Fixpoint collect_ir_call_vars_acc
+  (t : ir_call_tree) (acc : list (string * positive)) : list (string * positive) :=
   match t with
-  | ICT_Ret _ _ | ICT_UB => []
-  | ICT_Branch _ dt df => collect_ir_call_vars dt ++ collect_ir_call_vars df
-  | ICT_Call _ _ rw rv cont => (rv, rw) :: collect_ir_call_vars cont
+  | ICT_Ret _ _ | ICT_UB => acc
+  | ICT_Branch _ dt df =>
+      collect_ir_call_vars_acc df (collect_ir_call_vars_acc dt acc)
+  | ICT_Call _ _ rw rv cont =>
+      collect_ir_call_vars_acc cont ((rv, rw) :: acc)
   end.
 
-Fixpoint collect_mc_call_vars (t : mc_call_tree) : list (string * positive) :=
+Definition collect_ir_call_vars (t : ir_call_tree) : list (string * positive) :=
+  collect_ir_call_vars_acc t [].
+
+Lemma collect_ir_call_vars_acc_shift : forall t acc,
+  collect_ir_call_vars_acc t acc = collect_ir_call_vars t ++ acc.
+Proof.
+  unfold collect_ir_call_vars; induction t as [| | ? dt IHdt df IHdf | ? ? rw rv cont IH];
+    intro acc; cbn [collect_ir_call_vars_acc]; try reflexivity.
+  - rewrite IHdf, IHdt, (IHdf (collect_ir_call_vars_acc dt [])), app_assoc; reflexivity.
+  - rewrite IH, (IH [(rv, rw)]), <- app_assoc; reflexivity.
+Qed.
+
+Fixpoint collect_mc_call_vars_acc
+  (t : mc_call_tree) (acc : list (string * positive)) : list (string * positive) :=
   match t with
-  | MCT_Ret _ => []
-  | MCT_Branch _ dt df => collect_mc_call_vars dt ++ collect_mc_call_vars df
+  | MCT_Ret _ => acc
+  | MCT_Branch _ dt df =>
+      collect_mc_call_vars_acc df (collect_mc_call_vars_acc dt acc)
   | MCT_Call _ _ rw _ rv opt_hi cont =>
-      let hi_l := match opt_hi with None => [] | Some hn => [(hn, 64%positive)] end in
-      (rv, rw) :: hi_l ++ collect_mc_call_vars cont
+      let acc1 := match opt_hi with
+                  | None => (rv, rw) :: acc
+                  | Some hn => (rv, rw) :: (hn, 64%positive) :: acc
+                  end in
+      collect_mc_call_vars_acc cont acc1
   end.
+
+Definition collect_mc_call_vars (t : mc_call_tree) : list (string * positive) :=
+  collect_mc_call_vars_acc t [].
+
+Lemma collect_mc_call_vars_acc_shift : forall t acc,
+  collect_mc_call_vars_acc t acc = collect_mc_call_vars t ++ acc.
+Proof.
+  unfold collect_mc_call_vars; induction t as [| ? dt IHdt df IHdf | ? ? rw ? rv opt_hi cont IH];
+    intro acc; cbn [collect_mc_call_vars_acc]; try reflexivity.
+  - rewrite IHdf, IHdt, (IHdf (collect_mc_call_vars_acc dt [])), app_assoc; reflexivity.
+  - destruct opt_hi as [hn |];
+      [rewrite (IH ((rv, rw) :: (hn, 64%positive) :: acc)), (IH [(rv, rw); (hn, 64%positive)])
+      | rewrite (IH ((rv, rw) :: acc)), (IH [(rv, rw)])];
+      rewrite <- app_assoc; reflexivity.
+Qed.
 
 Definition sym_expr_freeze_free (allowed : list (string * positive)) (w : positive) (e : cert_expr) : Prop :=
   wf_sym_expr allowed w e /\ expr_has_freeze e = false.
@@ -1846,31 +1899,45 @@ Fixpoint rv_sym_read_call_args_from (idx : N) (n : nat) (vrf : rv_val_regs) {str
       end
   end.
 
+Lemma lookup_rv_call_inst_eq_key : forall insts pc,
+  lookup_rv_call_inst insts pc = lookup_by_key drci_off insts pc.
+Proof.
+  induction insts as [| d rest IH]; intro pc; [reflexivity |].
+  cbn [lookup_rv_call_inst lookup_by_key]; destruct (N.eqb (drci_off d) pc); [reflexivity | exact (IH pc)].
+Qed.
+
+Lemma pt_of_list_first_lookup_rv_call : forall insts pc,
+  pt_get (N.succ_pos pc) (pt_of_list_first drci_off insts) = lookup_rv_call_inst insts pc.
+Proof.
+  intros insts pc; rewrite lookup_rv_call_inst_eq_key; exact (pt_of_list_first_get drci_off insts pc).
+Qed.
+
 Fixpoint summarize_rv64_call_at
-  (fuel : nat) (insts : list decoded_rv_call_inst) (callees : list mc_callee_spec)
-  (visited : list N) (pc : N) (cid : nat) (sp_off : Z)
+  (fuel : nat) (im : pos_trie decoded_rv_call_inst) (callees : list mc_callee_spec)
+  (visited : pos_trie unit) (pc : N) (cid : nat) (sp_off : Z)
   (vrf : rv_val_regs) (astk : mc_sym_stack) (ret_w : positive)
   {struct fuel} : option mc_call_tree :=
-  if n_in_list pc visited then None
+  if pt_has_n pc visited then None
   else
     match fuel with
     | O => None
     | S fuel' =>
-        match lookup_rv_call_inst insts pc with
+        match pt_get (N.succ_pos pc) im with
         | None => None
         | Some dec =>
+            let visited' := pt_add_n pc visited in
             match drci_inst dec with
             | RCI_Core i =>
                 let cdec := mk_decoded_rv (drci_off dec) (drci_len dec) i in
                 match rv_sym_step_one cdec pc sp_off vrf astk ret_w with
                 | None => None
                 | Some (RSSR_Next next_pc sp_off' vrf' astk') =>
-                    summarize_rv64_call_at fuel' insts callees (pc :: visited)
+                    summarize_rv64_call_at fuel' im callees visited'
                       next_pc cid sp_off' vrf' astk' ret_w
                 | Some (RSSR_Branch cond tgt_pc next_pc) =>
-                    match summarize_rv64_call_at fuel' insts callees (pc :: visited)
+                    match summarize_rv64_call_at fuel' im callees visited'
                             tgt_pc cid sp_off vrf astk ret_w,
-                          summarize_rv64_call_at fuel' insts callees (pc :: visited)
+                          summarize_rv64_call_at fuel' im callees visited'
                             next_pc cid sp_off vrf astk ret_w with
                     | Some dt, Some df => Some (MCT_Branch cond dt df)
                     | _, _ => None
@@ -1891,7 +1958,7 @@ Fixpoint summarize_rv64_call_at
                           let '(_, opt_hi) := mc_post_call_ret_expr cid rw rext in
                           let vrf' := rv_post_call_vrf cid c vrf in
                           let next_pc := (pc + drci_len dec)%N in
-                          match summarize_rv64_call_at fuel' insts callees (pc :: visited)
+                          match summarize_rv64_call_at fuel' im callees visited'
                                   next_pc (S cid) sp_off vrf' astk ret_w with
                           | None => None
                           | Some cont =>
@@ -1907,8 +1974,8 @@ Fixpoint summarize_rv64_call_at
 Definition summarize_rv64_call_tree
   (insts : list decoded_rv_call_inst) (callees : list mc_callee_spec)
   (arg_specs : list rv_arg_spec) (ret_w : positive) : option mc_call_tree :=
-  let fuel := S (2 * List.length insts) in
-  summarize_rv64_call_at fuel insts callees [] 0%N 0%nat 0%Z
+  let fuel := S (2 * elf_length_tr insts) in
+  summarize_rv64_call_at fuel (pt_of_list_first drci_off insts) callees PT_Empty 0%N 0%nat 0%Z
     (rv_build_init_val_regs 10%N arg_specs) [] ret_w.
 
 (** *** 3.4 Acyclic AArch64 Call-Tree Summarizer *)
@@ -1936,32 +2003,46 @@ Fixpoint a64_sym_read_call_args_from (idx : N) (n : nat) (vrf : a64_val_regs) {s
       end
   end.
 
+Lemma lookup_a64_call_inst_eq_key : forall insts pc,
+  lookup_a64_call_inst insts pc = lookup_by_key daci_off insts pc.
+Proof.
+  induction insts as [| d rest IH]; intro pc; [reflexivity |].
+  cbn [lookup_a64_call_inst lookup_by_key]; destruct (N.eqb (daci_off d) pc); [reflexivity | exact (IH pc)].
+Qed.
+
+Lemma pt_of_list_first_lookup_a64_call : forall insts pc,
+  pt_get (N.succ_pos pc) (pt_of_list_first daci_off insts) = lookup_a64_call_inst insts pc.
+Proof.
+  intros insts pc; rewrite lookup_a64_call_inst_eq_key; exact (pt_of_list_first_get daci_off insts pc).
+Qed.
+
 Fixpoint summarize_a64_call_at
-  (fuel : nat) (insts : list decoded_a64_call_inst) (callees : list mc_callee_spec)
-  (visited : list N) (pc : N) (cid : nat) (sp_off : Z)
+  (fuel : nat) (im : pos_trie decoded_a64_call_inst) (callees : list mc_callee_spec)
+  (visited : pos_trie unit) (pc : N) (cid : nat) (sp_off : Z)
   (vrf : a64_val_regs) (astk : mc_sym_stack) (sfl : a64_sym_flags) (fl_def : bool)
   (ret_w : positive)
   {struct fuel} : option mc_call_tree :=
-  if n_in_list pc visited then None
+  if pt_has_n pc visited then None
   else
     match fuel with
     | O => None
     | S fuel' =>
-        match lookup_a64_call_inst insts pc with
+        match pt_get (N.succ_pos pc) im with
         | None => None
         | Some dec =>
+            let visited' := pt_add_n pc visited in
             match daci_inst dec with
             | ACI_Core i =>
                 let cdec := mk_decoded_a64_inst (daci_off dec) i in
                 match a64_sym_step_one cdec pc sp_off vrf astk sfl fl_def ret_w with
                 | None => None
                 | Some (ASSR_Next next_pc sp_off' vrf' astk' sfl' fl_def') =>
-                    summarize_a64_call_at fuel' insts callees (pc :: visited)
+                    summarize_a64_call_at fuel' im callees visited'
                       next_pc cid sp_off' vrf' astk' sfl' fl_def' ret_w
                 | Some (ASSR_Branch cond tgt_pc next_pc fl_def') =>
-                    match summarize_a64_call_at fuel' insts callees (pc :: visited)
+                    match summarize_a64_call_at fuel' im callees visited'
                             tgt_pc cid sp_off vrf astk sfl fl_def' ret_w,
-                          summarize_a64_call_at fuel' insts callees (pc :: visited)
+                          summarize_a64_call_at fuel' im callees visited'
                             next_pc cid sp_off vrf astk sfl fl_def' ret_w with
                     | Some dt, Some df => Some (MCT_Branch cond dt df)
                     | _, _ => None
@@ -1982,7 +2063,7 @@ Fixpoint summarize_a64_call_at
                           let '(_, opt_hi) := mc_post_call_ret_expr cid rw rext in
                           let vrf' := a64_post_call_vrf cid c vrf in
                           let next_pc := (pc + 4%N)%N in
-                          match summarize_a64_call_at fuel' insts callees (pc :: visited)
+                          match summarize_a64_call_at fuel' im callees visited'
                                   next_pc (S cid) sp_off vrf' astk sfl false ret_w with
                           | None => None
                           | Some cont =>
@@ -1998,8 +2079,8 @@ Fixpoint summarize_a64_call_at
 Definition summarize_a64_call_tree
   (insts : list decoded_a64_call_inst) (callees : list mc_callee_spec)
   (arg_specs : list rv_arg_spec) (ret_w : positive) : option mc_call_tree :=
-  let fuel := S (2 * List.length insts) in
-  summarize_a64_call_at fuel insts callees [] 0%N 0%nat 0%Z
+  let fuel := S (2 * elf_length_tr insts) in
+  summarize_a64_call_at fuel (pt_of_list_first daci_off insts) callees PT_Empty 0%N 0%nat 0%Z
     (a64_build_init_val_regs 0%N arg_specs) [] a64_init_sym_flags false ret_w.
 
 (** *** 3.5 Well-Formedness of RV64 & AArch64 Call-Tree Summarizers *)
@@ -2114,7 +2195,9 @@ Proof.
 Qed.
 
 Lemma summarize_rv64_call_at_wfsym :
-  forall fuel insts callees visited pc cid sp_off vrf astk ret_w allowed t,
+  forall insts im
+    (Him : forall pc, pt_get (N.succ_pos pc) im = lookup_rv_call_inst insts pc)
+    fuel callees visited pc cid sp_off vrf astk ret_w allowed t,
     rv_supported_arg_width ret_w = true ->
     (forall c, In c callees -> rv_supported_arg_width (mcs_ret_width c) = true) ->
     forallb rv_call_inst_no_word_mulh insts = true ->
@@ -2122,15 +2205,16 @@ Lemma summarize_rv64_call_at_wfsym :
     rv_val_read 2%N vrf = MSV_StackPtr sp_off ->
     rv_val_regs_wf allowed vrf ->
     mc_sym_stack_wf allowed sp_off astk ->
-    summarize_rv64_call_at fuel insts callees visited pc cid sp_off vrf astk ret_w = Some t ->
+    summarize_rv64_call_at fuel im callees visited pc cid sp_off vrf astk ret_w = Some t ->
     mc_call_tree_wf allowed ret_w t.
 Proof.
-  intro fuel; induction fuel as [| fuel' IH];
-    intros insts callees visited pc cid sp_off vrf astk ret_w allowed t
+  intros insts im Him fuel; induction fuel as [| fuel' IH];
+    intros callees visited pc cid sp_off vrf astk ret_w allowed t
            Hrw Hcws Hmul Hrng Hsp2 Hvrf Hastk Hsum;
     cbn [summarize_rv64_call_at] in Hsum;
-    destruct (n_in_list pc visited); try discriminate Hsum.
-  destruct (lookup_rv_call_inst insts pc) as [dec |] eqn:Hlk; [| discriminate Hsum].
+    destruct (pt_has_n pc visited); try discriminate Hsum.
+  destruct (pt_get (N.succ_pos pc) im) as [dec |] eqn:Hlk; [| discriminate Hsum].
+  rewrite Him in Hlk.
   assert (Hin_dec : In dec insts).
   { clear -Hlk; induction insts as [| d rest IHi]; cbn in Hlk; [discriminate |].
     destruct (N.eqb (drci_off d) pc); [inversion Hlk; left; reflexivity | right; exact (IHi Hlk)]. }
@@ -2144,21 +2228,21 @@ Proof.
                   pc sp_off vrf astk ret_w res Hrw Hdec_nmul Hrng Hsp2 Hvrf Hastk Est) as Hwf_step.
     destruct res as [npc sp' vrf' astk' | cond tpc npc | ret_e].
     + destruct Hwf_step as (Hrng' & Hsp2' & Hvrf' & Hastk').
-      exact (IH _ _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hmul Hrng' Hsp2' Hvrf' Hastk' Hsum).
-    + destruct (summarize_rv64_call_at fuel' insts callees (pc :: visited) tpc cid sp_off vrf astk ret_w)
+      exact (IH _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hmul Hrng' Hsp2' Hvrf' Hastk' Hsum).
+    + destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) tpc cid sp_off vrf astk ret_w)
         as [dt |] eqn:Hdt; [| discriminate Hsum].
-      destruct (summarize_rv64_call_at fuel' insts callees (pc :: visited) npc cid sp_off vrf astk ret_w)
+      destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) npc cid sp_off vrf astk ret_w)
         as [df |] eqn:Hdf; [| discriminate Hsum].
       inversion Hsum; subst t; cbn [mc_call_tree_wf]; split; [exact Hwf_step | split;
-        [exact (IH _ _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hmul Hrng Hsp2 Hvrf Hastk Hdt)
-        | exact (IH _ _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hmul Hrng Hsp2 Hvrf Hastk Hdf)]].
+        [exact (IH _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hmul Hrng Hsp2 Hvrf Hastk Hdt)
+        | exact (IH _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hmul Hrng Hsp2 Hvrf Hastk Hdf)]].
     + inversion Hsum; subst t; exact Hwf_step.
   - destruct (mc_sp_aligned16 sp_off) eqn:Esp_al; [| discriminate Hsum].
     destruct (find_callee_spec callees cname) as [c |] eqn:Efc; [| discriminate Hsum].
     destruct (rv_sym_read_call_args_from 10%N (List.length (mcs_args c)) vrf) as [aes |] eqn:Eargs;
       [| discriminate Hsum].
     destruct (mc_post_call_ret_expr cid (mcs_ret_width c) (mcs_ret_ext c)) as [ret_e64 opt_hi] eqn:Epc.
-    destruct (summarize_rv64_call_at fuel' insts callees (pc :: visited)
+    destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited)
                 (pc + drci_len dec)%N (S cid) sp_off (rv_post_call_vrf cid c vrf) astk ret_w)
       as [cont |] eqn:Ect; [| discriminate Hsum].
     inversion Hsum; subst t; clear Hsum.
@@ -2178,11 +2262,13 @@ Proof.
     cbn [mc_call_tree_wf]; split; [| split].
     + exact (rv_sym_read_call_args_from_wf _ _ _ _ _ Hvrf Eargs).
     + exact Hcrw.
-    + exact (IH _ _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hmul Hrng Hsp2' Hvrf' Hastk' Ect).
+    + exact (IH _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hmul Hrng Hsp2' Hvrf' Hastk' Ect).
 Qed.
 
 Lemma summarize_a64_call_at_wfsym :
-  forall fuel insts callees visited pc cid sp_off vrf astk sfl fl_def ret_w allowed t,
+  forall insts im
+    (Him : forall pc, pt_get (N.succ_pos pc) im = lookup_a64_call_inst insts pc)
+    fuel callees visited pc cid sp_off vrf astk sfl fl_def ret_w allowed t,
     rv_supported_arg_width ret_w = true ->
     (forall c, In c callees -> rv_supported_arg_width (mcs_ret_width c) = true) ->
     forallb a64_call_inst_valid insts = true ->
@@ -2190,15 +2276,16 @@ Lemma summarize_a64_call_at_wfsym :
     wf_a64_val_regs allowed vrf ->
     mc_sym_stack_wf allowed sp_off astk ->
     (fl_def = true -> wf_sym_flags allowed sfl) ->
-    summarize_a64_call_at fuel insts callees visited pc cid sp_off vrf astk sfl fl_def ret_w = Some t ->
+    summarize_a64_call_at fuel im callees visited pc cid sp_off vrf astk sfl fl_def ret_w = Some t ->
     mc_call_tree_wf allowed ret_w t.
 Proof.
-  intro fuel; induction fuel as [| fuel' IH];
-    intros insts callees visited pc cid sp_off vrf astk sfl fl_def ret_w allowed t
+  intros insts im Him fuel; induction fuel as [| fuel' IH];
+    intros callees visited pc cid sp_off vrf astk sfl fl_def ret_w allowed t
            Hrw Hcws Hval Hrng Hvrf Hastk Hfl Hsum;
     cbn [summarize_a64_call_at] in Hsum;
-    destruct (n_in_list pc visited); try discriminate Hsum.
-  destruct (lookup_a64_call_inst insts pc) as [dec |] eqn:Hlk; [| discriminate Hsum].
+    destruct (pt_has_n pc visited); try discriminate Hsum.
+  destruct (pt_get (N.succ_pos pc) im) as [dec |] eqn:Hlk; [| discriminate Hsum].
+  rewrite Him in Hlk.
   assert (Hin_dec : In dec insts).
   { clear -Hlk; induction insts as [| d rest IHi]; cbn in Hlk; [discriminate |].
     destruct (N.eqb (daci_off d) pc); [inversion Hlk; left; reflexivity | right; exact (IHi Hlk)]. }
@@ -2209,22 +2296,22 @@ Proof.
                   pc sp_off vrf astk sfl fl_def ret_w res Hrw Hrng Hvrf Hastk Hfl Est) as Hwf_step.
     destruct res as [npc sp' vrf' astk' sfl' fl_def' | cond tpc npc fl_def' | ret_e].
     + destruct Hwf_step as (Hrng' & Hvrf' & Hastk' & Hfl').
-      exact (IH _ _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hval Hrng' Hvrf' Hastk' Hfl' Hsum).
+      exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hval Hrng' Hvrf' Hastk' Hfl' Hsum).
     + destruct Hwf_step as [Hcw Himp].
-      destruct (summarize_a64_call_at fuel' insts callees (pc :: visited) tpc cid sp_off vrf astk sfl fl_def' ret_w)
+      destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited) tpc cid sp_off vrf astk sfl fl_def' ret_w)
         as [dt |] eqn:Hdt; [| discriminate Hsum].
-      destruct (summarize_a64_call_at fuel' insts callees (pc :: visited) npc cid sp_off vrf astk sfl fl_def' ret_w)
+      destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited) npc cid sp_off vrf astk sfl fl_def' ret_w)
         as [df |] eqn:Hdf; [| discriminate Hsum].
       inversion Hsum; subst t; cbn [mc_call_tree_wf]; split; [exact Hcw | split;
-        [exact (IH _ _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hval Hrng Hvrf Hastk (fun h => Hfl (Himp h)) Hdt)
-        | exact (IH _ _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hval Hrng Hvrf Hastk (fun h => Hfl (Himp h)) Hdf)]].
+        [exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hval Hrng Hvrf Hastk (fun h => Hfl (Himp h)) Hdt)
+        | exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hval Hrng Hvrf Hastk (fun h => Hfl (Himp h)) Hdf)]].
     + inversion Hsum; subst t; exact Hwf_step.
   - destruct (mc_sp_aligned16 sp_off) eqn:Esp_al; [| discriminate Hsum].
     destruct (find_callee_spec callees cname) as [c |] eqn:Efc; [| discriminate Hsum].
     destruct (a64_sym_read_call_args_from 0%N (List.length (mcs_args c)) vrf) as [aes |] eqn:Eargs;
       [| discriminate Hsum].
     destruct (mc_post_call_ret_expr cid (mcs_ret_width c) (mcs_ret_ext c)) as [ret_e64 opt_hi] eqn:Epc.
-    destruct (summarize_a64_call_at fuel' insts callees (pc :: visited)
+    destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited)
                 (pc + 4%N)%N (S cid) sp_off (a64_post_call_vrf cid c vrf) astk sfl false ret_w)
       as [cont |] eqn:Ect; [| discriminate Hsum].
     inversion Hsum; subst t; clear Hsum.
@@ -2241,7 +2328,7 @@ Proof.
     cbn [mc_call_tree_wf]; split; [| split].
     + exact (a64_sym_read_call_args_from_wf _ _ _ _ _ Hvrf Eargs).
     + exact Hcrw.
-    + exact (IH _ _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hval Hrng Hvrf' Hastk' (fun C : false = true => ltac:(discriminate C)) Ect).
+    + exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hcws Hval Hrng Hvrf' Hastk' (fun C : false = true => ltac:(discriminate C)) Ect).
 Qed.
 
 
@@ -2255,132 +2342,301 @@ Definition build_rv_call_arg_expr (w : positive) (ext : rv_arg_ext) (e_ir : cert
     | RAE_SignExt | RAE_None => CE_Cast CCK_SExt w 64%positive no_cast_flags e_ir
     end.
 
-Fixpoint build_call_arg_obls
+Definition build_call_arg_cmp
+  (arch : elf_arch) (path : list (bool * cert_expr))
+  (sp : rv_arg_spec) (w : positive) (e_ir e_mc64 : cert_expr) : option mc_loop_obl :=
+  match arch with
+  | EA_Riscv64 =>
+      Some (MLO_Refine false path 64%positive
+              (build_rv_call_arg_expr w (ras_ext sp) e_ir) e_mc64)
+  | EA_AArch64 =>
+      if Pos.eqb w 64%positive then
+        match ras_ext sp with
+        | RAE_None => Some (MLO_Refine false path 64%positive e_ir e_mc64)
+        | _ => None
+        end
+      else
+        match ras_ext sp with
+        | RAE_None =>
+            let e_trunc := CE_Cast CCK_Trunc 64%positive w no_cast_flags e_mc64 in
+            Some (MLO_Refine false path w e_ir e_trunc)
+        | RAE_SignExt =>
+            let src32 :=
+              if Pos.eqb w 32%positive then e_ir
+              else CE_Cast CCK_SExt w 32%positive no_cast_flags e_ir in
+            let tgt32 := CE_Cast CCK_Trunc 64%positive 32%positive no_cast_flags e_mc64 in
+            Some (MLO_Refine false path 32%positive src32 tgt32)
+        | RAE_ZeroExt =>
+            let src32 :=
+              if Pos.eqb w 32%positive then e_ir
+              else CE_Cast CCK_ZExt w 32%positive no_cast_flags e_ir in
+            let tgt32 := CE_Cast CCK_Trunc 64%positive 32%positive no_cast_flags e_mc64 in
+            Some (MLO_Refine false path 32%positive src32 tgt32)
+        end
+  end.
+
+Fixpoint build_call_arg_obls_acc
   (arch : elf_arch) (path : list (bool * cert_expr))
   (specs : list rv_arg_spec)
   (ir_args : list (bool * positive * cert_expr))
   (mc_args64 : list cert_expr)
+  (acc : list mc_loop_obl)
   {struct specs} : option (list mc_loop_obl) :=
   match specs, ir_args, mc_args64 with
-  | [], [], [] => Some []
+  | [], [], [] => Some acc
   | sp :: srest, (need_def, w, e_ir) :: irest, e_mc64 :: mrest =>
       if Pos.eqb w (ras_width sp) then
-        match build_call_arg_obls arch path srest irest mrest with
+        match build_call_arg_cmp arch path sp w e_ir e_mc64 with
         | None => None
-        | Some rest =>
-            let def_l := if need_def then [MLO_Defined false path w e_ir] else [] in
-            let opt_cmp :=
-              match arch with
-              | EA_Riscv64 =>
-                  Some [MLO_Refine false path 64%positive
-                          (build_rv_call_arg_expr w (ras_ext sp) e_ir) e_mc64]
-              | EA_AArch64 =>
-                  if Pos.eqb w 64%positive then
-                    match ras_ext sp with
-                    | RAE_None => Some [MLO_Refine false path 64%positive e_ir e_mc64]
-                    | _ => None
-                    end
-                  else
-                    match ras_ext sp with
-                    | RAE_None =>
-                        let e_trunc := CE_Cast CCK_Trunc 64%positive w no_cast_flags e_mc64 in
-                        Some [MLO_Refine false path w e_ir e_trunc]
-                    | RAE_SignExt =>
-                        let src32 :=
-                          if Pos.eqb w 32%positive then e_ir
-                          else CE_Cast CCK_SExt w 32%positive no_cast_flags e_ir in
-                        let tgt32 := CE_Cast CCK_Trunc 64%positive 32%positive no_cast_flags e_mc64 in
-                        Some [MLO_Refine false path 32%positive src32 tgt32]
-                    | RAE_ZeroExt =>
-                        let src32 :=
-                          if Pos.eqb w 32%positive then e_ir
-                          else CE_Cast CCK_ZExt w 32%positive no_cast_flags e_ir in
-                        let tgt32 := CE_Cast CCK_Trunc 64%positive 32%positive no_cast_flags e_mc64 in
-                        Some [MLO_Refine false path 32%positive src32 tgt32]
-                    end
-              end in
-            match opt_cmp with
-            | None => None
-            | Some cmp_l => Some (def_l ++ cmp_l ++ rest)
-            end
+        | Some cmp_o =>
+            let acc1 := if need_def then MLO_Defined false path w e_ir :: cmp_o :: acc else cmp_o :: acc in
+            build_call_arg_obls_acc arch path srest irest mrest acc1
         end
       else None
   | _, _, _ => None
   end.
 
-Fixpoint collect_call_obls
+Definition build_call_arg_obls
+  (arch : elf_arch) (path : list (bool * cert_expr))
+  (specs : list rv_arg_spec)
+  (ir_args : list (bool * positive * cert_expr))
+  (mc_args64 : list cert_expr) : option (list mc_loop_obl) :=
+  build_call_arg_obls_acc arch path specs ir_args mc_args64 [].
+
+Lemma build_call_arg_obls_acc_shift : forall arch path specs ir_args mc_args64 acc,
+  build_call_arg_obls_acc arch path specs ir_args mc_args64 acc =
+  option_map (fun xs => xs ++ acc) (build_call_arg_obls arch path specs ir_args mc_args64).
+Proof.
+  unfold build_call_arg_obls.
+  intros arch path specs; induction specs as [| sp srest IH];
+    intros [| [[need_def w] e_ir] irest] [| e_mc64 mrest] acc;
+    cbn [build_call_arg_obls_acc option_map]; try reflexivity.
+  destruct (Pos.eqb w (ras_width sp)); [| reflexivity].
+  destruct (build_call_arg_cmp arch path sp w e_ir e_mc64) as [cmp_o |]; [| reflexivity].
+  destruct need_def.
+  - rewrite IH, (IH _ _ [MLO_Defined false path w e_ir; cmp_o]).
+    destruct (build_call_arg_obls_acc arch path srest irest mrest []) as [xs |];
+      [cbn [option_map]; rewrite <- app_assoc; reflexivity | reflexivity].
+  - rewrite IH, (IH _ _ [cmp_o]).
+    destruct (build_call_arg_obls_acc arch path srest irest mrest []) as [xs |];
+      [cbn [option_map]; rewrite <- app_assoc; reflexivity | reflexivity].
+Qed.
+
+Lemma build_call_arg_obls_cons :
+  forall arch path sp sr nd w e ir m mr,
+    build_call_arg_obls arch path (sp :: sr) ((nd, w, e) :: ir) (m :: mr) =
+    if Pos.eqb w (ras_width sp) then
+      match build_call_arg_cmp arch path sp w e m with
+      | None => None
+      | Some cmp_o =>
+          option_map
+            (fun rest => rest ++ (if nd then [MLO_Defined false path w e; cmp_o] else [cmp_o]))
+            (build_call_arg_obls arch path sr ir mr)
+      end
+    else None.
+Proof.
+  intros arch path sp sr nd w e ir m mr; unfold build_call_arg_obls; cbn [build_call_arg_obls_acc].
+  destruct (Pos.eqb w (ras_width sp)); [| reflexivity].
+  destruct (build_call_arg_cmp arch path sp w e m) as [cmp_o |]; [| reflexivity].
+  apply build_call_arg_obls_acc_shift.
+Qed.
+
+Fixpoint collect_call_obls_ret_acc
+  (ret_w rw : positive) (e_ir : cert_expr)
+  (p : list (bool * cert_expr)) (m : mc_call_tree) (a : list mc_loop_obl)
+  {struct m} : option (list mc_loop_obl) :=
+  match m with
+  | MCT_Ret e_mc =>
+      if Pos.eqb rw ret_w then Some (MLO_Refine false p ret_w e_ir e_mc :: a) else None
+  | MCT_Branch c mt mf =>
+      match collect_call_obls_ret_acc ret_w rw e_ir ((true, c) :: p) mt a with
+      | None => None
+      | Some a1 => collect_call_obls_ret_acc ret_w rw e_ir ((false, c) :: p) mf a1
+      end
+  | MCT_Call _ _ _ _ _ _ _ => Some (imposs_obl false p ++ a)
+  end.
+
+Lemma collect_call_obls_ret_acc_shift : forall ret_w rw e_ir p m a,
+  collect_call_obls_ret_acc ret_w rw e_ir p m a =
+  option_map (fun xs => xs ++ a) (collect_call_obls_ret_acc ret_w rw e_ir p m []).
+Proof.
+  intros ret_w rw e_ir p m; revert p;
+    induction m as [e_mc | cm mt IHmt mf IHmf | cn_m am rw_m rm rv_m oh_m cm];
+    intros p a; cbn [collect_call_obls_ret_acc option_map].
+  - destruct (Pos.eqb rw ret_w); reflexivity.
+  - rewrite IHmt at 1;
+      destruct (collect_call_obls_ret_acc ret_w rw e_ir ((true, cm) :: p) mt []) as [o1 |];
+      cbn [option_map]; [| reflexivity].
+    rewrite IHmf at 1; rewrite (IHmf _ o1);
+      destruct (collect_call_obls_ret_acc ret_w rw e_ir ((false, cm) :: p) mf []) as [o2 |];
+      cbn [option_map]; [rewrite <- app_assoc; reflexivity | reflexivity].
+  - rewrite app_nil_r; reflexivity.
+Qed.
+
+Fixpoint collect_call_obls_acc
   (arch : elf_arch) (callees : list mc_callee_spec) (ret_w : positive)
   (path : list (bool * cert_expr)) (t_ir : ir_call_tree) (t_mc : mc_call_tree)
+  (acc : list mc_loop_obl)
   {struct t_ir} : option (list mc_loop_obl) :=
-  let fix go_mc (p : list (bool * cert_expr)) (m : mc_call_tree) {struct m}
-      : option (list mc_loop_obl) :=
-    match t_ir with
-    | ICT_UB => Some []
-    | ICT_Branch c dt df =>
-        match collect_call_obls arch callees ret_w ((true, c) :: p) dt m,
-              collect_call_obls arch callees ret_w ((false, c) :: p) df m with
-        | Some o1, Some o2 => Some (o1 ++ o2)
-        | _, _ => None
-        end
-    | ICT_Ret rw e_ir =>
-        match m with
-        | MCT_Ret e_mc =>
-            if Pos.eqb rw ret_w then Some [MLO_Refine false p ret_w e_ir e_mc] else None
-        | MCT_Branch c mt mf =>
-            match go_mc ((true, c) :: p) mt, go_mc ((false, c) :: p) mf with
-            | Some o1, Some o2 => Some (o1 ++ o2)
-            | _, _ => None
-            end
-        | MCT_Call _ _ _ _ _ _ _ => Some (imposs_obl false p)
-        end
-    | ICT_Call cn_ir args_ir rw_ir rv_ir c_ir =>
+  match t_ir with
+  | ICT_UB => Some acc
+  | ICT_Branch c dt df =>
+      match collect_call_obls_acc arch callees ret_w ((true, c) :: path) dt t_mc acc with
+      | None => None
+      | Some a1 => collect_call_obls_acc arch callees ret_w ((false, c) :: path) df t_mc a1
+      end
+  | ICT_Ret rw e_ir => collect_call_obls_ret_acc ret_w rw e_ir path t_mc acc
+  | ICT_Call cn_ir args_ir rw_ir rv_ir c_ir =>
+      (fix go_call (p : list (bool * cert_expr)) (m : mc_call_tree) (a : list mc_loop_obl) {struct m}
+          : option (list mc_loop_obl) :=
         match m with
         | MCT_Branch c mt mf =>
-            match go_mc ((true, c) :: p) mt, go_mc ((false, c) :: p) mf with
-            | Some o1, Some o2 => Some (o1 ++ o2)
-            | _, _ => None
+            match go_call ((true, c) :: p) mt a with
+            | None => None
+            | Some a1 => go_call ((false, c) :: p) mf a1
             end
-        | MCT_Ret _ => Some (imposs_obl false p)
+        | MCT_Ret _ => Some (imposs_obl false p ++ a)
         | MCT_Call cn_mc args_mc rw_mc _ rv_mc _ c_mc =>
             if String.eqb cn_ir cn_mc && Pos.eqb rw_ir rw_mc && String.eqb rv_ir rv_mc then
               match find_callee_spec callees cn_ir with
               | None => None
               | Some sp =>
                   if Pos.eqb rw_ir (mcs_ret_width sp) then
-                    match build_call_arg_obls arch p (mcs_args sp) args_ir args_mc,
-                          collect_call_obls arch callees ret_w p c_ir c_mc with
-                    | Some aobls, Some cobls => Some (aobls ++ cobls)
-                    | _, _ => None
+                    match build_call_arg_obls_acc arch p (mcs_args sp) args_ir args_mc a with
+                    | None => None
+                    | Some a1 => collect_call_obls_acc arch callees ret_w p c_ir c_mc a1
                     end
                   else None
               end
-            else Some (imposs_obl false p)
-        end
-    end in
-  go_mc path t_mc.
-
-Fixpoint dedup_typed_vars (vs : list (string * positive)) : list (string * positive) :=
-  match vs with
-  | [] => []
-  | (nm, w) :: rest =>
-      if existsb (fun '(x, _) => String.eqb nm x) rest then dedup_typed_vars rest
-      else (nm, w) :: dedup_typed_vars rest
+            else Some (imposs_obl false p ++ a)
+        end) path t_mc acc
   end.
+
+Lemma collect_call_obls_acc_ict_call_ret :
+  forall arch callees ret_w p cn_ir args_ir rw_ir rv_ir c_ir e_mc acc,
+    collect_call_obls_acc arch callees ret_w p (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) (MCT_Ret e_mc) acc =
+    Some (imposs_obl false p ++ acc).
+Proof. reflexivity. Qed.
+
+Lemma collect_call_obls_acc_ict_call_branch :
+  forall arch callees ret_w p cn_ir args_ir rw_ir rv_ir c_ir c mt mf acc,
+    collect_call_obls_acc arch callees ret_w p (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) (MCT_Branch c mt mf) acc =
+    match collect_call_obls_acc arch callees ret_w ((true, c) :: p) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mt acc with
+    | None => None
+    | Some a1 => collect_call_obls_acc arch callees ret_w ((false, c) :: p) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mf a1
+    end.
+Proof. reflexivity. Qed.
+
+Lemma collect_call_obls_acc_ict_call_call :
+  forall arch callees ret_w p cn_ir args_ir rw_ir rv_ir c_ir cn_mc args_mc rw_mc rm_mc rv_mc oh_mc c_mc acc,
+    collect_call_obls_acc arch callees ret_w p (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir)
+      (MCT_Call cn_mc args_mc rw_mc rm_mc rv_mc oh_mc c_mc) acc =
+    (if String.eqb cn_ir cn_mc && Pos.eqb rw_ir rw_mc && String.eqb rv_ir rv_mc then
+       match find_callee_spec callees cn_ir with
+       | None => None
+       | Some sp =>
+           if Pos.eqb rw_ir (mcs_ret_width sp) then
+             match build_call_arg_obls_acc arch p (mcs_args sp) args_ir args_mc acc with
+             | None => None
+             | Some a1 => collect_call_obls_acc arch callees ret_w p c_ir c_mc a1
+             end
+           else None
+       end
+     else Some (imposs_obl false p ++ acc)).
+Proof. reflexivity. Qed.
+
+Definition collect_call_obls
+  (arch : elf_arch) (callees : list mc_callee_spec) (ret_w : positive)
+  (path : list (bool * cert_expr)) (t_ir : ir_call_tree) (t_mc : mc_call_tree)
+  : option (list mc_loop_obl) :=
+  collect_call_obls_acc arch callees ret_w path t_ir t_mc [].
+
+Lemma collect_call_obls_acc_shift : forall arch callees ret_w path t_ir t_mc acc,
+  collect_call_obls_acc arch callees ret_w path t_ir t_mc acc =
+  option_map (fun xs => xs ++ acc) (collect_call_obls arch callees ret_w path t_ir t_mc).
+Proof.
+  unfold collect_call_obls.
+  intros arch callees ret_w path t_ir; revert path;
+    induction t_ir as [rw e_ir | | c dt IHt df IHf | cn_ir args_ir rw_ir rv_ir c_ir IHc];
+    intros path t_mc acc.
+  - cbn [collect_call_obls_acc]; exact (collect_call_obls_ret_acc_shift ret_w rw e_ir path t_mc acc).
+  - cbn [collect_call_obls_acc option_map]; reflexivity.
+  - cbn [collect_call_obls_acc].
+    rewrite IHt at 1;
+      destruct (collect_call_obls_acc arch callees ret_w ((true, c) :: path) dt t_mc []) as [o1 |];
+      cbn [option_map]; [| reflexivity].
+    rewrite IHf at 1; rewrite (IHf ((false, c) :: path) t_mc o1);
+      destruct (collect_call_obls_acc arch callees ret_w ((false, c) :: path) df t_mc []) as [o2 |];
+      cbn [option_map]; [rewrite <- app_assoc; reflexivity | reflexivity].
+  - induction t_mc as [e_mc | cm mt IHmt mf IHmf | cn_mc args_mc rw_mc rm_mc rv_mc oh_mc c_mc] in path, acc |- *.
+    + rewrite !collect_call_obls_acc_ict_call_ret; cbn [option_map]; rewrite app_nil_r; reflexivity.
+    + rewrite !collect_call_obls_acc_ict_call_branch.
+      rewrite IHmt at 1;
+        destruct (collect_call_obls_acc arch callees ret_w ((true, cm) :: path) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mt []) as [o1 |];
+        cbn [option_map]; [| reflexivity].
+      rewrite IHmf at 1; rewrite (IHmf _ o1);
+        destruct (collect_call_obls_acc arch callees ret_w ((false, cm) :: path) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mf []) as [o2 |];
+        cbn [option_map]; [rewrite <- app_assoc; reflexivity | reflexivity].
+    + rewrite !collect_call_obls_acc_ict_call_call.
+      destruct (String.eqb cn_ir cn_mc && Pos.eqb rw_ir rw_mc && String.eqb rv_ir rv_mc);
+        [| cbn [option_map]; rewrite app_nil_r; reflexivity].
+      destruct (find_callee_spec callees cn_ir) as [sp |]; [| reflexivity].
+      destruct (Pos.eqb rw_ir (mcs_ret_width sp)); [| reflexivity].
+      rewrite !build_call_arg_obls_acc_shift.
+      destruct (build_call_arg_obls arch path (mcs_args sp) args_ir args_mc) as [ao |];
+        cbn [option_map]; [rewrite app_nil_r | reflexivity].
+      rewrite IHc, (IHc path c_mc ao);
+        destruct (collect_call_obls_acc arch callees ret_w path c_ir c_mc []) as [co |];
+        cbn [option_map]; [rewrite <- app_assoc; reflexivity | reflexivity].
+Qed.
+
+Fixpoint dedup_typed_vars_acc
+  (vs acc : list (string * positive)) : list (string * positive) :=
+  match vs with
+  | [] => acc
+  | (nm, w) :: rest =>
+      if existsb (fun '(x, _) => String.eqb nm x) acc then dedup_typed_vars_acc rest acc
+      else dedup_typed_vars_acc rest ((nm, w) :: acc)
+  end.
+
+Definition dedup_typed_vars (vs : list (string * positive)) : list (string * positive) :=
+  dedup_typed_vars_acc vs [].
+
+Lemma dedup_typed_vars_acc_nodup : forall vs acc,
+  NoDup (List.map fst acc) ->
+  NoDup (List.map fst (dedup_typed_vars_acc vs acc)).
+Proof.
+  induction vs as [| [nm w] rest IH]; intros acc Hnd;
+    cbn [dedup_typed_vars_acc]; [exact Hnd |].
+  destruct (existsb (fun '(x, _) => String.eqb nm x) acc) eqn:Eex; [exact (IH _ Hnd) |].
+  apply IH; cbn [List.map]; constructor; [| exact Hnd].
+  intro Hin; apply in_map_iff in Hin as [[x wx] [Heq Hina]]; cbn in Heq; subst x.
+  assert (Htru : existsb (fun '(x, _) => String.eqb nm x) acc = true)
+    by (apply existsb_exists; exists (nm, wx); split; [exact Hina | apply String.eqb_refl]).
+  congruence.
+Qed.
 
 Lemma dedup_typed_vars_nodup : forall vs,
   NoDup (List.map fst (dedup_typed_vars vs)).
+Proof. intro vs; apply dedup_typed_vars_acc_nodup; constructor. Qed.
+
+Lemma dedup_typed_vars_acc_sub : forall vs acc nm w,
+  In (nm, w) (dedup_typed_vars_acc vs acc) -> In (nm, w) vs \/ In (nm, w) acc.
 Proof.
-  induction vs as [| [nm w] rest IH]; cbn [dedup_typed_vars List.map]; [constructor |].
-  destruct (existsb (fun '(x, _) => String.eqb nm x) rest) eqn:Eex; [exact IH |].
-  constructor; [| exact IH].
-  intro Hin; apply in_map_iff in Hin as [[x wx] [Heq Hdin]]; cbn in Heq; subst x.
-  assert (Hsub : In (nm, wx) rest).
-  { clear Eex IH; induction rest as [| [y wy] r IH]; cbn in Hdin; [contradiction |].
-    destruct (existsb (fun '(z, _) => String.eqb y z) r);
-      [right; exact (IH Hdin) | destruct Hdin as [Heq | Hr]; [left; exact Heq | right; exact (IH Hr)]]. }
-  assert (Htru : existsb (fun '(x, _) => String.eqb nm x) rest = true)
-    by (apply existsb_exists; exists (nm, wx); split; [exact Hsub | apply String.eqb_refl]).
-  congruence.
+  induction vs as [| [a wa] rest IH]; intros acc nm w Hin;
+    cbn [dedup_typed_vars_acc] in Hin; [right; exact Hin |].
+  destruct (existsb (fun '(x, _) => String.eqb a x) acc).
+  - destruct (IH _ _ _ Hin) as [Hr | Ha]; [left; right; exact Hr | right; exact Ha].
+  - destruct (IH _ _ _ Hin) as [Hr | Ha].
+    + left; right; exact Hr.
+    + destruct Ha as [Heq | Ha]; [left; left; exact Heq | right; exact Ha].
+Qed.
+
+Lemma dedup_typed_vars_sub : forall vs nm w,
+  In (nm, w) (dedup_typed_vars vs) -> In (nm, w) vs.
+Proof.
+  intros vs nm w Hin; destruct (dedup_typed_vars_acc_sub vs [] nm w Hin) as [H | H];
+    [exact H | contradiction H].
 Qed.
 
 Definition vars_width_consistent (raw all_vars : list (string * positive)) : bool :=
@@ -2432,11 +2688,12 @@ Definition build_mc_call_bundle_rv64
             match collect_call_obls EA_Riscv64 callees ret_w [] t_ir t_mc with
             | None => inl "failed to collect RV64 call-tree obligations"
             | Some obls =>
-                let call_vars := dedup_typed_vars (collect_ir_call_vars t_ir ++ collect_mc_call_vars t_mc) in
-                let all_vars := dedup_typed_vars (allowed0 ++ call_vars) in
+                let raw_cvars := collect_ir_call_vars_acc t_ir (collect_mc_call_vars_acc t_mc []) in
+                let call_vars := dedup_typed_vars raw_cvars in
+                let all_vars := dedup_typed_vars_acc allowed0 call_vars in
                 let call_ctx := List.map (fun '(nm, w) => UBA_ParamNoUndef nm w) call_vars in
                 let all_ctx := mc_init_ctx ++ call_ctx in
-                if negb (vars_width_consistent (allowed0 ++ collect_ir_call_vars t_ir ++ collect_mc_call_vars t_mc) all_vars) then
+                if negb (vars_width_consistent allowed0 all_vars && vars_width_consistent raw_cvars all_vars) then
                   inl "inconsistent variable widths across call tree branches"
                 else if negb (forallb (obl_wf_exprs all_vars) obls) then
                   inl "ill-typed or ill-scoped call obligation"
@@ -2470,11 +2727,12 @@ Definition build_mc_call_bundle_a64
             match collect_call_obls EA_AArch64 callees ret_w [] t_ir t_mc with
             | None => inl "failed to collect AArch64 call-tree obligations"
             | Some obls =>
-                let call_vars := dedup_typed_vars (collect_ir_call_vars t_ir ++ collect_mc_call_vars t_mc) in
-                let all_vars := dedup_typed_vars (allowed0 ++ call_vars) in
+                let raw_cvars := collect_ir_call_vars_acc t_ir (collect_mc_call_vars_acc t_mc []) in
+                let call_vars := dedup_typed_vars raw_cvars in
+                let all_vars := dedup_typed_vars_acc allowed0 call_vars in
                 let call_ctx := List.map (fun '(nm, w) => UBA_ParamNoUndef nm w) call_vars in
                 let all_ctx := mc_init_ctx ++ call_ctx in
-                if negb (vars_width_consistent (allowed0 ++ collect_ir_call_vars t_ir ++ collect_mc_call_vars t_mc) all_vars) then
+                if negb (vars_width_consistent allowed0 all_vars && vars_width_consistent raw_cvars all_vars) then
                   inl "inconsistent variable widths across call tree branches"
                 else if negb (forallb (obl_wf_exprs all_vars) obls) then
                   inl "ill-typed or ill-scoped call obligation"
@@ -2977,8 +3235,10 @@ Proof.
 Qed.
 
 Lemma summarize_rv64_call_at_exec {Pa : Params} :
-  forall fuel insts callees visited pc cid sp_off vrf astk ret_w allowed t_mc
-         (O : rv_call_oracle) (penv0 : param_env Pa) rf0 rf mstk,
+  forall insts im
+    (Him : forall pc, pt_get (N.succ_pos pc) im = lookup_rv_call_inst insts pc)
+    fuel callees visited pc cid sp_off vrf astk ret_w allowed t_mc
+    (O : rv_call_oracle) (penv0 : param_env Pa) rf0 rf mstk,
     rv_supported_arg_width ret_w = true ->
     (forall c, In c callees -> rv_supported_arg_width (mcs_ret_width c) = true) ->
     forallb rv_call_inst_no_word_mulh insts = true ->
@@ -2992,7 +3252,7 @@ Lemma summarize_rv64_call_at_exec {Pa : Params} :
        forall k' w', (cid <= k')%nat -> nm <> mc_call_ret_var k' w' /\ nm <> mc_call_hi_var k') ->
     rv_val_regs_agrees penv0 dummy_freeze_oracle rf0 (rv_read_reg 2%N rf0) vrf rf ->
     mc_sym_stack_agrees penv0 dummy_freeze_oracle (fun r => rv_read_reg r rf0) (rv_read_reg 2%N rf0) astk mstk ->
-    summarize_rv64_call_at fuel insts callees visited pc cid sp_off vrf astk ret_w = Some t_mc ->
+    summarize_rv64_call_at fuel im callees visited pc cid sp_off vrf astk ret_w = Some t_mc ->
     exists tr_mc new_binds rf_end mstk_end,
       NoDup (List.map fst new_binds) /\
       binds_disjoint_from allowed new_binds /\
@@ -3016,12 +3276,13 @@ Lemma summarize_rv64_call_at_exec {Pa : Params} :
              (cn, List.map (fun j => rv_read_reg (10%N + N.of_nat j) rf_c) (seq 0 n), a0_r)) tr_mc)
           (rv_trunc_ret_val ret_w (rv_read_reg 10%N rf_end)).
 Proof.
-  intro fuel; induction fuel as [| fuel' IH];
-    intros insts callees visited pc cid sp_off vrf astk ret_w allowed t_mc
+  intros insts im Him fuel; induction fuel as [| fuel' IH];
+    intros callees visited pc cid sp_off vrf astk ret_w allowed t_mc
            O penv0 rf0 rf mstk Hrw Hcws Hmul HO Hsp0 Hrng Hsp2 Hvrf Hastk Hfresh Hag_rf Hag_stk Hsum;
     cbn [summarize_rv64_call_at] in Hsum;
-    destruct (n_in_list pc visited); try discriminate Hsum.
-  destruct (lookup_rv_call_inst insts pc) as [dec |] eqn:Hlk; [| discriminate Hsum].
+    destruct (pt_has_n pc visited); try discriminate Hsum.
+  destruct (pt_get (N.succ_pos pc) im) as [dec |] eqn:Hlk; [| discriminate Hsum].
+  rewrite Him in Hlk.
   assert (Hin_dec : In dec insts).
   { clear -Hlk; induction insts as [| d rest IHi]; cbn in Hlk; [discriminate |].
     destruct (N.eqb (drci_off d) pc); [inversion Hlk; left; reflexivity | right; exact (IHi Hlk)]. }
@@ -3041,7 +3302,7 @@ Proof.
     destruct res as [npc sp' vrf' astk' | cond tpc npc | ret_e].
     + destruct Hwf_step as (Hrng' & Hsp2' & Hvrf' & Hastk').
       destruct Hsd_step as (rf' & mstk' & Hexec1 & _ & _ & Hag_rf' & Hag_stk').
-      destruct (IH insts callees (pc :: visited) npc cid sp' vrf' astk' ret_w allowed t_mc
+      destruct (IH callees (pt_add_n pc visited) npc cid sp' vrf' astk' ret_w allowed t_mc
                    O penv0 rf0 rf' mstk' Hrw Hcws Hmul HO Hsp0 Hrng' Hsp2' Hvrf' Hastk' Hfresh
                    Hag_rf' Hag_stk' Hsum)
         as (tr_mc & nb & rf_end & mstk_end & Hnd & Hdisj & Hkge & Hcv & Hexec & Hpres & Hra & Hpath).
@@ -3049,23 +3310,23 @@ Proof.
       cbn [rv_exec_with_calls]; rewrite Hlk, Edi.
       destruct i; cbn [rv_exec_one_nonret] in Hexec1; try discriminate Hexec1;
         rewrite ?Hexec1; exact Hexec.
-    + destruct (summarize_rv64_call_at fuel' insts callees (pc :: visited) tpc cid sp_off vrf astk ret_w)
+    + destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) tpc cid sp_off vrf astk ret_w)
         as [dt |] eqn:Hdt; [| discriminate Hsum].
-      destruct (summarize_rv64_call_at fuel' insts callees (pc :: visited) npc cid sp_off vrf astk ret_w)
+      destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) npc cid sp_off vrf astk ret_w)
         as [df |] eqn:Hdf; [| discriminate Hsum].
       inversion Hsum; subst t_mc; clear Hsum.
       destruct Hwf_step as (Hwt_c & Hbw_c & Hlf_c & Hsub_c).
       destruct Hsd_step as [b [Hevc Hexec1]].
-      assert (Hnext_p : summarize_rv64_call_at fuel' insts callees (pc :: visited)
+      assert (Hnext_p : summarize_rv64_call_at fuel' im callees (pt_add_n pc visited)
                           (if b then tpc else npc) cid sp_off vrf astk ret_w = Some (if b then dt else df))
         by (destruct b; [exact Hdt | exact Hdf]).
-      destruct (IH insts callees (pc :: visited) (if b then tpc else npc) cid sp_off vrf astk ret_w
+      destruct (IH callees (pt_add_n pc visited) (if b then tpc else npc) cid sp_off vrf astk ret_w
                    allowed (if b then dt else df) O penv0 rf0 rf mstk
                    Hrw Hcws Hmul HO Hsp0 Hrng Hsp2 Hvrf Hastk Hfresh Hag_rf Hag_stk Hnext_p)
         as (tr_mc & nb & rf_end & mstk_end & Hnd & Hdisj & Hkge & Hcv & Hexec & Hpres & Hra & Hpath).
       exists tr_mc, nb, rf_end, mstk_end; repeat split; try assumption.
       * intros nm dv Hinn; destruct (Hcv nm dv Hinn) as (w & Hcm & Hv).
-        exists w; split; [cbn [collect_mc_call_vars]; apply in_app_iff; destruct b; [left | right]; exact Hcm | exact Hv].
+        exists w; split; [unfold collect_mc_call_vars; cbn [collect_mc_call_vars_acc]; rewrite collect_mc_call_vars_acc_shift; apply in_app_iff; destruct b; [right | left]; exact Hcm | exact Hv].
       * cbn [rv_exec_with_calls]; rewrite Hlk, Edi.
         destruct i; cbn [rv_exec_one_nonret] in Hexec1; try discriminate Hexec1;
           rewrite Hexec1; exact Hexec.
@@ -3093,7 +3354,7 @@ Proof.
     destruct (rv_sym_read_call_args_from 10%N (List.length (mcs_args c)) vrf) as [aes |] eqn:Eargs;
       [| discriminate Hsum].
     destruct (mc_post_call_ret_expr cid (mcs_ret_width c) (mcs_ret_ext c)) as [ret_e64 opt_hi] eqn:Epc.
-    destruct (summarize_rv64_call_at fuel' insts callees (pc :: visited)
+    destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited)
                 (pc + drci_len dec)%N (S cid) sp_off (rv_post_call_vrf cid c vrf) astk ret_w)
       as [cont |] eqn:Ect; [| discriminate Hsum].
     inversion Hsum; subst t_mc; clear Hsum.
@@ -3194,7 +3455,7 @@ Proof.
             intros nm0 w0 Hnm0; exact (Hp1_al nm0 w0 (vars_subset_b_incl _ _ Hsub_e _ Hnm0)). }
     assert (Hag_stk1 : mc_sym_stack_agrees penv1 dummy_freeze_oracle (fun r => rv_read_reg r rf0) (rv_read_reg 2%N rf0) astk mstk)
       by (eapply (mc_sym_stack_agrees_penv_agree penv0 penv1); [exact Hastk | intros nm w H; symmetry; exact (Hp1_al nm w H) | exact Hag_stk]).
-    destruct (IH insts callees (pc :: visited) next_pc (S cid) sp_off
+    destruct (IH callees (pt_add_n pc visited) next_pc (S cid) sp_off
                  (rv_post_call_vrf cid c vrf) astk ret_w allowed' cont
                  O penv1 rf0 rf_ret mstk Hrw Hcws Hmul HO Hsp0 Hrng Hsp2' Hvrf' Hastk' Hfresh' Hag_rf_ret Hag_stk1 Ect)
       as (tr_r & nb_r & rf_end & mstk_end & Hnd_r & Hdisj_r & Hkge_r & Hcv_r & Hexec_r & Hpres_r & Hra_r & Hpath_r).
@@ -3225,12 +3486,19 @@ Proof.
     + intros nm dv Hin; apply in_app_iff in Hin as [Hst | Hr].
       * unfold step_binds in Hst; destruct opt_hi as [hn |] eqn:Ehi.
         -- destruct Hst as [Heq | [Heq | []]]; inversion Heq; subst nm dv.
-           ++ exists (mcs_ret_width c); split; [cbn [collect_mc_call_vars]; left; reflexivity | exists v_ret; reflexivity].
-           ++ exists 64%positive; split; [cbn [collect_mc_call_vars]; right; left; reflexivity | exists (rv_read_reg 10%N rf_ret); reflexivity].
+           ++ exists (mcs_ret_width c); split;
+                [unfold collect_mc_call_vars; cbn [collect_mc_call_vars_acc]; rewrite collect_mc_call_vars_acc_shift; apply in_or_app; right; left; reflexivity
+                | exists v_ret; reflexivity].
+           ++ exists 64%positive; split;
+                [unfold collect_mc_call_vars; cbn [collect_mc_call_vars_acc]; rewrite collect_mc_call_vars_acc_shift; apply in_or_app; right; right; left; reflexivity
+                | exists (rv_read_reg 10%N rf_ret); reflexivity].
         -- destruct Hst as [Heq | []]; inversion Heq; subst nm dv.
-           exists (mcs_ret_width c); split; [cbn [collect_mc_call_vars]; left; reflexivity | exists v_ret; reflexivity].
+           exists (mcs_ret_width c); split;
+             [unfold collect_mc_call_vars; cbn [collect_mc_call_vars_acc]; rewrite collect_mc_call_vars_acc_shift; apply in_or_app; right; left; reflexivity
+             | exists v_ret; reflexivity].
       * destruct (Hcv_r nm dv Hr) as (w & Hcm & Hv); exists w; split;
-          [cbn [collect_mc_call_vars]; right; apply in_app_iff; right; exact Hcm | exact Hv].
+          [unfold collect_mc_call_vars; cbn [collect_mc_call_vars_acc]; rewrite collect_mc_call_vars_acc_shift; apply in_or_app; left; exact Hcm
+          | exact Hv].
     + cbn [rv_exec_with_calls]; rewrite Hlk, Edi, Hsp_eq_off, Esp_al.
       fold next_pc rf_link; rewrite HO_eq; cbn [fst snd]; rewrite Hexec_r; reflexivity.
     + exact Hpres_r.
@@ -3310,8 +3578,10 @@ Qed.
 (** *** 5.3 AArch64 Call-Tree Execution Witness *)
 
 Lemma summarize_a64_call_at_exec {Pa : Params} :
-  forall fuel insts callees visited pc cid sp_off vrf astk sfl fl_def ret_w allowed t_mc
-         (O : a64_call_oracle) (penv0 : param_env Pa) rf0 sp0 rf sp fl mstk,
+  forall insts im
+    (Him : forall pc, pt_get (N.succ_pos pc) im = lookup_a64_call_inst insts pc)
+    fuel callees visited pc cid sp_off vrf astk sfl fl_def ret_w allowed t_mc
+    (O : a64_call_oracle) (penv0 : param_env Pa) rf0 sp0 rf sp fl mstk,
     rv_supported_arg_width ret_w = true ->
     (forall c, In c callees ->
        rv_supported_arg_width (mcs_ret_width c) = true /\
@@ -3329,7 +3599,7 @@ Lemma summarize_a64_call_at_exec {Pa : Params} :
     a64_val_regs_agrees penv0 dummy_freeze_oracle rf0 sp0 vrf rf ->
     mc_sym_stack_agrees penv0 dummy_freeze_oracle (fun r0 => a64_read_reg r0 rf0) sp0 astk mstk ->
     (fl_def = true -> sym_flags_agree penv0 dummy_freeze_oracle sfl fl) ->
-    summarize_a64_call_at fuel insts callees visited pc cid sp_off vrf astk sfl fl_def ret_w = Some t_mc ->
+    summarize_a64_call_at fuel im callees visited pc cid sp_off vrf astk sfl fl_def ret_w = Some t_mc ->
     exists tr_mc new_binds rf_end fl_end mstk_end,
       NoDup (List.map fst new_binds) /\
       binds_disjoint_from allowed new_binds /\
@@ -3353,13 +3623,14 @@ Lemma summarize_a64_call_at_exec {Pa : Params} :
             (cn, List.map (fun j => a64_read_reg (N.of_nat j) rf_c) (seq 0 n), a0_r)) tr_mc)
           (rv_trunc_ret_val ret_w (a64_read_reg 0%N rf_end)).
 Proof.
-  intro fuel; induction fuel as [| fuel' IH];
-    intros insts callees visited pc cid sp_off vrf astk sfl fl_def ret_w allowed t_mc
+  intros insts im Him fuel; induction fuel as [| fuel' IH];
+    intros callees visited pc cid sp_off vrf astk sfl fl_def ret_w allowed t_mc
            O penv0 rf0 sp0 rf sp fl mstk
            Hrw Hcws Hval HO Hsp0 Hrng Hsp Hvrf Hastk Hflwf Hfresh Hag_rf Hag_stk Hfl Hsum;
     cbn [summarize_a64_call_at] in Hsum;
-    destruct (n_in_list pc visited); try discriminate Hsum.
-  destruct (lookup_a64_call_inst insts pc) as [dec |] eqn:Hlk; [| discriminate Hsum].
+    destruct (pt_has_n pc visited); try discriminate Hsum.
+  destruct (pt_get (N.succ_pos pc) im) as [dec |] eqn:Hlk; [| discriminate Hsum].
+  rewrite Him in Hlk.
   assert (Hin_dec : In dec insts).
   { clear -Hlk; induction insts as [| d rest IHi]; cbn in Hlk; [discriminate |].
     destruct (N.eqb (daci_off d) pc); [inversion Hlk; left; reflexivity | right; exact (IHi Hlk)]. }
@@ -3379,7 +3650,7 @@ Proof.
     destruct res as [npc sp_off' vrf' astk' sfl' fl_def' | cond tpc npc fl_def' | ret_e].
     + destruct Hwf_step as (Hrng' & Hvrf' & Hastk' & Hflwf').
       destruct Hsd_step as (rf' & sp' & fl' & mstk' & Hexec1 & _ & Hsp' & Hag_rf' & Hag_stk' & Hfl').
-      destruct (IH insts callees (pc :: visited) npc cid sp_off' vrf' astk' sfl' fl_def' ret_w
+      destruct (IH callees (pt_add_n pc visited) npc cid sp_off' vrf' astk' sfl' fl_def' ret_w
                    allowed t_mc O penv0 rf0 sp0 rf' sp' fl' mstk'
                    Hrw Hcws Hval HO Hsp0 Hrng' Hsp' Hvrf' Hastk' Hflwf' Hfresh Hag_rf' Hag_stk' Hfl' Hsum)
         as (tr_mc & nb & rf_end & fl_end & mstk_end & Hnd & Hdisj & Hkge & Hcv & Hexec & Hpres & Hpath).
@@ -3390,22 +3661,22 @@ Proof.
     + destruct Hwf_step as [Hcw Himp].
       destruct Hcw as (_ & _ & Hlf_c & Hsub_c).
       destruct Hsd_step as (b & Hevc & Hexec1 & _).
-      destruct (summarize_a64_call_at fuel' insts callees (pc :: visited) tpc cid sp_off vrf astk sfl fl_def' ret_w)
+      destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited) tpc cid sp_off vrf astk sfl fl_def' ret_w)
         as [dt |] eqn:Hdt; [| discriminate Hsum].
-      destruct (summarize_a64_call_at fuel' insts callees (pc :: visited) npc cid sp_off vrf astk sfl fl_def' ret_w)
+      destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited) npc cid sp_off vrf astk sfl fl_def' ret_w)
         as [df |] eqn:Hdf; [| discriminate Hsum].
       inversion Hsum; subst t_mc; clear Hsum.
-      assert (Hnext_p : summarize_a64_call_at fuel' insts callees (pc :: visited)
+      assert (Hnext_p : summarize_a64_call_at fuel' im callees (pt_add_n pc visited)
                           (if b then tpc else npc) cid sp_off vrf astk sfl fl_def' ret_w =
                         Some (if b then dt else df))
         by (destruct b; [exact Hdt | exact Hdf]).
-      destruct (IH insts callees (pc :: visited) (if b then tpc else npc) cid sp_off vrf astk sfl fl_def' ret_w
+      destruct (IH callees (pt_add_n pc visited) (if b then tpc else npc) cid sp_off vrf astk sfl fl_def' ret_w
                    allowed (if b then dt else df) O penv0 rf0 sp0 rf sp fl mstk
                    Hrw Hcws Hval HO Hsp0 Hrng Hsp Hvrf Hastk (fun h => Hflwf (Himp h)) Hfresh Hag_rf Hag_stk (fun h => Hfl (Himp h)) Hnext_p)
         as (tr_mc & nb & rf_end & fl_end & mstk_end & Hnd & Hdisj & Hkge & Hcv & Hexec & Hpres & Hpath).
       exists tr_mc, nb, rf_end, fl_end, mstk_end; repeat split; try assumption.
       * intros nm dv Hinn; destruct (Hcv nm dv Hinn) as (w & Hcm & Hv).
-        exists w; split; [cbn [collect_mc_call_vars]; apply in_app_iff; destruct b; [left | right]; exact Hcm | exact Hv].
+        exists w; split; [unfold collect_mc_call_vars; cbn [collect_mc_call_vars_acc]; rewrite collect_mc_call_vars_acc_shift; apply in_app_iff; destruct b; [right | left]; exact Hcm | exact Hv].
       * cbn [a64_exec_with_calls]; rewrite Hlk, Edi.
         destruct i; cbn [a64_exec_one_nonret] in Hexec1; try discriminate Hexec1;
           rewrite Hexec1; exact Hexec.
@@ -3433,7 +3704,7 @@ Proof.
     destruct (a64_sym_read_call_args_from 0%N (List.length (mcs_args c)) vrf) as [aes |] eqn:Eargs;
       [| discriminate Hsum].
     destruct (mc_post_call_ret_expr cid (mcs_ret_width c) (mcs_ret_ext c)) as [ret_e64 opt_hi] eqn:Epc.
-    destruct (summarize_a64_call_at fuel' insts callees (pc :: visited)
+    destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited)
                 (pc + 4%N)%N (S cid) sp_off (a64_post_call_vrf cid c vrf) astk sfl false ret_w)
       as [cont |] eqn:Ect; [| discriminate Hsum].
     inversion Hsum; subst t_mc; clear Hsum.
@@ -3525,7 +3796,7 @@ Proof.
           intros nm0 w0 Hnm0; exact (Hp1_al nm0 w0 (vars_subset_b_incl _ _ Hsub_e _ Hnm0)). }
     assert (Hag_stk1 : mc_sym_stack_agrees penv1 dummy_freeze_oracle (fun r => a64_read_reg r rf0) sp0 astk mstk)
       by (eapply (mc_sym_stack_agrees_penv_agree penv0 penv1); [exact Hastk | intros nm w H; symmetry; exact (Hp1_al nm w H) | exact Hag_stk]).
-    destruct (IH insts callees (pc :: visited) next_pc (S cid) sp_off
+    destruct (IH callees (pt_add_n pc visited) next_pc (S cid) sp_off
                  (a64_post_call_vrf cid c vrf) astk sfl false ret_w allowed' cont
                  O penv1 rf0 sp0 rf_ret sp fl_ret mstk
                  Hrw Hcws Hval HO Hsp0 Hrng Hsp Hvrf' Hastk' (fun C : false = true => ltac:(discriminate C))
@@ -3558,12 +3829,19 @@ Proof.
     + intros nm dv Hin; apply in_app_iff in Hin as [Hst | Hr].
       * unfold step_binds in Hst; destruct opt_hi as [hn |] eqn:Ehi.
         -- destruct Hst as [Heq | [Heq | []]]; inversion Heq; subst nm dv.
-           ++ exists (mcs_ret_width c); split; [cbn [collect_mc_call_vars]; left; reflexivity | exists v_ret; reflexivity].
-           ++ exists 64%positive; split; [cbn [collect_mc_call_vars]; right; left; reflexivity | exists (a64_read_reg 0%N rf_ret); reflexivity].
+           ++ exists (mcs_ret_width c); split;
+                [unfold collect_mc_call_vars; cbn [collect_mc_call_vars_acc]; rewrite collect_mc_call_vars_acc_shift; apply in_or_app; right; left; reflexivity
+                | exists v_ret; reflexivity].
+           ++ exists 64%positive; split;
+                [unfold collect_mc_call_vars; cbn [collect_mc_call_vars_acc]; rewrite collect_mc_call_vars_acc_shift; apply in_or_app; right; right; left; reflexivity
+                | exists (a64_read_reg 0%N rf_ret); reflexivity].
         -- destruct Hst as [Heq | []]; inversion Heq; subst nm dv.
-           exists (mcs_ret_width c); split; [cbn [collect_mc_call_vars]; left; reflexivity | exists v_ret; reflexivity].
+           exists (mcs_ret_width c); split;
+             [unfold collect_mc_call_vars; cbn [collect_mc_call_vars_acc]; rewrite collect_mc_call_vars_acc_shift; apply in_or_app; right; left; reflexivity
+             | exists v_ret; reflexivity].
       * destruct (Hcv_r nm dv Hr) as (w & Hcm & Hv); exists w; split;
-          [cbn [collect_mc_call_vars]; right; apply in_app_iff; right; exact Hcm | exact Hv].
+          [unfold collect_mc_call_vars; cbn [collect_mc_call_vars_acc]; rewrite collect_mc_call_vars_acc_shift; apply in_or_app; left; exact Hcm
+          | exact Hv].
     + cbn [a64_exec_with_calls]; rewrite Hlk, Edi, Hsp_eq_off, Esp_al.
       fold next_pc rf_link; rewrite HO_eq; cbn [fst snd]; rewrite Hexec_r; reflexivity.
     + exact Hpres_r.
@@ -3828,9 +4106,13 @@ Lemma build_call_arg_obls_length :
     List.length mc_args64 = List.length specs.
 Proof.
   intros arch path specs; induction specs as [| sp sr IH];
-    intros [| [[nd w] e] ir] [| m mr] obls Hbao; cbn in Hbao; try discriminate; [split; reflexivity |].
+    intros [| [[nd w] e] ir] [| m mr] obls Hbao;
+    try (cbn [build_call_arg_obls build_call_arg_obls_acc] in Hbao; discriminate Hbao);
+    [split; reflexivity |].
+  rewrite build_call_arg_obls_cons in Hbao.
   destruct (Pos.eqb w (ras_width sp)); [| discriminate].
-  destruct (build_call_arg_obls arch path sr ir mr) as [rest |] eqn:Er; [| discriminate].
+  destruct (build_call_arg_cmp arch path sp w e m); [| discriminate].
+  destruct (build_call_arg_obls arch path sr ir mr) as [rest |] eqn:Er; cbn [option_map] in Hbao; [| discriminate].
   destruct (IH _ _ _ Er) as [H1 H2]; cbn; split; f_equal; assumption.
 Qed.
 
@@ -3893,22 +4175,27 @@ Proof.
   { clear Hnd Hlen Harg_eq.
     revert ir_args mc_args64 obls arg_vals vs_ir Hobls Hbao Hvs Hfir Hfmc.
     induction specs as [| sp0 srest IH]; intros [| [[nd0 w0] e0] irest] [| m0 mrest] ob0 avs vs0 Hob0 Hb0 Hvs0 Hfi0 Hfm0 k sp v_mc Hsp0_n Hav_n;
-      try (destruct k; discriminate Hsp0_n); cbn [build_call_arg_obls] in Hb0; try discriminate Hb0.
+      try (destruct k; discriminate Hsp0_n);
+      try (cbn [build_call_arg_obls build_call_arg_obls_acc] in Hb0; discriminate Hb0).
+    rewrite build_call_arg_obls_cons in Hb0; cbn [build_call_arg_cmp] in Hb0.
     destruct (Pos.eqb w0 (ras_width sp0)) eqn:Epw; [apply Pos.eqb_eq in Epw; subst w0 | discriminate Hb0].
-    destruct (build_call_arg_obls EA_Riscv64 path srest irest mrest) as [rest_o |] eqn:Erest; [| discriminate Hb0].
+    destruct (build_call_arg_obls EA_Riscv64 path srest irest mrest) as [rest_o |] eqn:Erest;
+      cbn [option_map] in Hb0; [| discriminate Hb0].
     inversion Hb0; subst ob0; clear Hb0.
     destruct avs as [| vm0 av_r]; [inversion Hfm0 |].
     destruct vs0 as [| dv0 vs_r]; [inversion Hfi0 |].
     inversion Hvs0 as [| ? ? Hsp0_v Hvs_r]; subst.
     inversion Hfi0 as [| ? ? ? ? Hp0 Hfi_r]; subst; destruct Hp0 as [Hev0 [Hsc0 Hnd0]].
     inversion Hfm0 as [| ? ? ? ? Hm0 Hfm_r]; subst.
-    rewrite Forall_app in Hob0; destruct Hob0 as [Hdef0 Htail0];
-      inversion Htail0 as [| ? ? Hc0 Hrest_o]; subst.
+    rewrite Forall_app in Hob0; destruct Hob0 as [Hrest_o Hhead0].
+    assert (Hc0 : mc_obl_holds penv dummy_freeze_oracle None false
+                    (MLO_Refine false path 64%positive (build_rv_call_arg_expr (ras_width sp0) (ras_ext sp0) e0) m0)).
+    { destruct nd0; [inversion Hhead0 as [| ? ? _ Htl]; inversion Htl; assumption | inversion Hhead0; assumption]. }
     destruct k as [| k']; cbn in Hsp0_n, Hav_n.
     - inversion Hsp0_n; subst sp0; inversion Hav_n; subst vm0; clear Hsp0_n Hav_n.
       assert (Hwd0 : dvalue_well_defined dv0 = true).
       { destruct nd0; [| exact (Hnd0 eq_refl)].
-        inversion Hdef0 as [| ? ? Hd _]; subst.
+        inversion Hhead0 as [| ? ? Hd _]; subst.
         pose proof (Hd eq_refl ltac:(discriminate) Hpath) as [v Hv1].
         unfold eval_closed_cert_expr in *; rewrite Hev0 in Hv1; inversion Hv1; reflexivity. }
       destruct Hsc0 as [Hbad | [iv ->]]; [rewrite Hbad in Hwd0; discriminate Hwd0 |].
@@ -3988,24 +4275,29 @@ Proof.
   { clear Hnd Hlen Harg_eq.
     revert ir_args mc_args64 obls arg_vals vs_ir Hobls Hbao Hvs Hfir Hfmc.
     induction specs as [| sp0 srest IH]; intros [| [[nd0 w0] e0] irest] [| m0 mrest] ob0 avs vs0 Hob0 Hb0 Hvs0 Hfi0 Hfm0 k sp v_mc Hsp0_n Hav_n;
-      try (destruct k; discriminate Hsp0_n); cbn [build_call_arg_obls] in Hb0; try discriminate Hb0.
+      try (destruct k; discriminate Hsp0_n);
+      try (cbn [build_call_arg_obls build_call_arg_obls_acc] in Hb0; discriminate Hb0).
+    rewrite build_call_arg_obls_cons in Hb0; cbn [build_call_arg_cmp] in Hb0.
     destruct (Pos.eqb w0 (ras_width sp0)) eqn:Epw; [apply Pos.eqb_eq in Epw; subst w0 | discriminate Hb0].
-    destruct (build_call_arg_obls EA_AArch64 path srest irest mrest) as [rest_o |] eqn:Erest; [| discriminate Hb0].
     match type of Hb0 with
     | context [match ?x with Some _ => _ | None => _ end] => destruct x as [cmp0 |] eqn:Ecmp0; [| discriminate Hb0]
     end.
+    destruct (build_call_arg_obls EA_AArch64 path srest irest mrest) as [rest_o |] eqn:Erest;
+      cbn [option_map] in Hb0; [| discriminate Hb0].
     inversion Hb0; subst ob0; clear Hb0.
     destruct avs as [| vm0 av_r]; [inversion Hfm0 |].
     destruct vs0 as [| dv0 vs_r]; [inversion Hfi0 |].
     inversion Hvs0 as [| ? ? Hsp0_v Hvs_r]; subst.
     inversion Hfi0 as [| ? ? ? ? Hp0 Hfi_r]; subst; destruct Hp0 as [Hev0 [Hsc0 Hnd0]].
     inversion Hfm0 as [| ? ? ? ? Hm0 Hfm_r]; subst.
-    rewrite !Forall_app in Hob0; destruct Hob0 as [Hdef0 [Hcmp0 Hrest_o]].
+    rewrite Forall_app in Hob0; destruct Hob0 as [Hrest_o Hhead0].
+    assert (Hcmp0 : Forall (mc_obl_holds penv dummy_freeze_oracle None false) [cmp0])
+      by (destruct nd0; [inversion Hhead0; assumption | exact Hhead0]).
     destruct k as [| k']; cbn in Hsp0_n, Hav_n.
     - inversion Hsp0_n; subst sp0; inversion Hav_n; subst vm0; clear Hsp0_n Hav_n.
       assert (Hwd0 : dvalue_well_defined dv0 = true).
       { destruct nd0; [| exact (Hnd0 eq_refl)].
-        inversion Hdef0 as [| ? ? Hd _]; subst.
+        inversion Hhead0 as [| ? ? Hd _]; subst.
         pose proof (Hd eq_refl ltac:(discriminate) Hpath) as [v Hv1].
         unfold eval_closed_cert_expr in *; rewrite Hev0 in Hv1; inversion Hv1; reflexivity. }
       destruct Hsc0 as [Hbad | [iv ->]]; [rewrite Hbad in Hwd0; discriminate Hwd0 |].
@@ -4834,7 +5126,8 @@ Proof.
   intros insts callees arg_specs ret_w allowed t_mc Hrw Hcws Hmul Hws Hargs_al Hsum.
   unfold summarize_rv64_call_tree in Hsum.
   eapply summarize_rv64_call_at_wfsym;
-    [exact Hrw | exact Hcws | exact Hmul | | | exact (rv_init_val_regs_wf allowed arg_specs Hargs_al Hws) | | exact Hsum].
+    [exact (pt_of_list_first_lookup_rv_call insts)
+    | exact Hrw | exact Hcws | exact Hmul | | | exact (rv_init_val_regs_wf allowed arg_specs Hargs_al Hws) | | exact Hsum].
   - unfold mc_frame_cap; lia.
   - unfold rv_val_read; cbn [N.eqb]; rewrite rv_build_init_val_regs_other by lia; reflexivity.
   - constructor.
@@ -4871,7 +5164,8 @@ Proof.
     (ras_width sp <> 64%positive -> In (a64_hi_var_name (ras_name sp), 64%positive) allowed)).
   { intros sp Hsp; split; [exact (Hargs_al sp Hsp) | intro Hne; exact (Hhi_al _ (a64_hi_vars_in_specs _ _ Hsp Hne))]. }
   eapply summarize_a64_call_at_wfsym;
-    [exact Hrw | exact Hcws | exact Hval | | exact (a64_init_val_regs_wf allowed arg_specs Hall_a64 Hws) | | | exact Hsum].
+    [exact (pt_of_list_first_lookup_a64_call insts)
+    | exact Hrw | exact Hcws | exact Hval | | exact (a64_init_val_regs_wf allowed arg_specs Hall_a64 Hws) | | | exact Hsum].
   - unfold mc_frame_cap; lia.
   - constructor.
   - intro C; discriminate C.
@@ -4982,19 +5276,25 @@ Proof.
     revert ir_args mc_args64 obls arg_vals vs_ir Hobls Hbao Hvs Hfir Hfmc.
     induction specs as [| sp0 srest IH];
       intros [| [[nd0 w0] e0] irest] [| m0 mrest] ob0 avs vs0 Hob0 Hb0 Hvs0 Hfi0 Hfm0 k sp v_mc Hsp0_n Hav_n;
-      try (destruct k; discriminate Hsp0_n); cbn [build_call_arg_obls] in Hb0; try discriminate Hb0.
+      try (destruct k; discriminate Hsp0_n); cbn [build_call_arg_obls build_call_arg_obls_acc] in Hb0; try discriminate Hb0.
     destruct (Pos.eqb w0 (ras_width sp0)) eqn:Epw; [apply Pos.eqb_eq in Epw; subst w0 | discriminate Hb0].
-    destruct (build_call_arg_obls arch path srest irest mrest) as [rest_o |] eqn:Erest; [| discriminate Hb0].
     match type of Hb0 with
     | context [match ?x with Some _ => _ | None => _ end] => destruct x as [cmp0 |] eqn:Ecmp0; [| discriminate Hb0]
     end.
+    rewrite build_call_arg_obls_acc_shift in Hb0.
+    destruct (build_call_arg_obls arch path srest irest mrest) as [rest_o |] eqn:Erest;
+      cbn [option_map] in Hb0; [| discriminate Hb0].
     inversion Hb0; subst ob0; clear Hb0.
     destruct avs as [| vm0 av_r]; [inversion Hfm0 |].
     destruct vs0 as [| dv0 vs_r]; [inversion Hfi0 |].
     inversion Hvs0 as [| ? ? Hsp0_v Hvs_r]; subst.
     inversion Hfi0 as [| ? ? ? ? Hp0 Hfi_r]; subst; destruct Hp0 as [Hev0 [Hsc0 Hnd0]].
     inversion Hfm0 as [| ? ? ? ? Hm0 Hfm_r]; subst.
-    rewrite !Forall_app in Hob0; destruct Hob0 as [Hdef0 [Hcmp0 Hrest_o]].
+    rewrite Forall_app in Hob0; destruct Hob0 as [Hrest_o Hhead_o].
+    assert (Hdef0 : Forall (mc_obl_holds penv dummy_freeze_oracle None false) (if nd0 then [MLO_Defined false path (ras_width sp0) e0] else [])).
+    { destruct nd0; [inversion Hhead_o as [| ? ? Hd _]; constructor; [exact Hd | constructor] | constructor]. }
+    assert (Hcmp0 : Forall (mc_obl_holds penv dummy_freeze_oracle None false) [cmp0]).
+    { destruct nd0; [inversion Hhead_o as [| ? ? _ Hc]; exact Hc | exact Hhead_o]. }
     destruct k as [| k']; cbn in Hsp0_n, Hav_n.
     - inversion Hsp0_n; subst sp0; inversion Hav_n; subst vm0; clear Hsp0_n Hav_n.
       assert (Hwd0 : dvalue_well_defined dv0 = true).
@@ -5019,7 +5319,7 @@ Proof.
             erewrite ?eval_ce_sext, ?eval_ce_zext in Href by (first [exact Hltb | exact Hev0]);
             rewrite Hm0 in Href; cbn in Href; destruct Href as [Hbad | Heq];
             [discriminate Hbad | apply dvalue_i_inj in Heq; exact Heq | discriminate Hbad | apply dvalue_i_inj in Heq; exact Heq | discriminate Hbad | apply dvalue_i_inj in Heq; exact Heq].
-      + destruct (Pos.eqb (ras_width sp) 64%positive) eqn:Ew64.
+      + unfold build_call_arg_cmp in Ecmp0; destruct (Pos.eqb (ras_width sp) 64%positive) eqn:Ew64.
         * destruct (ras_ext sp); inversion Ecmp0; subst cmp0; clear Ecmp0.
           inversion Hcmp0 as [| ? ? Hc0 _]; subst; pose proof (Hc0 eq_refl ltac:(discriminate) Hpath) as Href.
           unfold refine_eou_dvalue, dvalue_refines in Href.
@@ -5072,12 +5372,24 @@ Lemma collect_call_obls_mct_branch :
     collect_call_obls arch callees ret_w p t_ir (MCT_Branch c mt mf) =
     match collect_call_obls arch callees ret_w ((true, c) :: p) t_ir mt,
           collect_call_obls arch callees ret_w ((false, c) :: p) t_ir mf with
-    | Some o1, Some o2 => Some (o1 ++ o2)
+    | Some o1, Some o2 => Some (o2 ++ o1)
     | _, _ => None
     end.
 Proof.
-  intros arch callees ret_w p t_ir c mt mf Hub Hbr;
-    destruct t_ir; [reflexivity | exfalso; exact (Hub eq_refl) | exfalso; exact (Hbr _ _ _ eq_refl) | reflexivity].
+  intros arch callees ret_w p t_ir c mt mf Hub Hbr; unfold collect_call_obls;
+    destruct t_ir as [rw e_ir | | cond dt df | cn_ir args_ir rw_ir rv_ir c_ir].
+  - cbn [collect_call_obls_acc collect_call_obls_ret_acc].
+    destruct (collect_call_obls_ret_acc ret_w rw e_ir ((true, c) :: p) mt []) as [o1 |]; [| reflexivity].
+    rewrite collect_call_obls_ret_acc_shift.
+    destruct (collect_call_obls_ret_acc ret_w rw e_ir ((false, c) :: p) mf []) as [o2 |]; reflexivity.
+  - exfalso; exact (Hub eq_refl).
+  - exfalso; exact (Hbr _ _ _ eq_refl).
+  - rewrite collect_call_obls_acc_ict_call_branch.
+    destruct (collect_call_obls_acc arch callees ret_w ((true, c) :: p) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mt []) as [o1 |];
+      [| reflexivity].
+    rewrite collect_call_obls_acc_shift; unfold collect_call_obls.
+    destruct (collect_call_obls_acc arch callees ret_w ((false, c) :: p) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mf []) as [o2 |];
+      reflexivity.
 Qed.
 
 Lemma collect_call_obls_ict_branch :
@@ -5085,10 +5397,18 @@ Lemma collect_call_obls_ict_branch :
     collect_call_obls arch callees ret_w p (ICT_Branch cond dt df) m =
     match collect_call_obls arch callees ret_w ((true, cond) :: p) dt m,
           collect_call_obls arch callees ret_w ((false, cond) :: p) df m with
-    | Some o1, Some o2 => Some (o1 ++ o2)
+    | Some o1, Some o2 => Some (o2 ++ o1)
     | _, _ => None
     end.
-Proof. intros arch callees ret_w p cond dt df m; destruct m; reflexivity. Qed.
+Proof.
+  intros arch callees ret_w p cond dt df m; unfold collect_call_obls;
+    cbn [collect_call_obls_acc];
+    destruct (collect_call_obls_acc arch callees ret_w ((true, cond) :: p) dt m []) as [o1 |];
+    [| reflexivity];
+    rewrite collect_call_obls_acc_shift; unfold collect_call_obls;
+    destruct (collect_call_obls_acc arch callees ret_w ((false, cond) :: p) df m []) as [o2 |];
+    reflexivity.
+Qed.
 
 Lemma ir_mc_call_trees_sound {Pa : Params} :
   forall arch callees ret_w genv (penv : param_env Pa)
@@ -5164,7 +5484,7 @@ Proof.
     revert obls Hobls Hco.
     induction Hmt as [p0 ret_e v0 Hev_mc | p0 cond0 mt mf b tr_v v0 Hev_c Hmt_r IHm | p0 cn_m aes rw_m rext rv_m ohi cont avals a0r vc tr_v v0];
       intros obls Hobls Hco.
-    + cbn [collect_call_obls] in Hco.
+    + cbn [collect_call_obls collect_call_obls_acc collect_call_obls_ret_acc] in Hco.
       destruct (Pos.eqb rw ret_w) eqn:Erw; [| discriminate Hco].
       apply Pos.eqb_eq in Erw; subst rw.
       inversion Hco; subst obls; clear Hco.
@@ -5178,13 +5498,13 @@ Proof.
         [| discriminate Hco].
       destruct (collect_call_obls arch callees ret_w ((false, cond0) :: p0) (ICT_Ret rw e_ir) mf) as [o2 |] eqn:Eo2;
         [| discriminate Hco].
-      inversion Hco; subst obls; rewrite Forall_app in Hobls; destruct Hobls as [Ho1 Ho2].
+      inversion Hco; subst obls; rewrite Forall_app in Hobls; destruct Hobls as [Ho2 Ho1].
       assert (Hpath' : forall b0 c0, In (b0, c0) ((b, cond0) :: p0) ->
         eval_closed_cert_expr penv dummy_freeze_oracle c0 =
         raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if b0 then @Integers.one 1%positive else @Integers.zero 1%positive)))).
       { intros b0 c0 [Heq | Hin]; [inversion Heq; subst; exact Hev_c | exact (Hpath b0 c0 Hin)]. }
       destruct b; [exact (IHm Hpath' _ Ho1 Eo1) | exact (IHm Hpath' _ Ho2 Eo2)].
-    + cbn [collect_call_obls] in Hco; inversion Hco; subst obls.
+    + cbn [collect_call_obls collect_call_obls_acc collect_call_obls_ret_acc] in Hco; rewrite app_nil_r in Hco; inversion Hco; subst obls.
       exfalso; exact (imposs_obl_absurd penv dummy_freeze_oracle None false p0 (fun C => ltac:(discriminate C)) Hpath Hobls).
   - (* ICT_UB *)
     cbn [ir_tree_denotes] in Hden.
@@ -5195,7 +5515,7 @@ Proof.
       [| discriminate Hco].
     destruct (collect_call_obls arch callees ret_w ((false, cond) :: path) df t_mc) as [o2 |] eqn:Eo2;
       [| discriminate Hco].
-    inversion Hco; subst obls; rewrite Forall_app in Hobls; destruct Hobls as [Ho1 Ho2].
+    inversion Hco; subst obls; rewrite Forall_app in Hobls; destruct Hobls as [Ho2 Ho1].
     cbn [ir_call_tree_wf] in Hwf_ir; destruct Hwf_ir as [_ [Hwf_t Hwf_f]].
     cbn [ir_tree_denotes] in Hden; destruct Hden as [[_ Hub] | [b [Hev Hb]]].
     + left; exists []; split; [constructor | exact (Hub default_draw_strat)].
@@ -5213,28 +5533,31 @@ Proof.
     induction Hmt as [p0 ret_e v0 Hev_mc | p0 cond0 mt mf b tr_v v0 Hev_c Hmt_r IHm
                      | p0 cn_m aes rw_m rext rv_m ohi cont avals a0r vc tr_v v0 Hfa_mc Hrv_m Hvc_eq Hmt_cont _];
       intros obls Hobls Hco.
-    + cbn [collect_call_obls] in Hco; inversion Hco; subst obls.
+    + unfold collect_call_obls in Hco; rewrite collect_call_obls_acc_ict_call_ret in Hco; rewrite app_nil_r in Hco; inversion Hco; subst obls.
       exfalso; exact (imposs_obl_absurd penv dummy_freeze_oracle None false p0 (fun C => ltac:(discriminate C)) Hpath Hobls).
     + rewrite collect_call_obls_mct_branch in Hco by ltac:(discriminate).
       destruct (collect_call_obls arch callees ret_w ((true, cond0) :: p0) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mt)
         as [o1 |] eqn:Eo1; [| discriminate Hco].
       destruct (collect_call_obls arch callees ret_w ((false, cond0) :: p0) (ICT_Call cn_ir args_ir rw_ir rv_ir c_ir) mf)
         as [o2 |] eqn:Eo2; [| discriminate Hco].
-      inversion Hco; subst obls; rewrite Forall_app in Hobls; destruct Hobls as [Ho1 Ho2].
+      inversion Hco; subst obls; rewrite Forall_app in Hobls; destruct Hobls as [Ho2 Ho1].
       assert (Hpath' : forall b0 c0, In (b0, c0) ((b, cond0) :: p0) ->
         eval_closed_cert_expr penv dummy_freeze_oracle c0 =
         raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if b0 then @Integers.one 1%positive else @Integers.zero 1%positive)))).
       { intros b0 c0 [Heq | Hin]; [inversion Heq; subst; exact Hev_c | exact (Hpath b0 c0 Hin)]. }
       destruct b; [exact (IHm Hpath' _ Ho1 Eo1) | exact (IHm Hpath' _ Ho2 Eo2)].
-    + cbn [collect_call_obls] in Hco.
+    + unfold collect_call_obls in Hco; rewrite collect_call_obls_acc_ict_call_call in Hco.
       destruct (String.eqb cn_ir cn_m && Pos.eqb rw_ir rw_m && String.eqb rv_ir rv_m) eqn:Em.
       * rewrite !andb_true_iff in Em; destruct Em as [[Ecn Erw] Erv].
         apply String.eqb_eq in Ecn; apply Pos.eqb_eq in Erw; apply String.eqb_eq in Erv; subst cn_m rw_m rv_m.
         destruct (find_callee_spec callees cn_ir) as [sp |] eqn:Efc; [| discriminate Hco].
         destruct (Pos.eqb rw_ir (mcs_ret_width sp)) eqn:Ewrw; [apply Pos.eqb_eq in Ewrw | discriminate Hco].
-        destruct (build_call_arg_obls arch p0 (mcs_args sp) args_ir aes) as [aobls |] eqn:Ebao; [| discriminate Hco].
-        destruct (collect_call_obls arch callees ret_w p0 c_ir cont) as [cobls |] eqn:Eco; [| discriminate Hco].
-        inversion Hco; subst obls; rewrite Forall_app in Hobls; destruct Hobls as [Haobls Hcobls].
+        unfold build_call_arg_obls in *;
+          destruct (build_call_arg_obls_acc arch p0 (mcs_args sp) args_ir aes []) as [aobls |] eqn:Ebao; [| discriminate Hco].
+        rewrite collect_call_obls_acc_shift in Hco; unfold collect_call_obls in Hco.
+        destruct (collect_call_obls_acc arch callees ret_w p0 c_ir cont []) as [cobls |] eqn:Eco;
+          cbn [option_map] in Hco; [| discriminate Hco].
+        inversion Hco; subst obls; rewrite Forall_app in Hobls; destruct Hobls as [Hcobls Haobls].
         pose proof (find_callee_spec_in _ _ _ Efc) as [Hin_sp Hstrip].
         destruct (Hcs sp Hin_sp) as [Hvs_sp Hnd_sp].
         assert (Hvs_f : Forall rv_valid_arg_spec (mcs_args sp))
@@ -5260,7 +5583,7 @@ Proof.
               ** exact (Hub1 default_draw_strat tr_pre Hub_t).
            ++ right; exists ((cn_ir, dvs, DVALUE_Base (@DVALUE_I Pa rw_ir vc)) :: tr_t), env_out, dv_ir;
                 repeat split; [constructor; [exact Hrel_hd | exact Hfa_t] | exact (Hret1 default_draw_strat tr_t default_draw_strat env_out dv_ir Hret_t) | exact Href_t].
-      * inversion Hco; subst obls.
+      * rewrite app_nil_r in Hco; inversion Hco; subst obls.
         exfalso; exact (imposs_obl_absurd penv dummy_freeze_oracle None false p0 (fun C => ltac:(discriminate C)) Hpath Hobls).
 Qed.
 
@@ -5309,8 +5632,10 @@ Proof.
             destruct (Pos.eqb rw (mcs_ret_width sp)) eqn:Erw; [| discriminate Hrc];
             destruct (reify_ir_call_args lmap (mcs_args sp) args) as [aes |] eqn:Eaes; [| discriminate Hrc];
             destruct (reify_ir_code_calls callees rest (S cid) _ k_end) as [cont |] eqn:Ect; [| discriminate Hrc];
-            inversion Hrc; subst t; clear Hrc; cbn [collect_ir_call_vars] in Hin;
-            destruct Hin as [Heq | Hr]; [inversion Heq; subst; apply mc_call_ret_var_bang | exact (IH _ _ _ _ Hk Ect nm w Hr)]
+            inversion Hrc; subst t; clear Hrc;
+            unfold collect_ir_call_vars in Hin; cbn [collect_ir_call_vars_acc] in Hin;
+            rewrite collect_ir_call_vars_acc_shift in Hin; apply in_app_iff in Hin as [Hr | [Heq | []]];
+            [exact (IH _ _ _ _ Hk Ect nm w Hr) | inversion Heq; subst; apply mc_call_ret_var_bang]
           end.
 Qed.
 
@@ -5339,80 +5664,89 @@ Proof.
     destruct (ub_free_expr cond_e && negb (expr_has_freeze cond_e)); [| discriminate Ht'].
     destruct (reify_ir_call_at fuel' callees bmap ret_w (cur_bid :: visited) false cur_bid br1 cid' lmap') as [dt1 |] eqn:Edt; [| discriminate Ht'].
     destruct (reify_ir_call_at fuel' callees bmap ret_w (cur_bid :: visited) false cur_bid br2 cid' lmap') as [df1 |] eqn:Edf; [| discriminate Ht'].
-    inversion Ht'; subst t'; cbn [collect_ir_call_vars] in Hin.
-    apply in_app_iff in Hin as [Hin | Hin];
-      [exact (IH _ _ _ _ _ _ _ _ _ _ Edt nm w Hin) | exact (IH _ _ _ _ _ _ _ _ _ _ Edf nm w Hin)].
+    inversion Ht'; subst t';
+      unfold collect_ir_call_vars in Hin; cbn [collect_ir_call_vars_acc] in Hin;
+      rewrite collect_ir_call_vars_acc_shift in Hin; apply in_app_iff in Hin as [Hin | Hin];
+      [exact (IH _ _ _ _ _ _ _ _ _ _ Edf nm w Hin) | exact (IH _ _ _ _ _ _ _ _ _ _ Edt nm w Hin)].
   - exact (IH _ _ _ _ _ _ _ _ _ _ Ht' nm w Hin).
 Qed.
 
 Lemma summarize_rv64_call_at_vars_bang :
-  forall fuel insts callees visited pc cid sp_off vrf astk ret_w t,
-    summarize_rv64_call_at fuel insts callees visited pc cid sp_off vrf astk ret_w = Some t ->
+  forall fuel im callees visited pc cid sp_off vrf astk ret_w t,
+    summarize_rv64_call_at fuel im callees visited pc cid sp_off vrf astk ret_w = Some t ->
     forall nm w, In (nm, w) (collect_mc_call_vars t) -> mc_starts_with_bang nm = true.
 Proof.
   intro fuel; induction fuel as [| fuel' IH];
-    intros insts callees visited pc cid sp_off vrf astk ret_w t Hsum nm w Hin;
+    intros im callees visited pc cid sp_off vrf astk ret_w t Hsum nm w Hin;
     cbn [summarize_rv64_call_at] in Hsum;
-    destruct (n_in_list pc visited); try discriminate Hsum.
-  destruct (lookup_rv_call_inst insts pc) as [dec |]; [| discriminate Hsum].
+    destruct (pt_has_n pc visited); try discriminate Hsum.
+  destruct (pt_get (N.succ_pos pc) im) as [dec |]; [| discriminate Hsum].
   destruct (drci_inst dec) as [i | cname].
   - destruct (rv_sym_step_one (mk_decoded_rv (drci_off dec) (drci_len dec) i) pc sp_off vrf astk ret_w)
       as [[npc sp' vrf' astk' | cond tpc npc | ret_e] |] eqn:Est; try discriminate Hsum.
     + exact (IH _ _ _ _ _ _ _ _ _ _ Hsum nm w Hin).
-    + destruct (summarize_rv64_call_at fuel' insts callees (pc :: visited) tpc cid sp_off vrf astk ret_w) as [dt |] eqn:Hdt; [| discriminate Hsum].
-      destruct (summarize_rv64_call_at fuel' insts callees (pc :: visited) npc cid sp_off vrf astk ret_w) as [df |] eqn:Hdf; [| discriminate Hsum].
-      inversion Hsum; subst t; cbn [collect_mc_call_vars] in Hin; apply in_app_iff in Hin as [H | H];
-        [exact (IH _ _ _ _ _ _ _ _ _ _ Hdt nm w H) | exact (IH _ _ _ _ _ _ _ _ _ _ Hdf nm w H)].
+    + destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) tpc cid sp_off vrf astk ret_w) as [dt |] eqn:Hdt; [| discriminate Hsum].
+      destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) npc cid sp_off vrf astk ret_w) as [df |] eqn:Hdf; [| discriminate Hsum].
+      inversion Hsum; subst t;
+        unfold collect_mc_call_vars in Hin; cbn [collect_mc_call_vars_acc] in Hin;
+        rewrite collect_mc_call_vars_acc_shift in Hin; apply in_app_iff in Hin as [H | H];
+        [exact (IH _ _ _ _ _ _ _ _ _ _ Hdf nm w H) | exact (IH _ _ _ _ _ _ _ _ _ _ Hdt nm w H)].
     + inversion Hsum; subst t; contradiction Hin.
   - destruct (mc_sp_aligned16 sp_off); [| discriminate Hsum].
     destruct (find_callee_spec callees cname) as [c |]; [| discriminate Hsum].
     destruct (rv_sym_read_call_args_from 10%N (List.length (mcs_args c)) vrf); [| discriminate Hsum].
     destruct (mc_post_call_ret_expr cid (mcs_ret_width c) (mcs_ret_ext c)) as [ret_e64 opt_hi] eqn:Epc.
-    destruct (summarize_rv64_call_at fuel' insts callees (pc :: visited) (pc + drci_len dec)%N (S cid) sp_off (rv_post_call_vrf cid c vrf) astk ret_w)
+    destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) (pc + drci_len dec)%N (S cid) sp_off (rv_post_call_vrf cid c vrf) astk ret_w)
       as [cont |] eqn:Ect; [| discriminate Hsum].
-    inversion Hsum; subst t; cbn [collect_mc_call_vars] in Hin.
-    destruct Hin as [Heq | Hr]; [inversion Heq; subst; apply mc_call_ret_var_bang |].
+    inversion Hsum; subst t;
+      unfold collect_mc_call_vars in Hin; cbn [collect_mc_call_vars_acc] in Hin;
+      rewrite collect_mc_call_vars_acc_shift in Hin; apply in_app_iff in Hin as [Hr | Hh];
+      [exact (IH _ _ _ _ _ _ _ _ _ _ Ect nm w Hr) |].
     destruct opt_hi as [hn |] eqn:Eoh.
-    + destruct Hr as [Heq | Hr']; [| exact (IH _ _ _ _ _ _ _ _ _ _ Ect nm w Hr')].
-      inversion Heq; subst.
-      unfold mc_post_call_ret_expr in Epc; destruct (Pos.eqb _ 64%positive); [discriminate Epc |].
-      destruct (mcs_ret_ext c); inversion Epc; apply mc_call_hi_var_bang.
-    + exact (IH _ _ _ _ _ _ _ _ _ _ Ect nm w Hr).
+    + destruct Hh as [Heq | [Heq | []]]; inversion Heq; subst.
+      * apply mc_call_ret_var_bang.
+      * unfold mc_post_call_ret_expr in Epc; destruct (Pos.eqb _ 64%positive); [discriminate Epc |].
+        destruct (mcs_ret_ext c); inversion Epc; apply mc_call_hi_var_bang.
+    + destruct Hh as [Heq | []]; inversion Heq; subst; apply mc_call_ret_var_bang.
 Qed.
 
 Lemma summarize_a64_call_at_vars_bang :
-  forall fuel insts callees visited pc cid sp_off vrf astk sfl fl_def ret_w t,
-    summarize_a64_call_at fuel insts callees visited pc cid sp_off vrf astk sfl fl_def ret_w = Some t ->
+  forall fuel im callees visited pc cid sp_off vrf astk sfl fl_def ret_w t,
+    summarize_a64_call_at fuel im callees visited pc cid sp_off vrf astk sfl fl_def ret_w = Some t ->
     forall nm w, In (nm, w) (collect_mc_call_vars t) -> mc_starts_with_bang nm = true.
 Proof.
   intro fuel; induction fuel as [| fuel' IH];
-    intros insts callees visited pc cid sp_off vrf astk sfl fl_def ret_w t Hsum nm w Hin;
+    intros im callees visited pc cid sp_off vrf astk sfl fl_def ret_w t Hsum nm w Hin;
     cbn [summarize_a64_call_at] in Hsum;
-    destruct (n_in_list pc visited); try discriminate Hsum.
-  destruct (lookup_a64_call_inst insts pc) as [dec |]; [| discriminate Hsum].
+    destruct (pt_has_n pc visited); try discriminate Hsum.
+  destruct (pt_get (N.succ_pos pc) im) as [dec |]; [| discriminate Hsum].
   destruct (daci_inst dec) as [i | cname].
   - destruct (a64_sym_step_one (mk_decoded_a64_inst (daci_off dec) i) pc sp_off vrf astk sfl fl_def ret_w)
       as [[npc sp' vrf' astk' sfl' fl_def' | cond tpc npc fl_def' | ret_e] |] eqn:Est; try discriminate Hsum.
     + exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Hsum nm w Hin).
-    + destruct (summarize_a64_call_at fuel' insts callees (pc :: visited) tpc cid sp_off vrf astk sfl fl_def' ret_w) as [dt |] eqn:Hdt; [| discriminate Hsum].
-      destruct (summarize_a64_call_at fuel' insts callees (pc :: visited) npc cid sp_off vrf astk sfl fl_def' ret_w) as [df |] eqn:Hdf; [| discriminate Hsum].
-      inversion Hsum; subst t; cbn [collect_mc_call_vars] in Hin; apply in_app_iff in Hin as [H | H];
-        [exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Hdt nm w H) | exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Hdf nm w H)].
+    + destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited) tpc cid sp_off vrf astk sfl fl_def' ret_w) as [dt |] eqn:Hdt; [| discriminate Hsum].
+      destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited) npc cid sp_off vrf astk sfl fl_def' ret_w) as [df |] eqn:Hdf; [| discriminate Hsum].
+      inversion Hsum; subst t;
+        unfold collect_mc_call_vars in Hin; cbn [collect_mc_call_vars_acc] in Hin;
+        rewrite collect_mc_call_vars_acc_shift in Hin; apply in_app_iff in Hin as [H | H];
+        [exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Hdf nm w H) | exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Hdt nm w H)].
     + inversion Hsum; subst t; contradiction Hin.
   - destruct (mc_sp_aligned16 sp_off); [| discriminate Hsum].
     destruct (find_callee_spec callees cname) as [c |]; [| discriminate Hsum].
     destruct (a64_sym_read_call_args_from 0%N (List.length (mcs_args c)) vrf); [| discriminate Hsum].
     destruct (mc_post_call_ret_expr cid (mcs_ret_width c) (mcs_ret_ext c)) as [ret_e64 opt_hi] eqn:Epc.
-    destruct (summarize_a64_call_at fuel' insts callees (pc :: visited) (pc + 4%N)%N (S cid) sp_off (a64_post_call_vrf cid c vrf) astk sfl false ret_w)
+    destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited) (pc + 4%N)%N (S cid) sp_off (a64_post_call_vrf cid c vrf) astk sfl false ret_w)
       as [cont |] eqn:Ect; [| discriminate Hsum].
-    inversion Hsum; subst t; cbn [collect_mc_call_vars] in Hin.
-    destruct Hin as [Heq | Hr]; [inversion Heq; subst; apply mc_call_ret_var_bang |].
+    inversion Hsum; subst t;
+      unfold collect_mc_call_vars in Hin; cbn [collect_mc_call_vars_acc] in Hin;
+      rewrite collect_mc_call_vars_acc_shift in Hin; apply in_app_iff in Hin as [Hr | Hh];
+      [exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Ect nm w Hr) |].
     destruct opt_hi as [hn |] eqn:Eoh.
-    + destruct Hr as [Heq | Hr']; [| exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Ect nm w Hr')].
-      inversion Heq; subst.
-      unfold mc_post_call_ret_expr in Epc; destruct (Pos.eqb _ 64%positive); [discriminate Epc |].
-      destruct (mcs_ret_ext c); inversion Epc; apply mc_call_hi_var_bang.
-    + exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Ect nm w Hr).
+    + destruct Hh as [Heq | [Heq | []]]; inversion Heq; subst.
+      * apply mc_call_ret_var_bang.
+      * unfold mc_post_call_ret_expr in Epc; destruct (Pos.eqb _ 64%positive); [discriminate Epc |].
+        destruct (mcs_ret_ext c); inversion Epc; apply mc_call_hi_var_bang.
+    + destruct Hh as [Heq | []]; inversion Heq; subst; apply mc_call_ret_var_bang.
 Qed.
 
 Section CallGhostFilling.
@@ -5575,10 +5909,12 @@ Proof.
   destruct (reify_ir_call_tree ir_cfg arg_specs callees ret_w) as [t_ir |] eqn:Eir; [| discriminate Hval].
   destruct (summarize_rv64_call_tree insts callees arg_specs ret_w) as [t_mc |] eqn:Emc; [| discriminate Hval].
   destruct (collect_call_obls EA_Riscv64 callees ret_w [] t_ir t_mc) as [obls |] eqn:Eco; [| discriminate Hval].
-  set (call_vars := dedup_typed_vars (collect_ir_call_vars t_ir ++ collect_mc_call_vars t_mc)) in *.
-  set (all_vars := dedup_typed_vars (allowed0 ++ call_vars)) in *.
-  destruct (vars_width_consistent (allowed0 ++ collect_ir_call_vars t_ir ++ collect_mc_call_vars t_mc) all_vars) eqn:Evwc;
+  set (raw_cvars := collect_ir_call_vars_acc t_ir (collect_mc_call_vars_acc t_mc [])) in *.
+  set (call_vars := dedup_typed_vars raw_cvars) in *.
+  set (all_vars := dedup_typed_vars_acc allowed0 call_vars) in *.
+  destruct (vars_width_consistent allowed0 all_vars && vars_width_consistent raw_cvars all_vars) eqn:Evwc;
     cbn [negb] in Hval; [| discriminate Hval].
+  apply andb_true_iff in Evwc as [Evwc_al Evwc_cv].
   destruct (forallb (obl_wf_exprs all_vars) obls) eqn:Ewf_o; cbn [negb] in Hval; [| discriminate Hval].
   cbn [mccb_ctx mccb_all_vars mccb_obls] in Hval.
   destruct (check_mc_loop_obls (mc_init_ctx ++ List.map (fun '(nm, w) => UBA_ParamNoUndef nm w) call_vars)
@@ -5592,23 +5928,21 @@ Proof.
   assert (Hcs : forall c, In c callees -> forallb rv_valid_arg_spec (mcs_args c) = true /\ NoDup (List.map ras_name (mcs_args c))).
   { intros c Hc; rewrite forallb_forall in Hcal_b; pose proof (Hcal_b c Hc) as Ht;
       rewrite !andb_true_iff in Ht; destruct Ht as [[[_ _] Hva] Hnd]; split; [exact Hva | apply mc_no_dup_strings_spec; exact Hnd]. }
-  assert (Hdedup_sub : forall l nm w, In (nm, w) (dedup_typed_vars l) -> In (nm, w) l).
-  { clear; induction l as [| [a wa] r IH]; intros nm w Hin; cbn in Hin; [contradiction |].
-    cbn [dedup_typed_vars] in Hin; destruct (existsb (fun '(x, _) => String.eqb a x) r);
-      [right; exact (IH _ _ Hin) | destruct Hin as [H | H]; [left; exact H | right; exact (IH _ _ H)]]. }
   assert (Hnb_cv : forall nm w, In (nm, w) call_vars -> mc_starts_with_bang nm = true).
-  { intros nm w Hcv; apply Hdedup_sub, in_app_iff in Hcv as [H1 | H2].
+  { intros nm w Hcv; apply dedup_typed_vars_sub in Hcv; unfold raw_cvars in Hcv;
+      rewrite collect_ir_call_vars_acc_shift in Hcv; apply in_app_iff in Hcv as [H1 | H2].
     - eapply reify_ir_call_at_vars_bang; [exact Eir | exact H1].
     - eapply summarize_rv64_call_at_vars_bang; [exact Emc | exact H2]. }
   assert (Hcv_av : forall nm w, In (nm, w) call_vars -> In (nm, w) all_vars).
-  { intros nm w Hcv; apply Hdedup_sub in Hcv.
-    eapply vars_width_consistent_in; [exact Evwc | apply in_or_app; right; exact Hcv]. }
+  { intros nm w Hcv; apply dedup_typed_vars_sub in Hcv.
+    exact (vars_width_consistent_in _ _ _ _ Evwc_cv Hcv). }
   assert (Hal_av : forall nm w, In (nm, w) allowed0 -> In (nm, w) all_vars)
-    by (intros nm w Hal; eapply vars_width_consistent_in; [exact Evwc | apply in_or_app; left; exact Hal]).
-  assert (Hmv_av : forall nm w, In (nm, w) (collect_mc_call_vars t_mc) -> In (nm, w) all_vars)
-    by (intros nm w Hmv; eapply vars_width_consistent_in; [exact Evwc | apply in_or_app; right; apply in_or_app; right; exact Hmv]).
-  assert (Hav_sp : forall nm w, In (nm, w) all_vars -> In (nm, w) allowed0 \/ In (nm, w) call_vars).
-  { intros nm w Hav; apply Hdedup_sub, in_app_iff in Hav as [Hal | Hcv]; [left; exact Hal | right; exact Hcv]. }
+    by (intros nm w Hal; exact (vars_width_consistent_in _ _ _ _ Evwc_al Hal)).
+  assert (Hmv_av : forall nm w, In (nm, w) (collect_mc_call_vars t_mc) -> In (nm, w) all_vars).
+  { intros nm w Hmv; eapply vars_width_consistent_in; [exact Evwc_cv |].
+    unfold raw_cvars; rewrite collect_ir_call_vars_acc_shift; apply in_or_app; right; exact Hmv. }
+  assert (Hav_sp : forall nm w, In (nm, w) all_vars -> In (nm, w) allowed0 \/ In (nm, w) call_vars)
+    by (intros nm w Hav; exact (dedup_typed_vars_acc_sub allowed0 call_vars nm w Hav)).
   intros genv O Hgenv HO; cbn [rv_call_sound_spec].
   assert (Hsp2_init : rv_val_read 2%N (rv_build_init_val_regs 10%N arg_specs) = MSV_StackPtr 0%Z)
     by (unfold rv_val_read; cbn [N.eqb]; rewrite rv_build_init_val_regs_other by lia; reflexivity).
@@ -5616,7 +5950,9 @@ Proof.
     nm <> mc_call_ret_var k' w' /\ nm <> mc_call_hi_var k').
   { intros nm w Hal k' w' _; pose proof (Hnb_al nm w Hal) as Hnb; split; intro Heq; subst;
       [rewrite mc_call_ret_var_bang in Hnb | rewrite mc_call_hi_var_bang in Hnb]; discriminate Hnb. }
-  destruct (summarize_rv64_call_at_exec (S (2 * List.length insts)) insts callees [] 0%N 0%nat 0%Z
+  unfold summarize_rv64_call_tree in Emc; rewrite elf_length_tr_eq in Emc.
+  destruct (summarize_rv64_call_at_exec insts (pt_of_list_first drci_off insts) (pt_of_list_first_lookup_rv_call insts)
+              (S (2 * List.length insts)) callees PT_Empty 0%N 0%nat 0%Z
               (rv_build_init_val_regs 10%N arg_specs) [] ret_w allowed0 t_mc O penv0 rf0 rf0 mstk0
               Hrw Hcws Hmul HO Hsp0 ltac:(unfold mc_frame_cap; lia) Hsp2_init
               (rv_init_val_regs_wf allowed0 arg_specs Hargs_al Hws) ltac:(constructor)
@@ -5627,7 +5963,7 @@ Proof.
   { intros nm Hin; destruct (Hnb_form nm Hin) as [k [_ [[w ->] | ->]]];
       [apply mc_call_ret_var_bang | apply mc_call_hi_var_bang]. }
   destruct (call_extra_binds_props allowed0 (collect_mc_call_vars t_mc) call_vars all_vars penv0 new_binds
-              Hnb_al Hnb_cv (dedup_typed_vars_nodup _) (dedup_typed_vars_nodup _)
+              Hnb_al Hnb_cv (dedup_typed_vars_nodup _) (dedup_typed_vars_acc_nodup _ _ (dedup_typed_vars_nodup _))
               Hcv_av Hal_av Hav_sp Hmv_av Hnd_nb Hnb_nb Hnb_vals Hpenv0
               (fun _ _ => Forall_nil _))
     as (Hdisj_eb & Hdisj_nb_eb & Hpres_nb & Hwf_full & Hctx_call).
@@ -5748,10 +6084,12 @@ Proof.
   destruct (reify_ir_call_tree ir_cfg arg_specs callees ret_w) as [t_ir |] eqn:Eir; [| discriminate Hval].
   destruct (summarize_a64_call_tree insts callees arg_specs ret_w) as [t_mc |] eqn:Emc; [| discriminate Hval].
   destruct (collect_call_obls EA_AArch64 callees ret_w [] t_ir t_mc) as [obls |] eqn:Eco; [| discriminate Hval].
-  set (call_vars := dedup_typed_vars (collect_ir_call_vars t_ir ++ collect_mc_call_vars t_mc)) in *.
-  set (all_vars := dedup_typed_vars (allowed0 ++ call_vars)) in *.
-  destruct (vars_width_consistent (allowed0 ++ collect_ir_call_vars t_ir ++ collect_mc_call_vars t_mc) all_vars) eqn:Evwc;
+  set (raw_cvars := collect_ir_call_vars_acc t_ir (collect_mc_call_vars_acc t_mc [])) in *.
+  set (call_vars := dedup_typed_vars raw_cvars) in *.
+  set (all_vars := dedup_typed_vars_acc allowed0 call_vars) in *.
+  destruct (vars_width_consistent allowed0 all_vars && vars_width_consistent raw_cvars all_vars) eqn:Evwc;
     cbn [negb] in Hval; [| discriminate Hval].
+  apply andb_true_iff in Evwc as [Evwc_al Evwc_cv].
   destruct (forallb (obl_wf_exprs all_vars) obls) eqn:Ewf_o; cbn [negb] in Hval; [| discriminate Hval].
   cbn [mccb_ctx mccb_all_vars mccb_obls] in Hval.
   destruct (check_mc_loop_obls (mc_init_ctx ++ List.map (fun '(nm, w) => UBA_ParamNoUndef nm w) call_vars)
@@ -5765,22 +6103,20 @@ Proof.
   assert (Hcs : forall c, In c callees -> forallb rv_valid_arg_spec (mcs_args c) = true /\ NoDup (List.map ras_name (mcs_args c))).
   { intros c Hc; rewrite forallb_forall in Hcal_b; pose proof (Hcal_b c Hc) as Ht;
       rewrite !andb_true_iff in Ht; destruct Ht as [[[_ _] Hva] Hnd]; split; [exact Hva | apply mc_no_dup_strings_spec; exact Hnd]. }
-  assert (Hdedup_sub : forall l nm w, In (nm, w) (dedup_typed_vars l) -> In (nm, w) l).
-  { clear; induction l as [| [a wa] r IH]; intros nm w Hin; cbn in Hin; [contradiction |].
-    cbn [dedup_typed_vars] in Hin; destruct (existsb (fun '(x, _) => String.eqb a x) r);
-      [right; exact (IH _ _ Hin) | destruct Hin as [H | H]; [left; exact H | right; exact (IH _ _ H)]]. }
   assert (Hnb_cv : forall nm w, In (nm, w) call_vars -> mc_starts_with_bang nm = true).
-  { intros nm w Hcv; apply Hdedup_sub, in_app_iff in Hcv as [H1 | H2].
+  { intros nm w Hcv; apply dedup_typed_vars_sub in Hcv; unfold raw_cvars in Hcv;
+      rewrite collect_ir_call_vars_acc_shift in Hcv; apply in_app_iff in Hcv as [H1 | H2].
     - eapply reify_ir_call_at_vars_bang; [exact Eir | exact H1].
     - eapply summarize_a64_call_at_vars_bang; [exact Emc | exact H2]. }
   assert (Hcv_av : forall nm w, In (nm, w) call_vars -> In (nm, w) all_vars)
-    by (intros nm w Hcv; apply Hdedup_sub in Hcv; eapply vars_width_consistent_in; [exact Evwc | apply in_or_app; right; exact Hcv]).
+    by (intros nm w Hcv; apply dedup_typed_vars_sub in Hcv; exact (vars_width_consistent_in _ _ _ _ Evwc_cv Hcv)).
   assert (Hal_av : forall nm w, In (nm, w) allowed0 -> In (nm, w) all_vars)
-    by (intros nm w Hal; eapply vars_width_consistent_in; [exact Evwc | apply in_or_app; left; exact Hal]).
-  assert (Hmv_av : forall nm w, In (nm, w) (collect_mc_call_vars t_mc) -> In (nm, w) all_vars)
-    by (intros nm w Hmv; eapply vars_width_consistent_in; [exact Evwc | apply in_or_app; right; apply in_or_app; right; exact Hmv]).
+    by (intros nm w Hal; exact (vars_width_consistent_in _ _ _ _ Evwc_al Hal)).
+  assert (Hmv_av : forall nm w, In (nm, w) (collect_mc_call_vars t_mc) -> In (nm, w) all_vars).
+  { intros nm w Hmv; eapply vars_width_consistent_in; [exact Evwc_cv |].
+    unfold raw_cvars; rewrite collect_ir_call_vars_acc_shift; apply in_or_app; right; exact Hmv. }
   assert (Hav_sp : forall nm w, In (nm, w) all_vars -> In (nm, w) allowed0 \/ In (nm, w) call_vars)
-    by (intros nm w Hav; apply Hdedup_sub, in_app_iff in Hav as [Hal | Hcv]; [left; exact Hal | right; exact Hcv]).
+    by (intros nm w Hav; exact (dedup_typed_vars_acc_sub allowed0 call_vars nm w Hav)).
   intros genv O Hgenv HO; cbn [a64_call_sound_spec].
   assert (Hfresh0 : forall nm w, In (nm, w) allowed0 -> forall k' w', (0 <= k')%nat ->
     nm <> mc_call_ret_var k' w' /\ nm <> mc_call_hi_var k').
@@ -5804,7 +6140,9 @@ Proof.
     In (ras_name sp, ras_width sp) allowed0 /\
     (ras_width sp <> 64%positive -> In (a64_hi_var_name (ras_name sp), 64%positive) allowed0)).
   { intros sp Hsp; split; [exact (Hargs_al sp Hsp) | intro Hne; exact (Hhi_al _ (a64_hi_vars_in_specs _ _ Hsp Hne))]. }
-  destruct (summarize_a64_call_at_exec (S (2 * List.length insts)) insts callees [] 0%N 0%nat 0%Z
+  unfold summarize_a64_call_tree in Emc; rewrite elf_length_tr_eq in Emc.
+  destruct (summarize_a64_call_at_exec insts (pt_of_list_first daci_off insts) (pt_of_list_first_lookup_a64_call insts)
+              (S (2 * List.length insts)) callees PT_Empty 0%N 0%nat 0%Z
               (a64_build_init_val_regs 0%N arg_specs) [] a64_init_sym_flags false ret_w allowed0 t_mc
               O penv0 rf0 sp0 rf0 sp0 fl0 mstk0
               Hrw Hcws Hvalid HO Hsp0 ltac:(unfold mc_frame_cap; lia) ltac:(symmetry; apply Integers.add_zero)
@@ -5816,7 +6154,7 @@ Proof.
   { intros nm Hin; destruct (Hnb_form nm Hin) as [k [_ [[w ->] | ->]]];
       [apply mc_call_ret_var_bang | apply mc_call_hi_var_bang]. }
   destruct (call_extra_binds_props allowed0 (collect_mc_call_vars t_mc) call_vars all_vars penv0 new_binds
-              Hnb_al Hnb_cv (dedup_typed_vars_nodup _) (dedup_typed_vars_nodup _)
+              Hnb_al Hnb_cv (dedup_typed_vars_nodup _) (dedup_typed_vars_acc_nodup _ _ (dedup_typed_vars_nodup _))
               Hcv_av Hal_av Hav_sp Hmv_av Hnd_nb Hnb_nb Hnb_vals Hpenv0
               (fun _ _ => Forall_nil _))
     as (Hdisj_eb & Hdisj_nb_eb & Hpres_nb & Hwf_full & Hctx_call).

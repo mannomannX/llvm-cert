@@ -45,6 +45,7 @@ From Vellvm Require Import
 
 From CertValidator Require Import
   CertFormat
+  AigLrat
   AlgRules
   CertValidator
   Elf64Spec
@@ -453,53 +454,52 @@ Definition decode_rv32_word (w : N) : option rv_inst :=
     else None
   else None.
 
-Fixpoint decode_rv64_stream
-  (fuel : nat) (rvc_enabled : bool) (code : list N) (cur_off : nat)
-  {struct fuel} : string + list decoded_rv_inst :=
-  if Nat.eqb cur_off (List.length code) then inr []
-  else
-    match fuel with
-    | O => inl "RV64 decoder fuel exhausted"
-    | S fuel' =>
-        match read_u16_le code cur_off with
-        | None => inl "truncated RV64 instruction stream"
-        | Some hw =>
-            if negb (N.eqb (N.modulo hw 4%N) 3%N) then
-              if negb rvc_enabled then inl "16-bit RVC instruction encountered with RVC disabled"
+Fixpoint decode_rv64_stream_acc
+  (fuel : nat) (rvc_enabled : bool) (cur : list N) (cur_off : nat)
+  (acc : list decoded_rv_inst) {struct fuel} : string + list decoded_rv_inst :=
+  match cur with
+  | [] => inr (elf_rev_tr acc)
+  | _ :: _ =>
+      match fuel with
+      | O => inl "RV64 decoder fuel exhausted"
+      | S fuel' =>
+          match take_u16_le cur with
+          | None => inl "truncated RV64 instruction stream"
+          | Some (hw, rest2) =>
+              if negb (N.eqb (N.modulo hw 4%N) 3%N) then
+                if negb rvc_enabled then
+                  inl "16-bit RVC instruction encountered with RVC disabled"
+                else
+                  match decode_rvc_hw hw with
+                  | None => inl "unsupported 16-bit RVC instruction"
+                  | Some inst =>
+                      let acc' := mk_decoded_rv (N.of_nat cur_off) 2%N inst :: acc in
+                      decode_rv64_stream_acc fuel' rvc_enabled rest2 (cur_off + 2) acc'
+                  end
               else
-                match decode_rvc_hw hw with
-                | None => inl "unsupported 16-bit RVC instruction"
-                | Some inst =>
-                    match decode_rv64_stream fuel' rvc_enabled code (cur_off + 2) with
-                    | inl err => inl err
-                    | inr rest => inr (mk_decoded_rv (N.of_nat cur_off) 2%N inst :: rest)
+                match take_u32_le cur with
+                | None => inl "truncated 32-bit RV64 instruction"
+                | Some (w, rest4) =>
+                    match decode_rv32_word w with
+                    | None => inl "unsupported 32-bit RV64 instruction"
+                    | Some inst =>
+                        let acc' := mk_decoded_rv (N.of_nat cur_off) 4%N inst :: acc in
+                        decode_rv64_stream_acc fuel' rvc_enabled rest4 (cur_off + 4) acc'
                     end
                 end
-            else
-              match read_u32_le code cur_off with
-              | None => inl "truncated 32-bit RV64 instruction"
-              | Some w =>
-                  match decode_rv32_word w with
-                  | None => inl "unsupported 32-bit RV64 instruction"
-                  | Some inst =>
-                      match decode_rv64_stream fuel' rvc_enabled code (cur_off + 4) with
-                      | inl err => inl err
-                      | inr rest => inr (mk_decoded_rv (N.of_nat cur_off) 4%N inst :: rest)
-                      end
-                  end
-              end
-        end
-    end.
+          end
+      end
+  end.
 
 Definition decode_rv64_bytes (rvc_enabled : bool) (code : list N)
   : string + list decoded_rv_inst :=
-  let len := List.length code in
+  let len := elf_length_tr code in
   if Nat.eqb len 0 || negb (Nat.eqb (Nat.modulo len 2) 0) then
     inl "RV64 function byte length must be positive and even"
   else if negb rvc_enabled && negb (Nat.eqb (Nat.modulo len 4) 0) then
     inl "non-RVC RV64 function length must be a multiple of 4"
   else
-    decode_rv64_stream (Nat.div len 2 + 1) rvc_enabled code 0.
+    decode_rv64_stream_acc (Nat.div len 2 + 1) rvc_enabled code 0 [].
 
 (** ** 3. Sail-Aligned Operational Semantics over [@Integers.bit_int 64] *)
 
@@ -957,6 +957,100 @@ Fixpoint rv_build_init_val_regs
       fun r => if N.eqb r idx then MSV_Expr e else vrf' r
   end.
 
+(** *** 4.1 First-Wins [pos_trie] Instruction Index & Visited Set *)
+
+Fixpoint lookup_by_key {A : Type} (key_of : A -> N) (xs : list A) (k : N)
+  {struct xs} : option A :=
+  match xs with
+  | [] => None
+  | x :: rest => if N.eqb (key_of x) k then Some x else lookup_by_key key_of rest k
+  end.
+
+Fixpoint pt_of_list_first_acc {A : Type} (key_of : A -> N)
+  (im : pos_trie A) (xs : list A) {struct xs} : pos_trie A :=
+  match xs with
+  | [] => im
+  | x :: rest =>
+      let k := N.succ_pos (key_of x) in
+      match pt_get k im with
+      | Some _ => pt_of_list_first_acc key_of im rest
+      | None => pt_of_list_first_acc key_of (pt_set k x im) rest
+      end
+  end.
+
+Definition pt_of_list_first {A : Type} (key_of : A -> N) (xs : list A)
+  : pos_trie A :=
+  pt_of_list_first_acc key_of (@PT_Empty A) xs.
+
+Lemma pt_of_list_first_acc_get :
+  forall {A : Type} (key_of : A -> N) (xs : list A) (im : pos_trie A) (k : N),
+    pt_get (N.succ_pos k) (pt_of_list_first_acc key_of im xs) =
+    match pt_get (N.succ_pos k) im with
+    | Some d => Some d
+    | None => lookup_by_key key_of xs k
+    end.
+Proof.
+  intros A key_of xs; induction xs as [| x rest IH];
+    intros im k; cbn [pt_of_list_first_acc lookup_by_key].
+  - destruct (pt_get (N.succ_pos k) im); reflexivity.
+  - destruct (pt_get (N.succ_pos (key_of x)) im) eqn:Ex.
+    + rewrite IH; destruct (pt_get (N.succ_pos k) im) eqn:Ek; try reflexivity.
+      destruct (N.eqb (key_of x) k) eqn:Heq; [| reflexivity].
+      apply N.eqb_eq in Heq; rewrite Heq, Ek in Ex; discriminate Ex.
+    + rewrite IH.
+      destruct (N.eqb (key_of x) k) eqn:Heq.
+      * apply N.eqb_eq in Heq; subst k.
+        rewrite Ex, pt_get_set_same; reflexivity.
+      * apply N.eqb_neq in Heq.
+        assert (Hneq : N.succ_pos k <> N.succ_pos (key_of x)).
+        { intro Hinj; apply Heq; symmetry.
+          destruct k as [| pk], (key_of x) as [| pm]; cbn in Hinj.
+          - reflexivity.
+          - destruct pm; discriminate Hinj.
+          - destruct pk; discriminate Hinj.
+          - f_equal; exact (Pos.succ_inj _ _ Hinj). }
+        rewrite (pt_get_set_other _ _ _ _ Hneq); reflexivity.
+Qed.
+
+Lemma pt_of_list_first_get :
+  forall {A : Type} (key_of : A -> N) (xs : list A) (k : N),
+    pt_get (N.succ_pos k) (pt_of_list_first key_of xs) = lookup_by_key key_of xs k.
+Proof.
+  intros A key_of xs k; unfold pt_of_list_first.
+  rewrite pt_of_list_first_acc_get, pt_get_empty; reflexivity.
+Qed.
+
+Definition pt_has_n (pc : N) (vis : pos_trie unit) : bool :=
+  match pt_get (N.succ_pos pc) vis with
+  | Some _ => true
+  | None => false
+  end.
+
+Definition pt_add_n (pc : N) (vis : pos_trie unit) : pos_trie unit :=
+  pt_set (N.succ_pos pc) tt vis.
+
+Fixpoint pt_of_visited_acc (acc : pos_trie unit) (xs : list N) {struct xs} : pos_trie unit :=
+  match xs with
+  | [] => acc
+  | pc :: rest => pt_of_visited_acc (pt_add_n pc acc) rest
+  end.
+
+Definition pt_of_visited (xs : list N) : pos_trie unit :=
+  pt_of_visited_acc (@PT_Empty unit) xs.
+
+Lemma lookup_rv_inst_eq_key : forall insts pc,
+  lookup_rv_inst insts pc = lookup_by_key dri_off insts pc.
+Proof.
+  induction insts as [| d rest IH]; intro pc; cbn; [reflexivity |].
+  destruct (N.eqb (dri_off d) pc); [reflexivity | exact (IH pc)].
+Qed.
+
+Lemma pt_of_list_first_lookup_rv : forall insts pc,
+  pt_get (N.succ_pos pc) (pt_of_list_first dri_off insts) = lookup_rv_inst insts pc.
+Proof.
+  intros insts pc; rewrite pt_of_list_first_get, lookup_rv_inst_eq_key; reflexivity.
+Qed.
+
 Definition rv_sym_step_write
   (rd : N) (sv : mc_sym_val) (sp_off : Z) (vrf : rv_val_regs) (astk : mc_sym_stack)
   : option (Z * rv_val_regs * mc_sym_stack) :=
@@ -971,27 +1065,27 @@ Definition rv_sym_step_write
   else Some (sp_off, rv_val_write rd sv vrf, astk).
 
 Fixpoint summarize_rv64_dag_at
-  (fuel : nat) (insts : list decoded_rv_inst) (visited : list N)
+  (fuel : nat) (im : pos_trie decoded_rv_inst) (visited : pos_trie unit)
   (pc : N) (sp_off : Z) (vrf : rv_val_regs) (astk : mc_sym_stack) (ret_w : positive)
   {struct fuel} : option cfg_dag :=
-  if n_in_list pc visited then None
+  if pt_has_n pc visited then None
   else
     match fuel with
     | O => None
     | S fuel' =>
-        match lookup_rv_inst insts pc with
+        match pt_get (N.succ_pos pc) im with
         | None => None
         | Some dec =>
             let next_pc := (pc + dri_len dec)%N in
-            let visited' := pc :: visited in
+            let visited' := pt_add_n pc visited in
             match dri_inst dec with
             | RV_Nop =>
-                summarize_rv64_dag_at fuel' insts visited' next_pc sp_off vrf astk ret_w
+                summarize_rv64_dag_at fuel' im visited' next_pc sp_off vrf astk ret_w
             | RV_Lui rd imm =>
                 match rv_sym_step_write rd (MSV_Expr (ce_bv_z 64%positive imm)) sp_off vrf astk with
                 | None => None
                 | Some (sp_off', vrf', astk') =>
-                    summarize_rv64_dag_at fuel' insts visited' next_pc sp_off' vrf' astk' ret_w
+                    summarize_rv64_dag_at fuel' im visited' next_pc sp_off' vrf' astk' ret_w
                 end
             | RV_AluImm op is_word rd rs1 imm =>
                 let sv_opt :=
@@ -1014,7 +1108,7 @@ Fixpoint summarize_rv64_dag_at
                     match rv_sym_step_write rd sv sp_off vrf astk with
                     | None => None
                     | Some (sp_off', vrf', astk') =>
-                        summarize_rv64_dag_at fuel' insts visited' next_pc sp_off' vrf' astk' ret_w
+                        summarize_rv64_dag_at fuel' im visited' next_pc sp_off' vrf' astk' ret_w
                     end
                 end
             | RV_AluReg op is_word rd rs1 rs2 =>
@@ -1037,7 +1131,7 @@ Fixpoint summarize_rv64_dag_at
                     match rv_sym_step_write rd sv sp_off vrf astk with
                     | None => None
                     | Some (sp_off', vrf', astk') =>
-                        summarize_rv64_dag_at fuel' insts visited' next_pc sp_off' vrf' astk' ret_w
+                        summarize_rv64_dag_at fuel' im visited' next_pc sp_off' vrf' astk' ret_w
                     end
                 end
             | RV_Load sz is_signed rd rs1 imm =>
@@ -1051,7 +1145,7 @@ Fixpoint summarize_rv64_dag_at
                           match rv_sym_step_write rd sv sp_off vrf astk with
                           | None => None
                           | Some (sp_off', vrf', astk') =>
-                              summarize_rv64_dag_at fuel' insts visited' next_pc sp_off' vrf' astk' ret_w
+                              summarize_rv64_dag_at fuel' im visited' next_pc sp_off' vrf' astk' ret_w
                           end
                       end
                     else None
@@ -1072,7 +1166,7 @@ Fixpoint summarize_rv64_dag_at
                       in
                       if sv_ok then
                         let astk' := mc_sym_stk_store off sz sv astk in
-                        summarize_rv64_dag_at fuel' insts visited' next_pc sp_off vrf astk' ret_w
+                        summarize_rv64_dag_at fuel' im visited' next_pc sp_off vrf astk' ret_w
                       else None
                     else None
                 | _ => None
@@ -1081,7 +1175,7 @@ Fixpoint summarize_rv64_dag_at
                 match add_rel_off pc rel with
                 | None => None
                 | Some tgt_pc =>
-                    summarize_rv64_dag_at fuel' insts visited' tgt_pc sp_off vrf astk ret_w
+                    summarize_rv64_dag_at fuel' im visited' tgt_pc sp_off vrf astk ret_w
                 end
             | RV_Branch cond rs1 rs2 rel =>
                 match rv_val_read rs1 vrf, rv_val_read rs2 vrf with
@@ -1090,8 +1184,8 @@ Fixpoint summarize_rv64_dag_at
                     | None => None
                     | Some tgt_pc =>
                         let c_e := sym_br_cond cond e1 e2 in
-                        match summarize_rv64_dag_at fuel' insts visited' tgt_pc sp_off vrf astk ret_w,
-                              summarize_rv64_dag_at fuel' insts visited' next_pc sp_off vrf astk ret_w
+                        match summarize_rv64_dag_at fuel' im visited' tgt_pc sp_off vrf astk ret_w,
+                              summarize_rv64_dag_at fuel' im visited' next_pc sp_off vrf astk ret_w
                         with
                         | Some d_t, Some d_f => Some (CD_Branch c_e d_t d_f)
                         | _, _ => None
@@ -1122,7 +1216,8 @@ Definition summarize_rv64_dag
   else if negb (rv_supported_arg_width ret_w) then None
   else
     let vrf0 := rv_build_init_val_regs 10%N arg_specs in
-    summarize_rv64_dag_at fuel insts [] 0%N 0%Z vrf0 [] ret_w.
+    let im := pt_of_list_first dri_off insts in
+    summarize_rv64_dag_at fuel im (@PT_Empty unit) 0%N 0%Z vrf0 [] ret_w.
 
 (** ** 5. Bitvector Arithmetic & Semantic Equivalence Proofs ([0 Admitted], [0] Custom Axioms) *)
 
@@ -2022,7 +2117,8 @@ Proof.
 Qed.
 
 Theorem summarize_rv64_dag_at_sound :
-  forall {Pa : Params} fuel insts visited pc sp_off vrf astk ret_w d_mc penv foracle rf0 rf mstk,
+  forall {Pa : Params} fuel insts im visited pc sp_off vrf astk ret_w d_mc penv foracle rf0 rf mstk,
+    (forall q, pt_get (N.succ_pos q) im = lookup_rv_inst insts q) ->
     rv_supported_arg_width ret_w = true ->
     forallb inst_no_word_mulh insts = true ->
     mc_valid_sp0 (rv_read_reg 2%N rf0) ->
@@ -2030,7 +2126,7 @@ Theorem summarize_rv64_dag_at_sound :
     rv_val_read 2%N vrf = MSV_StackPtr sp_off ->
     rv_val_regs_agrees penv foracle rf0 (rv_read_reg 2%N rf0) vrf rf ->
     mc_sym_stack_agrees penv foracle (fun r0 => rv_read_reg r0 rf0) (rv_read_reg 2%N rf0) astk mstk ->
-    summarize_rv64_dag_at fuel insts visited pc sp_off vrf astk ret_w = Some d_mc ->
+    summarize_rv64_dag_at fuel im visited pc sp_off vrf astk ret_w = Some d_mc ->
     exists rf_end mstk_end,
       rv_exec_mem fuel insts pc (rv_read_reg 2%N rf0) rf mstk = Some (rf_end, mstk_end) /\
       rv_callee_saved_preserved rf0 rf_end /\
@@ -2038,13 +2134,16 @@ Theorem summarize_rv64_dag_at_sound :
       eval_cfg_dag penv foracle d_mc =
       DO_Ret (DVALUE_Base (@DVALUE_I Pa ret_w (rv_trunc_ret_val ret_w (rv_read_reg 10%N rf_end)))).
 Proof.
-  intros Pa fuel; induction fuel as [| fuel' IH];
-    intros insts visited pc sp_off vrf astk ret_w d_mc penv foracle rf0 rf mstk
+  intros Pa fuel insts im visited pc sp_off vrf astk ret_w d_mc penv foracle rf0 rf mstk Him.
+  revert visited pc sp_off vrf astk ret_w d_mc penv foracle rf0 rf mstk.
+  induction fuel as [| fuel' IH];
+    intros visited pc sp_off vrf astk ret_w d_mc penv foracle rf0 rf mstk
            Hrw Hnmul Hsp0 Hrng Hsp2 Hag Hastk Hsum;
     cbn [summarize_rv64_dag_at rv_exec_mem] in *.
-  - destruct (n_in_list pc visited); discriminate Hsum.
-  - destruct (n_in_list pc visited); [discriminate Hsum |].
-    destruct (lookup_rv_inst insts pc) as [dec |] eqn:Elook; [| discriminate Hsum].
+  - destruct (pt_has_n pc visited); discriminate Hsum.
+  - destruct (pt_has_n pc visited); [discriminate Hsum |].
+    destruct (pt_get (N.succ_pos pc) im) as [dec |] eqn:Elook; [| discriminate Hsum].
+    rewrite Him in Elook; rewrite Elook.
     assert (Hdec_mulh : inst_no_word_mulh dec = true).
     { clear -Elook Hnmul. induction insts as [| d rest IHl]; cbn in *; [discriminate |].
       apply andb_true_iff in Hnmul as [Hd Hr].
@@ -2059,7 +2158,7 @@ Proof.
        | rel
        | ] eqn:Ed.
     + (* RV_Nop *)
-      exact (IH insts (pc :: visited) (pc + dri_len dec)%N sp_off vrf astk ret_w d_mc penv foracle rf0 rf mstk
+      exact (IH (pt_add_n pc visited) (pc + dri_len dec)%N sp_off vrf astk ret_w d_mc penv foracle rf0 rf mstk
                 Hrw Hnmul Hsp0 Hrng Hsp2 Hag Hastk Hsum).
     + (* RV_Lui *)
       destruct (rv_sym_step_write rd (MSV_Expr (ce_bv_z 64%positive imm)) sp_off vrf astk)
@@ -2069,7 +2168,7 @@ Proof.
                   rd (MSV_Expr (ce_bv_z 64%positive imm)) (@Integers.repr 64%positive imm)
                   sp_off vrf astk rf mstk sp_off' vrf' astk' Hag Hastk (eval_ce_bv_z penv foracle 64%positive imm) Est)
         as [Hag' Hastk'].
-      exact (IH insts (pc :: visited) (pc + dri_len dec)%N sp_off' vrf' astk' ret_w d_mc
+      exact (IH (pt_add_n pc visited) (pc + dri_len dec)%N sp_off' vrf' astk' ret_w d_mc
                 penv foracle rf0 (rv_write_reg rd (@Integers.repr 64%positive imm) rf) mstk
                 Hrw Hnmul Hsp0 Hrng' Hsp2' Hag' Hastk' Hsum).
     + (* RV_AluImm *)
@@ -2113,7 +2212,7 @@ Proof.
                   rd sv (rv_eval_alu_imm op is_word (rv_read_reg rs1 rf) imm)
                   sp_off vrf astk rf mstk sp_off' vrf' astk' Hag Hastk Hval_sv Est)
         as [Hag' Hastk'].
-      exact (IH insts (pc :: visited) (pc + dri_len dec)%N sp_off' vrf' astk' ret_w d_mc
+      exact (IH (pt_add_n pc visited) (pc + dri_len dec)%N sp_off' vrf' astk' ret_w d_mc
                 penv foracle rf0 (rv_write_reg rd (rv_eval_alu_imm op is_word (rv_read_reg rs1 rf) imm) rf) mstk
                 Hrw Hnmul Hsp0 Hrng' Hsp2' Hag' Hastk' Hsum).
     + (* RV_AluReg *)
@@ -2164,7 +2263,7 @@ Proof.
                   rd sv (rv_eval_alu_reg op is_word (rv_read_reg rs1 rf) (rv_read_reg rs2 rf))
                   sp_off vrf astk rf mstk sp_off' vrf' astk' Hag Hastk Hval_sv Est)
         as [Hag' Hastk'].
-      exact (IH insts (pc :: visited) (pc + dri_len dec)%N sp_off' vrf' astk' ret_w d_mc
+      exact (IH (pt_add_n pc visited) (pc + dri_len dec)%N sp_off' vrf' astk' ret_w d_mc
                 penv foracle rf0 (rv_write_reg rd (rv_eval_alu_reg op is_word (rv_read_reg rs1 rf) (rv_read_reg rs2 rf)) rf) mstk
                 Hrw Hnmul Hsp0 Hrng' Hsp2' Hag' Hastk' Hsum).
     + (* RV_Load *)
@@ -2193,7 +2292,7 @@ Proof.
                   rd sv (mc_stk_load mstk (base_off + imm) sz is_signed)
                   sp_off vrf astk rf mstk sp_off' vrf' astk' Hag Hastk Hval_sv Est)
         as [Hag' Hastk'].
-      exact (IH insts (pc :: visited) (pc + dri_len dec)%N sp_off' vrf' astk' ret_w d_mc
+      exact (IH (pt_add_n pc visited) (pc + dri_len dec)%N sp_off' vrf' astk' ret_w d_mc
                 penv foracle rf0 (rv_write_reg rd (mc_stk_load mstk (base_off + imm) sz is_signed) rf) mstk
                 Hrw Hnmul (conj Hsp0_cap Hsp0_al) Hrng' Hsp2' Hag' Hastk' Hsum).
     + (* RV_Store *)
@@ -2221,7 +2320,7 @@ Proof.
       pose proof (mc_sym_stk_store_agrees penv foracle (fun r0 => rv_read_reg r0 rf0)
                     (rv_read_reg 2%N rf0) (base_off + imm) sz (rv_val_read rs2 vrf) (rv_read_reg rs2 rf)
                     astk mstk Hsz_match (Hag rs2) Hastk) as Hastk'.
-      exact (IH insts (pc :: visited) (pc + dri_len dec)%N sp_off vrf
+      exact (IH (pt_add_n pc visited) (pc + dri_len dec)%N sp_off vrf
                 (mc_sym_stk_store (base_off + imm) sz (rv_val_read rs2 vrf) astk)
                 ret_w d_mc penv foracle rf0 rf (mc_stk_store mstk (base_off + imm) sz (rv_read_reg rs2 rf))
                 Hrw Hnmul (conj Hsp0_cap Hsp0_al) Hrng Hsp2 Hag Hastk' Hsum).
@@ -2229,9 +2328,9 @@ Proof.
       destruct (rv_val_read rs1 vrf) as [| e1 | |] eqn:Er1; try discriminate Hsum.
       destruct (rv_val_read rs2 vrf) as [| e2 | |] eqn:Er2; try discriminate Hsum.
       destruct (add_rel_off pc rel) as [tgt_pc |] eqn:Erel; [| discriminate Hsum].
-      destruct (summarize_rv64_dag_at fuel' insts (pc :: visited) tgt_pc sp_off vrf astk ret_w) as [dt |] eqn:Edt;
+      destruct (summarize_rv64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk ret_w) as [dt |] eqn:Edt;
         [| discriminate Hsum].
-      destruct (summarize_rv64_dag_at fuel' insts (pc :: visited) (pc + dri_len dec)%N sp_off vrf astk ret_w) as [df |] eqn:Edf;
+      destruct (summarize_rv64_dag_at fuel' im (pt_add_n pc visited) (pc + dri_len dec)%N sp_off vrf astk ret_w) as [df |] eqn:Edf;
         [| discriminate Hsum].
       inversion Hsum; subst d_mc; clear Hsum.
       pose proof (Hag rs1) as H1; rewrite Er1 in H1; cbn [mc_sym_val_agrees] in H1.
@@ -2240,14 +2339,14 @@ Proof.
       cbn [eval_cfg_dag]; rewrite Hbr.
       destruct (rv_eval_br_cond cond (rv_read_reg rs1 rf) (rv_read_reg rs2 rf)).
       * rewrite (@Integers.unsigned_one 1%positive); cbn [Z.eqb].
-        exact (IH insts (pc :: visited) tgt_pc sp_off vrf astk ret_w dt penv foracle rf0 rf mstk
+        exact (IH (pt_add_n pc visited) tgt_pc sp_off vrf astk ret_w dt penv foracle rf0 rf mstk
                   Hrw Hnmul Hsp0 Hrng Hsp2 Hag Hastk Edt).
       * rewrite (@Integers.unsigned_zero 1%positive); cbn [Z.eqb].
-        exact (IH insts (pc :: visited) (pc + dri_len dec)%N sp_off vrf astk ret_w df penv foracle rf0 rf mstk
+        exact (IH (pt_add_n pc visited) (pc + dri_len dec)%N sp_off vrf astk ret_w df penv foracle rf0 rf mstk
                   Hrw Hnmul Hsp0 Hrng Hsp2 Hag Hastk Edf).
     + (* RV_Jal0 *)
       destruct (add_rel_off pc rel) as [tgt_pc |] eqn:Erel; [| discriminate Hsum].
-      exact (IH insts (pc :: visited) tgt_pc sp_off vrf astk ret_w d_mc penv foracle rf0 rf mstk
+      exact (IH (pt_add_n pc visited) tgt_pc sp_off vrf astk ret_w d_mc penv foracle rf0 rf mstk
                 Hrw Hnmul Hsp0 Hrng Hsp2 Hag Hastk Hsum).
     + (* RV_Ret *)
       destruct (rv_sym_epilogue_ok sp_off vrf) eqn:Eep; [| discriminate Hsum].
@@ -2495,23 +2594,27 @@ Proof.
 Qed.
 
 Theorem summarize_rv64_dag_at_wf :
-  forall fuel insts visited pc allowed sp_off vrf astk ret_w d_mc,
+  forall fuel insts im visited pc allowed sp_off vrf astk ret_w d_mc,
+    (forall q, pt_get (N.succ_pos q) im = lookup_rv_inst insts q) ->
     rv_supported_arg_width ret_w = true ->
     forallb inst_no_word_mulh insts = true ->
     (- mc_frame_cap <= sp_off <= 0)%Z ->
     rv_val_read 2%N vrf = MSV_StackPtr sp_off ->
     rv_val_regs_wf allowed vrf ->
     mc_sym_stack_wf allowed sp_off astk ->
-    summarize_rv64_dag_at fuel insts visited pc sp_off vrf astk ret_w = Some d_mc ->
+    summarize_rv64_dag_at fuel im visited pc sp_off vrf astk ret_w = Some d_mc ->
     wf_cfg_dag allowed d_mc = true.
 Proof.
+  intros fuel insts im visited pc allowed sp_off vrf astk ret_w d_mc Him.
+  revert visited pc allowed sp_off vrf astk ret_w d_mc.
   induction fuel as [| fuel' IH];
-    intros insts visited pc allowed sp_off vrf astk ret_w d_mc
+    intros visited pc allowed sp_off vrf astk ret_w d_mc
            Hrw Hnmul Hrng Hsp2 Hwf Hstk Hsum;
     cbn [summarize_rv64_dag_at] in Hsum.
-  - destruct (n_in_list pc visited); discriminate Hsum.
-  - destruct (n_in_list pc visited); [discriminate Hsum |].
-    destruct (lookup_rv_inst insts pc) as [dec |] eqn:Elook; [| discriminate Hsum].
+  - destruct (pt_has_n pc visited); discriminate Hsum.
+  - destruct (pt_has_n pc visited); [discriminate Hsum |].
+    destruct (pt_get (N.succ_pos pc) im) as [dec |] eqn:Elook; [| discriminate Hsum].
+    rewrite Him in Elook.
     assert (Hdec_mulh : inst_no_word_mulh dec = true).
     { clear -Elook Hnmul. induction insts as [| d rest IHl]; cbn in *; [discriminate |].
       apply andb_true_iff in Hnmul as [Hd Hr].
@@ -2525,7 +2628,7 @@ Proof.
        | cond rs1 rs2 rel
        | rel
        | ] eqn:Ed.
-    + exact (IH insts (pc :: visited) (pc + dri_len dec)%N allowed sp_off vrf astk ret_w d_mc
+    + exact (IH (pt_add_n pc visited) (pc + dri_len dec)%N allowed sp_off vrf astk ret_w d_mc
                 Hrw Hnmul Hrng Hsp2 Hwf Hstk Hsum).
     + destruct (rv_sym_step_write rd (MSV_Expr (ce_bv_z 64%positive imm)) sp_off vrf astk)
         as [[[sp_off' vrf'] astk'] |] eqn:Est; [| discriminate Hsum].
@@ -2535,7 +2638,7 @@ Proof.
         inversion Est; subst; apply rv_val_regs_wf_write; [exact Hwf | apply wf_sym_bv_z]. }
       assert (Hstk' : mc_sym_stack_wf allowed sp_off' astk').
       { unfold rv_sym_step_write in Est; destruct (N.eqb rd 2%N); [discriminate Est | inversion Est; subst; exact Hstk]. }
-      exact (IH _ _ _ _ _ _ _ _ _ Hrw Hnmul Hrng' Hsp2' Hwf' Hstk' Hsum).
+      exact (IH _ _ _ _ _ _ _ _ Hrw Hnmul Hrng' Hsp2' Hwf' Hstk' Hsum).
     + set (sv_opt :=
         match op, is_word, rv_val_read rs1 vrf with
         | RAI_Addi, false, MSV_StackPtr base_off =>
@@ -2570,7 +2673,7 @@ Proof.
           inversion Est; subst; split;
             [apply rv_val_regs_wf_write; assumption | eapply mc_sym_stk_prune_wf; [lia | exact Hstk]].
         - inversion Est; subst; split; [apply rv_val_regs_wf_write; assumption | exact Hstk]. }
-      exact (IH _ _ _ _ _ _ _ _ _ Hrw Hnmul Hrng' Hsp2' (proj1 Hwf') (proj2 Hwf') Hsum).
+      exact (IH _ _ _ _ _ _ _ _ Hrw Hnmul Hrng' Hsp2' (proj1 Hwf') (proj2 Hwf') Hsum).
     + set (is_mv := ((match op with RAR_Add => negb is_word | _ => false end) &&
                      (N.eqb rs1 0%N || N.eqb rs2 0%N))%bool) in *.
       set (sv_opt :=
@@ -2611,7 +2714,7 @@ Proof.
           inversion Est; subst; split;
             [apply rv_val_regs_wf_write; assumption | eapply mc_sym_stk_prune_wf; [lia | exact Hstk]].
         - inversion Est; subst; split; [apply rv_val_regs_wf_write; assumption | exact Hstk]. }
-      exact (IH _ _ _ _ _ _ _ _ _ Hrw Hnmul Hrng' Hsp2' (proj1 Hwf') (proj2 Hwf') Hsum).
+      exact (IH _ _ _ _ _ _ _ _ Hrw Hnmul Hrng' Hsp2' (proj1 Hwf') (proj2 Hwf') Hsum).
     + destruct (rv_val_read rs1 vrf) as [| | | base_off]; try discriminate Hsum.
       destruct (mc_slot_in_frame sp_off (base_off + imm) sz); [| discriminate Hsum].
       destruct (mc_sym_stk_load (base_off + imm) sz is_signed astk) as [sv |] eqn:Eload;
@@ -2626,7 +2729,7 @@ Proof.
           inversion Est; subst; split;
             [apply rv_val_regs_wf_write; assumption | eapply mc_sym_stk_prune_wf; [lia | exact Hstk]].
         - inversion Est; subst; split; [apply rv_val_regs_wf_write; assumption | exact Hstk]. }
-      exact (IH _ _ _ _ _ _ _ _ _ Hrw Hnmul Hrng' Hsp2' (proj1 Hwf') (proj2 Hwf') Hsum).
+      exact (IH _ _ _ _ _ _ _ _ Hrw Hnmul Hrng' Hsp2' (proj1 Hwf') (proj2 Hwf') Hsum).
     + destruct (rv_val_read rs1 vrf) as [| | | base_off]; try discriminate Hsum.
       destruct (mc_slot_in_frame sp_off (base_off + imm) sz) eqn:Eslot; [| discriminate Hsum].
       destruct (match rv_val_read rs2 vrf with
@@ -2634,14 +2737,14 @@ Proof.
                 | MSV_Expr _ => true
                 | MSV_SavedReg _ | MSV_StackPtr _ => mc_mem_size_eqb sz MS_8
                 end); [| discriminate Hsum].
-      exact (IH _ _ _ _ _ _ _ _ _ Hrw Hnmul Hrng Hsp2 Hwf
+      exact (IH _ _ _ _ _ _ _ _ Hrw Hnmul Hrng Hsp2 Hwf
                 (mc_sym_stk_store_wf _ _ _ _ _ _ Eslot (Hwf rs2) Hstk) Hsum).
     + destruct (rv_val_read rs1 vrf) as [| e1 | |] eqn:Er1; try discriminate Hsum.
       destruct (rv_val_read rs2 vrf) as [| e2 | |] eqn:Er2; try discriminate Hsum.
       destruct (add_rel_off pc rel) as [tgt_pc |]; [| discriminate Hsum].
-      destruct (summarize_rv64_dag_at fuel' insts (pc :: visited) tgt_pc sp_off vrf astk ret_w) as [dt |] eqn:Edt;
+      destruct (summarize_rv64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk ret_w) as [dt |] eqn:Edt;
         [| discriminate Hsum].
-      destruct (summarize_rv64_dag_at fuel' insts (pc :: visited) (pc + dri_len dec)%N sp_off vrf astk ret_w) as [df |] eqn:Edf;
+      destruct (summarize_rv64_dag_at fuel' im (pt_add_n pc visited) (pc + dri_len dec)%N sp_off vrf astk ret_w) as [df |] eqn:Edf;
         [| discriminate Hsum].
       inversion Hsum; subst d_mc; clear Hsum.
       pose proof (Hwf rs1) as H1; rewrite Er1 in H1; pose proof (Hwf rs2) as H2; rewrite Er2 in H2.
@@ -2649,10 +2752,10 @@ Proof.
         by (destruct cond; apply wf_sym_icmp; assumption).
       destruct Hbc as (Htc & Hwc & Hlfc & Hvc).
       cbn [wf_cfg_dag]; rewrite Htc, Hwc, Hlfc, Hvc; cbn [Pos.eqb andb].
-      rewrite (IH _ _ _ _ _ _ _ _ _ Hrw Hnmul Hrng Hsp2 Hwf Hstk Edt),
-              (IH _ _ _ _ _ _ _ _ _ Hrw Hnmul Hrng Hsp2 Hwf Hstk Edf); reflexivity.
+      rewrite (IH _ _ _ _ _ _ _ _ Hrw Hnmul Hrng Hsp2 Hwf Hstk Edt),
+              (IH _ _ _ _ _ _ _ _ Hrw Hnmul Hrng Hsp2 Hwf Hstk Edf); reflexivity.
     + destruct (add_rel_off pc rel); [| discriminate Hsum].
-      exact (IH insts (pc :: visited) _ allowed sp_off vrf astk ret_w d_mc Hrw Hnmul Hrng Hsp2 Hwf Hstk Hsum).
+      exact (IH (pt_add_n pc visited) _ allowed sp_off vrf astk ret_w d_mc Hrw Hnmul Hrng Hsp2 Hwf Hstk Hsum).
     + destruct (rv_sym_epilogue_ok sp_off vrf); [| discriminate Hsum].
       destruct (rv_val_read 10%N vrf) as [| e_ret | |] eqn:Er10; try discriminate Hsum.
       inversion Hsum; subst d_mc; clear Hsum.
@@ -2742,28 +2845,31 @@ Proof.
   end.
 Qed.
 
-Lemma decode_rv64_stream_no_word_mulh : forall fuel rvc code cur_off insts,
-  decode_rv64_stream fuel rvc code cur_off = inr insts ->
+Lemma decode_rv64_stream_acc_no_word_mulh : forall fuel rvc cur cur_off acc insts,
+  forallb inst_no_word_mulh acc = true ->
+  decode_rv64_stream_acc fuel rvc cur cur_off acc = inr insts ->
   forallb inst_no_word_mulh insts = true.
 Proof.
-  induction fuel as [| fuel' IH]; intros rvc code cur_off insts H; cbn [decode_rv64_stream] in H.
-  - destruct (Nat.eqb cur_off (List.length code)); [inversion H; reflexivity | discriminate H].
-  - destruct (Nat.eqb cur_off (List.length code)); [inversion H; reflexivity |].
-    destruct (read_u16_le code cur_off) as [hw |]; [| discriminate H].
+  induction fuel as [| fuel' IH]; intros rvc [| b0 r0] cur_off acc insts Hacc H;
+    cbn [decode_rv64_stream_acc] in H.
+  - inversion H; subst insts; rewrite elf_rev_tr_eq, forallb_forall in *;
+      intros x Hx; apply Hacc; rewrite in_rev; exact Hx.
+  - discriminate H.
+  - inversion H; subst insts; rewrite elf_rev_tr_eq, forallb_forall in *;
+      intros x Hx; apply Hacc; rewrite in_rev; exact Hx.
+  - destruct (take_u16_le (b0 :: r0)) as [[hw rest2] |] eqn:Ehw; [| discriminate H].
     destruct (negb (N.eqb (N.modulo hw 4%N) 3%N)).
     + destruct (negb rvc); [discriminate H |].
       destruct (decode_rvc_hw hw) as [inst |] eqn:Edec; [| discriminate H].
-      destruct (decode_rv64_stream fuel' rvc code (cur_off + 2)) as [| rest] eqn:Erec; [discriminate H |].
-      inversion H; subst insts; clear H.
-      cbn [forallb]; rewrite (IH _ _ _ _ Erec), andb_true_r.
+      eapply IH; [| exact H].
+      cbn [forallb]; rewrite Hacc, andb_true_r.
       pose proof (decode_rvc_hw_no_word_mulh hw inst Edec) as Hnm.
       unfold inst_no_word_mulh; cbn [dri_inst].
       destruct inst as [| | | op [|] | | | | |]; try reflexivity; destruct op; try reflexivity; contradiction.
-    + destruct (read_u32_le code cur_off) as [w |]; [| discriminate H].
+    + destruct (take_u32_le (b0 :: r0)) as [[w rest4] |] eqn:Ew; [| discriminate H].
       destruct (decode_rv32_word w) as [inst |] eqn:Edec; [| discriminate H].
-      destruct (decode_rv64_stream fuel' rvc code (cur_off + 4)) as [| rest] eqn:Erec; [discriminate H |].
-      inversion H; subst insts; clear H.
-      cbn [forallb]; rewrite (IH _ _ _ _ Erec), andb_true_r.
+      eapply IH; [| exact H].
+      cbn [forallb]; rewrite Hacc, andb_true_r.
       pose proof (decode_rv32_word_no_word_mulh w inst Edec) as Hnm.
       unfold inst_no_word_mulh; cbn [dri_inst].
       destruct inst as [| | | op [|] | | | | |]; try reflexivity; destruct op; try reflexivity; contradiction.
@@ -2774,9 +2880,11 @@ Lemma decode_rv64_bytes_no_word_mulh : forall rvc code insts,
   forallb inst_no_word_mulh insts = true.
 Proof.
   intros rvc code insts H; unfold decode_rv64_bytes in H.
-  destruct (Nat.eqb (List.length code) 0 || negb (Nat.eqb (Nat.modulo (List.length code) 2) 0)); [discriminate H |].
-  destruct (negb rvc && negb (Nat.eqb (Nat.modulo (List.length code) 4) 0)); [discriminate H |].
-  eapply decode_rv64_stream_no_word_mulh; exact H.
+  destruct (Nat.eqb (elf_length_tr code) 0 || negb (Nat.eqb (Nat.modulo (elf_length_tr code) 2) 0));
+    [discriminate H |].
+  destruct (negb rvc && negb (Nat.eqb (Nat.modulo (elf_length_tr code) 4) 0));
+    [discriminate H |].
+  eapply decode_rv64_stream_acc_no_word_mulh; [| exact H]; reflexivity.
 Qed.
 
 Definition rv_rf_matches_args {Pa : Params}
@@ -2944,8 +3052,10 @@ Proof.
   set (vrf0 := rv_build_init_val_regs 10%N arg_specs) in *.
   assert (Hsp2 : rv_val_read 2%N vrf0 = MSV_StackPtr 0%Z).
   { unfold rv_val_read, vrf0; cbn [N.eqb]; rewrite rv_build_init_val_regs_other by lia; reflexivity. }
-  eapply summarize_rv64_dag_at_wf with (sp_off := 0%Z);
-    [exact Hrw | exact Hnmul | unfold mc_frame_cap; lia | exact Hsp2 | | apply mc_sym_stack_wf_empty | exact Hsum].
+  eapply summarize_rv64_dag_at_wf with (insts := insts) (sp_off := 0%Z);
+    [exact (pt_of_list_first_lookup_rv insts)
+    | exact Hrw | exact Hnmul | unfold mc_frame_cap; lia | exact Hsp2
+    | | apply mc_sym_stack_wf_empty | exact Hsum].
   apply rv_init_val_regs_wf; [| exact Hws].
   intros sp Hsp; apply in_map_iff; exists sp; split; [reflexivity | exact Hsp].
 Qed.
@@ -2973,8 +3083,9 @@ Proof.
   set (vrf0 := rv_build_init_val_regs 10%N arg_specs) in *.
   assert (Hsp2 : rv_val_read 2%N vrf0 = MSV_StackPtr 0%Z).
   { unfold rv_val_read, vrf0; cbn [N.eqb]; rewrite rv_build_init_val_regs_other by lia; reflexivity. }
-  eapply summarize_rv64_dag_at_sound with (sp_off := 0%Z);
-    [exact Hrw | exact Hnmul | exact Hsp0 | unfold mc_frame_cap; lia | exact Hsp2
+  eapply summarize_rv64_dag_at_sound with (insts := insts) (sp_off := 0%Z);
+    [exact (pt_of_list_first_lookup_rv insts)
+    | exact Hrw | exact Hnmul | exact Hsp0 | unfold mc_frame_cap; lia | exact Hsp2
     | exact (rv_init_val_regs_agrees penv foracle arg_specs rf0 Hws Hm)
     | apply mc_sym_stack_agrees_empty | exact Hsum].
 Qed.
@@ -3129,6 +3240,28 @@ Proof.
   end.
 Qed.
 
+Lemma decode_rv64_stream_acc_regs_lt32 : forall fuel rvc cur cur_off acc insts,
+  Forall (fun d => rv_inst_regs_lt32 (dri_inst d)) acc ->
+  decode_rv64_stream_acc fuel rvc cur cur_off acc = inr insts ->
+  Forall (fun d => rv_inst_regs_lt32 (dri_inst d)) insts.
+Proof.
+  induction fuel as [| fuel' IH]; intros rvc [| b0 r0] cur_off acc insts Hacc H;
+    cbn [decode_rv64_stream_acc] in H.
+  - inversion H; subst insts; rewrite elf_rev_tr_eq, Forall_forall in *;
+      intros x Hx; apply Hacc; rewrite in_rev; exact Hx.
+  - discriminate H.
+  - inversion H; subst insts; rewrite elf_rev_tr_eq, Forall_forall in *;
+      intros x Hx; apply Hacc; rewrite in_rev; exact Hx.
+  - destruct (take_u16_le (b0 :: r0)) as [[hw rest2] |]; [| discriminate H].
+    destruct (negb (N.eqb (N.modulo hw 4%N) 3%N)).
+    + destruct (negb rvc); [discriminate H |].
+      destruct (decode_rvc_hw hw) as [inst |] eqn:Ed; [| discriminate H].
+      eapply IH; [| exact H]; constructor; [exact (decode_rvc_hw_regs_lt32 hw inst Ed) | exact Hacc].
+    + destruct (take_u32_le (b0 :: r0)) as [[w rest4] |]; [| discriminate H].
+      destruct (decode_rv32_word w) as [inst |] eqn:Ed; [| discriminate H].
+      eapply IH; [| exact H]; constructor; [exact (decode_rv32_word_regs_lt32 w inst Ed) | exact Hacc].
+Qed.
+
 Lemma decode_rv64_bytes_single_regs_lt32 : forall rvc code dec,
   decode_rv64_bytes rvc code = inr [dec] ->
   rv_inst_regs_lt32 (dri_inst dec) /\ inst_no_word_mulh dec = true.
@@ -3137,20 +3270,12 @@ Proof.
   pose proof (decode_rv64_bytes_no_word_mulh rvc code [dec] H) as Hnm.
   cbn [forallb andb] in Hnm; rewrite andb_true_r in Hnm; split; [| exact Hnm].
   unfold decode_rv64_bytes in H.
-  destruct (Nat.eqb (List.length code) 0 || negb (Nat.eqb (Nat.modulo (List.length code) 2) 0)); [discriminate H |].
-  destruct (negb rvc && negb (Nat.eqb (Nat.modulo (List.length code) 4) 0)); [discriminate H |].
-  rewrite Nat.add_1_r in H; cbn [decode_rv64_stream] in H.
-  destruct (Nat.eqb 0 (List.length code)); [discriminate H |].
-  destruct (read_u16_le code 0) as [hw |]; [| discriminate H].
-  destruct (negb (N.eqb (N.modulo hw 4%N) 3%N)).
-  - destruct (negb rvc); [discriminate H |].
-    destruct (decode_rvc_hw hw) as [inst |] eqn:Ed; [| discriminate H].
-    destruct (decode_rv64_stream (Datatypes.length code / 2) rvc code (0 + 2)) as [| rest]; [discriminate H |].
-    inversion H; subst; cbn [dri_inst]; exact (decode_rvc_hw_regs_lt32 hw inst Ed).
-  - destruct (read_u32_le code 0) as [w |]; [| discriminate H].
-    destruct (decode_rv32_word w) as [inst |] eqn:Ed; [| discriminate H].
-    destruct (decode_rv64_stream (Datatypes.length code / 2) rvc code (0 + 4)) as [| rest]; [discriminate H |].
-    inversion H; subst; cbn [dri_inst]; exact (decode_rv32_word_regs_lt32 w inst Ed).
+  destruct (Nat.eqb (elf_length_tr code) 0 || negb (Nat.eqb (Nat.modulo (elf_length_tr code) 2) 0));
+    [discriminate H |].
+  destruct (negb rvc && negb (Nat.eqb (Nat.modulo (elf_length_tr code) 4) 0));
+    [discriminate H |].
+  pose proof (decode_rv64_stream_acc_regs_lt32 _ rvc code 0 [] [dec] (Forall_nil _) H) as Hfa.
+  inversion Hfa; assumption.
 Qed.
 
 Definition rv_penv_matches_rf {Pa : Params} (penv : param_env Pa) (rf : rv_regfile) : Prop :=
@@ -3952,29 +4077,29 @@ Proof.
       rewrite (eval_ce_trunc penv foracle 64%positive ret_w _ _ Hlt64 Ha10); reflexivity.
 Qed.
 
-Fixpoint summarize_rv64_seg
-  (fuel : nat) (insts : list decoded_rv_inst) (cut_pc : N)
-  (req_step : bool) (visited : list N)
+Fixpoint summarize_rv64_seg_at
+  (fuel : nat) (im : pos_trie decoded_rv_inst) (cut_pc : N)
+  (req_step : bool) (visited : pos_trie unit)
   (pc : N) (sp_off : Z) (vrf : rv_val_regs) (astk : mc_sym_stack) (ret_w : positive)
   {struct fuel} : option rv_seg_tree :=
   if negb req_step && N.eqb pc cut_pc then
     Some (RST_Cut sp_off vrf astk)
-  else if n_in_list pc visited then None
+  else if pt_has_n pc visited then None
   else
     match fuel with
     | O => None
     | S fuel' =>
-        match lookup_rv_inst insts pc with
+        match pt_get (N.succ_pos pc) im with
         | None => None
         | Some dec =>
-            let visited' := pc :: visited in
+            let visited' := pt_add_n pc visited in
             match rv_sym_step_one dec pc sp_off vrf astk ret_w with
             | None => None
             | Some (RSSR_Next next_pc sp_off' vrf' astk') =>
-                summarize_rv64_seg fuel' insts cut_pc false visited' next_pc sp_off' vrf' astk' ret_w
+                summarize_rv64_seg_at fuel' im cut_pc false visited' next_pc sp_off' vrf' astk' ret_w
             | Some (RSSR_Branch cond tgt_pc next_pc) =>
-                match summarize_rv64_seg fuel' insts cut_pc false visited' tgt_pc sp_off vrf astk ret_w,
-                      summarize_rv64_seg fuel' insts cut_pc false visited' next_pc sp_off vrf astk ret_w with
+                match summarize_rv64_seg_at fuel' im cut_pc false visited' tgt_pc sp_off vrf astk ret_w,
+                      summarize_rv64_seg_at fuel' im cut_pc false visited' next_pc sp_off vrf astk ret_w with
                 | Some dt, Some df => Some (RST_Branch cond dt df)
                 | _, _ => None
                 end
@@ -3982,6 +4107,57 @@ Fixpoint summarize_rv64_seg
             end
         end
     end.
+
+Definition summarize_rv64_seg
+  (fuel : nat) (insts : list decoded_rv_inst) (cut_pc : N)
+  (req_step : bool) (visited : list N)
+  (pc : N) (sp_off : Z) (vrf : rv_val_regs) (astk : mc_sym_stack) (ret_w : positive)
+  : option rv_seg_tree :=
+  summarize_rv64_seg_at fuel (pt_of_list_first dri_off insts) cut_pc req_step
+    (pt_of_visited visited) pc sp_off vrf astk ret_w.
+
+Theorem summarize_rv64_seg_at_wf :
+  forall fuel insts im cut_pc req_step visited pc allowed sp_off vrf astk ret_w seg,
+    (forall q, pt_get (N.succ_pos q) im = lookup_rv_inst insts q) ->
+    rv_supported_arg_width ret_w = true ->
+    forallb inst_no_word_mulh insts = true ->
+    (- mc_frame_cap <= sp_off <= 0)%Z ->
+    rv_val_read 2%N vrf = MSV_StackPtr sp_off ->
+    rv_val_regs_wf allowed vrf ->
+    mc_sym_stack_wf allowed sp_off astk ->
+    summarize_rv64_seg_at fuel im cut_pc req_step visited pc sp_off vrf astk ret_w = Some seg ->
+    rv_seg_wf allowed ret_w seg.
+Proof.
+  intros fuel insts im cut_pc req_step visited pc allowed sp_off vrf astk ret_w seg Him.
+  revert cut_pc req_step visited pc allowed sp_off vrf astk ret_w seg.
+  induction fuel as [| fuel' IH];
+    intros cut_pc req_step visited pc allowed sp_off vrf astk ret_w seg
+           Hrw Hnmul Hrng Hsp2 Hwf Hstk Hsum;
+    cbn [summarize_rv64_seg_at] in Hsum.
+  - destruct (negb req_step && N.eqb pc cut_pc).
+    + inversion Hsum; subst; split; [exact Hrng | split; [exact Hsp2 | split; [exact Hwf | exact Hstk]]].
+    + destruct (pt_has_n pc visited); discriminate Hsum.
+  - destruct (negb req_step && N.eqb pc cut_pc).
+    + inversion Hsum; subst; split; [exact Hrng | split; [exact Hsp2 | split; [exact Hwf | exact Hstk]]].
+    + destruct (pt_has_n pc visited); [discriminate Hsum |].
+      destruct (pt_get (N.succ_pos pc) im) as [dec |] eqn:Elook; [| discriminate Hsum].
+      rewrite Him in Elook.
+      assert (Hdec_mulh : inst_no_word_mulh dec = true).
+      { clear -Elook Hnmul; induction insts as [| d rest IHl]; cbn in *; [discriminate |].
+        apply andb_true_iff in Hnmul as [Hd Hr]; destruct (N.eqb (dri_off d) pc); [inversion Elook; subst; exact Hd | exact (IHl Hr Elook)]. }
+      destruct (rv_sym_step_one dec pc sp_off vrf astk ret_w) as [res |] eqn:Est; [| discriminate Hsum].
+      pose proof (rv_sym_step_one_wf allowed dec pc sp_off vrf astk ret_w res Hrw Hdec_mulh Hrng Hsp2 Hwf Hstk Est) as Hres.
+      destruct res.
+      * destruct Hres as (Hrng' & Hsp2' & Hwf' & Hstk').
+        exact (IH _ _ _ _ _ _ _ _ _ _ Hrw Hnmul Hrng' Hsp2' Hwf' Hstk' Hsum).
+      * destruct (summarize_rv64_seg_at fuel' im cut_pc false (pt_add_n pc visited) tgt_pc sp_off vrf astk ret_w) as [dt |] eqn:Edt; [| discriminate Hsum].
+        destruct (summarize_rv64_seg_at fuel' im cut_pc false (pt_add_n pc visited) next_pc sp_off vrf astk ret_w) as [df |] eqn:Edf; [| discriminate Hsum].
+        inversion Hsum; subst; split;
+          [exact Hres
+          | split; [exact (IH _ _ _ _ _ _ _ _ _ _ Hrw Hnmul Hrng Hsp2 Hwf Hstk Edt)
+                   | exact (IH _ _ _ _ _ _ _ _ _ _ Hrw Hnmul Hrng Hsp2 Hwf Hstk Edf)]].
+      * inversion Hsum; subst; exact Hres.
+Qed.
 
 Theorem summarize_rv64_seg_wf :
   forall fuel insts cut_pc req_step visited pc allowed sp_off vrf astk ret_w seg,
@@ -3994,32 +4170,11 @@ Theorem summarize_rv64_seg_wf :
     summarize_rv64_seg fuel insts cut_pc req_step visited pc sp_off vrf astk ret_w = Some seg ->
     rv_seg_wf allowed ret_w seg.
 Proof.
-  induction fuel as [| fuel' IH];
-    intros insts cut_pc req_step visited pc allowed sp_off vrf astk ret_w seg
-           Hrw Hnmul Hrng Hsp2 Hwf Hstk Hsum;
-    cbn [summarize_rv64_seg] in Hsum.
-  - destruct (negb req_step && N.eqb pc cut_pc).
-    + inversion Hsum; subst; split; [exact Hrng | split; [exact Hsp2 | split; [exact Hwf | exact Hstk]]].
-    + destruct (n_in_list pc visited); discriminate Hsum.
-  - destruct (negb req_step && N.eqb pc cut_pc).
-    + inversion Hsum; subst; split; [exact Hrng | split; [exact Hsp2 | split; [exact Hwf | exact Hstk]]].
-    + destruct (n_in_list pc visited); [discriminate Hsum |].
-      destruct (lookup_rv_inst insts pc) as [dec |] eqn:Elook; [| discriminate Hsum].
-      assert (Hdec_mulh : inst_no_word_mulh dec = true).
-      { clear -Elook Hnmul; induction insts as [| d rest IHl]; cbn in *; [discriminate |].
-        apply andb_true_iff in Hnmul as [Hd Hr]; destruct (N.eqb (dri_off d) pc); [inversion Elook; subst; exact Hd | exact (IHl Hr Elook)]. }
-      destruct (rv_sym_step_one dec pc sp_off vrf astk ret_w) as [res |] eqn:Est; [| discriminate Hsum].
-      pose proof (rv_sym_step_one_wf allowed dec pc sp_off vrf astk ret_w res Hrw Hdec_mulh Hrng Hsp2 Hwf Hstk Est) as Hres.
-      destruct res.
-      * destruct Hres as (Hrng' & Hsp2' & Hwf' & Hstk').
-        exact (IH _ _ _ _ _ _ _ _ _ _ _ Hrw Hnmul Hrng' Hsp2' Hwf' Hstk' Hsum).
-      * destruct (summarize_rv64_seg fuel' insts cut_pc false (pc :: visited) tgt_pc sp_off vrf astk ret_w) as [dt |] eqn:Edt; [| discriminate Hsum].
-        destruct (summarize_rv64_seg fuel' insts cut_pc false (pc :: visited) next_pc sp_off vrf astk ret_w) as [df |] eqn:Edf; [| discriminate Hsum].
-        inversion Hsum; subst; split;
-          [exact Hres
-          | split; [exact (IH _ _ _ _ _ _ _ _ _ _ _ Hrw Hnmul Hrng Hsp2 Hwf Hstk Edt)
-                   | exact (IH _ _ _ _ _ _ _ _ _ _ _ Hrw Hnmul Hrng Hsp2 Hwf Hstk Edf)]].
-      * inversion Hsum; subst; exact Hres.
+  intros fuel insts cut_pc req_step visited pc allowed sp_off vrf astk ret_w seg
+         Hrw Hnmul Hrng Hsp2 Hwf Hstk Hsum.
+  eapply summarize_rv64_seg_at_wf with (insts := insts);
+    [exact (pt_of_list_first_lookup_rv insts)
+    | exact Hrw | exact Hnmul | exact Hrng | exact Hsp2 | exact Hwf | exact Hstk | exact Hsum].
 Qed.
 
 Fixpoint rv_seg_exec_spec
@@ -4069,6 +4224,70 @@ Proof.
     destruct b; [exact (IHt Hsub) | exact (IHf Hsub)].
 Qed.
 
+Theorem summarize_rv64_seg_at_sound :
+  forall {Pa : Params} fuel insts im cut_pc req_step visited pc sp_off vrf astk ret_w seg
+         penv foracle rf0 rf mstk,
+    (forall q, pt_get (N.succ_pos q) im = lookup_rv_inst insts q) ->
+    rv_supported_arg_width ret_w = true ->
+    forallb inst_no_word_mulh insts = true ->
+    mc_valid_sp0 (rv_read_reg 2%N rf0) ->
+    (- mc_frame_cap <= sp_off <= 0)%Z ->
+    rv_val_read 2%N vrf = MSV_StackPtr sp_off ->
+    rv_val_regs_agrees penv foracle rf0 (rv_read_reg 2%N rf0) vrf rf ->
+    mc_sym_stack_agrees penv foracle (fun r0 => rv_read_reg r0 rf0) (rv_read_reg 2%N rf0) astk mstk ->
+    summarize_rv64_seg_at fuel im cut_pc req_step visited pc sp_off vrf astk ret_w = Some seg ->
+    rv_seg_exec_spec penv foracle insts cut_pc req_step pc rf0 rf mstk ret_w seg.
+Proof.
+  intros Pa fuel insts im cut_pc req_step visited pc sp_off vrf astk ret_w seg
+         penv foracle rf0 rf mstk Him.
+  revert cut_pc req_step visited pc sp_off vrf astk ret_w seg penv foracle rf0 rf mstk.
+  induction fuel as [| fuel' IH];
+    intros cut_pc req_step visited pc sp_off vrf astk ret_w seg
+           penv foracle rf0 rf mstk Hrw Hnmul Hsp0 Hrng Hsp2 Hag Hastk Hsum;
+    cbn [summarize_rv64_seg_at] in Hsum.
+  - destruct (negb req_step && N.eqb pc cut_pc) eqn:Ecut.
+    + apply andb_true_iff in Ecut as [Hreq Hpc]; apply N.eqb_eq in Hpc; subst pc.
+      destruct req_step; [discriminate Hreq |].
+      inversion Hsum; subst seg; clear Hsum.
+      exists 0%nat, rf, mstk; split; [intro C; discriminate C | split; [reflexivity | split; [exact Hrng | split; [exact Hsp2 | split; [exact Hag | exact Hastk]]]]].
+    + destruct (pt_has_n pc visited); discriminate Hsum.
+  - destruct (negb req_step && N.eqb pc cut_pc) eqn:Ecut.
+    + apply andb_true_iff in Ecut as [Hreq Hpc]; apply N.eqb_eq in Hpc; subst pc.
+      destruct req_step; [discriminate Hreq |].
+      inversion Hsum; subst seg; clear Hsum.
+      exists 0%nat, rf, mstk; split; [intro C; discriminate C | split; [reflexivity | split; [exact Hrng | split; [exact Hsp2 | split; [exact Hag | exact Hastk]]]]].
+    + destruct (pt_has_n pc visited); [discriminate Hsum |].
+      destruct (pt_get (N.succ_pos pc) im) as [dec |] eqn:Elook; [| discriminate Hsum].
+      rewrite Him in Elook.
+      assert (Hdec_mulh : inst_no_word_mulh dec = true).
+      { clear -Elook Hnmul; induction insts as [| d rest IHl]; cbn in *; [discriminate |].
+        apply andb_true_iff in Hnmul as [Hd Hr]; destruct (N.eqb (dri_off d) pc); [inversion Elook; subst; exact Hd | exact (IHl Hr Elook)]. }
+      destruct (rv_sym_step_one dec pc sp_off vrf astk ret_w) as [res |] eqn:Est; [| discriminate Hsum].
+      pose proof (rv_sym_step_one_sound dec pc sp_off vrf astk ret_w res penv foracle rf0 rf mstk
+                    Hrw Hdec_mulh Hsp0 Hrng Hsp2 Hag Hastk Est) as Hres.
+      destruct res.
+      * destruct Hres as (rf1 & mstk1 & Hone & Hrng' & Hsp2' & Hag' & Hastk').
+        assert (H1 : rv_exec_steps 1 insts (rv_read_reg 2%N rf0) pc rf mstk = Some (next_pc, rf1, mstk1))
+          by (cbn [rv_exec_steps]; rewrite Elook, Hone; reflexivity).
+        exact (rv_seg_exec_spec_step_front _ _ _ _ _ _ _ _ _ _ _ _ _ _ H1
+                 (IH _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hnmul Hsp0 Hrng' Hsp2' Hag' Hastk' Hsum)).
+      * destruct (summarize_rv64_seg_at fuel' im cut_pc false (pt_add_n pc visited) tgt_pc sp_off vrf astk ret_w) as [dt |] eqn:Edt; [| discriminate Hsum].
+        destruct (summarize_rv64_seg_at fuel' im cut_pc false (pt_add_n pc visited) next_pc sp_off vrf astk ret_w) as [df |] eqn:Edf; [| discriminate Hsum].
+        inversion Hsum; subst seg; clear Hsum.
+        destruct Hres as [b [Hbc Hone]].
+        cbn [rv_seg_exec_spec]; exists b; split; [exact Hbc |].
+        assert (H1 : rv_exec_steps 1 insts (rv_read_reg 2%N rf0) pc rf mstk = Some ((if b then tgt_pc else next_pc), rf, mstk))
+          by (cbn [rv_exec_steps]; rewrite Elook, Hone; reflexivity).
+        eapply rv_seg_exec_spec_step_front; [exact H1 |].
+        destruct b;
+          [exact (IH _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hnmul Hsp0 Hrng Hsp2 Hag Hastk Edt)
+          | exact (IH _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hnmul Hsp0 Hrng Hsp2 Hag Hastk Edf)].
+      * inversion Hsum; subst seg; clear Hsum.
+        destruct Hres as (Hret & Hcs & Hra & Hev).
+        exists 1%nat, rf, mstk; split; [| split; [exact Hcs | split; [exact Hra | exact Hev]]].
+        cbn [rv_exec_mem]; rewrite Elook, Hret; reflexivity.
+Qed.
+
 Theorem summarize_rv64_seg_sound :
   forall {Pa : Params} fuel insts cut_pc req_step visited pc sp_off vrf astk ret_w seg
          penv foracle rf0 rf mstk,
@@ -4082,50 +4301,12 @@ Theorem summarize_rv64_seg_sound :
     summarize_rv64_seg fuel insts cut_pc req_step visited pc sp_off vrf astk ret_w = Some seg ->
     rv_seg_exec_spec penv foracle insts cut_pc req_step pc rf0 rf mstk ret_w seg.
 Proof.
-  intros Pa fuel; induction fuel as [| fuel' IH];
-    intros insts cut_pc req_step visited pc sp_off vrf astk ret_w seg
-           penv foracle rf0 rf mstk Hrw Hnmul Hsp0 Hrng Hsp2 Hag Hastk Hsum;
-    cbn [summarize_rv64_seg] in Hsum.
-  - destruct (negb req_step && N.eqb pc cut_pc) eqn:Ecut.
-    + apply andb_true_iff in Ecut as [Hreq Hpc]; apply N.eqb_eq in Hpc; subst pc.
-      destruct req_step; [discriminate Hreq |].
-      inversion Hsum; subst seg; clear Hsum.
-      exists 0%nat, rf, mstk; split; [intro C; discriminate C | split; [reflexivity | split; [exact Hrng | split; [exact Hsp2 | split; [exact Hag | exact Hastk]]]]].
-    + destruct (n_in_list pc visited); discriminate Hsum.
-  - destruct (negb req_step && N.eqb pc cut_pc) eqn:Ecut.
-    + apply andb_true_iff in Ecut as [Hreq Hpc]; apply N.eqb_eq in Hpc; subst pc.
-      destruct req_step; [discriminate Hreq |].
-      inversion Hsum; subst seg; clear Hsum.
-      exists 0%nat, rf, mstk; split; [intro C; discriminate C | split; [reflexivity | split; [exact Hrng | split; [exact Hsp2 | split; [exact Hag | exact Hastk]]]]].
-    + destruct (n_in_list pc visited); [discriminate Hsum |].
-      destruct (lookup_rv_inst insts pc) as [dec |] eqn:Elook; [| discriminate Hsum].
-      assert (Hdec_mulh : inst_no_word_mulh dec = true).
-      { clear -Elook Hnmul; induction insts as [| d rest IHl]; cbn in *; [discriminate |].
-        apply andb_true_iff in Hnmul as [Hd Hr]; destruct (N.eqb (dri_off d) pc); [inversion Elook; subst; exact Hd | exact (IHl Hr Elook)]. }
-      destruct (rv_sym_step_one dec pc sp_off vrf astk ret_w) as [res |] eqn:Est; [| discriminate Hsum].
-      pose proof (rv_sym_step_one_sound dec pc sp_off vrf astk ret_w res penv foracle rf0 rf mstk
-                    Hrw Hdec_mulh Hsp0 Hrng Hsp2 Hag Hastk Est) as Hres.
-      destruct res.
-      * destruct Hres as (rf1 & mstk1 & Hone & Hrng' & Hsp2' & Hag' & Hastk').
-        assert (H1 : rv_exec_steps 1 insts (rv_read_reg 2%N rf0) pc rf mstk = Some (next_pc, rf1, mstk1))
-          by (cbn [rv_exec_steps]; rewrite Elook, Hone; reflexivity).
-        exact (rv_seg_exec_spec_step_front _ _ _ _ _ _ _ _ _ _ _ _ _ _ H1
-                 (IH _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hnmul Hsp0 Hrng' Hsp2' Hag' Hastk' Hsum)).
-      * destruct (summarize_rv64_seg fuel' insts cut_pc false (pc :: visited) tgt_pc sp_off vrf astk ret_w) as [dt |] eqn:Edt; [| discriminate Hsum].
-        destruct (summarize_rv64_seg fuel' insts cut_pc false (pc :: visited) next_pc sp_off vrf astk ret_w) as [df |] eqn:Edf; [| discriminate Hsum].
-        inversion Hsum; subst seg; clear Hsum.
-        destruct Hres as [b [Hbc Hone]].
-        cbn [rv_seg_exec_spec]; exists b; split; [exact Hbc |].
-        assert (H1 : rv_exec_steps 1 insts (rv_read_reg 2%N rf0) pc rf mstk = Some ((if b then tgt_pc else next_pc), rf, mstk))
-          by (cbn [rv_exec_steps]; rewrite Elook, Hone; reflexivity).
-        eapply rv_seg_exec_spec_step_front; [exact H1 |].
-        destruct b;
-          [exact (IH _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hnmul Hsp0 Hrng Hsp2 Hag Hastk Edt)
-          | exact (IH _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hnmul Hsp0 Hrng Hsp2 Hag Hastk Edf)].
-      * inversion Hsum; subst seg; clear Hsum.
-        destruct Hres as (Hret & Hcs & Hra & Hev).
-        exists 1%nat, rf, mstk; split; [| split; [exact Hcs | split; [exact Hra | exact Hev]]].
-        cbn [rv_exec_mem]; rewrite Elook, Hret; reflexivity.
+  intros Pa fuel insts cut_pc req_step visited pc sp_off vrf astk ret_w seg
+         penv foracle rf0 rf mstk Hrw Hnmul Hsp0 Hrng Hsp2 Hag Hastk Hsum.
+  eapply summarize_rv64_seg_at_sound with (insts := insts);
+    [exact (pt_of_list_first_lookup_rv insts)
+    | exact Hrw | exact Hnmul | exact Hsp0 | exact Hrng | exact Hsp2
+    | exact Hag | exact Hastk | exact Hsum].
 Qed.
 
 Lemma rv_exec_mem_det :

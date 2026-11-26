@@ -28,30 +28,82 @@ Definition list_ascii_of_string_tail_rec (s : string) : list ascii
 (* The following is reproduced from the QuickChick library to avoid a heavy dependency *)
 Section Show.
 
-  Fixpoint contents {A : Type} (s : A -> string) (l : list A) : string :=
-    match l with
-    | nil => ""%string
-    | cons h nil => s h
-    | cons h t => append (append (s h) "; ") (contents s t)
+  Fixpoint push_str_rev (s : string) (acc : list ascii) : list ascii :=
+    match s with
+    | EmptyString => acc
+    | String c rest => push_str_rev rest (c :: acc)
     end.
+
+  Fixpoint rev_chars_to_string_go (cs : list ascii) (acc : string) : string :=
+    match cs with
+    | [] => acc
+    | c :: rest => rev_chars_to_string_go rest (String c acc)
+    end.
+
+  Definition rev_chars_to_string (cs : list ascii) : string :=
+    rev_chars_to_string_go cs EmptyString.
+
+  Fixpoint push_chars_n (c : ascii) (n : nat) (acc : list ascii) : list ascii :=
+    match n with
+    | O => acc
+    | S n' => push_chars_n c n' (c :: acc)
+    end.
+
+  Fixpoint push_uint_rev (n : uint) (acc : list ascii) : list ascii :=
+    match n with
+    | Nil => acc
+    | D0 n' => push_uint_rev n' ("0"%char :: acc)
+    | D1 n' => push_uint_rev n' ("1"%char :: acc)
+    | D2 n' => push_uint_rev n' ("2"%char :: acc)
+    | D3 n' => push_uint_rev n' ("3"%char :: acc)
+    | D4 n' => push_uint_rev n' ("4"%char :: acc)
+    | D5 n' => push_uint_rev n' ("5"%char :: acc)
+    | D6 n' => push_uint_rev n' ("6"%char :: acc)
+    | D7 n' => push_uint_rev n' ("7"%char :: acc)
+    | D8 n' => push_uint_rev n' ("8"%char :: acc)
+    | D9 n' => push_uint_rev n' ("9"%char :: acc)
+    end.
+
+  Definition push_int_rev (n : int) (acc : list ascii) : list ascii :=
+    match n with
+    | Pos n' => push_uint_rev n' acc
+    | Neg n' => push_uint_rev n' ("-"%char :: acc)
+    end.
+
+  Definition push_Z_rev (n : Z) (acc : list ascii) : list ascii :=
+    push_int_rev (Z.to_int n) acc.
+
+  Definition push_N_rev (n : N) (acc : list ascii) : list ascii :=
+    push_Z_rev (Z.of_N n) acc.
+
+  Definition push_nat_rev (n : nat) (acc : list ascii) : list ascii :=
+    push_uint_rev (Nat.to_uint n) acc.
+
+  Definition push_bool_rev (b : bool) (acc : list ascii) : list ascii :=
+    push_str_rev (if b then "true" else "false") acc.
+
+  Fixpoint push_sep_tail_rev {A : Type} (sep : string) (f : A -> list ascii -> list ascii)
+    (l : list A) (acc : list ascii) : list ascii :=
+    match l with
+    | [] => acc
+    | h :: t => push_sep_tail_rev sep f t (f h (push_str_rev sep acc))
+    end.
+
+  Definition push_sep_rev {A : Type} (sep : string) (f : A -> list ascii -> list ascii)
+    (l : list A) (acc : list ascii) : list ascii :=
+    match l with
+    | [] => acc
+    | h :: t => push_sep_tail_rev sep f t (f h acc)
+    end.
+
+  Definition contents {A : Type} (s : A -> string) (l : list A) : string :=
+    rev_chars_to_string (push_sep_rev "; " (fun x acc => push_str_rev (s x) acc) l []).
 
   Class Show (A : Type) : Type :=
     { show : A -> string }.
 
-  Fixpoint show_uint (n : uint) : string :=
-    match n with
-    | Nil => ""
-    | D0 n => String "0" (show_uint n)
-    | D1 n => String "1" (show_uint n)
-    | D2 n => String "2" (show_uint n)
-    | D3 n => String "3" (show_uint n)
-    | D4 n => String "4" (show_uint n)
-    | D5 n => String "5" (show_uint n)
-    | D6 n => String "6" (show_uint n)
-    | D7 n => String "7" (show_uint n)
-    | D8 n => String "8" (show_uint n)
-    | D9 n => String "9" (show_uint n)
-    end.
+  Definition show_uint (n : uint) : string :=
+    rev_chars_to_string (push_uint_rev n []).
 
   Definition show_int (n : int) : string :=
     match n with
@@ -134,32 +186,38 @@ Section Show.
     | _, _, _ => None
     end.
 
-  Fixpoint show_quoted_string (s:string) : string :=
+  Definition push_three_digit_rev (n : nat) (acc : list ascii) : list ascii :=
+    let n0 := unit_digit n in
+    let n1 := unit_digit (n / 10) in
+    let n2 := unit_digit (n / 100) in
+    n0 :: n1 :: n2 :: acc.
+
+  Fixpoint push_quoted_string_body_rev (s : string) (acc : list ascii) : list ascii :=
     match s with
-    | EmptyString => """"
+    | EmptyString => acc
     | String c s' =>
-        let quoted_s' := show_quoted_string s' in
         let n := nat_of_ascii c in
-        if ascii_dec c "009" (* TAB *) then
-          "\t" ++ quoted_s'
-        else if ascii_dec c "010" (* NEWLINE *) then
-               "\n" ++ quoted_s'
-             else if ascii_dec c "013" (* CARRIAGE RETURN *) then
-                    "\r" ++ quoted_s'
-                  else if ascii_dec c """" (* DOUBLEQUOTE *) then
-                         "\""" ++ quoted_s'
-                       else if ascii_dec c "\" (* BACKSLASH *) then
-                              "\\" ++ quoted_s'
-                            else if ((n <? 32)%nat (* SPACE *)
-                                     || (126 <? n)%nat (* ~ *))%bool then
-                                   "\" ++ three_digit n ++ quoted_s'
-                                 else
-                                   String c quoted_s'
+        let acc' :=
+          if ascii_dec c "009" (* TAB *) then push_str_rev "\t" acc
+          else if ascii_dec c "010" (* NEWLINE *) then push_str_rev "\n" acc
+          else if ascii_dec c "013" (* CARRIAGE RETURN *) then push_str_rev "\r" acc
+          else if ascii_dec c """" (* DOUBLEQUOTE *) then push_str_rev "\""" acc
+          else if ascii_dec c "\" (* BACKSLASH *) then push_str_rev "\\" acc
+          else if ((n <? 32)%nat (* SPACE *) || (126 <? n)%nat (* ~ *))%bool
+               then push_three_digit_rev n ("\"%char :: acc)
+               else c :: acc in
+        push_quoted_string_body_rev s' acc'
     end.
+
+  Definition push_quoted_string_rev (s : string) (acc : list ascii) : list ascii :=
+    """"%char :: push_quoted_string_body_rev s (""""%char :: acc).
+
+  Definition show_quoted_string (s : string) : string :=
+    rev_chars_to_string (""""%char :: push_quoted_string_body_rev s []).
 
   #[global] Instance showString : Show string :=
     {|
-      show s := String """" (show_quoted_string s)
+      show s := rev_chars_to_string (push_quoted_string_rev s [])
     |}.
 
   
@@ -178,7 +236,9 @@ Section Show.
 
   #[global] Instance showList {A : Type} `{_ : Show A} : Show (list A) :=
     {|
-      show l := append "[" (append (contents show l) "]")
+      show l :=
+        rev_chars_to_string
+          ("]"%char :: push_sep_rev "; " (fun x acc => push_str_rev (show x) acc) l ["["%char])
     |}.
 
   Definition newline := String "010" ""%string.

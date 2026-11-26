@@ -585,10 +585,24 @@ Fixpoint reify_ir_seg
         end
     end.
 
-Fixpoint ir_seg_written_ids (fuel : nat) (bmap : rmap (block dtyp)) (hdr_id : block_id)
-  (req_step : bool) (visited : list block_id) (cur_bid : block_id)
+Fixpoint push_phi_ids_acc {A B : Type} (xs : list (raw_id * A * B)) (acc : list raw_id)
+  {struct xs} : list raw_id :=
+  match xs with
+  | [] => acc
+  | (id, _, _) :: rest => push_phi_ids_acc rest (id :: acc)
+  end.
+
+Fixpoint code_written_ids_acc (c : code dtyp) (acc : list raw_id) {struct c} : list raw_id :=
+  match c with
+  | [] => acc
+  | (IId id, _, _) :: rest => code_written_ids_acc rest (id :: acc)
+  | (IVoid _, _, _) :: rest => code_written_ids_acc rest acc
+  end.
+
+Fixpoint ir_seg_written_ids_acc (fuel : nat) (bmap : rmap (block dtyp)) (hdr_id : block_id)
+  (req_step : bool) (visited : list block_id) (cur_bid : block_id) (acc : list raw_id)
   {struct fuel} : option (list raw_id) :=
-  if negb req_step && raw_id_eqb cur_bid hdr_id then Some []
+  if negb req_step && raw_id_eqb cur_bid hdr_id then Some acc
   else if raw_id_in_list cur_bid visited then None
   else
     match fuel with
@@ -598,26 +612,27 @@ Fixpoint ir_seg_written_ids (fuel : nat) (bmap : rmap (block dtyp)) (hdr_id : bl
         | None => None
         | Some b =>
             let visited' := cur_bid :: visited in
-            let phi_ids := if req_step then [] else List.map (fun '(id, _, _) => id) (blk_phis b) in
-            let code_ids := code_written_ids (blk_code b) in
+            let acc_ph := if req_step then acc else push_phi_ids_acc (blk_phis b) acc in
+            let acc' := code_written_ids_acc (blk_code b) acc_ph in
             let '(_, term) := fst (blk_term b) in
             match term with
-            | TERM_Unreachable | TERM_Ret _ => Some (phi_ids ++ code_ids)
+            | TERM_Unreachable | TERM_Ret _ => Some acc'
             | TERM_Br_1 next_bid =>
-                match ir_seg_written_ids fuel' bmap hdr_id false visited' next_bid with
-                | Some wr => Some (phi_ids ++ code_ids ++ wr)
-                | None => None
-                end
+                ir_seg_written_ids_acc fuel' bmap hdr_id false visited' next_bid acc'
             | TERM_Br _ br1 br2 =>
-                match ir_seg_written_ids fuel' bmap hdr_id false visited' br1,
-                      ir_seg_written_ids fuel' bmap hdr_id false visited' br2 with
-                | Some wr1, Some wr2 => Some (phi_ids ++ code_ids ++ wr1 ++ wr2)
-                | _, _ => None
+                match ir_seg_written_ids_acc fuel' bmap hdr_id false visited' br1 acc' with
+                | Some wr1 => ir_seg_written_ids_acc fuel' bmap hdr_id false visited' br2 wr1
+                | None => None
                 end
             | _ => None
             end
         end
     end.
+
+Definition ir_seg_written_ids (fuel : nat) (bmap : rmap (block dtyp)) (hdr_id : block_id)
+  (req_step : bool) (visited : list block_id) (cur_bid : block_id)
+  : option (list raw_id) :=
+  ir_seg_written_ids_acc fuel bmap hdr_id req_step visited cur_bid [].
 
 Fixpoint collect_entry_cut_lmaps (t : ir_seg_tree) : list (rmap (positive * cert_expr)) :=
   match t with
@@ -963,6 +978,72 @@ Proof.
   rewrite RMF.F.add_neq_o; [reflexivity | intro H; apply Hnin; left; exact H].
 Qed.
 
+Lemma push_phi_ids_acc_app : forall {A B : Type} (xs : list (raw_id * A * B)) acc1 acc2,
+  push_phi_ids_acc xs (acc1 ++ acc2) = push_phi_ids_acc xs acc1 ++ acc2.
+Proof.
+  intros A B xs; induction xs as [| [[id a] b] rest IH]; intros acc1 acc2;
+    cbn [push_phi_ids_acc]; [reflexivity | exact (IH (id :: acc1) acc2)].
+Qed.
+
+Lemma code_written_ids_acc_app : forall c acc1 acc2,
+  code_written_ids_acc c (acc1 ++ acc2) = code_written_ids_acc c acc1 ++ acc2.
+Proof.
+  induction c as [| [[iid ins] md] rest IH]; intros acc1 acc2;
+    cbn [code_written_ids_acc]; [reflexivity | destruct iid; [exact (IH (id :: acc1) acc2) | exact (IH acc1 acc2)]].
+Qed.
+
+Lemma push_phi_ids_acc_in : forall {A B : Type} (xs : list (raw_id * A * B)) acc r,
+  In r (push_phi_ids_acc xs acc) <-> In r (List.map (fun '(id, _, _) => id) xs) \/ In r acc.
+Proof.
+  intros A B xs; induction xs as [| [[id a] b] rest IH]; intros acc r;
+    cbn [push_phi_ids_acc List.map In]; [tauto |].
+  rewrite IH; cbn [In]; tauto.
+Qed.
+
+Lemma code_written_ids_acc_in : forall c acc r,
+  In r (code_written_ids_acc c acc) <-> In r (code_written_ids c) \/ In r acc.
+Proof.
+  induction c as [| [[iid ins] md] rest IH]; intros acc r;
+    unfold code_written_ids in *; cbn [code_written_ids_acc List.flat_map In]; [tauto |].
+  destruct iid; cbn [In app]; [rewrite IH; cbn [In]; tauto | exact (IH acc r)].
+Qed.
+
+Lemma ir_seg_written_ids_acc_shift :
+  forall fuel bmap hdr_id req_step visited cur_bid acc,
+    ir_seg_written_ids_acc fuel bmap hdr_id req_step visited cur_bid acc =
+    option_map (fun d => d ++ acc)
+      (ir_seg_written_ids_acc fuel bmap hdr_id req_step visited cur_bid []).
+Proof.
+  intro fuel; induction fuel as [| fuel' IH];
+    intros bmap hdr_id req_step visited cur_bid acc;
+    cbn [ir_seg_written_ids_acc].
+  - destruct (negb req_step && raw_id_eqb cur_bid hdr_id); [reflexivity |].
+    destruct (raw_id_in_list cur_bid visited); reflexivity.
+  - destruct (negb req_step && raw_id_eqb cur_bid hdr_id); [reflexivity |].
+    destruct (raw_id_in_list cur_bid visited); [reflexivity |].
+    destruct (RM.find cur_bid bmap) as [b |]; [| reflexivity].
+    destruct (blk_term b) as [[tid term] tmd]; cbn [fst].
+    set (base := code_written_ids_acc (blk_code b)
+                   (if req_step then [] else push_phi_ids_acc (blk_phis b) [])).
+    assert (Happ : code_written_ids_acc (blk_code b)
+                     (if req_step then acc else push_phi_ids_acc (blk_phis b) acc) =
+                   base ++ acc).
+    { unfold base; destruct req_step;
+        [rewrite <- (app_nil_l acc) at 1 | rewrite <- (app_nil_l acc) at 1; rewrite push_phi_ids_acc_app];
+        exact (code_written_ids_acc_app (blk_code b) _ acc). }
+    rewrite Happ.
+    destruct term; try reflexivity.
+    + rewrite IH, (IH _ _ _ _ _ base).
+      destruct (ir_seg_written_ids_acc fuel' bmap hdr_id false (cur_bid :: visited) br1 []);
+        cbn [option_map]; [| reflexivity].
+      rewrite IH, (IH _ _ _ _ _ (l ++ base));
+        destruct (ir_seg_written_ids_acc fuel' bmap hdr_id false (cur_bid :: visited) br2 []);
+        cbn [option_map]; [rewrite !app_assoc |]; reflexivity.
+    + rewrite IH, (IH _ _ _ _ _ base).
+      destruct (ir_seg_written_ids_acc fuel' bmap hdr_id false (cur_bid :: visited) br []);
+        cbn [option_map]; [rewrite app_assoc |]; reflexivity.
+Qed.
+
 Lemma ir_seg_written_disjoint_block : forall fuel bmap hdr_id req_step visited cur_bid wr_all r,
   ir_seg_written_ids fuel bmap hdr_id req_step visited cur_bid = Some wr_all ->
   ~ In r wr_all ->
@@ -973,24 +1054,30 @@ Lemma ir_seg_written_disjoint_block : forall fuel bmap hdr_id req_step visited c
     ~ In r (code_written_ids (blk_code b)).
 Proof.
   intros fuel bmap hdr_id req_step visited cur_bid wr_all r Hwr Hnin Hnstop Hnvis b Efb.
-  destruct fuel as [| fuel']; cbn [ir_seg_written_ids] in Hwr;
+  unfold ir_seg_written_ids in Hwr.
+  destruct fuel as [| fuel']; cbn [ir_seg_written_ids_acc] in Hwr;
     rewrite Hnstop, Hnvis in Hwr; [discriminate Hwr |].
   rewrite Efb in Hwr; destruct (blk_term b) as [[tid term] tmd]; cbn [fst] in Hwr.
-  assert (Hsub : incl ((if req_step then [] else List.map (fun '(id, _, _) => id) (blk_phis b)) ++ code_written_ids (blk_code b)) wr_all).
+  set (acc0 := code_written_ids_acc (blk_code b)
+                 (if req_step then [] else push_phi_ids_acc (blk_phis b) [])) in Hwr.
+  assert (Hsub : incl acc0 wr_all).
   { destruct term; try discriminate Hwr.
     - inversion Hwr; subst; apply incl_refl.
-    - destruct (ir_seg_written_ids fuel' bmap hdr_id false (cur_bid :: visited) br1); [| discriminate Hwr].
-      destruct (ir_seg_written_ids fuel' bmap hdr_id false (cur_bid :: visited) br2); [| discriminate Hwr].
-      inversion Hwr; subst; intros x Hx; apply in_app_iff in Hx as [Hx | Hx]; apply in_app_iff;
-        [left; exact Hx | right; apply in_app_iff; left; exact Hx].
-    - destruct (ir_seg_written_ids fuel' bmap hdr_id false (cur_bid :: visited) br); [| discriminate Hwr].
-      inversion Hwr; subst; intros x Hx; apply in_app_iff in Hx as [Hx | Hx]; apply in_app_iff;
-        [left; exact Hx | right; apply in_app_iff; left; exact Hx].
+    - rewrite ir_seg_written_ids_acc_shift in Hwr.
+      destruct (ir_seg_written_ids_acc fuel' bmap hdr_id false (cur_bid :: visited) br1 []);
+        cbn [option_map] in Hwr; [| discriminate Hwr].
+      rewrite ir_seg_written_ids_acc_shift in Hwr.
+      destruct (ir_seg_written_ids_acc fuel' bmap hdr_id false (cur_bid :: visited) br2 []);
+        cbn [option_map] in Hwr; [| discriminate Hwr].
+      inversion Hwr; subst wr_all; intros x Hx; apply in_app_iff; right; apply in_app_iff; right; exact Hx.
+    - rewrite ir_seg_written_ids_acc_shift in Hwr.
+      destruct (ir_seg_written_ids_acc fuel' bmap hdr_id false (cur_bid :: visited) br []);
+        cbn [option_map] in Hwr; [| discriminate Hwr].
+      inversion Hwr; subst wr_all; intros x Hx; apply in_app_iff; right; exact Hx.
     - inversion Hwr; subst; apply incl_refl. }
   split.
-  - intro Hrs; rewrite Hrs in Hsub; cbn [app] in Hsub.
-    intro Hin; apply Hnin, Hsub, in_app_iff; left; exact Hin.
-  - intro Hin; apply Hnin, Hsub, in_app_iff; right; exact Hin.
+  - intro Hrs; intro Hin; apply Hnin, Hsub; unfold acc0; rewrite Hrs, code_written_ids_acc_in; right; rewrite push_phi_ids_acc_in; left; exact Hin.
+  - intro Hin; apply Hnin, Hsub; unfold acc0; rewrite code_written_ids_acc_in; left; exact Hin.
 Qed.
 
 Lemma reify_pure_phis_ids : forall phis bid_from lmap pevals,
@@ -1079,8 +1166,7 @@ Proof.
                 (req_step = false -> ~ In r (List.map (fun '(id, _, _) => id) (blk_phis b))) /\
                 ~ In r (code_written_ids (blk_code b))).
       { intros r Hrk; eapply (ir_seg_written_disjoint_block (S fuel') bmap hdr_id req_step visited cur_bid wr_all r);
-          [cbn [ir_seg_written_ids]; rewrite Estp, Evis, Efb; exact Hwr
-          | exact (disjoint_raw_ids_spec _ _ r Hdisj Hrk) | exact Estp | exact Evis | exact Efb]. }
+          [exact Hwr | exact (disjoint_raw_ids_spec _ _ r Hdisj Hrk) | exact Estp | exact Evis | exact Efb]. }
       set (lmap_phis_opt := if req_step then Some lmap else match reify_pure_phis bid_from lmap (blk_phis b) with Some pevals => if pevals_ub_free pevals then Some (apply_reified_phis lmap pevals) else None | None => None end) in *.
       destruct lmap_phis_opt as [lmap1 |] eqn:El1; [| discriminate Hr].
       assert (Hphase1 :
@@ -1109,7 +1195,9 @@ Proof.
             * exact Hstp. }
       destruct (reify_pure_code lmap1 (blk_code b)) as [[cevals lmap2] |] eqn:Erc; [| discriminate Hr].
       destruct (negb (cevals_ub_free cevals)); [discriminate Hr |].
-      destruct (blk_term b) as [[tid term] tmd] eqn:Etm; cbn [fst] in Hr, Hwr.
+      destruct (blk_term b) as [[tid term] tmd] eqn:Etm; cbn [fst] in Hr;
+        unfold ir_seg_written_ids in Hwr; cbn [ir_seg_written_ids_acc] in Hwr;
+        rewrite Estp, Evis, Efb, Etm in Hwr; cbn [fst] in Hwr.
       destruct Hphase1 as [Hub_ph | (env1 & Henv1 & Hpres1 & Hstp_ph)].
       { destruct term; try discriminate Hr.
         - destruct v as [[[rw | | | | | | | | | |] | |] op]; try discriminate Hr.
@@ -1169,8 +1257,6 @@ Proof.
         destruct (ub_free_expr cond_e); cbn [negb] in Hr; [| discriminate Hr].
         destruct (reify_ir_seg fuel' bmap hdr_id hdr_phis false (cur_bid :: visited) cur_bid br1 lmap2) as [dt |] eqn:Hdt; [| discriminate Hr].
         destruct (reify_ir_seg fuel' bmap hdr_id hdr_phis false (cur_bid :: visited) cur_bid br2 lmap2) as [df |] eqn:Hdf; [| discriminate Hr].
-        destruct (ir_seg_written_ids fuel' bmap hdr_id false (cur_bid :: visited) br1) as [wr1 |] eqn:Ewr1; [| discriminate Hwr].
-        destruct (ir_seg_written_ids fuel' bmap hdr_id false (cur_bid :: visited) br2) as [wr2 |] eqn:Ewr2; [| discriminate Hwr].
         inversion Hr; subst t; clear Hr; cbn [ir_seg_eval_spec].
         pose proof (check_opt_int_width_some_inv _ _ (reify_pure_exp_top_width _ _ _ _ _ Ercd)) as ->.
         destruct (eval_reified_pure_exp e_cond penv lmap2 env2 (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive cond_e Henv2 Ercd)
@@ -1212,36 +1298,43 @@ Proof.
                            apply Integers.same_bits_eq; intros i Hi; change (@Integers.zwordsize 1%positive) with 1%Z in Hi.
                            assert (Hi0 : i = 0%Z) by lia; subst i; unfold Integers.testbit; rewrite Hz0; reflexivity. }
                          rewrite Hcbit; exact Hev_cd.
-                 --- assert (Hdisj1 : disjoint_raw_ids wr_keep wr1 = true).
+                 --- rewrite ir_seg_written_ids_acc_shift in Hwr.
+                     destruct (ir_seg_written_ids_acc fuel' bmap hdr_id false (cur_bid :: visited) br1 []) as [wr1 |] eqn:Ewr1;
+                       cbn [option_map] in Hwr; [| discriminate Hwr].
+                     rewrite ir_seg_written_ids_acc_shift in Hwr.
+                     destruct (ir_seg_written_ids_acc fuel' bmap hdr_id false (cur_bid :: visited) br2 []) as [wr2 |] eqn:Ewr2;
+                       cbn [option_map] in Hwr; [| discriminate Hwr].
+                     inversion Hwr; subst wr_all; clear Hwr.
+                     assert (Hdisj1 : disjoint_raw_ids wr_keep wr1 = true).
                      { unfold disjoint_raw_ids in *; rewrite forallb_forall in *; intros x Hx.
                        pose proof (Hdisj x Hx) as Hnx; apply negb_true_iff in Hnx; apply negb_true_iff.
                        destruct (raw_id_in_list x wr1) eqn:Ex1; [| reflexivity].
-                       inversion Hwr; subst wr_all.
                        exfalso; rewrite raw_id_in_list_spec in Ex1.
-                       assert (Htru : raw_id_in_list x ((if req_step then [] else List.map (fun '(id, _, _) => id) (blk_phis b)) ++ code_written_ids (blk_code b) ++ wr1 ++ wr2) = true)
-                         by (apply raw_id_in_list_spec; apply in_app_iff; right; apply in_app_iff; right; apply in_app_iff; left; exact Ex1).
+                       assert (Htru : raw_id_in_list x (wr2 ++ wr1 ++ code_written_ids_acc (blk_code b) (if req_step then [] else push_phi_ids_acc (blk_phis b) [])) = true)
+                         by (apply raw_id_in_list_spec; apply in_app_iff; right; apply in_app_iff; left; exact Ex1).
                        rewrite Htru in Hnx; discriminate Hnx. }
                      assert (Hdisj2 : disjoint_raw_ids wr_keep wr2 = true).
                      { unfold disjoint_raw_ids in *; rewrite forallb_forall in *; intros x Hx.
                        pose proof (Hdisj x Hx) as Hnx; apply negb_true_iff in Hnx; apply negb_true_iff.
                        destruct (raw_id_in_list x wr2) eqn:Ex2; [| reflexivity].
-                       inversion Hwr; subst wr_all.
                        exfalso; rewrite raw_id_in_list_spec in Ex2.
-                       assert (Htru : raw_id_in_list x ((if req_step then [] else List.map (fun '(id, _, _) => id) (blk_phis b)) ++ code_written_ids (blk_code b) ++ wr1 ++ wr2) = true)
-                         by (apply raw_id_in_list_spec; apply in_app_iff; right; apply in_app_iff; right; apply in_app_iff; right; exact Ex2).
+                       assert (Htru : raw_id_in_list x (wr2 ++ wr1 ++ code_written_ids_acc (blk_code b) (if req_step then [] else push_phi_ids_acc (blk_phis b) [])) = true)
+                         by (apply raw_id_in_list_spec; apply in_app_iff; left; exact Ex2).
                        rewrite Htru in Hnx; discriminate Hnx. }
                      destruct (@Integers.unsigned 1%positive cbit =? 1)%Z;
                        [exact (IH _ _ _ _ _ _ _ _ _ _ _ env2 env2 dt Ewr1 Hdisj1 (conj eq_refl Henv2) Hdt)
                        | exact (IH _ _ _ _ _ _ _ _ _ _ _ env2 env2 df Ewr2 Hdisj2 (conj eq_refl Henv2) Hdf)].
-      * destruct (ir_seg_written_ids fuel' bmap hdr_id false (cur_bid :: visited) br) as [wr_n |] eqn:Ewrn; [| discriminate Hwr].
+      * rewrite ir_seg_written_ids_acc_shift in Hwr.
+        destruct (ir_seg_written_ids_acc fuel' bmap hdr_id false (cur_bid :: visited) br []) as [wr_n |] eqn:Ewrn;
+          cbn [option_map] in Hwr; [| discriminate Hwr].
+        inversion Hwr; subst wr_all; clear Hwr.
         assert (Hdisjn : disjoint_raw_ids wr_keep wr_n = true).
         { unfold disjoint_raw_ids in *; rewrite forallb_forall in *; intros x Hx.
           pose proof (Hdisj x Hx) as Hnx; apply negb_true_iff in Hnx; apply negb_true_iff.
           destruct (raw_id_in_list x wr_n) eqn:Exn; [| reflexivity].
-          inversion Hwr; subst wr_all.
           exfalso; rewrite raw_id_in_list_spec in Exn.
-          assert (Htru : raw_id_in_list x ((if req_step then [] else List.map (fun '(id, _, _) => id) (blk_phis b)) ++ code_written_ids (blk_code b) ++ wr_n) = true)
-            by (apply raw_id_in_list_spec; apply in_app_iff; right; apply in_app_iff; right; exact Exn).
+          assert (Htru : raw_id_in_list x (wr_n ++ code_written_ids_acc (blk_code b) (if req_step then [] else push_phi_ids_acc (blk_phis b) [])) = true)
+            by (apply raw_id_in_list_spec; apply in_app_iff; left; exact Exn).
           rewrite Htru in Hnx; discriminate Hnx. }
         assert (Htau_j : pure_cfg_steps_to_tau env_prev (@denote_cfg_from Pa bmap None (bid_from, cur_bid))
                            env2 (@denote_cfg_from Pa bmap None (cur_bid, br))).
@@ -1427,21 +1520,48 @@ Definition blast_mc_obl
       end
   end.
 
-Fixpoint blast_mc_obls_list
-  (ctx : ub_ctx) (body_hyp_lit : lit) (obls : list mc_loop_obl) (env : blast_env)
+Fixpoint mc_filter_tr_acc {A : Type} (p : A -> bool) (acc xs : list A) {struct xs} : list A :=
+  match xs with
+  | [] => elf_rev_tr acc
+  | x :: rest => mc_filter_tr_acc p (if p x then x :: acc else acc) rest
+  end.
+
+Definition mc_filter_tr {A : Type} (p : A -> bool) (xs : list A) : list A :=
+  mc_filter_tr_acc p [] xs.
+
+Lemma mc_filter_tr_acc_eq : forall {A : Type} (p : A -> bool) (acc xs : list A),
+  mc_filter_tr_acc p acc xs = List.rev_append acc (List.filter p xs).
+Proof.
+  intros A p acc xs; revert acc; induction xs as [| x rest IH]; intro acc;
+    cbn [mc_filter_tr_acc List.filter].
+  - unfold elf_rev_tr; reflexivity.
+  - destruct (p x); rewrite IH; reflexivity.
+Qed.
+
+Lemma mc_filter_tr_eq : forall {A : Type} (p : A -> bool) (xs : list A),
+  mc_filter_tr p xs = List.filter p xs.
+Proof.
+  intros A p xs; unfold mc_filter_tr; exact (mc_filter_tr_acc_eq p [] xs).
+Qed.
+
+Fixpoint blast_mc_obls_list_acc
+  (ctx : ub_ctx) (body_hyp_lit : lit) (obls : list mc_loop_obl)
+  (env : blast_env) (acc : list lit)
   {struct obls} : option (list lit * blast_env) :=
   match obls with
-  | [] => Some ([], env)
+  | [] => Some (elf_rev_tr acc, env)
   | o :: rest =>
       match blast_mc_obl ctx body_hyp_lit env o with
       | None => None
       | Some (cex, env1) =>
-          match blast_mc_obls_list ctx body_hyp_lit rest env1 with
-          | None => None
-          | Some (cexs, env2) => Some (cex :: cexs, env2)
-          end
+          blast_mc_obls_list_acc ctx body_hyp_lit rest env1 (cex :: acc)
       end
   end.
+
+Definition blast_mc_obls_list
+  (ctx : ub_ctx) (body_hyp_lit : lit) (obls : list mc_loop_obl) (env : blast_env)
+  : option (list lit * blast_env) :=
+  blast_mc_obls_list_acc ctx body_hyp_lit obls env [].
 
 Definition obl_is_alg_ok (ctx : ub_ctx) (o : mc_loop_obl) : bool :=
   match o with
@@ -1492,7 +1612,7 @@ Definition check_mc_loop_obls
   (opt_pf : option (list lrat_step)) : bool :=
   if negb (forallb (obl_wf_exprs known_vars) obls) then false
   else
-    let rem := List.filter (fun o => negb (obl_is_alg_ok ctx o)) obls in
+    let rem := mc_filter_tr (fun o => negb (obl_is_alg_ok ctx o)) obls in
     match rem with
     | [] => true
     | _ :: _ =>
@@ -1508,7 +1628,7 @@ Definition emit_mc_loop_cnf
   : option (option (positive * cnf)) :=
   if negb (forallb (obl_wf_exprs known_vars) obls) then None
   else
-    let rem := List.filter (fun o => negb (obl_is_alg_ok ctx o)) obls in
+    let rem := mc_filter_tr (fun o => negb (obl_is_alg_ok ctx o)) obls in
     match rem with
     | [] => Some None
     | _ :: _ =>
@@ -1725,6 +1845,60 @@ Proof.
     subst ve; exists (eval_rail_val w asg2 re); exact Eve.
 Qed.
 
+Lemma blast_mc_obls_list_acc_sat {Pa : Params} :
+  forall ctx (penv : param_env Pa) foracle known_vars opt_inv is_body_mode body_hyp_lit obls env acc cexs env' asg,
+    forallb (obl_wf_exprs known_vars) obls = true ->
+    wf_param_env_for known_vars penv ->
+    ub_ctx_holds penv foracle ctx ->
+    sat_blast_env penv foracle asg env ->
+    wf_lit_bound (bs_next_var (be_st env)) body_hyp_lit ->
+    wf_lits_bound (bs_next_var (be_st env)) acc ->
+    (is_body_mode = true ->
+     match opt_inv with
+     | None => True
+     | Some inv_e =>
+         eval_closed_cert_expr penv foracle inv_e =
+         raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.one 1%positive)))
+     end ->
+     eval_lit asg body_hyp_lit = true) ->
+    blast_mc_obls_list_acc ctx body_hyp_lit obls env acc = Some (cexs, env') ->
+    exists asg',
+      step_spec (be_st env) (be_st env') asg asg' /\
+      sat_blast_env penv foracle asg' env' /\
+      wf_lits_bound (bs_next_var (be_st env')) cexs /\
+      ((forall l, In l cexs -> eval_lit asg' l = false) ->
+       Forall (mc_obl_holds penv foracle opt_inv is_body_mode) obls /\
+       (forall l, In l acc -> eval_lit asg' l = false)).
+Proof.
+  intros ctx penv foracle known_vars opt_inv is_body_mode body_hyp_lit obls;
+    induction obls as [| o rest IH];
+    intros env acc cexs env' asg Hwf Hpenv Hctx Henv Hwbh Hwacc Hbh_true Hbl;
+    cbn [blast_mc_obls_list_acc] in Hbl.
+  - inversion Hbl; subst cexs env'; exists asg; split;
+      [exact (step_spec_refl _ _ (proj1 Henv)) | split; [exact Henv | split]].
+    + rewrite elf_rev_tr_eq; unfold wf_lits_bound in *; rewrite Forall_forall in Hwacc |- *.
+      intros l Hl; rewrite <- in_rev in Hl; exact (Hwacc l Hl).
+    + intros Hall; split; [constructor | intros l Hl; apply Hall; rewrite elf_rev_tr_eq, <- in_rev; exact Hl].
+  - cbn [forallb] in Hwf; apply andb_true_iff in Hwf as [Ho Hrest].
+    destruct (blast_mc_obl ctx body_hyp_lit env o) as [[cx env1] |] eqn:Ebo; [| discriminate Hbl].
+    destruct (blast_mc_obl_sat ctx penv foracle known_vars opt_inv is_body_mode body_hyp_lit env o cx env1 asg
+                Ho Hpenv Hctx Henv Hwbh Hbh_true Ebo)
+      as (asg1 & Hs1 & Henv1 & Hwcx & Ho_sound).
+    assert (Hbh1_wf : wf_lit_bound (bs_next_var (be_st env1)) body_hyp_lit)
+      by exact (wf_lit_bound_mono _ _ _ (proj1 Hs1) Hwbh).
+    assert (Hwacc1 : wf_lits_bound (bs_next_var (be_st env1)) (cx :: acc))
+      by (constructor; [exact Hwcx | exact (wf_lits_bound_mono _ _ _ (proj1 Hs1) Hwacc)]).
+    assert (Hbh1_true : is_body_mode = true -> match opt_inv with None => True | Some inv_e => eval_closed_cert_expr penv foracle inv_e = raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.one 1%positive))) end -> eval_lit asg1 body_hyp_lit = true).
+    { intros Hbm Hinv; rewrite (step_spec_eval_lit _ _ _ _ _ Hs1 Hwbh); exact (Hbh_true Hbm Hinv). }
+    destruct (IH env1 (cx :: acc) cexs env' asg1 Hrest Hpenv Hctx Henv1 Hbh1_wf Hwacc1 Hbh1_true Hbl)
+      as (asg2 & Hs2 & Henv2 & Hwcxs & Hrest_sound).
+    exists asg2; split; [exact (step_spec_trans _ _ _ _ _ _ Hs1 Hs2) | split; [exact Henv2 | split; [exact Hwcxs |]]].
+    intros Hall; destruct (Hrest_sound Hall) as [Hfa2 Hacc2]; split.
+    + constructor; [| exact Hfa2].
+      apply Ho_sound; rewrite <- (step_spec_eval_lit _ _ _ _ _ Hs2 Hwcx); apply Hacc2; left; reflexivity.
+    + intros l Hl; apply Hacc2; right; exact Hl.
+Qed.
+
 Lemma blast_mc_obls_list_sat {Pa : Params} :
   forall ctx (penv : param_env Pa) foracle known_vars opt_inv is_body_mode body_hyp_lit obls env cexs env' asg,
     forallb (obl_wf_exprs known_vars) obls = true ->
@@ -1748,30 +1922,12 @@ Lemma blast_mc_obls_list_sat {Pa : Params} :
       ((forall l, In l cexs -> eval_lit asg' l = false) ->
        Forall (mc_obl_holds penv foracle opt_inv is_body_mode) obls).
 Proof.
-  intros ctx penv foracle known_vars opt_inv is_body_mode body_hyp_lit obls;
-    induction obls as [| o rest IH];
-    intros env cexs env' asg Hwf Hpenv Hctx Henv Hwbh Hbh_true Hbl;
-    cbn [blast_mc_obls_list] in Hbl.
-  - inversion Hbl; subst cexs env'; exists asg; split;
-      [exact (step_spec_refl _ _ (proj1 Henv)) | split; [exact Henv | split; [constructor | intros _; constructor]]].
-  - cbn [forallb] in Hwf; apply andb_true_iff in Hwf as [Ho Hrest].
-    destruct (blast_mc_obl ctx body_hyp_lit env o) as [[cx env1] |] eqn:Ebo; [| discriminate Hbl].
-    destruct (blast_mc_obls_list ctx body_hyp_lit rest env1) as [[cxs env2] |] eqn:Ebr; [| discriminate Hbl].
-    inversion Hbl; subst cexs env'; clear Hbl.
-    destruct (blast_mc_obl_sat ctx penv foracle known_vars opt_inv is_body_mode body_hyp_lit env o cx env1 asg
-                Ho Hpenv Hctx Henv Hwbh Hbh_true Ebo)
-      as (asg1 & Hs1 & Henv1 & Hwcx & Ho_sound).
-    assert (Hbh1_wf : wf_lit_bound (bs_next_var (be_st env1)) body_hyp_lit)
-      by exact (wf_lit_bound_mono _ _ _ (proj1 Hs1) Hwbh).
-    assert (Hbh1_true : is_body_mode = true -> match opt_inv with None => True | Some inv_e => eval_closed_cert_expr penv foracle inv_e = raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.one 1%positive))) end -> eval_lit asg1 body_hyp_lit = true).
-    { intros Hbm Hinv; rewrite (step_spec_eval_lit _ _ _ _ _ Hs1 Hwbh); exact (Hbh_true Hbm Hinv). }
-    destruct (IH env1 cxs env2 asg1 Hrest Hpenv Hctx Henv1 Hbh1_wf Hbh1_true Ebr)
-      as (asg2 & Hs2 & Henv2 & Hwcxs & Hrest_sound).
-    exists asg2; split; [exact (step_spec_trans _ _ _ _ _ _ Hs1 Hs2) | split; [exact Henv2 | split]].
-    + constructor; [exact (wf_lit_bound_mono _ _ _ (proj1 Hs2) Hwcx) | exact Hwcxs].
-    + intros Hall; constructor.
-      * apply Ho_sound; rewrite <- (step_spec_eval_lit _ _ _ _ _ Hs2 Hwcx); apply Hall; left; reflexivity.
-      * apply Hrest_sound; intros l Hl; apply Hall; right; exact Hl.
+  intros ctx penv foracle known_vars opt_inv is_body_mode body_hyp_lit obls env cexs env' asg
+         Hwf Hpenv Hctx Henv Hwbh Hbh_true Hbl.
+  destruct (blast_mc_obls_list_acc_sat ctx penv foracle known_vars opt_inv is_body_mode body_hyp_lit
+              obls env [] cexs env' asg Hwf Hpenv Hctx Henv Hwbh (Forall_nil _) Hbh_true Hbl)
+    as (asg' & Hs & Henv' & Hwc & Hfa).
+  exists asg'; split; [exact Hs | split; [exact Henv' | split; [exact Hwc | intro Hall; exact (proj1 (Hfa Hall))]]].
 Qed.
 
 Theorem check_mc_loop_obls_sound {Pa : Params} :
@@ -1784,6 +1940,7 @@ Proof.
   intros ctx known_vars opt_inv obls opt_pf penv foracle is_body_mode Hchk Hpenv Hctx.
   unfold check_mc_loop_obls in Hchk.
   destruct (forallb (obl_wf_exprs known_vars) obls) eqn:Hwf_all; cbn [negb] in Hchk; [| discriminate Hchk].
+  rewrite mc_filter_tr_eq in Hchk.
   remember (List.filter (fun o => negb (obl_is_alg_ok ctx o)) obls) as rem eqn:Erem.
   assert (Halg : forall o, In o obls -> obl_is_alg_ok ctx o = true -> mc_obl_holds penv foracle opt_inv is_body_mode o).
   { intros o Ho Hal Hbm Hinv Hpath.
@@ -2228,11 +2385,137 @@ Definition is_exact_cut_var (k : nat) (w : positive) (e : cert_expr) : bool :=
 Definition reg_slot_uses_cut_var_ok (k : nat) (w : positive) (e : cert_expr) : bool :=
   negb (expr_has_var (mc_cut_var_name k) e) || is_exact_cut_var k w e.
 
+Fixpoint mc_count_tr_acc {A : Type} (p : A -> bool) (acc : nat) (xs : list A) {struct xs} : nat :=
+  match xs with
+  | [] => acc
+  | x :: rest => mc_count_tr_acc p (if p x then S acc else acc) rest
+  end.
+
+Definition mc_count_tr {A : Type} (p : A -> bool) (xs : list A) : nat :=
+  mc_count_tr_acc p 0%nat xs.
+
+Lemma mc_count_tr_acc_eq : forall {A : Type} (p : A -> bool) (acc : nat) (xs : list A),
+  mc_count_tr_acc p acc xs = (acc + List.length (List.filter p xs))%nat.
+Proof.
+  intros A p acc xs; revert acc; induction xs as [| x rest IH]; intro acc;
+    cbn [mc_count_tr_acc List.filter List.length].
+  - lia.
+  - destruct (p x); rewrite IH; cbn [List.length]; lia.
+Qed.
+
+Lemma mc_count_tr_eq : forall {A : Type} (p : A -> bool) (xs : list A),
+  mc_count_tr p xs = List.length (List.filter p xs).
+Proof.
+  intros A p xs; unfold mc_count_tr; exact (mc_count_tr_acc_eq p 0%nat xs).
+Qed.
+
 Definition cut_var_bind_count (k : nat) (rbs : list mc_loop_reg_bind) (sbs : list mc_loop_slot_bind) : nat :=
-  List.length (List.filter (fun rb => expr_has_var (mc_cut_var_name k) (mlr_expr rb)) rbs) +
-  List.length (List.filter (fun sb => match sb with MLS_Expr _ _ e => expr_has_var (mc_cut_var_name k) e | MLS_SavedReg _ _ => false end) sbs).
+  mc_count_tr (fun rb => expr_has_var (mc_cut_var_name k) (mlr_expr rb)) rbs +
+  mc_count_tr (fun sb => match sb with MLS_Expr _ _ e => expr_has_var (mc_cut_var_name k) e | MLS_SavedReg _ _ => false end) sbs.
+
+Fixpoint check_cut_var_regs_acc
+  (k : nat) (w : positive) (seen : bool) (rbs : list mc_loop_reg_bind)
+  {struct rbs} : option bool :=
+  match rbs with
+  | [] => Some seen
+  | rb :: rest =>
+      let e := mlr_expr rb in
+      if is_exact_cut_var k w e then
+        if seen then None else check_cut_var_regs_acc k w true rest
+      else if expr_has_var (mc_cut_var_name k) e then None
+      else check_cut_var_regs_acc k w seen rest
+  end.
+
+Fixpoint check_cut_var_slots_acc
+  (k : nat) (w : positive) (seen : bool) (sbs : list mc_loop_slot_bind)
+  {struct sbs} : option bool :=
+  match sbs with
+  | [] => Some seen
+  | MLS_SavedReg _ _ :: rest => check_cut_var_slots_acc k w seen rest
+  | MLS_Expr _ _ e :: rest =>
+      if is_exact_cut_var k w e then
+        if seen then None else check_cut_var_slots_acc k w true rest
+      else if expr_has_var (mc_cut_var_name k) e then None
+      else check_cut_var_slots_acc k w seen rest
+  end.
 
 Definition cut_var_ptol (ls : mc_loop_spec) (k : nat) (w : positive) : bool :=
+  match ml_inv ls with
+  | None => true
+  | Some inv_e => negb (expr_has_var (mc_cut_var_name k) inv_e)
+  end &&
+  match check_cut_var_regs_acc k w false (ml_regs ls) with
+  | None => false
+  | Some seen1 =>
+      match check_cut_var_slots_acc k w seen1 (ml_slots ls) with
+      | None => false
+      | Some _ => true
+      end
+  end.
+
+Lemma is_exact_cut_var_has_var : forall k w e,
+  is_exact_cut_var k w e = true ->
+  expr_has_var (mc_cut_var_name k) e = true.
+Proof.
+  intros k w [] H; cbn in H; try discriminate H.
+  apply andb_true_iff in H as [Hs _]; cbn; rewrite Hs; reflexivity.
+Qed.
+
+Lemma check_cut_var_regs_acc_spec : forall k w seen rbs,
+  check_cut_var_regs_acc k w seen rbs =
+  let cnt := List.length (List.filter (fun rb => expr_has_var (mc_cut_var_name k) (mlr_expr rb)) rbs) in
+  if forallb (fun rb => reg_slot_uses_cut_var_ok k w (mlr_expr rb)) rbs &&
+     Nat.leb ((if seen then 1%nat else 0%nat) + cnt) 1%nat
+  then Some (seen || Nat.eqb cnt 1%nat)
+  else None.
+Proof.
+  intros k w seen rbs; revert seen; induction rbs as [| rb rest IH]; intro seen;
+    cbn [check_cut_var_regs_acc List.filter List.length forallb].
+  - destruct seen; reflexivity.
+  - destruct (is_exact_cut_var k w (mlr_expr rb)) eqn:Eex.
+    + pose proof (is_exact_cut_var_has_var k w (mlr_expr rb) Eex) as Hhv.
+      unfold reg_slot_uses_cut_var_ok; rewrite Hhv, Eex; cbn [orb andb List.length].
+      destruct seen.
+      * cbn [Nat.add Nat.leb]; rewrite andb_false_r; reflexivity.
+      * rewrite IH; cbn [Nat.add].
+        set (c := Datatypes.length (List.filter (fun rb0 => expr_has_var (mc_cut_var_name k) (mlr_expr rb0)) rest)).
+        destruct (forallb _ rest); [| reflexivity].
+        destruct c as [| c']; reflexivity.
+    + unfold reg_slot_uses_cut_var_ok; rewrite Eex.
+      destruct (expr_has_var (mc_cut_var_name k) (mlr_expr rb)) eqn:Hhv; cbn [negb orb andb List.length].
+      * reflexivity.
+      * exact (IH seen).
+Qed.
+
+Lemma check_cut_var_slots_acc_spec : forall k w seen sbs,
+  check_cut_var_slots_acc k w seen sbs =
+  let cnt := List.length (List.filter (fun sb => match sb with MLS_Expr _ _ e => expr_has_var (mc_cut_var_name k) e | MLS_SavedReg _ _ => false end) sbs) in
+  if forallb (fun sb => match sb with MLS_Expr _ _ e => reg_slot_uses_cut_var_ok k w e | MLS_SavedReg _ _ => true end) sbs &&
+     Nat.leb ((if seen then 1%nat else 0%nat) + cnt) 1%nat
+  then Some (seen || Nat.eqb cnt 1%nat)
+  else None.
+Proof.
+  intros k w seen sbs; revert seen; induction sbs as [| [off sz e | off r] rest IH]; intro seen;
+    cbn [check_cut_var_slots_acc List.filter List.length forallb].
+  - destruct seen; reflexivity.
+  - destruct (is_exact_cut_var k w e) eqn:Eex.
+    + pose proof (is_exact_cut_var_has_var k w e Eex) as Hhv.
+      unfold reg_slot_uses_cut_var_ok; rewrite Hhv, Eex; cbn [orb andb List.length].
+      destruct seen.
+      * cbn [Nat.add Nat.leb]; rewrite andb_false_r; reflexivity.
+      * rewrite IH; cbn [Nat.add].
+        set (c := Datatypes.length (List.filter _ rest)).
+        destruct (forallb _ rest); [| reflexivity].
+        destruct c as [| c']; reflexivity.
+    + unfold reg_slot_uses_cut_var_ok; rewrite Eex.
+      destruct (expr_has_var (mc_cut_var_name k) e) eqn:Hhv; cbn [negb orb andb List.length].
+      * reflexivity.
+      * exact (IH seen).
+  - exact (IH seen).
+Qed.
+
+Lemma cut_var_ptol_spec : forall ls k w,
+  cut_var_ptol ls k w =
   match ml_inv ls with
   | None => true
   | Some inv_e => negb (expr_has_var (mc_cut_var_name k) inv_e)
@@ -2240,6 +2523,26 @@ Definition cut_var_ptol (ls : mc_loop_spec) (k : nat) (w : positive) : bool :=
   Nat.leb (cut_var_bind_count k (ml_regs ls) (ml_slots ls)) 1 &&
   forallb (fun rb => reg_slot_uses_cut_var_ok k w (mlr_expr rb)) (ml_regs ls) &&
   forallb (fun sb => match sb with MLS_Expr _ _ e => reg_slot_uses_cut_var_ok k w e | MLS_SavedReg _ _ => true end) (ml_slots ls).
+Proof.
+  intros ls k w; unfold cut_var_ptol, cut_var_bind_count; rewrite !mc_count_tr_eq.
+  rewrite check_cut_var_regs_acc_spec.
+  set (cr := Datatypes.length (List.filter (fun rb => expr_has_var (mc_cut_var_name k) (mlr_expr rb)) (ml_regs ls))).
+  set (cs := Datatypes.length (List.filter (fun sb => match sb with MLS_Expr _ _ e => expr_has_var (mc_cut_var_name k) e | MLS_SavedReg _ _ => false end) (ml_slots ls))).
+  set (okr := forallb (fun rb => reg_slot_uses_cut_var_ok k w (mlr_expr rb)) (ml_regs ls)).
+  set (oks := forallb (fun sb => match sb with MLS_Expr _ _ e => reg_slot_uses_cut_var_ok k w e | MLS_SavedReg _ _ => true end) (ml_slots ls)).
+  destruct (match ml_inv ls with None => true | Some inv_e => negb (expr_has_var (mc_cut_var_name k) inv_e) end);
+    cbn [andb]; [| reflexivity].
+  destruct okr; cbn [andb Nat.add]; [| rewrite andb_false_r; reflexivity].
+  destruct (cr <=? 1)%nat eqn:Ecr.
+  - rewrite check_cut_var_slots_acc_spec.
+    change (forallb (fun sb => match sb with MLS_Expr _ _ e => reg_slot_uses_cut_var_ok k w e | MLS_SavedReg _ _ => true end) (ml_slots ls)) with oks.
+    change (Datatypes.length (List.filter (fun sb => match sb with MLS_Expr _ _ e => expr_has_var (mc_cut_var_name k) e | MLS_SavedReg _ _ => false end) (ml_slots ls))) with cs.
+    destruct oks; cbn [andb]; [| rewrite andb_false_r; reflexivity].
+    destruct cr as [| [| cr']]; cbn [Nat.leb Nat.eqb] in Ecr |- *; try discriminate Ecr;
+      rewrite ?andb_true_r; destruct cs as [| [| cs']]; reflexivity.
+  - apply Nat.leb_gt in Ecr; assert (Hgt : (cr + cs <=? 1)%nat = false) by (apply Nat.leb_gt; lia);
+      rewrite Hgt; cbn [andb]; reflexivity.
+Qed.
 
 Fixpoint expr_is_ptol_var_at (ls : mc_loop_spec) (idx : nat) (hdr_ws : list positive) (e : cert_expr) {struct hdr_ws} : bool :=
   match hdr_ws with
@@ -2259,14 +2562,15 @@ Fixpoint build_phi_subst (idx : nat) (phis : list (positive * cert_expr)) {struc
   | (w, ce) :: rest => (mc_cut_var_name idx, w, ce) :: build_phi_subst (S idx) rest
   end.
 
-Fixpoint collect_phi_def_obls
+Fixpoint collect_phi_def_obls_acc
   (ls : mc_loop_spec) (is_body : bool) (path : list (bool * cert_expr))
-  (idx : nat) (phis : list (positive * cert_expr)) {struct phis} : list mc_loop_obl :=
+  (idx : nat) (phis : list (positive * cert_expr)) (acc : list mc_loop_obl)
+  {struct phis} : list mc_loop_obl :=
   match phis with
-  | [] => []
+  | [] => acc
   | (w, ce) :: rest =>
-      (if cut_var_ptol ls idx w then [] else [MLO_Defined is_body path w ce]) ++
-      collect_phi_def_obls ls is_body path (S idx) rest
+      let acc' := if cut_var_ptol ls idx w then acc else MLO_Defined is_body path w ce :: acc in
+      collect_phi_def_obls_acc ls is_body path (S idx) rest acc'
   end.
 
 Definition trunc_mc_expr_to (w : positive) (e64 : cert_expr) : cert_expr :=
@@ -2279,57 +2583,64 @@ Definition trunc_mc_slot_expr (sz : mc_mem_size) (e64 : cert_expr) : cert_expr :
   | _ => CE_Cast CCK_Trunc 64%positive (mc_mem_bits sz) no_cast_flags e64
   end.
 
-Fixpoint collect_reg_cut_obls
+Fixpoint collect_reg_cut_obls_acc
   (ls : mc_loop_spec) (hdr_ws : list positive) (is_body : bool) (path : list (bool * cert_expr))
-  (sub : list (string * positive * cert_expr)) (rr' : N -> mc_sym_val) (rbs : list mc_loop_reg_bind)
+  (sub : list (string * positive * cert_expr)) (rr' : N -> mc_sym_val)
+  (rbs : list mc_loop_reg_bind) (acc : list mc_loop_obl)
   {struct rbs} : option (list mc_loop_obl) :=
   match rbs with
-  | [] => Some []
+  | [] => Some acc
   | rb :: rest =>
       match rr' (mlr_reg rb) with
       | MSV_Expr e_mc64 =>
-          match collect_reg_cut_obls ls hdr_ws is_body path sub rr' rest with
-          | None => None
-          | Some obls_r =>
-              let e_src := subst_cert_expr sub (mlr_expr rb) in
-              let e_tgt := trunc_mc_expr_to (mlr_width rb) e_mc64 in
-              let def_l := if expr_is_ptol_var ls hdr_ws (mlr_expr rb) then [] else [MLO_Defined is_body path (mlr_width rb) e_src] in
-              Some (def_l ++ [MLO_Refine is_body path (mlr_width rb) e_src e_tgt] ++ obls_r)
-          end
+          let e_src := subst_cert_expr sub (mlr_expr rb) in
+          let e_tgt := trunc_mc_expr_to (mlr_width rb) e_mc64 in
+          let o_ref := MLO_Refine is_body path (mlr_width rb) e_src e_tgt in
+          let acc' :=
+            if expr_is_ptol_var ls hdr_ws (mlr_expr rb) then o_ref :: acc
+            else MLO_Defined is_body path (mlr_width rb) e_src :: o_ref :: acc
+          in
+          collect_reg_cut_obls_acc ls hdr_ws is_body path sub rr' rest acc'
       | _ => None
       end
   end.
 
-Fixpoint collect_slot_cut_obls
+Fixpoint collect_slot_cut_obls_acc
   (ls : mc_loop_spec) (hdr_ws : list positive) (is_body : bool) (path : list (bool * cert_expr))
-  (sub : list (string * positive * cert_expr)) (astk' : mc_sym_stack) (sbs : list mc_loop_slot_bind)
+  (sub : list (string * positive * cert_expr)) (astk' : mc_sym_stack)
+  (sbs : list mc_loop_slot_bind) (acc : list mc_loop_obl)
   {struct sbs} : option (list mc_loop_obl) :=
   match sbs with
-  | [] => Some []
+  | [] => Some acc
   | MLS_SavedReg off r :: rest =>
       match mc_sym_stk_load off MS_8 false astk' with
       | Some (MSV_SavedReg r0) =>
-          if N.eqb r0 r then collect_slot_cut_obls ls hdr_ws is_body path sub astk' rest else None
+          if N.eqb r0 r then collect_slot_cut_obls_acc ls hdr_ws is_body path sub astk' rest acc
+          else None
       | _ => None
       end
   | MLS_Expr off sz e_s :: rest =>
       match mc_sym_stk_load off sz false astk' with
       | Some (MSV_Expr e_mc64) =>
-          match collect_slot_cut_obls ls hdr_ws is_body path sub astk' rest with
-          | None => None
-          | Some obls_r =>
-              let w := mc_mem_bits sz in
-              let e_src := subst_cert_expr sub e_s in
-              let e_tgt := trunc_mc_slot_expr sz e_mc64 in
-              let def_l := if expr_is_ptol_var ls hdr_ws e_s then [] else [MLO_Defined is_body path w e_src] in
-              Some (def_l ++ [MLO_Refine is_body path w e_src e_tgt] ++ obls_r)
-          end
+          let w := mc_mem_bits sz in
+          let e_src := subst_cert_expr sub e_s in
+          let e_tgt := trunc_mc_slot_expr sz e_mc64 in
+          let o_ref := MLO_Refine is_body path w e_src e_tgt in
+          let acc' :=
+            if expr_is_ptol_var ls hdr_ws e_s then o_ref :: acc
+            else MLO_Defined is_body path w e_src :: o_ref :: acc
+          in
+          collect_slot_cut_obls_acc ls hdr_ws is_body path sub astk' rest acc'
       | _ => None
       end
   end.
 
 Definition imposs_obl (is_body : bool) (path : list (bool * cert_expr)) : list mc_loop_obl :=
   [MLO_Refine is_body path 1%positive (CE_BvConst 1%positive 1%N) (CE_BvConst 1%positive 0%N)].
+
+Definition imposs_obl_cons (is_body : bool) (path : list (bool * cert_expr)) (acc : list mc_loop_obl)
+  : list mc_loop_obl :=
+  MLO_Refine is_body path 1%positive (CE_BvConst 1%positive 1%N) (CE_BvConst 1%positive 0%N) :: acc.
 
 Fixpoint check_widths_match (ws : list positive) (phis : list (positive * cert_expr)) {struct ws} : bool :=
   match ws, phis with
@@ -2338,30 +2649,36 @@ Fixpoint check_widths_match (ws : list positive) (phis : list (positive * cert_e
   | _, _ => false
   end.
 
-Fixpoint collect_mc_ir_obls
+Fixpoint collect_mc_ir_obls_acc
   (arch : elf_arch) (ls : mc_loop_spec) (ret_w : positive) (hdr_ws : list positive)
   (is_body : bool) (path : list (bool * cert_expr)) (t_ir : ir_seg_tree) (t_mc : mc_seg_tree)
+  (acc : list mc_loop_obl)
   {struct t_ir} : list mc_loop_obl :=
   match t_ir with
-  | IST_UB => []
+  | IST_UB => acc
   | IST_Branch cond dt_ir df_ir =>
-      collect_mc_ir_obls arch ls ret_w hdr_ws is_body (path ++ [(true, cond)]) dt_ir t_mc ++
-      collect_mc_ir_obls arch ls ret_w hdr_ws is_body (path ++ [(false, cond)]) df_ir t_mc
+      let acc_f := collect_mc_ir_obls_acc arch ls ret_w hdr_ws is_body ((false, cond) :: path) df_ir t_mc acc in
+      collect_mc_ir_obls_acc arch ls ret_w hdr_ws is_body ((true, cond) :: path) dt_ir t_mc acc_f
   | IST_Ret rw ret_ir =>
-      (fix go_mc (u : mc_seg_tree) (p : list (bool * cert_expr)) {struct u} : list mc_loop_obl :=
+      (fix go_mc (u : mc_seg_tree) (p : list (bool * cert_expr)) (a : list mc_loop_obl) {struct u}
+          : list mc_loop_obl :=
         match u with
         | MST_Branch cond_mc dt_mc df_mc =>
-            go_mc dt_mc (p ++ [(true, cond_mc)]) ++ go_mc df_mc (p ++ [(false, cond_mc)])
+            let af := go_mc df_mc ((false, cond_mc) :: p) a in
+            go_mc dt_mc ((true, cond_mc) :: p) af
         | MST_Ret ret_mc =>
-            if Pos.eqb rw ret_w then [MLO_Refine is_body p rw ret_ir ret_mc] else imposs_obl is_body p
-        | MST_Cut _ _ _ => imposs_obl is_body p
-        end) t_mc path
+            if Pos.eqb rw ret_w then MLO_Refine is_body p rw ret_ir ret_mc :: a
+            else imposs_obl_cons is_body p a
+        | MST_Cut _ _ _ => imposs_obl_cons is_body p a
+        end) t_mc path acc
   | IST_Cut _ phis_ir =>
-      (fix go_mc (u : mc_seg_tree) (p : list (bool * cert_expr)) {struct u} : list mc_loop_obl :=
+      (fix go_mc (u : mc_seg_tree) (p : list (bool * cert_expr)) (a : list mc_loop_obl) {struct u}
+          : list mc_loop_obl :=
         match u with
         | MST_Branch cond_mc dt_mc df_mc =>
-            go_mc dt_mc (p ++ [(true, cond_mc)]) ++ go_mc df_mc (p ++ [(false, cond_mc)])
-        | MST_Ret _ => imposs_obl is_body p
+            let af := go_mc df_mc ((false, cond_mc) :: p) a in
+            go_mc dt_mc ((true, cond_mc) :: p) af
+        | MST_Ret _ => imposs_obl_cons is_body p a
         | MST_Cut sp' rr' astk' =>
             let pres_ok :=
               Z.eqb sp' (ml_sp_off ls) &&
@@ -2369,22 +2686,80 @@ Fixpoint collect_mc_ir_obls
                 (mc_unspilled_preserved arch ls) &&
               check_widths_match hdr_ws phis_ir
             in
-            if negb pres_ok then imposs_obl is_body p
+            if negb pres_ok then imposs_obl_cons is_body p a
             else
               let sub := build_phi_subst 0%nat phis_ir in
-              match collect_reg_cut_obls ls hdr_ws is_body p sub rr' (ml_regs ls),
-                    collect_slot_cut_obls ls hdr_ws is_body p sub astk' (ml_slots ls) with
-              | Some robls, Some sobls =>
-                  let iobls :=
-                    match ml_inv ls with
-                    | None => []
-                    | Some inv_e => [MLO_Refine is_body p 1%positive (CE_BvConst 1%positive 1%N) (subst_cert_expr sub inv_e)]
-                    end in
-                  collect_phi_def_obls ls is_body p 0%nat phis_ir ++ robls ++ sobls ++ iobls
-              | _, _ => imposs_obl is_body p
+              let a_inv :=
+                match ml_inv ls with
+                | None => a
+                | Some inv_e => MLO_Refine is_body p 1%positive (CE_BvConst 1%positive 1%N) (subst_cert_expr sub inv_e) :: a
+                end in
+              let a_phi := collect_phi_def_obls_acc ls is_body p 0%nat phis_ir a_inv in
+              match collect_reg_cut_obls_acc ls hdr_ws is_body p sub rr' (ml_regs ls) a_phi with
+              | None => imposs_obl_cons is_body p a
+              | Some a_reg =>
+                  match collect_slot_cut_obls_acc ls hdr_ws is_body p sub astk' (ml_slots ls) a_reg with
+                  | None => imposs_obl_cons is_body p a
+                  | Some a_fin => a_fin
+                  end
               end
-        end) t_mc path
+        end) t_mc path acc
   end.
+
+Definition collect_mc_ir_obls
+  (arch : elf_arch) (ls : mc_loop_spec) (ret_w : positive) (hdr_ws : list positive)
+  (is_body : bool) (path : list (bool * cert_expr)) (t_ir : ir_seg_tree) (t_mc : mc_seg_tree)
+  : list mc_loop_obl :=
+  collect_mc_ir_obls_acc arch ls ret_w hdr_ws is_body path t_ir t_mc [].
+
+Lemma collect_mc_ir_obls_acc_sub :
+  forall (P : mc_loop_obl -> Prop) arch ls ret_w hdr_ws is_body path t_ir t_mc acc,
+    Forall P (collect_mc_ir_obls_acc arch ls ret_w hdr_ws is_body path t_ir t_mc acc) ->
+    Forall P acc.
+Proof.
+  intros P arch ls ret_w hdr_ws is_body path t_ir;
+    revert path; induction t_ir as [lm ph | rw0 re | | c0 d0 IH0 d1 IH1];
+    intros path t_mc acc Hfa; cbn [collect_mc_ir_obls_acc] in Hfa.
+  - clear -Hfa.
+    induction t_mc as [sp' rr' astk' | ret_mc | cm dl IHl dr IHr] in path, acc, Hfa |- *; cbn in Hfa.
+    + destruct (Z.eqb sp' (ml_sp_off ls) && forallb _ _ && check_widths_match _ _);
+        [| inversion Hfa; assumption].
+      set (ai := match ml_inv ls with None => acc | Some _ => _ :: acc end) in *.
+      set (ap := collect_phi_def_obls_acc ls is_body path 0%nat ph ai) in *.
+      destruct (collect_reg_cut_obls_acc ls hdr_ws is_body path _ rr' (ml_regs ls) ap) as [ar |] eqn:Ero;
+        [| inversion Hfa; assumption].
+      destruct (collect_slot_cut_obls_acc ls hdr_ws is_body path _ astk' (ml_slots ls) ar) as [afn |] eqn:Eso;
+        [| inversion Hfa; assumption].
+      assert (Hsr : Forall P ar).
+      { clear -Eso Hfa; revert ar afn Eso Hfa; induction (ml_slots ls) as [| [o s e | o r0] r IHs];
+          intros ar0 afn0 Eso0 Hfa0; cbn in Eso0;
+          [inversion Eso0; subst; exact Hfa0
+          | destruct (mc_sym_stk_load o s false astk') as [[| em | |] |]; try discriminate Eso0;
+            pose proof (IHs _ _ Eso0 Hfa0) as Hsub; destruct (expr_is_ptol_var ls hdr_ws e);
+            [inversion Hsub; assumption | inversion Hsub as [| ? ? ? Hs1]; inversion Hs1; assumption]
+          | destruct (mc_sym_stk_load o MS_8 false astk') as [[| | r1 |] |]; try discriminate Eso0;
+            destruct (N.eqb r1 r0); [| discriminate Eso0]; exact (IHs _ _ Eso0 Hfa0)]. }
+      assert (Hsp : Forall P ap).
+      { clear -Ero Hsr; clearbody ap; revert ap ar Ero Hsr; induction (ml_regs ls) as [| rb r IHr];
+          intros ap0 ar0 Ero0 Hsr0; cbn in Ero0;
+          [inversion Ero0; subst; exact Hsr0
+          | destruct (rr' (mlr_reg rb)) as [| em | |]; try discriminate Ero0;
+            pose proof (IHr _ _ Ero0 Hsr0) as Hsub; destruct (expr_is_ptol_var ls hdr_ws (mlr_expr rb));
+            [inversion Hsub; assumption | inversion Hsub as [| ? ? ? Hs1]; inversion Hs1; assumption]]. }
+      assert (Hsa : Forall P ai).
+      { clear -Hsp; unfold ap in Hsp; clear ap; clearbody ai; revert ai Hsp; generalize 0%nat as idx;
+          induction ph as [| [w0 ce0] rp IHp]; intros idx a0 H0; cbn in H0; [exact H0 |].
+        destruct (cut_var_ptol ls idx w0); [exact (IHp (S idx) a0 H0) |].
+        pose proof (IHp (S idx) _ H0) as Hsub0; inversion Hsub0; assumption. }
+      unfold ai in Hsa; destruct (ml_inv ls); [inversion Hsa; assumption | exact Hsa].
+    + inversion Hfa; assumption.
+    + exact (IHr _ _ (IHl _ _ Hfa)).
+  - clear -Hfa.
+    induction t_mc as [| ret_mc | cm dl IHl dr IHr] in path, acc, Hfa |- *; cbn in Hfa;
+      [inversion Hfa; assumption | destruct (Pos.eqb rw0 ret_w); inversion Hfa; assumption | exact (IHr _ _ (IHl _ _ Hfa))].
+  - exact Hfa.
+  - exact (IH1 _ _ _ (IH0 _ _ _ Hfa)).
+Qed.
 
 Lemma cut_slot_expr_wf : forall allowed off sz e,
   mc_slot_in_frame 0%Z off sz = true ->
@@ -3070,8 +3445,514 @@ Proof.
   cbn in Hu; rewrite (@Integers.unsigned_one 1%positive), (@Integers.unsigned_zero 1%positive) in Hu; discriminate Hu.
 Qed.
 
-(** Leaf-pair soundness for [collect_mc_ir_obls] against generic [ir_seg_eval_spec]
-    and [mc_seg_holds]. *)
+Lemma collect_phi_def_obls_acc_sound {Pa : Params} :
+  forall ls (penv_mc : param_env Pa) opt_inv is_body path idx phis acc,
+    (is_body = true ->
+     match opt_inv with
+     | None => True
+     | Some inv_e =>
+         eval_closed_cert_expr penv_mc dummy_freeze_oracle inv_e =
+         raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.one 1%positive)))
+     end) ->
+    (forall (b : bool) (c : cert_expr), In (b, c) path ->
+       eval_closed_cert_expr penv_mc dummy_freeze_oracle c =
+       raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if b then @Integers.one 1%positive else @Integers.zero 1%positive)))) ->
+    Forall (mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body)
+      (collect_phi_def_obls_acc ls is_body path idx phis acc) ->
+    Forall (mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body) acc /\
+    (forall j w ce,
+       nth_error phis j = Some (w, ce) ->
+       cut_var_ptol ls (idx + j) w = false ->
+       exists vi,
+         eval_closed_cert_expr penv_mc dummy_freeze_oracle ce =
+         raise_ret (DVALUE_Base (@DVALUE_I Pa w vi))).
+Proof.
+  intros ls penv_mc opt_inv is_body path idx phis;
+    revert idx; induction phis as [| [w0 ce0] rest IH];
+    intros idx acc Hinv Hpath Hfa; cbn [collect_phi_def_obls_acc] in *.
+  - split; [exact Hfa | intros [| j'] ? ? Hn; discriminate Hn].
+  - destruct (cut_var_ptol ls idx w0) eqn:Ept.
+    + destruct (IH (S idx) acc Hinv Hpath Hfa) as [Hacc Hrest].
+      split; [exact Hacc | intros [| j'] w ce Hn Hpt].
+      * inversion Hn; subst w0 ce0; rewrite Nat.add_0_r, Ept in Hpt; discriminate Hpt.
+      * replace (idx + S j')%nat with (S idx + j')%nat in Hpt by lia; exact (Hrest j' w ce Hn Hpt).
+    + destruct (IH (S idx) (MLO_Defined is_body path w0 ce0 :: acc) Hinv Hpath Hfa) as [Hacc Hrest].
+      inversion Hacc as [| ? ? Hd Hacc0]; subst.
+      split; [exact Hacc0 | intros [| j'] w ce Hn Hpt].
+      * inversion Hn; subst w0 ce0; exact (Hd eq_refl Hinv Hpath).
+      * replace (idx + S j')%nat with (S idx + j')%nat in Hpt by lia; exact (Hrest j' w ce Hn Hpt).
+Qed.
+
+Lemma collect_reg_cut_obls_acc_sound {Pa : Params} :
+  forall ls hdr_ws (penv_mc : param_env Pa) opt_inv is_body path sub rr' rbs acc res,
+    collect_reg_cut_obls_acc ls hdr_ws is_body path sub rr' rbs acc = Some res ->
+    Forall (mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body) res ->
+    Forall (mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body) acc /\
+    (forall rb, In rb rbs ->
+       exists e_mc64,
+         rr' (mlr_reg rb) = MSV_Expr e_mc64 /\
+         mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body
+           (MLO_Refine is_body path (mlr_width rb) (subst_cert_expr sub (mlr_expr rb)) (trunc_mc_expr_to (mlr_width rb) e_mc64)) /\
+         (expr_is_ptol_var ls hdr_ws (mlr_expr rb) = false ->
+          mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body
+            (MLO_Defined is_body path (mlr_width rb) (subst_cert_expr sub (mlr_expr rb))))).
+Proof.
+  intros ls hdr_ws penv_mc opt_inv is_body path sub rr' rbs;
+    induction rbs as [| rb0 rest IH]; intros acc res Hrec Hfa; cbn [collect_reg_cut_obls_acc] in Hrec.
+  - inversion Hrec; subst res; split; [exact Hfa | intros rb []].
+  - destruct (rr' (mlr_reg rb0)) as [| e_mc64 | |] eqn:Err; try discriminate Hrec.
+    destruct (expr_is_ptol_var ls hdr_ws (mlr_expr rb0)) eqn:Ept.
+    + destruct (IH _ res Hrec Hfa) as [Hacc Hrest].
+      inversion Hacc as [| ? ? Ho_r Hacc0]; subst.
+      split; [exact Hacc0 | intros rb [<- | Hinr]].
+      * exists e_mc64; split; [exact Err | split; [exact Ho_r | intro C; congruence]].
+      * exact (Hrest rb Hinr).
+    + destruct (IH _ res Hrec Hfa) as [Hacc Hrest].
+      inversion Hacc as [| ? ? Ho_d Hacc1]; subst; inversion Hacc1 as [| ? ? Ho_r Hacc0]; subst.
+      split; [exact Hacc0 | intros rb [<- | Hinr]].
+      * exists e_mc64; split; [exact Err | split; [exact Ho_r | intros _; exact Ho_d]].
+      * exact (Hrest rb Hinr).
+Qed.
+
+Lemma collect_slot_cut_obls_acc_sound {Pa : Params} :
+  forall ls hdr_ws (penv_mc : param_env Pa) opt_inv is_body path sub astk' sbs acc res,
+    collect_slot_cut_obls_acc ls hdr_ws is_body path sub astk' sbs acc = Some res ->
+    Forall (mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body) res ->
+    Forall (mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body) acc /\
+    (forall off r, In (MLS_SavedReg off r) sbs ->
+       mc_sym_stk_load off MS_8 false astk' = Some (MSV_SavedReg r)) /\
+    (forall off sz e_s, In (MLS_Expr off sz e_s) sbs ->
+       exists e_mc64,
+         mc_sym_stk_load off sz false astk' = Some (MSV_Expr e_mc64) /\
+         mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body
+           (MLO_Refine is_body path (mc_mem_bits sz) (subst_cert_expr sub e_s) (trunc_mc_slot_expr sz e_mc64)) /\
+         (expr_is_ptol_var ls hdr_ws e_s = false ->
+          mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body
+            (MLO_Defined is_body path (mc_mem_bits sz) (subst_cert_expr sub e_s)))).
+Proof.
+  intros ls hdr_ws penv_mc opt_inv is_body path sub astk' sbs;
+    induction sbs as [| [o s e | o r0] rest IH]; intros acc res Hrec Hfa; cbn [collect_slot_cut_obls_acc] in Hrec.
+  - inversion Hrec; subst res; split; [exact Hfa | split; intros; contradiction].
+  - destruct (mc_sym_stk_load o s false astk') as [[| em | |] |] eqn:Eld; try discriminate Hrec.
+    destruct (expr_is_ptol_var ls hdr_ws e) eqn:Ept.
+    + destruct (IH _ res Hrec Hfa) as (Hacc & Hsav & Hexp).
+      inversion Hacc as [| ? ? Ho_r Hacc0]; subst.
+      split; [exact Hacc0 | split].
+      * intros off r [Hc | Hr]; [discriminate Hc | exact (Hsav off r Hr)].
+      * intros off sz e_s [Heq | Hr].
+        -- inversion Heq; subst; exists em; split; [exact Eld | split; [exact Ho_r | intro C; congruence]].
+        -- exact (Hexp off sz e_s Hr).
+    + destruct (IH _ res Hrec Hfa) as (Hacc & Hsav & Hexp).
+      inversion Hacc as [| ? ? Ho_d Hacc1]; subst; inversion Hacc1 as [| ? ? Ho_r Hacc0]; subst.
+      split; [exact Hacc0 | split].
+      * intros off r [Hc | Hr]; [discriminate Hc | exact (Hsav off r Hr)].
+      * intros off sz e_s [Heq | Hr].
+        -- inversion Heq; subst; exists em; split; [exact Eld | split; [exact Ho_r | intros _; exact Ho_d]].
+        -- exact (Hexp off sz e_s Hr).
+  - destruct (mc_sym_stk_load o MS_8 false astk') as [[| | r1 |] |] eqn:Eld; try discriminate Hrec.
+    destruct (N.eqb r1 r0) eqn:Er; [| discriminate Hrec]; apply N.eqb_eq in Er; subst r1.
+    destruct (IH acc res Hrec Hfa) as (Hacc & Hsav & Hexp).
+    split; [exact Hacc | split].
+    + intros off r [Heq | Hr]; [inversion Heq; subst; exact Eld | exact (Hsav off r Hr)].
+    + intros off sz e_s [Hc | Hr]; [discriminate Hc | exact (Hexp off sz e_s Hr)].
+Qed.
+
+(** Leaf-pair soundness for [collect_mc_ir_obls_acc] against generic
+    [ir_seg_eval_spec] and [mc_seg_holds]. *)
+Theorem collect_mc_ir_obls_acc_sound {Pa : Params} :
+  forall arch ls ret_w hdr_ws allowed_ir (is_body : bool)
+         (penv_ir penv_mc : param_env Pa)
+         bmap hdr_id hdr_phis wr_keep env0 bid_from cur_bid t_ir
+         P_cut P_ret t_mc opt_inv (path : list (bool * cert_expr)) acc,
+    extract_hdr_phi_widths hdr_phis = hdr_ws ->
+    ir_seg_wf allowed_ir hdr_ws t_ir ->
+    ir_seg_freeze_free t_ir = true ->
+    (forall nm w, In (nm, w) allowed_ir ->
+       exists d1 d2 : @dvalue Pa,
+         penv_ir nm = Some d1 /\ penv_mc nm = Some d2 /\
+         wf_scalar_dvalue w d1 /\ wf_scalar_dvalue w d2 /\ dvalue_refines d1 d2) ->
+    ir_seg_eval_spec bmap hdr_id hdr_phis wr_keep penv_ir env0 bid_from cur_bid t_ir ->
+    mc_seg_holds penv_mc dummy_freeze_oracle P_cut P_ret t_mc ->
+    (is_body = true ->
+     match opt_inv with
+     | None => True
+     | Some inv_e =>
+         eval_closed_cert_expr penv_mc dummy_freeze_oracle inv_e =
+         raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.one 1%positive)))
+     end) ->
+    (forall (b : bool) (c : cert_expr), In (b, c) path ->
+       eval_closed_cert_expr penv_mc dummy_freeze_oracle c =
+       raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if b then @Integers.one 1%positive else @Integers.zero 1%positive)))) ->
+    Forall (mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body)
+      (collect_mc_ir_obls_acc arch ls ret_w hdr_ws is_body path t_ir t_mc acc) ->
+    Forall (mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body) acc /\
+    ((forall sigma, cfg_steps_to_ub sigma env0 (@denote_cfg_from Pa bmap None (bid_from, cur_bid))) \/
+     (exists env_out dv_ir ret_mc dv_mc,
+        pure_cfg_steps env0 (@denote_cfg_from Pa bmap None (bid_from, cur_bid)) env_out dv_ir /\
+        P_ret ret_mc /\
+        eval_closed_cert_expr penv_mc dummy_freeze_oracle ret_mc = raise_ret dv_mc /\
+        dvalue_refines dv_ir dv_mc) \/
+     (exists env_c bid_c b_hdr dvs lmap_cut phis_ir sp' rr' astk',
+        ((env_c = env0 /\ bid_c = bid_from /\ cur_bid = hdr_id) \/
+         pure_cfg_steps_to_tau env0 (@denote_cfg_from Pa bmap None (bid_from, cur_bid))
+           env_c (@denote_cfg_from Pa bmap None (bid_c, hdr_id))) /\
+        RM.find hdr_id bmap = Some b_hdr /\
+        In lmap_cut (collect_entry_cut_lmaps t_ir) /\
+        lmap_matches_env penv_ir lmap_cut env_c /\
+        (forall r, In r wr_keep -> RM.find r env_c = RM.find r env0) /\
+        pure_cfg_steps env_c (denote_phis bid_c (blk_phis b_hdr)) (apply_phi_env env_c dvs) tt /\
+        Forall2 (fun '(id, _) '(id', _) => id' = id) hdr_phis dvs /\
+        Forall2 (fun w '(wp, _) => w = wp) hdr_ws phis_ir /\
+        Forall (fun '(wp, ce) =>
+          wt_cert_expr [] ce = true /\ cert_expr_bit_width ce = wp /\
+          is_let_free_expr ce = true /\ ub_free_expr ce = true /\
+          expr_has_freeze ce = false /\ incl (collect_free_vars [] ce) allowed_ir) phis_ir /\
+        Forall2 (fun '(wp, ce) '(_, dv) =>
+          eval_closed_cert_expr penv_ir dummy_freeze_oracle ce = raise_ret dv /\
+          wf_scalar_dvalue wp dv) phis_ir dvs /\
+        sp' = ml_sp_off ls /\
+        P_cut sp' rr' astk' /\
+        (forall r, In r (mc_unspilled_preserved arch ls) -> rr' r = MSV_SavedReg r) /\
+        (forall k w ce,
+           nth_error phis_ir k = Some (w, ce) ->
+           cut_var_ptol ls k w = false ->
+           exists vi,
+             eval_closed_cert_expr penv_mc dummy_freeze_oracle ce =
+             raise_ret (DVALUE_Base (@DVALUE_I Pa w vi))) /\
+        (forall rb, In rb (ml_regs ls) ->
+           exists e_mc64,
+             rr' (mlr_reg rb) = MSV_Expr e_mc64 /\
+             mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body
+               (MLO_Refine is_body path (mlr_width rb) (subst_cert_expr (build_phi_subst 0%nat phis_ir) (mlr_expr rb)) (trunc_mc_expr_to (mlr_width rb) e_mc64)) /\
+             (expr_is_ptol_var ls hdr_ws (mlr_expr rb) = false ->
+              mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body
+                (MLO_Defined is_body path (mlr_width rb) (subst_cert_expr (build_phi_subst 0%nat phis_ir) (mlr_expr rb))))) /\
+        (forall off r, In (MLS_SavedReg off r) (ml_slots ls) ->
+           mc_sym_stk_load off MS_8 false astk' = Some (MSV_SavedReg r)) /\
+        (forall off sz e_s, In (MLS_Expr off sz e_s) (ml_slots ls) ->
+           exists e_mc64,
+             mc_sym_stk_load off sz false astk' = Some (MSV_Expr e_mc64) /\
+             mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body
+               (MLO_Refine is_body path (mc_mem_bits sz) (subst_cert_expr (build_phi_subst 0%nat phis_ir) e_s) (trunc_mc_slot_expr sz e_mc64)) /\
+             (expr_is_ptol_var ls hdr_ws e_s = false ->
+              mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body
+                (MLO_Defined is_body path (mc_mem_bits sz) (subst_cert_expr (build_phi_subst 0%nat phis_ir) e_s)))) /\
+        match ml_inv ls with
+        | None => True
+        | Some inv_e =>
+            mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body
+              (MLO_Refine is_body path 1%positive (CE_BvConst 1%positive 1%N) (subst_cert_expr (build_phi_subst 0%nat phis_ir) inv_e))
+        end)).
+Proof.
+  intros arch ls ret_w hdr_ws allowed_ir is_body penv_ir penv_mc bmap hdr_id hdr_phis wr_keep.
+  intros env0 bid_from cur_bid t_ir P_cut P_ret t_mc opt_inv path acc Hhdr Hwf_ir Hfrz_ir Href.
+  revert env0 bid_from cur_bid path acc Hwf_ir Hfrz_ir.
+  induction t_ir as [lmap_cut phis_ir | rw ret_ir | | cond dt_ir IHt df_ir IHf];
+    intros env0 bid_from cur_bid path acc Hwf_ir Hfrz_ir Hir Hmc Hinv Hpath Hobls.
+  - (* IST_Cut *)
+    destruct Hwf_ir as [_ Hwf_phis]; cbn [ir_seg_freeze_free ir_seg_exprs_freeze_free_cut] in Hfrz_ir.
+    assert (Hphis_wf : Forall (fun '(wp, ce) =>
+      wt_cert_expr [] ce = true /\ cert_expr_bit_width ce = wp /\
+      is_let_free_expr ce = true /\ ub_free_expr ce = true /\
+      expr_has_freeze ce = false /\ incl (collect_free_vars [] ce) allowed_ir) phis_ir).
+    { clear -Hwf_phis Hfrz_ir.
+      induction Hwf_phis as [| w [wp ce] rw rp (_ & Hwt & Hbw & Hlf & Hub & Hfv) _ IH];
+        cbn [forallb] in *; [constructor |].
+      apply andb_true_iff in Hfrz_ir as [Hnfrz Hfrz_r]; apply negb_true_iff in Hnfrz.
+      constructor; [repeat split; assumption | exact (IH Hfrz_r)]. }
+    clear Hhdr; induction t_mc as [sp' rr' astk' | ret_mc | cond_mc dt_mc IHtm df_mc IHfm] in path, acc, Hmc, Hpath, Hobls |- *;
+      cbn [collect_mc_ir_obls_acc mc_seg_holds] in Hobls, Hmc.
+    + destruct (Z.eqb sp' (ml_sp_off ls) &&
+                forallb (fun r => match rr' r with MSV_SavedReg r0 => N.eqb r0 r | _ => false end) (mc_unspilled_preserved arch ls) &&
+                check_widths_match hdr_ws phis_ir) eqn:Epres; cbn [negb] in Hobls;
+        [| exfalso; exact (imposs_obl_absurd penv_mc dummy_freeze_oracle opt_inv is_body path Hinv Hpath ltac:(constructor; [exact (Forall_inv Hobls) | constructor]))].
+      set (a_inv := match ml_inv ls with None => acc | Some inv_e => MLO_Refine is_body path 1%positive (CE_BvConst 1%positive 1%N) (subst_cert_expr (build_phi_subst 0%nat phis_ir) inv_e) :: acc end) in *.
+      set (a_phi := collect_phi_def_obls_acc ls is_body path 0%nat phis_ir a_inv) in *.
+      destruct (collect_reg_cut_obls_acc ls hdr_ws is_body path (build_phi_subst 0%nat phis_ir) rr' (ml_regs ls) a_phi) as [a_reg |] eqn:Ero;
+        [| exfalso; exact (imposs_obl_absurd penv_mc dummy_freeze_oracle opt_inv is_body path Hinv Hpath ltac:(constructor; [exact (Forall_inv Hobls) | constructor]))].
+      destruct (collect_slot_cut_obls_acc ls hdr_ws is_body path (build_phi_subst 0%nat phis_ir) astk' (ml_slots ls) a_reg) as [a_fin |] eqn:Eso;
+        [| exfalso; exact (imposs_obl_absurd penv_mc dummy_freeze_oracle opt_inv is_body path Hinv Hpath ltac:(constructor; [exact (Forall_inv Hobls) | constructor]))].
+      destruct (collect_slot_cut_obls_acc_sound ls hdr_ws penv_mc opt_inv is_body path (build_phi_subst 0%nat phis_ir) astk' (ml_slots ls) a_reg a_fin Eso Hobls)
+        as (Hfa_reg & Hsav & Hslts_o).
+      destruct (collect_reg_cut_obls_acc_sound ls hdr_ws penv_mc opt_inv is_body path (build_phi_subst 0%nat phis_ir) rr' (ml_regs ls) a_phi a_reg Ero Hfa_reg)
+        as (Hfa_phi & Hregs_o).
+      destruct (collect_phi_def_obls_acc_sound ls penv_mc opt_inv is_body path 0%nat phis_ir a_inv Hinv Hpath Hfa_phi)
+        as (Hfa_inv & Hphi_d).
+      assert (Hacc_ok : Forall (mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body) acc).
+      { unfold a_inv in Hfa_inv; destruct (ml_inv ls); [inversion Hfa_inv; assumption | exact Hfa_inv]. }
+      split; [exact Hacc_ok |].
+      destruct Hir as [Hub | (env_c & bid_c & b_hdr & dvs & Htau & Ebh & Hlm & Hkp & Hph & Hids & Hstp)]; [left; exact Hub |].
+      right; right; exists env_c, bid_c, b_hdr, dvs, lmap_cut, phis_ir, sp', rr', astk'.
+      rewrite !andb_true_iff in Epres; destruct Epres as [[Hsp Hunsp] Hwm].
+      apply Z.eqb_eq in Hsp.
+      cbn [collect_entry_cut_lmaps].
+      repeat split; try assumption.
+      * left; reflexivity.
+      * exact (check_widths_match_spec _ _ Hwm).
+      * intros r Hr; rewrite forallb_forall in Hunsp; pose proof (Hunsp r Hr) as Hrr.
+        destruct (rr' r) as [| | r0 |]; try discriminate Hrr; apply N.eqb_eq in Hrr; subst r0; reflexivity.
+      * unfold a_inv in Hfa_inv; destruct (ml_inv ls); [inversion Hfa_inv; assumption | exact I].
+    + exfalso; exact (imposs_obl_absurd penv_mc dummy_freeze_oracle opt_inv is_body path Hinv Hpath ltac:(constructor; [exact (Forall_inv Hobls) | constructor])).
+    + destruct Hmc as [b [Hbc Hsub]].
+      assert (Hpath' : forall (b0 : bool) (c0 : cert_expr), In (b0, c0) ((b, cond_mc) :: path) ->
+        eval_closed_cert_expr penv_mc dummy_freeze_oracle c0 =
+        raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if b0 then @Integers.one 1%positive else @Integers.zero 1%positive)))).
+      { intros b0 c0 [Heq | Hin]; [inversion Heq; subst; exact Hbc | exact (Hpath b0 c0 Hin)]. }
+      set (af := (fix go_mc (u : mc_seg_tree) (p : list (bool * cert_expr)) (a : list mc_loop_obl) {struct u} : list mc_loop_obl :=
+        match u with
+        | MST_Branch cond_mc0 dt_mc0 df_mc0 =>
+            let af0 := go_mc df_mc0 ((false, cond_mc0) :: p) a in
+            go_mc dt_mc0 ((true, cond_mc0) :: p) af0
+        | MST_Ret _ => imposs_obl_cons is_body p a
+        | MST_Cut sp' rr' astk' =>
+            let pres_ok :=
+              Z.eqb sp' (ml_sp_off ls) &&
+              forallb (fun r => match rr' r with MSV_SavedReg r0 => N.eqb r0 r | _ => false end) (mc_unspilled_preserved arch ls) &&
+              check_widths_match hdr_ws phis_ir
+            in
+            if negb pres_ok then imposs_obl_cons is_body p a
+            else
+              let sub := build_phi_subst 0%nat phis_ir in
+              let a_inv := match ml_inv ls with None => a | Some inv_e => MLO_Refine is_body p 1%positive (CE_BvConst 1%positive 1%N) (subst_cert_expr sub inv_e) :: a end in
+              let a_phi := collect_phi_def_obls_acc ls is_body p 0%nat phis_ir a_inv in
+              match collect_reg_cut_obls_acc ls hdr_ws is_body p sub rr' (ml_regs ls) a_phi with
+              | None => imposs_obl_cons is_body p a
+              | Some a_reg =>
+                  match collect_slot_cut_obls_acc ls hdr_ws is_body p sub astk' (ml_slots ls) a_reg with
+                  | None => imposs_obl_cons is_body p a
+                  | Some a_fin => a_fin
+                  end
+              end
+        end) df_mc ((false, cond_mc) :: path) acc).
+      assert (Hacc_or_sub :
+        Forall (mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body) acc /\
+        ((forall sigma, cfg_steps_to_ub sigma env0 (@denote_cfg_from Pa bmap None (bid_from, cur_bid))) \/
+         (exists env_out dv_ir ret_mc dv_mc,
+            pure_cfg_steps env0 (@denote_cfg_from Pa bmap None (bid_from, cur_bid)) env_out dv_ir /\
+            P_ret ret_mc /\
+            eval_closed_cert_expr penv_mc dummy_freeze_oracle ret_mc = raise_ret dv_mc /\
+            dvalue_refines dv_ir dv_mc) \/
+         (exists env_c bid_c b_hdr dvs lmap_cut0 phis_ir0 sp' rr' astk',
+            ((env_c = env0 /\ bid_c = bid_from /\ cur_bid = hdr_id) \/
+             pure_cfg_steps_to_tau env0 (@denote_cfg_from Pa bmap None (bid_from, cur_bid))
+               env_c (@denote_cfg_from Pa bmap None (bid_c, hdr_id))) /\
+            RM.find hdr_id bmap = Some b_hdr /\
+            In lmap_cut0 (collect_entry_cut_lmaps (IST_Cut lmap_cut phis_ir)) /\
+            lmap_matches_env penv_ir lmap_cut0 env_c /\
+            (forall r, In r wr_keep -> RM.find r env_c = RM.find r env0) /\
+            pure_cfg_steps env_c (denote_phis bid_c (blk_phis b_hdr)) (apply_phi_env env_c dvs) tt /\
+            Forall2 (fun '(id, _) '(id', _) => id' = id) hdr_phis dvs /\
+            Forall2 (fun w '(wp, _) => w = wp) hdr_ws phis_ir0 /\
+            Forall (fun '(wp, ce) =>
+              wt_cert_expr [] ce = true /\ cert_expr_bit_width ce = wp /\
+              is_let_free_expr ce = true /\ ub_free_expr ce = true /\
+              expr_has_freeze ce = false /\ incl (collect_free_vars [] ce) allowed_ir) phis_ir0 /\
+            Forall2 (fun '(wp, ce) '(_, dv) =>
+              eval_closed_cert_expr penv_ir dummy_freeze_oracle ce = raise_ret dv /\
+              wf_scalar_dvalue wp dv) phis_ir0 dvs /\
+            sp' = ml_sp_off ls /\ P_cut sp' rr' astk' /\
+            (forall r, In r (mc_unspilled_preserved arch ls) -> rr' r = MSV_SavedReg r) /\
+            (forall k w ce, nth_error phis_ir0 k = Some (w, ce) -> cut_var_ptol ls k w = false ->
+               exists vi, eval_closed_cert_expr penv_mc dummy_freeze_oracle ce = raise_ret (DVALUE_Base (@DVALUE_I Pa w vi))) /\
+            (forall rb, In rb (ml_regs ls) -> exists e_mc64, rr' (mlr_reg rb) = MSV_Expr e_mc64 /\
+               mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Refine is_body ((b, cond_mc) :: path) (mlr_width rb) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) (mlr_expr rb)) (trunc_mc_expr_to (mlr_width rb) e_mc64)) /\
+               (expr_is_ptol_var ls hdr_ws (mlr_expr rb) = false -> mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Defined is_body ((b, cond_mc) :: path) (mlr_width rb) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) (mlr_expr rb))))) /\
+            (forall off r, In (MLS_SavedReg off r) (ml_slots ls) -> mc_sym_stk_load off MS_8 false astk' = Some (MSV_SavedReg r)) /\
+            (forall off sz e_s, In (MLS_Expr off sz e_s) (ml_slots ls) -> exists e_mc64, mc_sym_stk_load off sz false astk' = Some (MSV_Expr e_mc64) /\
+               mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Refine is_body ((b, cond_mc) :: path) (mc_mem_bits sz) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) e_s) (trunc_mc_slot_expr sz e_mc64)) /\
+               (expr_is_ptol_var ls hdr_ws e_s = false -> mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Defined is_body ((b, cond_mc) :: path) (mc_mem_bits sz) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) e_s)))) /\
+            match ml_inv ls with None => True | Some inv_e => mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Refine is_body ((b, cond_mc) :: path) 1%positive (CE_BvConst 1%positive 1%N) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) inv_e)) end))).
+      { assert (Haf : Forall (mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body) af) by
+          exact (collect_mc_ir_obls_acc_sub _ arch ls ret_w hdr_ws is_body ((true, cond_mc) :: path) (IST_Cut lmap_cut phis_ir) dt_mc af Hobls).
+        destruct b.
+        -- destruct (IHtm ((true, cond_mc) :: path) af Hsub Hpath' Hobls) as [_ Hres]; split.
+           ++ unfold af in Haf; exact (collect_mc_ir_obls_acc_sub _ arch ls ret_w hdr_ws is_body ((false, cond_mc) :: path) (IST_Cut lmap_cut phis_ir) df_mc acc Haf).
+           ++ exact Hres.
+        -- exact (IHfm ((false, cond_mc) :: path) acc Hsub Hpath' Haf). }
+      destruct Hacc_or_sub as [Hacc_ok [Hub_m | [Hret_m | (env_c & bid_c & b_hdr & dvs & lmap_cut0 & phis_ir0 & sp' & rr' & astk' & Htau_m & Ebh_m & Hin_m & Hlm_m & Hkp_m & Hstp_m & Hids_m & Hws_m & Hpwf_m & Hph_m & Hsp_m & Hpc_m & Hunsp_m & Hphi_m & Hregs_m & Hsav_m & Hslts_m & Hmi_m)]]];
+        split; try assumption.
+      * left; exact Hub_m.
+      * right; left; exact Hret_m.
+      * right; right; exists env_c, bid_c, b_hdr, dvs, lmap_cut0, phis_ir0, sp', rr', astk'.
+        repeat split; try assumption.
+        -- intros rb Hrb; destruct (Hregs_m rb Hrb) as (e_mc64 & Err & Ho_r & Ho_d); exists e_mc64; split; [exact Err | split].
+           ++ intros Hbm Hinv0 Hpath0; exact (Ho_r Hbm Hinv0 Hpath').
+           ++ intros Hnpt Hbm Hinv0 Hpath0; exact (Ho_d Hnpt Hbm Hinv0 Hpath').
+        -- intros off sz e_s Hsl; destruct (Hslts_m off sz e_s Hsl) as (e_mc64 & Eld & Ho_r & Ho_d); exists e_mc64; split; [exact Eld | split].
+           ++ intros Hbm Hinv0 Hpath0; exact (Ho_r Hbm Hinv0 Hpath').
+           ++ intros Hnpt Hbm Hinv0 Hpath0; exact (Ho_d Hnpt Hbm Hinv0 Hpath').
+        -- destruct (ml_inv ls); [| exact I]; intros Hbm Hinv0 Hpath0; exact (Hmi_m Hbm Hinv0 Hpath').
+  - (* IST_Ret *)
+    destruct Hwf_ir as (_ & Hsup & Hwt_r & Hbw_r & Hlf_r & Hub_r & Hfv_r).
+    cbn [ir_seg_freeze_free] in Hfrz_ir; apply negb_true_iff in Hfrz_ir.
+    induction t_mc as [sp' rr' astk' | ret_mc | cond_mc dt_mc IHtm df_mc IHfm] in path, acc, Hmc, Hpath, Hobls |- *;
+      cbn [collect_mc_ir_obls_acc mc_seg_holds] in Hobls, Hmc.
+    + exfalso; exact (imposs_obl_absurd penv_mc dummy_freeze_oracle opt_inv is_body path Hinv Hpath ltac:(constructor; [exact (Forall_inv Hobls) | constructor])).
+    + destruct (Pos.eqb rw ret_w) eqn:Erw;
+        [| exfalso; exact (imposs_obl_absurd penv_mc dummy_freeze_oracle opt_inv is_body path Hinv Hpath ltac:(constructor; [exact (Forall_inv Hobls) | constructor]))].
+      inversion Hobls as [| ? ? Ho_r Hacc_ok]; subst; clear Hobls.
+      split; [exact Hacc_ok |].
+      destruct Hir as [Hub | (env_out & dv_ir & Hst & Hev_ir)]; [left; exact Hub |].
+      pose proof (Ho_r eq_refl Hinv Hpath) as Href_e.
+      destruct (eval_cert_expr_refine_mono penv_ir penv_mc dummy_freeze_oracle ret_ir Hwt_r Hlf_r Hub_r Hfrz_ir
+                  (fun x wx Hx => Href x wx (Hfv_r (x, wx) Hx)))
+        as (v1 & v2 & Ev1 & Ev2 & _ & _ & R12).
+      rewrite Hev_ir in Ev1; inversion Ev1; subst v1.
+      cbn [refine_eou_dvalue] in Href_e; rewrite Ev2 in Href_e; destruct (eval_closed_cert_expr penv_mc dummy_freeze_oracle ret_mc) as [| | | dv_mc] eqn:Evmc;
+        try contradiction.
+      right; left; exists env_out, dv_ir, ret_mc, dv_mc; repeat split; try assumption.
+      exact (dvalue_refines_trans _ _ _ R12 Href_e).
+    + destruct Hmc as [b [Hbc Hsub]].
+      assert (Hpath' : forall (b0 : bool) (c0 : cert_expr), In (b0, c0) ((b, cond_mc) :: path) ->
+        eval_closed_cert_expr penv_mc dummy_freeze_oracle c0 =
+        raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if b0 then @Integers.one 1%positive else @Integers.zero 1%positive)))).
+      { intros b0 c0 [Heq | Hin]; [inversion Heq; subst; exact Hbc | exact (Hpath b0 c0 Hin)]. }
+      set (af := (fix go_mc (u : mc_seg_tree) (p : list (bool * cert_expr)) (a : list mc_loop_obl) {struct u} : list mc_loop_obl :=
+        match u with
+        | MST_Branch cond_mc0 dt_mc0 df_mc0 =>
+            let af0 := go_mc df_mc0 ((false, cond_mc0) :: p) a in
+            go_mc dt_mc0 ((true, cond_mc0) :: p) af0
+        | MST_Ret ret_mc => if Pos.eqb rw ret_w then MLO_Refine is_body p rw ret_ir ret_mc :: a else imposs_obl_cons is_body p a
+        | MST_Cut _ _ _ => imposs_obl_cons is_body p a
+        end) df_mc ((false, cond_mc) :: path) acc).
+      assert (Haf : Forall (mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body) af) by
+        exact (collect_mc_ir_obls_acc_sub _ arch ls ret_w hdr_ws is_body ((true, cond_mc) :: path) (IST_Ret rw ret_ir) dt_mc af Hobls).
+      assert (Hacc_or_sub :
+        Forall (mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body) acc /\
+        ((forall sigma, cfg_steps_to_ub sigma env0 (@denote_cfg_from Pa bmap None (bid_from, cur_bid))) \/
+         (exists env_out dv_ir ret_mc dv_mc,
+            pure_cfg_steps env0 (@denote_cfg_from Pa bmap None (bid_from, cur_bid)) env_out dv_ir /\
+            P_ret ret_mc /\
+            eval_closed_cert_expr penv_mc dummy_freeze_oracle ret_mc = raise_ret dv_mc /\
+            dvalue_refines dv_ir dv_mc) \/
+         (exists env_c bid_c b_hdr dvs lmap_cut0 phis_ir0 sp' rr' astk',
+            ((env_c = env0 /\ bid_c = bid_from /\ cur_bid = hdr_id) \/
+             pure_cfg_steps_to_tau env0 (@denote_cfg_from Pa bmap None (bid_from, cur_bid))
+               env_c (@denote_cfg_from Pa bmap None (bid_c, hdr_id))) /\
+            RM.find hdr_id bmap = Some b_hdr /\
+            In lmap_cut0 (collect_entry_cut_lmaps (IST_Ret rw ret_ir)) /\
+            lmap_matches_env penv_ir lmap_cut0 env_c /\
+            (forall r, In r wr_keep -> RM.find r env_c = RM.find r env0) /\
+            pure_cfg_steps env_c (denote_phis bid_c (blk_phis b_hdr)) (apply_phi_env env_c dvs) tt /\
+            Forall2 (fun '(id, _) '(id', _) => id' = id) hdr_phis dvs /\
+            Forall2 (fun w '(wp, _) => w = wp) hdr_ws phis_ir0 /\
+            Forall (fun '(wp, ce) =>
+              wt_cert_expr [] ce = true /\ cert_expr_bit_width ce = wp /\
+              is_let_free_expr ce = true /\ ub_free_expr ce = true /\
+              expr_has_freeze ce = false /\ incl (collect_free_vars [] ce) allowed_ir) phis_ir0 /\
+            Forall2 (fun '(wp, ce) '(_, dv) =>
+              eval_closed_cert_expr penv_ir dummy_freeze_oracle ce = raise_ret dv /\
+              wf_scalar_dvalue wp dv) phis_ir0 dvs /\
+            sp' = ml_sp_off ls /\ P_cut sp' rr' astk' /\
+            (forall r, In r (mc_unspilled_preserved arch ls) -> rr' r = MSV_SavedReg r) /\
+            (forall k w ce, nth_error phis_ir0 k = Some (w, ce) -> cut_var_ptol ls k w = false ->
+               exists vi, eval_closed_cert_expr penv_mc dummy_freeze_oracle ce = raise_ret (DVALUE_Base (@DVALUE_I Pa w vi))) /\
+            (forall rb, In rb (ml_regs ls) -> exists e_mc64, rr' (mlr_reg rb) = MSV_Expr e_mc64 /\
+               mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Refine is_body ((b, cond_mc) :: path) (mlr_width rb) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) (mlr_expr rb)) (trunc_mc_expr_to (mlr_width rb) e_mc64)) /\
+               (expr_is_ptol_var ls hdr_ws (mlr_expr rb) = false -> mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Defined is_body ((b, cond_mc) :: path) (mlr_width rb) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) (mlr_expr rb))))) /\
+            (forall off r, In (MLS_SavedReg off r) (ml_slots ls) -> mc_sym_stk_load off MS_8 false astk' = Some (MSV_SavedReg r)) /\
+            (forall off sz e_s, In (MLS_Expr off sz e_s) (ml_slots ls) -> exists e_mc64, mc_sym_stk_load off sz false astk' = Some (MSV_Expr e_mc64) /\
+               mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Refine is_body ((b, cond_mc) :: path) (mc_mem_bits sz) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) e_s) (trunc_mc_slot_expr sz e_mc64)) /\
+               (expr_is_ptol_var ls hdr_ws e_s = false -> mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Defined is_body ((b, cond_mc) :: path) (mc_mem_bits sz) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) e_s)))) /\
+            match ml_inv ls with None => True | Some inv_e => mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Refine is_body ((b, cond_mc) :: path) 1%positive (CE_BvConst 1%positive 1%N) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) inv_e)) end))).
+      { destruct b.
+        -- destruct (IHtm ((true, cond_mc) :: path) af Hsub Hpath' Hobls) as [_ Hres]; split.
+           ++ unfold af in Haf; exact (collect_mc_ir_obls_acc_sub _ arch ls ret_w hdr_ws is_body ((false, cond_mc) :: path) (IST_Ret rw ret_ir) df_mc acc Haf).
+           ++ exact Hres.
+        -- exact (IHfm ((false, cond_mc) :: path) acc Hsub Hpath' Haf). }
+      destruct Hacc_or_sub as [Hacc_ok [Hub_m | [Hret_m | (? & ? & ? & ? & ? & ? & ? & ? & ? & _ & _ & Hin_m & _)]]];
+        split; try assumption; [left; exact Hub_m | right; left; exact Hret_m | exfalso; exact Hin_m].
+  - (* IST_UB *)
+    split; [exact Hobls | left; exact Hir].
+  - (* IST_Branch *)
+    cbn [collect_mc_ir_obls_acc] in Hobls.
+    destruct Hwf_ir as [Hlms (Hwt_c & Hbw_c & Hlf_c & Hub_c & Hfv_c & Hwf_t & Hwf_f)].
+    assert (Hlms_t : forall lm, In lm (collect_entry_cut_lmaps dt_ir) -> wf_pure_lmap allowed_ir lm)
+      by (intros lm Hin; exact (Hlms lm (in_or_app _ _ _ (or_introl Hin)))).
+    assert (Hlms_f : forall lm, In lm (collect_entry_cut_lmaps df_ir) -> wf_pure_lmap allowed_ir lm)
+      by (intros lm Hin; exact (Hlms lm (in_or_app _ _ _ (or_intror Hin)))).
+    cbn [ir_seg_freeze_free] in Hfrz_ir; rewrite !andb_true_iff in Hfrz_ir; destruct Hfrz_ir as [[Hnfrz_c Hnf_t] Hnf_f].
+    apply negb_true_iff in Hnfrz_c.
+    assert (Haf : Forall (mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body)
+                    (collect_mc_ir_obls_acc arch ls ret_w hdr_ws is_body ((false, cond) :: path) df_ir t_mc acc))
+      by exact (collect_mc_ir_obls_acc_sub _ _ _ _ _ _ _ _ _ _ Hobls).
+    cbn [ir_seg_eval_spec] in Hir; destruct Hir as [Hub | (env_mid & bid_step & br_t & br_f & b & Htau & Hev_c & Hk2 & Hsub)].
+    + split; [exact (collect_mc_ir_obls_acc_sub _ _ _ _ _ _ _ _ _ _ Haf) | left; exact Hub].
+    + destruct (eval_cert_expr_refine_mono penv_ir penv_mc dummy_freeze_oracle cond Hwt_c Hlf_c Hub_c Hnfrz_c
+                  (fun x wx Hx => Href x wx (Hfv_c (x, wx) Hx)))
+        as (vc1 & vc2 & Evc1 & Evc2 & _ & _ & Rc).
+      rewrite Hev_c in Evc1; inversion Evc1; subst vc1.
+      assert (Hvc2 : vc2 = DVALUE_Base (@DVALUE_I Pa 1%positive (if b then @Integers.one 1%positive else @Integers.zero 1%positive))).
+      { destruct Rc as [Hbad | <-]; [discriminate Hbad | reflexivity]. }
+      subst vc2.
+      assert (Hpath' : forall b0 c0, In (b0, c0) ((b, cond) :: path) ->
+        eval_closed_cert_expr penv_mc dummy_freeze_oracle c0 =
+        raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if b0 then @Integers.one 1%positive else @Integers.zero 1%positive)))).
+      { intros b0 c0 [Heq | Hin]; [inversion Heq; subst; exact Evc2 | exact (Hpath b0 c0 Hin)]. }
+      assert (Hacc_and_sub :
+        Forall (mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body) acc /\
+        ((forall sigma, cfg_steps_to_ub sigma env_mid (@denote_cfg_from Pa bmap None (bid_step, if b then br_t else br_f))) \/
+         (exists env_out dv_ir ret_mc dv_mc,
+            pure_cfg_steps env_mid (@denote_cfg_from Pa bmap None (bid_step, if b then br_t else br_f)) env_out dv_ir /\
+            P_ret ret_mc /\
+            eval_closed_cert_expr penv_mc dummy_freeze_oracle ret_mc = raise_ret dv_mc /\
+            dvalue_refines dv_ir dv_mc) \/
+         (exists env_c bid_c b_hdr dvs lmap_cut phis_ir sp' rr' astk',
+            ((env_c = env_mid /\ bid_c = bid_step /\ (if b then br_t else br_f) = hdr_id) \/
+             pure_cfg_steps_to_tau env_mid (@denote_cfg_from Pa bmap None (bid_step, if b then br_t else br_f))
+               env_c (@denote_cfg_from Pa bmap None (bid_c, hdr_id))) /\
+            RM.find hdr_id bmap = Some b_hdr /\
+            In lmap_cut (collect_entry_cut_lmaps (if b then dt_ir else df_ir)) /\
+            lmap_matches_env penv_ir lmap_cut env_c /\
+            (forall r, In r wr_keep -> RM.find r env_c = RM.find r env_mid) /\
+            pure_cfg_steps env_c (denote_phis bid_c (blk_phis b_hdr)) (apply_phi_env env_c dvs) tt /\
+            Forall2 (fun '(id, _) '(id', _) => id' = id) hdr_phis dvs /\
+            Forall2 (fun w '(wp, _) => w = wp) hdr_ws phis_ir /\
+            Forall (fun '(wp, ce) =>
+              wt_cert_expr [] ce = true /\ cert_expr_bit_width ce = wp /\
+              is_let_free_expr ce = true /\ ub_free_expr ce = true /\
+              expr_has_freeze ce = false /\ incl (collect_free_vars [] ce) allowed_ir) phis_ir /\
+            Forall2 (fun '(wp, ce) '(_, dv) =>
+              eval_closed_cert_expr penv_ir dummy_freeze_oracle ce = raise_ret dv /\
+              wf_scalar_dvalue wp dv) phis_ir dvs /\
+            sp' = ml_sp_off ls /\ P_cut sp' rr' astk' /\
+            (forall r, In r (mc_unspilled_preserved arch ls) -> rr' r = MSV_SavedReg r) /\
+            (forall k w ce, nth_error phis_ir k = Some (w, ce) -> cut_var_ptol ls k w = false ->
+               exists vi, eval_closed_cert_expr penv_mc dummy_freeze_oracle ce = raise_ret (DVALUE_Base (@DVALUE_I Pa w vi))) /\
+            (forall rb, In rb (ml_regs ls) -> exists e_mc64, rr' (mlr_reg rb) = MSV_Expr e_mc64 /\
+               mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Refine is_body ((b, cond) :: path) (mlr_width rb) (subst_cert_expr (build_phi_subst 0%nat phis_ir) (mlr_expr rb)) (trunc_mc_expr_to (mlr_width rb) e_mc64)) /\
+               (expr_is_ptol_var ls hdr_ws (mlr_expr rb) = false -> mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Defined is_body ((b, cond) :: path) (mlr_width rb) (subst_cert_expr (build_phi_subst 0%nat phis_ir) (mlr_expr rb))))) /\
+            (forall off r, In (MLS_SavedReg off r) (ml_slots ls) -> mc_sym_stk_load off MS_8 false astk' = Some (MSV_SavedReg r)) /\
+            (forall off sz e_s, In (MLS_Expr off sz e_s) (ml_slots ls) -> exists e_mc64, mc_sym_stk_load off sz false astk' = Some (MSV_Expr e_mc64) /\
+               mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Refine is_body ((b, cond) :: path) (mc_mem_bits sz) (subst_cert_expr (build_phi_subst 0%nat phis_ir) e_s) (trunc_mc_slot_expr sz e_mc64)) /\
+               (expr_is_ptol_var ls hdr_ws e_s = false -> mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Defined is_body ((b, cond) :: path) (mc_mem_bits sz) (subst_cert_expr (build_phi_subst 0%nat phis_ir) e_s)))) /\
+            match ml_inv ls with None => True | Some inv_e => mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Refine is_body ((b, cond) :: path) 1%positive (CE_BvConst 1%positive 1%N) (subst_cert_expr (build_phi_subst 0%nat phis_ir) inv_e)) end))).
+      { destruct b.
+        - destruct (IHt _ _ _ ((true, cond) :: path) _ (conj Hlms_t Hwf_t) Hnf_t Hsub Hmc Hinv Hpath' Hobls) as [_ Hres].
+          split; [exact (collect_mc_ir_obls_acc_sub _ _ _ _ _ _ _ _ _ _ Haf) | exact Hres].
+        - exact (IHf _ _ _ ((false, cond) :: path) acc (conj Hlms_f Hwf_f) Hnf_f Hsub Hmc Hinv Hpath' Haf). }
+      destruct Hacc_and_sub as [Hacc_ok [Hub_sub | [(env_out & dv_ir & ret_mc & dv_mc & Hst & Hpr & Hevmc & Href_d)
+                                            | (env_c & bid_c & b_hdr & dvs & lmap_cut & phis_ir & sp' & rr' & astk' &
+                                               Htau2 & Ebh & Hin_lm & Hlm_m & Hkp2 & Hstp & Hids & Hws & Hpwf & Hph & Hsp & Hpc & Hunsp & Hphi_d & Hregs & Hsav & Hslts & Hmi)]]];
+        split; try assumption.
+      * left; intro sigma; exact (pure_cfg_steps_to_tau_then_ub sigma _ _ _ _ Htau (Hub_sub sigma)).
+      * right; left; exists env_out, dv_ir, ret_mc, dv_mc; repeat split; try assumption.
+        exact (pure_cfg_steps_to_tau_then_ret _ _ _ _ _ _ Htau Hst).
+      * right; right; exists env_c, bid_c, b_hdr, dvs, lmap_cut, phis_ir, sp', rr', astk'.
+        cbn [collect_entry_cut_lmaps].
+        repeat split; try assumption.
+        -- right; destruct Htau2 as [[-> [-> Eeq]] | Htau2]; [rewrite <- Eeq; exact Htau | exact (pure_cfg_steps_to_tau_trans _ _ _ _ _ _ Htau Htau2)].
+        -- apply in_app_iff; destruct b; [left | right]; exact Hin_lm.
+        -- intros r Hr; rewrite (Hkp2 r Hr), (Hk2 r Hr); reflexivity.
+        -- intros rb Hrb; destruct (Hregs rb Hrb) as (e_mc64 & Err & Ho_r & Ho_d); exists e_mc64; split; [exact Err | split].
+           ++ intros Hbm Hinv0 Hpath0; apply Ho_r; try assumption; intros b0 c0 Hin; apply Hpath'; exact Hin.
+           ++ intros Hnpt Hbm Hinv0 Hpath0; apply Ho_d; try assumption; intros b0 c0 Hin; apply Hpath'; exact Hin.
+        -- intros off sz e_s Hsl; destruct (Hslts off sz e_s Hsl) as (e_mc64 & Eld & Ho_r & Ho_d); exists e_mc64; split; [exact Eld | split].
+           ++ intros Hbm Hinv0 Hpath0; apply Ho_r; try assumption; intros b0 c0 Hin; apply Hpath'; exact Hin.
+           ++ intros Hnpt Hbm Hinv0 Hpath0; apply Ho_d; try assumption; intros b0 c0 Hin; apply Hpath'; exact Hin.
+        -- destruct (ml_inv ls); [| exact I]; intros Hbm Hinv0 Hpath0; apply Hmi; try assumption.
+Qed.
+
 Theorem collect_mc_ir_obls_sound {Pa : Params} :
   forall arch ls ret_w hdr_ws allowed_ir (is_body : bool)
          (penv_ir penv_mc : param_env Pa)
@@ -3156,299 +4037,11 @@ Theorem collect_mc_ir_obls_sound {Pa : Params} :
              (MLO_Refine is_body path 1%positive (CE_BvConst 1%positive 1%N) (subst_cert_expr (build_phi_subst 0%nat phis_ir) inv_e))
        end).
 Proof.
-  intros arch ls ret_w hdr_ws allowed_ir is_body penv_ir penv_mc bmap hdr_id hdr_phis wr_keep.
-  intros env0 bid_from cur_bid t_ir P_cut P_ret t_mc opt_inv path Hhdr Hwf_ir Hfrz_ir Href.
-  revert env0 bid_from cur_bid path Hwf_ir Hfrz_ir.
-  induction t_ir as [lmap_cut phis_ir | rw ret_ir | | cond dt_ir IHt df_ir IHf];
-    intros env0 bid_from cur_bid path Hwf_ir Hfrz_ir Hir Hmc Hinv Hpath Hobls.
-  - (* IST_Cut *)
-    destruct Hwf_ir as [_ Hwf_phis]; cbn [ir_seg_freeze_free ir_seg_exprs_freeze_free_cut] in Hfrz_ir.
-    assert (Hphis_wf : Forall (fun '(wp, ce) =>
-      wt_cert_expr [] ce = true /\ cert_expr_bit_width ce = wp /\
-      is_let_free_expr ce = true /\ ub_free_expr ce = true /\
-      expr_has_freeze ce = false /\ incl (collect_free_vars [] ce) allowed_ir) phis_ir).
-    { clear -Hwf_phis Hfrz_ir.
-      induction Hwf_phis as [| w [wp ce] rw rp (_ & Hwt & Hbw & Hlf & Hub & Hfv) _ IH];
-        cbn [forallb] in *; [constructor |].
-      apply andb_true_iff in Hfrz_ir as [Hnfrz Hfrz_r]; apply negb_true_iff in Hnfrz.
-      constructor; [repeat split; assumption | exact (IH Hfrz_r)]. }
-    clear Hhdr; induction t_mc as [sp' rr' astk' | ret_mc | cond_mc dt_mc IHtm df_mc IHfm] in path, Hmc, Hpath, Hobls |- *;
-      cbn [collect_mc_ir_obls mc_seg_holds] in Hobls, Hmc.
-    + destruct (Z.eqb sp' (ml_sp_off ls) &&
-                forallb (fun r => match rr' r with MSV_SavedReg r0 => N.eqb r0 r | _ => false end) (mc_unspilled_preserved arch ls) &&
-                check_widths_match hdr_ws phis_ir) eqn:Epres; cbn [negb] in Hobls;
-        [| exfalso; exact (imposs_obl_absurd penv_mc dummy_freeze_oracle opt_inv is_body path Hinv Hpath Hobls)].
-      destruct (collect_reg_cut_obls ls hdr_ws is_body path (build_phi_subst 0%nat phis_ir) rr' (ml_regs ls)) as [robls |] eqn:Ero;
-        [| exfalso; exact (imposs_obl_absurd penv_mc dummy_freeze_oracle opt_inv is_body path Hinv Hpath Hobls)].
-      destruct (collect_slot_cut_obls ls hdr_ws is_body path (build_phi_subst 0%nat phis_ir) astk' (ml_slots ls)) as [sobls |] eqn:Eso;
-        [| exfalso; exact (imposs_obl_absurd penv_mc dummy_freeze_oracle opt_inv is_body path Hinv Hpath Hobls)].
-      destruct Hir as [Hub | (env_c & bid_c & b_hdr & dvs & Htau & Ebh & Hlm & Hkp & Hph & Hids & Hstp)]; [left; exact Hub |].
-      right; right; exists env_c, bid_c, b_hdr, dvs, lmap_cut, phis_ir, sp', rr', astk'.
-      rewrite !andb_true_iff in Epres; destruct Epres as [[Hsp Hunsp] Hwm].
-      apply Z.eqb_eq in Hsp.
-      rewrite !Forall_app in Hobls; destruct Hobls as [Hob_phi [Hob_reg [Hob_slot Hob_inv]]].
-      cbn [collect_entry_cut_lmaps].
-      repeat split; try assumption.
-      * left; reflexivity.
-      * exact (check_widths_match_spec _ _ Hwm).
-      * intros r Hr; rewrite forallb_forall in Hunsp; pose proof (Hunsp r Hr) as Hrr.
-        destruct (rr' r) as [| | r0 |]; try discriminate Hrr; apply N.eqb_eq in Hrr; subst r0; reflexivity.
-      * intros k w ce Hnth Hpt.
-        clear -Hob_phi Hnth Hpt Hinv Hpath.
-        assert (Hgen : forall idx phis,
-          nth_error phis (k - idx)%nat = Some (w, ce) ->
-          (idx <= k)%nat ->
-          Forall (mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body) (collect_phi_def_obls ls is_body path idx phis) ->
-          cut_var_ptol ls k w = false ->
-          exists vi, eval_closed_cert_expr penv_mc dummy_freeze_oracle ce = raise_ret (DVALUE_Base (@DVALUE_I Pa w vi))).
-        { intros idx phis; revert idx; induction phis as [| [w0 ce0] rp IHp]; intros idx Hn Hle Hfa Hpt0;
-            cbn in Hfa; [destruct (k - idx)%nat; discriminate Hn |].
-          rewrite Forall_app in Hfa; destruct Hfa as [H0 Hrest].
-          destruct (Nat.eq_dec idx k) as [-> | Hneq].
-          - rewrite Nat.sub_diag in Hn; inversion Hn; subst w0 ce0.
-            rewrite Hpt0 in H0; inversion H0 as [| ? ? Hd _]; exact (Hd eq_refl Hinv Hpath).
-          - replace (k - idx)%nat with (S (k - S idx))%nat in Hn by lia; exact (IHp (S idx) Hn ltac:(lia) Hrest Hpt0). }
-        exact (Hgen 0%nat phis_ir ltac:(rewrite Nat.sub_0_r; exact Hnth) ltac:(lia) Hob_phi Hpt).
-      * intros rb Hrb.
-        clear -Ero Hob_reg Hrb; revert Hrb robls Hob_reg Ero.
-        induction (ml_regs ls) as [| rb0 rest IHr]; intros Hrb robls Hob_reg Ero; cbn in *; [contradiction |].
-        destruct (rr' (mlr_reg rb0)) as [| e_mc64 | |] eqn:Err; try discriminate Ero.
-        destruct (collect_reg_cut_obls ls hdr_ws is_body path (build_phi_subst 0%nat phis_ir) rr' rest) as [or_r |] eqn:Erest;
-          [| discriminate Ero]; inversion Ero; subst robls; clear Ero.
-        rewrite !Forall_app in Hob_reg; destruct Hob_reg as [Hdef Hcons].
-        inversion Hcons as [| ? ? Ho_ref Hrest]; subst.
-        destruct Hrb as [<- | Hinr].
-        -- exists e_mc64; split; [exact Err | split; [exact Ho_ref |]].
-           intro Hno; rewrite Hno in Hdef; inversion Hdef as [| ? ? Ho_def _]; exact Ho_def.
-        -- exact (IHr Hinr or_r Hrest eq_refl).
-      * intros off r Hs; clear -Eso Hs; revert Hs sobls Eso.
-        induction (ml_slots ls) as [| [o s e | o r0] rest IHs]; intros Hs sobls Eso; cbn in *; [contradiction | |].
-        -- destruct (mc_sym_stk_load o s false astk') as [[| em | |] |]; try discriminate Eso.
-           destruct (collect_slot_cut_obls ls hdr_ws is_body path (build_phi_subst 0%nat phis_ir) astk' rest) as [os_r |] eqn:Erest;
-             [| discriminate Eso]; inversion Eso; destruct Hs as [Hc | Hr]; [discriminate Hc | exact (IHs Hr os_r eq_refl)].
-        -- destruct (mc_sym_stk_load o MS_8 false astk') as [[| | r1 |] |] eqn:Eld; try discriminate Eso.
-           destruct (N.eqb r1 r0) eqn:Er; [| discriminate Eso]; apply N.eqb_eq in Er; subst r1.
-           destruct Hs as [Heq | Hr]; [inversion Heq; subst; exact Eld | exact (IHs Hr sobls Eso)].
-      * intros off sz e_s Hs; clear -Eso Hob_slot Hs; revert Hs sobls Hob_slot Eso.
-        induction (ml_slots ls) as [| [o s e | o r0] rest IHs]; intros Hs sobls Hob_slot Eso; cbn in *; [contradiction | |].
-        -- destruct (mc_sym_stk_load o s false astk') as [[| em | |] |] eqn:Eld; try discriminate Eso.
-           destruct (collect_slot_cut_obls ls hdr_ws is_body path (build_phi_subst 0%nat phis_ir) astk' rest) as [os_r |] eqn:Erest;
-             [| discriminate Eso]; inversion Eso; subst sobls; clear Eso.
-           rewrite !Forall_app in Hob_slot; destruct Hob_slot as [Hdef Hcons].
-           inversion Hcons as [| ? ? Ho_ref Hrest]; subst.
-           destruct Hs as [Heq | Hr].
-           ++ inversion Heq; subst; exists em; split; [exact Eld | split; [exact Ho_ref |]].
-              intro Hno; rewrite Hno in Hdef; inversion Hdef as [| ? ? Ho_def _]; exact Ho_def.
-           ++ exact (IHs Hr os_r Hrest eq_refl).
-        -- destruct (mc_sym_stk_load o MS_8 false astk') as [[| | r1 |] |]; try discriminate Eso.
-           destruct (N.eqb r1 r0); [| discriminate Eso].
-           destruct Hs as [Hc | Hr]; [discriminate Hc | exact (IHs Hr sobls Hob_slot Eso)].
-      * destruct (ml_inv ls); [inversion Hob_inv; assumption | exact I].
-    + exfalso; exact (imposs_obl_absurd penv_mc dummy_freeze_oracle opt_inv is_body path Hinv Hpath Hobls).
-    + rewrite Forall_app in Hobls; destruct Hobls as [Hbt Hbf].
-      destruct Hmc as [b [Hbc Hsub]].
-      assert (Hpath' : forall (b0 : bool) (c0 : cert_expr), In (b0, c0) (path ++ [(b, cond_mc)]) ->
-        eval_closed_cert_expr penv_mc dummy_freeze_oracle c0 =
-        raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if b0 then @Integers.one 1%positive else @Integers.zero 1%positive)))).
-      { intros b0 c0 Hin; apply in_app_iff in Hin as [Hin | [Heq | []]]; [exact (Hpath b0 c0 Hin) | inversion Heq; subst; exact Hbc]. }
-      assert (Hsub_mc :
-        (forall sigma, cfg_steps_to_ub sigma env0 (@denote_cfg_from Pa bmap None (bid_from, cur_bid))) \/
-        (exists env_out dv_ir ret_mc dv_mc,
-           pure_cfg_steps env0 (@denote_cfg_from Pa bmap None (bid_from, cur_bid)) env_out dv_ir /\
-           P_ret ret_mc /\
-           eval_closed_cert_expr penv_mc dummy_freeze_oracle ret_mc = raise_ret dv_mc /\
-           dvalue_refines dv_ir dv_mc) \/
-        (exists env_c bid_c b_hdr dvs lmap_cut0 phis_ir0 sp' rr' astk',
-           ((env_c = env0 /\ bid_c = bid_from /\ cur_bid = hdr_id) \/
-            pure_cfg_steps_to_tau env0 (@denote_cfg_from Pa bmap None (bid_from, cur_bid))
-              env_c (@denote_cfg_from Pa bmap None (bid_c, hdr_id))) /\
-           RM.find hdr_id bmap = Some b_hdr /\
-           In lmap_cut0 (collect_entry_cut_lmaps (IST_Cut lmap_cut phis_ir)) /\
-           lmap_matches_env penv_ir lmap_cut0 env_c /\
-           (forall r, In r wr_keep -> RM.find r env_c = RM.find r env0) /\
-           pure_cfg_steps env_c (denote_phis bid_c (blk_phis b_hdr)) (apply_phi_env env_c dvs) tt /\
-           Forall2 (fun '(id, _) '(id', _) => id' = id) hdr_phis dvs /\
-           Forall2 (fun w '(wp, _) => w = wp) hdr_ws phis_ir0 /\
-           Forall (fun '(wp, ce) =>
-             wt_cert_expr [] ce = true /\ cert_expr_bit_width ce = wp /\
-             is_let_free_expr ce = true /\ ub_free_expr ce = true /\
-             expr_has_freeze ce = false /\ incl (collect_free_vars [] ce) allowed_ir) phis_ir0 /\
-           Forall2 (fun '(wp, ce) '(_, dv) =>
-             eval_closed_cert_expr penv_ir dummy_freeze_oracle ce = raise_ret dv /\
-             wf_scalar_dvalue wp dv) phis_ir0 dvs /\
-           sp' = ml_sp_off ls /\ P_cut sp' rr' astk' /\
-           (forall r, In r (mc_unspilled_preserved arch ls) -> rr' r = MSV_SavedReg r) /\
-           (forall k w ce, nth_error phis_ir0 k = Some (w, ce) -> cut_var_ptol ls k w = false ->
-              exists vi, eval_closed_cert_expr penv_mc dummy_freeze_oracle ce = raise_ret (DVALUE_Base (@DVALUE_I Pa w vi))) /\
-           (forall rb, In rb (ml_regs ls) -> exists e_mc64, rr' (mlr_reg rb) = MSV_Expr e_mc64 /\
-              mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Refine is_body (path ++ [(b, cond_mc)]) (mlr_width rb) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) (mlr_expr rb)) (trunc_mc_expr_to (mlr_width rb) e_mc64)) /\
-              (expr_is_ptol_var ls hdr_ws (mlr_expr rb) = false -> mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Defined is_body (path ++ [(b, cond_mc)]) (mlr_width rb) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) (mlr_expr rb))))) /\
-           (forall off r, In (MLS_SavedReg off r) (ml_slots ls) -> mc_sym_stk_load off MS_8 false astk' = Some (MSV_SavedReg r)) /\
-           (forall off sz e_s, In (MLS_Expr off sz e_s) (ml_slots ls) -> exists e_mc64, mc_sym_stk_load off sz false astk' = Some (MSV_Expr e_mc64) /\
-              mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Refine is_body (path ++ [(b, cond_mc)]) (mc_mem_bits sz) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) e_s) (trunc_mc_slot_expr sz e_mc64)) /\
-              (expr_is_ptol_var ls hdr_ws e_s = false -> mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Defined is_body (path ++ [(b, cond_mc)]) (mc_mem_bits sz) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) e_s)))) /\
-           match ml_inv ls with None => True | Some inv_e => mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Refine is_body (path ++ [(b, cond_mc)]) 1%positive (CE_BvConst 1%positive 1%N) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) inv_e)) end)).
-      { destruct b; [exact (IHtm (path ++ [(true, cond_mc)]) Hsub Hpath' Hbt)
-                   | exact (IHfm (path ++ [(false, cond_mc)]) Hsub Hpath' Hbf)]. }
-      destruct Hsub_mc as [Hub_m | [Hret_m | (env_c & bid_c & b_hdr & dvs & lmap_cut0 & phis_ir0 & sp' & rr' & astk' & Htau_m & Ebh_m & Hin_m & Hlm_m & Hkp_m & Hstp_m & Hids_m & Hws_m & Hpwf_m & Hph_m & Hsp_m & Hpc_m & Hunsp_m & Hphi_m & Hregs_m & Hsav_m & Hslts_m & Hmi_m)]];
-        [left; exact Hub_m | right; left; exact Hret_m |].
-      right; right; exists env_c, bid_c, b_hdr, dvs, lmap_cut0, phis_ir0, sp', rr', astk'.
-      repeat split; try assumption.
-      * intros rb Hrb; destruct (Hregs_m rb Hrb) as (e_mc64 & Err & Ho_r & Ho_d); exists e_mc64; split; [exact Err | split].
-        -- intros Hbm Hinv0 Hpath0; exact (Ho_r Hbm Hinv0 Hpath').
-        -- intros Hnpt Hbm Hinv0 Hpath0; exact (Ho_d Hnpt Hbm Hinv0 Hpath').
-      * intros off sz e_s Hsl; destruct (Hslts_m off sz e_s Hsl) as (e_mc64 & Eld & Ho_r & Ho_d); exists e_mc64; split; [exact Eld | split].
-        -- intros Hbm Hinv0 Hpath0; exact (Ho_r Hbm Hinv0 Hpath').
-        -- intros Hnpt Hbm Hinv0 Hpath0; exact (Ho_d Hnpt Hbm Hinv0 Hpath').
-      * destruct (ml_inv ls); [| exact I]; intros Hbm Hinv0 Hpath0; exact (Hmi_m Hbm Hinv0 Hpath').
-  - (* IST_Ret *)
-    destruct Hwf_ir as (_ & Hsup & Hwt_r & Hbw_r & Hlf_r & Hub_r & Hfv_r).
-    cbn [ir_seg_freeze_free] in Hfrz_ir; apply negb_true_iff in Hfrz_ir.
-    induction t_mc as [sp' rr' astk' | ret_mc | cond_mc dt_mc IHtm df_mc IHfm] in path, Hmc, Hpath, Hobls |- *;
-      cbn [collect_mc_ir_obls mc_seg_holds] in Hobls, Hmc.
-    + exfalso; exact (imposs_obl_absurd penv_mc dummy_freeze_oracle opt_inv is_body path Hinv Hpath Hobls).
-    + destruct (Pos.eqb rw ret_w) eqn:Erw;
-        [| exfalso; exact (imposs_obl_absurd penv_mc dummy_freeze_oracle opt_inv is_body path Hinv Hpath Hobls)].
-      destruct Hir as [Hub | (env_out & dv_ir & Hst & Hev_ir)]; [left; exact Hub |].
-      inversion Hobls as [| ? ? Ho_r _]; subst; clear Hobls.
-      pose proof (Ho_r eq_refl Hinv Hpath) as Href_e.
-      destruct (eval_cert_expr_refine_mono penv_ir penv_mc dummy_freeze_oracle ret_ir Hwt_r Hlf_r Hub_r Hfrz_ir
-                  (fun x wx Hx => Href x wx (Hfv_r (x, wx) Hx)))
-        as (v1 & v2 & Ev1 & Ev2 & _ & _ & R12).
-      rewrite Hev_ir in Ev1; inversion Ev1; subst v1.
-      cbn [refine_eou_dvalue] in Href_e; rewrite Ev2 in Href_e; destruct (eval_closed_cert_expr penv_mc dummy_freeze_oracle ret_mc) as [| | | dv_mc] eqn:Evmc;
-        try contradiction.
-      right; left; exists env_out, dv_ir, ret_mc, dv_mc; repeat split; try assumption.
-      exact (dvalue_refines_trans _ _ _ R12 Href_e).
-    + rewrite Forall_app in Hobls; destruct Hobls as [Hbt Hbf].
-      destruct Hmc as [b [Hbc Hsub]].
-      assert (Hpath' : forall (b0 : bool) (c0 : cert_expr), In (b0, c0) (path ++ [(b, cond_mc)]) ->
-        eval_closed_cert_expr penv_mc dummy_freeze_oracle c0 =
-        raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if b0 then @Integers.one 1%positive else @Integers.zero 1%positive)))).
-      { intros b0 c0 Hin; apply in_app_iff in Hin as [Hin | [Heq | []]]; [exact (Hpath b0 c0 Hin) | inversion Heq; subst; exact Hbc]. }
-      assert (Hsub_mc :
-        (forall sigma, cfg_steps_to_ub sigma env0 (@denote_cfg_from Pa bmap None (bid_from, cur_bid))) \/
-        (exists env_out dv_ir ret_mc dv_mc,
-           pure_cfg_steps env0 (@denote_cfg_from Pa bmap None (bid_from, cur_bid)) env_out dv_ir /\
-           P_ret ret_mc /\
-           eval_closed_cert_expr penv_mc dummy_freeze_oracle ret_mc = raise_ret dv_mc /\
-           dvalue_refines dv_ir dv_mc) \/
-        (exists env_c bid_c b_hdr dvs lmap_cut0 phis_ir0 sp' rr' astk',
-           ((env_c = env0 /\ bid_c = bid_from /\ cur_bid = hdr_id) \/
-            pure_cfg_steps_to_tau env0 (@denote_cfg_from Pa bmap None (bid_from, cur_bid))
-              env_c (@denote_cfg_from Pa bmap None (bid_c, hdr_id))) /\
-           RM.find hdr_id bmap = Some b_hdr /\
-           In lmap_cut0 (collect_entry_cut_lmaps (IST_Ret rw ret_ir)) /\
-           lmap_matches_env penv_ir lmap_cut0 env_c /\
-           (forall r, In r wr_keep -> RM.find r env_c = RM.find r env0) /\
-           pure_cfg_steps env_c (denote_phis bid_c (blk_phis b_hdr)) (apply_phi_env env_c dvs) tt /\
-           Forall2 (fun '(id, _) '(id', _) => id' = id) hdr_phis dvs /\
-           Forall2 (fun w '(wp, _) => w = wp) hdr_ws phis_ir0 /\
-           Forall (fun '(wp, ce) =>
-             wt_cert_expr [] ce = true /\ cert_expr_bit_width ce = wp /\
-             is_let_free_expr ce = true /\ ub_free_expr ce = true /\
-             expr_has_freeze ce = false /\ incl (collect_free_vars [] ce) allowed_ir) phis_ir0 /\
-           Forall2 (fun '(wp, ce) '(_, dv) =>
-             eval_closed_cert_expr penv_ir dummy_freeze_oracle ce = raise_ret dv /\
-             wf_scalar_dvalue wp dv) phis_ir0 dvs /\
-           sp' = ml_sp_off ls /\ P_cut sp' rr' astk' /\
-           (forall r, In r (mc_unspilled_preserved arch ls) -> rr' r = MSV_SavedReg r) /\
-           (forall k w ce, nth_error phis_ir0 k = Some (w, ce) -> cut_var_ptol ls k w = false ->
-              exists vi, eval_closed_cert_expr penv_mc dummy_freeze_oracle ce = raise_ret (DVALUE_Base (@DVALUE_I Pa w vi))) /\
-           (forall rb, In rb (ml_regs ls) -> exists e_mc64, rr' (mlr_reg rb) = MSV_Expr e_mc64 /\
-              mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Refine is_body (path ++ [(b, cond_mc)]) (mlr_width rb) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) (mlr_expr rb)) (trunc_mc_expr_to (mlr_width rb) e_mc64)) /\
-              (expr_is_ptol_var ls hdr_ws (mlr_expr rb) = false -> mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Defined is_body (path ++ [(b, cond_mc)]) (mlr_width rb) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) (mlr_expr rb))))) /\
-           (forall off r, In (MLS_SavedReg off r) (ml_slots ls) -> mc_sym_stk_load off MS_8 false astk' = Some (MSV_SavedReg r)) /\
-           (forall off sz e_s, In (MLS_Expr off sz e_s) (ml_slots ls) -> exists e_mc64, mc_sym_stk_load off sz false astk' = Some (MSV_Expr e_mc64) /\
-              mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Refine is_body (path ++ [(b, cond_mc)]) (mc_mem_bits sz) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) e_s) (trunc_mc_slot_expr sz e_mc64)) /\
-              (expr_is_ptol_var ls hdr_ws e_s = false -> mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Defined is_body (path ++ [(b, cond_mc)]) (mc_mem_bits sz) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) e_s)))) /\
-           match ml_inv ls with None => True | Some inv_e => mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Refine is_body (path ++ [(b, cond_mc)]) 1%positive (CE_BvConst 1%positive 1%N) (subst_cert_expr (build_phi_subst 0%nat phis_ir0) inv_e)) end)).
-      { destruct b; [exact (IHtm (path ++ [(true, cond_mc)]) Hsub Hpath' Hbt)
-                   | exact (IHfm (path ++ [(false, cond_mc)]) Hsub Hpath' Hbf)]. }
-      destruct Hsub_mc as [Hub_m | [Hret_m | (? & ? & ? & ? & ? & ? & ? & ? & ? & _ & _ & Hin_m & _)]];
-        [left; exact Hub_m | right; left; exact Hret_m | exfalso; exact Hin_m].
-  - (* IST_UB *)
-    left; exact Hir.
-  - (* IST_Branch *)
-    cbn [collect_mc_ir_obls] in Hobls; rewrite Forall_app in Hobls; destruct Hobls as [Hob_t Hob_f].
-    destruct Hwf_ir as [Hlms (Hwt_c & Hbw_c & Hlf_c & Hub_c & Hfv_c & Hwf_t & Hwf_f)].
-    assert (Hlms_t : forall lm, In lm (collect_entry_cut_lmaps dt_ir) -> wf_pure_lmap allowed_ir lm)
-      by (intros lm Hin; exact (Hlms lm (in_or_app _ _ _ (or_introl Hin)))).
-    assert (Hlms_f : forall lm, In lm (collect_entry_cut_lmaps df_ir) -> wf_pure_lmap allowed_ir lm)
-      by (intros lm Hin; exact (Hlms lm (in_or_app _ _ _ (or_intror Hin)))).
-    cbn [ir_seg_freeze_free] in Hfrz_ir; rewrite !andb_true_iff in Hfrz_ir; destruct Hfrz_ir as [[Hnfrz_c Hnf_t] Hnf_f].
-    apply negb_true_iff in Hnfrz_c.
-    cbn [ir_seg_eval_spec] in Hir; destruct Hir as [Hub | (env_mid & bid_step & br_t & br_f & b & Htau & Hev_c & Hk2 & Hsub)];
-      [left; exact Hub |].
-    destruct (eval_cert_expr_refine_mono penv_ir penv_mc dummy_freeze_oracle cond Hwt_c Hlf_c Hub_c Hnfrz_c
-                (fun x wx Hx => Href x wx (Hfv_c (x, wx) Hx)))
-      as (vc1 & vc2 & Evc1 & Evc2 & _ & _ & Rc).
-    rewrite Hev_c in Evc1; inversion Evc1; subst vc1.
-    assert (Hvc2 : vc2 = DVALUE_Base (@DVALUE_I Pa 1%positive (if b then @Integers.one 1%positive else @Integers.zero 1%positive))).
-    { destruct Rc as [Hbad | <-]; [discriminate Hbad | reflexivity]. }
-    subst vc2.
-    assert (Hpath' : forall b0 c0, In (b0, c0) (path ++ [(b, cond)]) ->
-      eval_closed_cert_expr penv_mc dummy_freeze_oracle c0 =
-      raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if b0 then @Integers.one 1%positive else @Integers.zero 1%positive)))).
-    { intros b0 c0 Hin; apply in_app_iff in Hin as [Hin | [Heq | []]]; [exact (Hpath b0 c0 Hin) | inversion Heq; subst; exact Evc2]. }
-    assert (Hsub_res :
-      (forall sigma, cfg_steps_to_ub sigma env_mid (@denote_cfg_from Pa bmap None (bid_step, if b then br_t else br_f))) \/
-      (exists env_out dv_ir ret_mc dv_mc,
-         pure_cfg_steps env_mid (@denote_cfg_from Pa bmap None (bid_step, if b then br_t else br_f)) env_out dv_ir /\
-         P_ret ret_mc /\
-         eval_closed_cert_expr penv_mc dummy_freeze_oracle ret_mc = raise_ret dv_mc /\
-         dvalue_refines dv_ir dv_mc) \/
-      (exists env_c bid_c b_hdr dvs lmap_cut phis_ir sp' rr' astk',
-         ((env_c = env_mid /\ bid_c = bid_step /\ (if b then br_t else br_f) = hdr_id) \/
-          pure_cfg_steps_to_tau env_mid (@denote_cfg_from Pa bmap None (bid_step, if b then br_t else br_f))
-            env_c (@denote_cfg_from Pa bmap None (bid_c, hdr_id))) /\
-         RM.find hdr_id bmap = Some b_hdr /\
-         In lmap_cut (collect_entry_cut_lmaps (if b then dt_ir else df_ir)) /\
-         lmap_matches_env penv_ir lmap_cut env_c /\
-         (forall r, In r wr_keep -> RM.find r env_c = RM.find r env_mid) /\
-         pure_cfg_steps env_c (denote_phis bid_c (blk_phis b_hdr)) (apply_phi_env env_c dvs) tt /\
-         Forall2 (fun '(id, _) '(id', _) => id' = id) hdr_phis dvs /\
-         Forall2 (fun w '(wp, _) => w = wp) hdr_ws phis_ir /\
-         Forall (fun '(wp, ce) =>
-           wt_cert_expr [] ce = true /\ cert_expr_bit_width ce = wp /\
-           is_let_free_expr ce = true /\ ub_free_expr ce = true /\
-           expr_has_freeze ce = false /\ incl (collect_free_vars [] ce) allowed_ir) phis_ir /\
-         Forall2 (fun '(wp, ce) '(_, dv) =>
-           eval_closed_cert_expr penv_ir dummy_freeze_oracle ce = raise_ret dv /\
-           wf_scalar_dvalue wp dv) phis_ir dvs /\
-         sp' = ml_sp_off ls /\ P_cut sp' rr' astk' /\
-         (forall r, In r (mc_unspilled_preserved arch ls) -> rr' r = MSV_SavedReg r) /\
-         (forall k w ce, nth_error phis_ir k = Some (w, ce) -> cut_var_ptol ls k w = false ->
-            exists vi, eval_closed_cert_expr penv_mc dummy_freeze_oracle ce = raise_ret (DVALUE_Base (@DVALUE_I Pa w vi))) /\
-         (forall rb, In rb (ml_regs ls) -> exists e_mc64, rr' (mlr_reg rb) = MSV_Expr e_mc64 /\
-            mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Refine is_body (path ++ [(b, cond)]) (mlr_width rb) (subst_cert_expr (build_phi_subst 0%nat phis_ir) (mlr_expr rb)) (trunc_mc_expr_to (mlr_width rb) e_mc64)) /\
-            (expr_is_ptol_var ls hdr_ws (mlr_expr rb) = false -> mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Defined is_body (path ++ [(b, cond)]) (mlr_width rb) (subst_cert_expr (build_phi_subst 0%nat phis_ir) (mlr_expr rb))))) /\
-         (forall off r, In (MLS_SavedReg off r) (ml_slots ls) -> mc_sym_stk_load off MS_8 false astk' = Some (MSV_SavedReg r)) /\
-         (forall off sz e_s, In (MLS_Expr off sz e_s) (ml_slots ls) -> exists e_mc64, mc_sym_stk_load off sz false astk' = Some (MSV_Expr e_mc64) /\
-            mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Refine is_body (path ++ [(b, cond)]) (mc_mem_bits sz) (subst_cert_expr (build_phi_subst 0%nat phis_ir) e_s) (trunc_mc_slot_expr sz e_mc64)) /\
-            (expr_is_ptol_var ls hdr_ws e_s = false -> mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Defined is_body (path ++ [(b, cond)]) (mc_mem_bits sz) (subst_cert_expr (build_phi_subst 0%nat phis_ir) e_s)))) /\
-         match ml_inv ls with None => True | Some inv_e => mc_obl_holds penv_mc dummy_freeze_oracle opt_inv is_body (MLO_Refine is_body (path ++ [(b, cond)]) 1%positive (CE_BvConst 1%positive 1%N) (subst_cert_expr (build_phi_subst 0%nat phis_ir) inv_e)) end)).
-    { destruct b; [exact (IHt _ _ _ (path ++ [(true, cond)]) (conj Hlms_t Hwf_t) Hnf_t Hsub Hmc Hinv Hpath' Hob_t)
-                 | exact (IHf _ _ _ (path ++ [(false, cond)]) (conj Hlms_f Hwf_f) Hnf_f Hsub Hmc Hinv Hpath' Hob_f)]. }
-    destruct Hsub_res as [Hub_sub | [(env_out & dv_ir & ret_mc & dv_mc & Hst & Hpr & Hevmc & Href_d)
-                                  | (env_c & bid_c & b_hdr & dvs & lmap_cut & phis_ir & sp' & rr' & astk' &
-                                     Htau2 & Ebh & Hin_lm & Hlm_m & Hkp2 & Hstp & Hids & Hws & Hpwf & Hph & Hsp & Hpc & Hunsp & Hphi_d & Hregs & Hsav & Hslts & Hmi)]].
-    + left; intro sigma; exact (pure_cfg_steps_to_tau_then_ub sigma _ _ _ _ Htau (Hub_sub sigma)).
-    + right; left; exists env_out, dv_ir, ret_mc, dv_mc; repeat split; try assumption.
-      exact (pure_cfg_steps_to_tau_then_ret _ _ _ _ _ _ Htau Hst).
-    + right; right; exists env_c, bid_c, b_hdr, dvs, lmap_cut, phis_ir, sp', rr', astk'.
-      cbn [collect_entry_cut_lmaps].
-      repeat split; try assumption.
-      * right; destruct Htau2 as [[-> [-> Eeq]] | Htau2]; [rewrite <- Eeq; exact Htau | exact (pure_cfg_steps_to_tau_trans _ _ _ _ _ _ Htau Htau2)].
-      * apply in_app_iff; destruct b; [left | right]; exact Hin_lm.
-      * intros r Hr; rewrite (Hkp2 r Hr), (Hk2 r Hr); reflexivity.
-      * intros rb Hrb; destruct (Hregs rb Hrb) as (e_mc64 & Err & Ho_r & Ho_d); exists e_mc64; split; [exact Err | split].
-        -- intros Hbm Hinv0 Hpath0; apply Ho_r; try assumption; intros b0 c0 Hin; apply Hpath'; exact Hin.
-        -- intros Hnpt Hbm Hinv0 Hpath0; apply Ho_d; try assumption; intros b0 c0 Hin; apply Hpath'; exact Hin.
-      * intros off sz e_s Hsl; destruct (Hslts off sz e_s Hsl) as (e_mc64 & Eld & Ho_r & Ho_d); exists e_mc64; split; [exact Eld | split].
-        -- intros Hbm Hinv0 Hpath0; apply Ho_r; try assumption; intros b0 c0 Hin; apply Hpath'; exact Hin.
-        -- intros Hnpt Hbm Hinv0 Hpath0; apply Ho_d; try assumption; intros b0 c0 Hin; apply Hpath'; exact Hin.
-      * destruct (ml_inv ls); [| exact I]; intros Hbm Hinv0 Hpath0; apply Hmi; try assumption.
+  intros arch ls ret_w hdr_ws allowed_ir is_body penv_ir penv_mc bmap hdr_id hdr_phis wr_keep
+         env0 bid_from cur_bid t_ir P_cut P_ret t_mc opt_inv path Hhdr Hwf Hfrz Href Hir Hmc Hinv Hpath Hobls.
+  exact (proj2 (collect_mc_ir_obls_acc_sound arch ls ret_w hdr_ws allowed_ir is_body penv_ir penv_mc
+                  bmap hdr_id hdr_phis wr_keep env0 bid_from cur_bid t_ir P_cut P_ret t_mc opt_inv path []
+                  Hhdr Hwf Hfrz Href Hir Hmc Hinv Hpath Hobls)).
 Qed.
 
 Lemma reify_ir_seg_req_step_bid_from_irrel :
@@ -3547,7 +4140,7 @@ Definition build_mc_loop_bundle_rv64
     match prepare_mc_loop_ir ir_cfg allowed0 ls with
     | None => inl "IR loop preparation/reification failed"
     | Some prep =>
-        let mc_fuel := S (2 * List.length insts) in
+        let mc_fuel := S (2 * elf_length_tr insts) in
         let hdr_ws := extract_hdr_phi_widths (mlip_hdr_phis prep) in
         match summarize_rv64_seg mc_fuel insts (ml_mc_pc ls) false [] 0%N 0%Z
                 (rv_build_init_val_regs 10%N arg_specs) [] ret_w,
@@ -3560,9 +4153,10 @@ Definition build_mc_loop_bundle_rv64
                      mc_skel_tree_ok EA_Riscv64 ls (rv_seg_to_mc_seg seg_skel)) then
               inl "RV64 loop skeleton callee-saved/stack check failed"
             else
+              let obls_body :=
+                collect_mc_ir_obls_acc EA_Riscv64 ls ret_w hdr_ws true [] (mlip_t_ir_body prep) (rv_seg_to_mc_seg seg_body) [] in
               let obls :=
-                collect_mc_ir_obls EA_Riscv64 ls ret_w hdr_ws false [] (mlip_t_ir_entry prep) (rv_seg_to_mc_seg seg_ent) ++
-                collect_mc_ir_obls EA_Riscv64 ls ret_w hdr_ws true [] (mlip_t_ir_body prep) (rv_seg_to_mc_seg seg_body) in
+                collect_mc_ir_obls_acc EA_Riscv64 ls ret_w hdr_ws false [] (mlip_t_ir_entry prep) (rv_seg_to_mc_seg seg_ent) obls_body in
               let ghost_vars := cut_vars_from 0%nat (mlip_hdr_phis prep) ++ hi32_vars ls in
               let known_vars := allowed0 ++ ghost_vars in
               let loop_ctx := mc_init_ctx ++ List.map (fun '(nm, w) => UBA_ParamNoUndef nm w) ghost_vars in
@@ -3609,7 +4203,7 @@ Definition build_mc_loop_bundle_a64
     match prepare_mc_loop_ir ir_cfg allowed0 ls with
     | None => inl "IR loop preparation/reification failed"
     | Some prep =>
-        let mc_fuel := S (2 * List.length insts) in
+        let mc_fuel := S (2 * elf_length_tr insts) in
         let hdr_ws := extract_hdr_phi_widths (mlip_hdr_phis prep) in
         match summarize_a64_seg mc_fuel insts (ml_mc_pc ls) false [] 0%N 0%Z
                 (a64_build_init_val_regs 0%N arg_specs) [] a64_init_sym_flags false ret_w,
@@ -3622,9 +4216,10 @@ Definition build_mc_loop_bundle_a64
                      mc_skel_tree_ok EA_AArch64 ls (a64_seg_to_mc_seg seg_skel)) then
               inl "AArch64 loop skeleton callee-saved/stack check failed"
             else
+              let obls_body :=
+                collect_mc_ir_obls_acc EA_AArch64 ls ret_w hdr_ws true [] (mlip_t_ir_body prep) (a64_seg_to_mc_seg seg_body) [] in
               let obls :=
-                collect_mc_ir_obls EA_AArch64 ls ret_w hdr_ws false [] (mlip_t_ir_entry prep) (a64_seg_to_mc_seg seg_ent) ++
-                collect_mc_ir_obls EA_AArch64 ls ret_w hdr_ws true [] (mlip_t_ir_body prep) (a64_seg_to_mc_seg seg_body) in
+                collect_mc_ir_obls_acc EA_AArch64 ls ret_w hdr_ws false [] (mlip_t_ir_entry prep) (a64_seg_to_mc_seg seg_ent) obls_body in
               let ghost_vars := cut_vars_from 0%nat (mlip_hdr_phis prep) ++ hi32_vars ls in
               let known_vars := allowed0 ++ ghost_vars in
               let loop_ctx := mc_init_ctx ++ List.map (fun '(nm, w) => UBA_ParamNoUndef nm w) ghost_vars in
@@ -4093,12 +4688,6 @@ Qed.
 
 (** Constructive Cutpoint [penv] Construction *)
 
-Lemma is_exact_cut_var_has_var : forall k w e,
-  is_exact_cut_var k w e = true -> expr_has_var (mc_cut_var_name k) e = true.
-Proof.
-  intros k w e H; destruct e; cbn in H; try discriminate H; apply andb_true_iff in H as [Hnm _].
-  unfold expr_has_var; cbn; rewrite Hnm; reflexivity.
-Qed.
 
 Lemma is_exact_cut_var_inj_k : forall k1 w1 k2 w2 e,
   is_exact_cut_var k1 w1 e = true ->
@@ -4185,8 +4774,9 @@ Lemma cut_var_ptol_count_split : forall ls k w,
   (List.length (List.filter (fun rb => expr_has_var (mc_cut_var_name k) (mlr_expr rb)) (ml_regs ls)) +
    List.length (List.filter (fun sb => match sb with MLS_Expr _ _ e => expr_has_var (mc_cut_var_name k) e | MLS_SavedReg _ _ => false end) (ml_slots ls)) <= 1)%nat.
 Proof.
-  intros ls k w H; unfold cut_var_ptol in H; rewrite !andb_true_iff in H.
-  destruct H as [[[_ Hcnt] _] _]; apply Nat.leb_le in Hcnt; exact Hcnt.
+  intros ls k w H; rewrite cut_var_ptol_spec in H; rewrite !andb_true_iff in H.
+  destruct H as [[[_ Hcnt] _] _]; unfold cut_var_bind_count in Hcnt; rewrite !mc_count_tr_eq in Hcnt.
+  apply Nat.leb_le in Hcnt; exact Hcnt.
 Qed.
 
 Lemma cut_var_ptol_inv_not_in : forall ls k w inv_e,
@@ -4195,21 +4785,21 @@ Lemma cut_var_ptol_inv_not_in : forall ls k w inv_e,
   forall w0, ~ In (mc_cut_var_name k, w0) (collect_free_vars [] inv_e).
 Proof.
   intros ls k w inv_e Hpt Hmi w0.
-  unfold cut_var_ptol in Hpt; rewrite Hmi, !andb_true_iff in Hpt.
+  rewrite cut_var_ptol_spec in Hpt; rewrite Hmi, !andb_true_iff in Hpt.
   destruct Hpt as [[[Hneg _] _] _]; apply negb_true_iff in Hneg; exact (expr_has_var_false_not_in _ _ Hneg w0).
 Qed.
 
 Lemma cut_var_ptol_reg_uses : forall ls k w rb,
   cut_var_ptol ls k w = true -> In rb (ml_regs ls) -> reg_slot_uses_cut_var_ok k w (mlr_expr rb) = true.
 Proof.
-  intros ls k w rb Hpt Hrb; unfold cut_var_ptol in Hpt; rewrite !andb_true_iff in Hpt.
+  intros ls k w rb Hpt Hrb; rewrite cut_var_ptol_spec in Hpt; rewrite !andb_true_iff in Hpt.
   destruct Hpt as [[[_ _] Hregs] _]; rewrite forallb_forall in Hregs; exact (Hregs rb Hrb).
 Qed.
 
 Lemma cut_var_ptol_slot_uses : forall ls k w off sz e,
   cut_var_ptol ls k w = true -> In (MLS_Expr off sz e) (ml_slots ls) -> reg_slot_uses_cut_var_ok k w e = true.
 Proof.
-  intros ls k w off sz e Hpt Hs; unfold cut_var_ptol in Hpt; rewrite !andb_true_iff in Hpt.
+  intros ls k w off sz e Hpt Hs; rewrite cut_var_ptol_spec in Hpt; rewrite !andb_true_iff in Hpt.
   destruct Hpt as [_ Hslts]; rewrite forallb_forall in Hslts; exact (Hslts (MLS_Expr off sz e) Hs).
 Qed.
 
@@ -5075,7 +5665,7 @@ Proof.
   destruct (Nat.leb (List.length arg_specs) 8) eqn:Hlen_args; cbn [negb orb] in Hval; [| discriminate Hval].
   destruct (forallb rv_valid_arg_spec arg_specs) eqn:Hws; cbn [negb orb] in Hval; [| discriminate Hval].
   destruct (prepare_mc_loop_ir ir_cfg allowed0 ls) as [prep |] eqn:Eprep; [| discriminate Hval].
-  set (mc_fuel := S (2 * List.length insts)) in *.
+  rewrite elf_length_tr_eq in Hval; set (mc_fuel := S (2 * List.length insts)) in *.
   set (hdr_ws := extract_hdr_phi_widths (mlip_hdr_phis prep)) in *.
   destruct (summarize_rv64_seg mc_fuel insts (ml_mc_pc ls) false [] 0%N 0%Z (rv_build_init_val_regs 10%N arg_specs) [] ret_w)
     as [seg_ent |] eqn:Es_ent; [| discriminate Hval].
@@ -5133,8 +5723,11 @@ Proof.
     as (Hnb_ext & Hpenv_ext & Hctx_ext).
   set (penv_ext := overlay_penv (@zero_ghost_binds Pa (cut_vars_from_ws 0%nat hdr_ws ++ hi32_vars ls)) penv0) in *.
   cbn [mlcb_ctx mlcb_known mlcb_obls] in Hchk; rewrite cut_vars_from_eq_ws in Hchk; change (extract_hdr_phi_widths hdr_phis) with hdr_ws in Hchk.
-  pose proof (check_mc_loop_obls_sound _ _ _ _ _ penv_ext dummy_freeze_oracle false Hchk Hpenv_ext Hctx_ext) as Hobls_all_ent.
-  rewrite Forall_app in Hobls_all_ent; destruct Hobls_all_ent as [Hobls_ent _].
+  pose proof (check_mc_loop_obls_sound _ _ _ _ _ penv_ext dummy_freeze_oracle false Hchk Hpenv_ext Hctx_ext) as Hobls_ent_body.
+  assert (Hobls_ent : Forall (mc_obl_holds penv_ext dummy_freeze_oracle (ml_inv ls) false)
+    (collect_mc_ir_obls_acc EA_Riscv64 ls ret_w hdr_ws false [] t_ir_ent (rv_seg_to_mc_seg seg_ent)
+       (collect_mc_ir_obls_acc EA_Riscv64 ls ret_w hdr_ws true [] t_ir_body (rv_seg_to_mc_seg seg_body) [])))
+    by exact Hobls_ent_body.
   assert (Hpenv_ext_ref : forall nm w, In (nm, w) allowed0 ->
     exists d1 d2 : @dvalue Pa, penv_ext nm = Some d1 /\ penv_ext nm = Some d2 /\ wf_scalar_dvalue w d1 /\ wf_scalar_dvalue w d2 /\ dvalue_refines d1 d2).
   { intros nm w Hin; destruct (Hpenv0 nm w Hin) as [d0 [Hp0 Hw0]]; rewrite (Hnb_ext nm (Hnb_al nm w Hin)).
@@ -5271,15 +5864,17 @@ Proof.
                   Hsp2_init (rv_init_val_regs_agrees penv_ext dummy_freeze_oracle arg_specs rf0 Hws Hm_ext)
                   (mc_sym_stack_agrees_empty _ _ _ _ _) Es_ent) as Hmc_ent.
     apply rv_seg_exec_to_mc in Hmc_ent.
-    destruct (collect_mc_ir_obls_sound EA_Riscv64 ls ret_w hdr_ws allowed0 false penv_ext penv_ext
+    destruct (collect_mc_ir_obls_acc_sound EA_Riscv64 ls ret_w hdr_ws allowed0 false penv_ext penv_ext
                 bmap hdr_id hdr_phis [] (init_cfg_locals (args ir_cfg) vs) (init ir_cfg) (init ir_cfg) t_ir_ent
-                _ _ (rv_seg_to_mc_seg seg_ent) (ml_inv ls) [] eq_refl Hwf_te Hnf_ent Hpenv_ext_ref
+                _ _ (rv_seg_to_mc_seg seg_ent) (ml_inv ls) []
+                (collect_mc_ir_obls_acc EA_Riscv64 ls ret_w hdr_ws true [] t_ir_body (rv_seg_to_mc_seg seg_body) [])
+                eq_refl Hwf_te Hnf_ent Hpenv_ext_ref
                 Hir_ent Hmc_ent (fun C => ltac:(discriminate C)) (fun _ _ Hin => ltac:(contradiction Hin)) Hobls_ent)
-      as [Hub | [(env_out & dv_ir & ret_mc & dv_mc & Hst & (fuel_e & rf_e & mstk_e & Hme & Hcs & Hra & Hev_mc) & Hev_mc2 & Href_d)
+      as [_ [Hub | [(env_out & dv_ir & ret_mc & dv_mc & Hst & (fuel_e & rf_e & mstk_e & Hme & Hcs & Hra & Hev_mc) & Hev_mc2 & Href_d)
                 | (env_c & bid_c & b_hdr0 & dvs & lmap_cut0 & phis_ir & sp' & rr' & astk' &
                    Htau & Ebh0 & Hin_lm & Hlm_m & _ & Hstp & Hids & Hws_m & Hpwf_m & Hph_m & Hsp' &
                    (n & rf1 & mstk1 & _ & Hst_mc & _ & Hsp2' & Hag' & Hastk') &
-                   Hunsp & Hphi_d & Hregs_o & Hsav & Hslts_o & Hmi_o)]].
+                   Hunsp & Hphi_d & Hregs_o & Hsav & Hslts_o & Hmi_o)]]].
     - left; change (denote_cfg ir_cfg None) with (denote_cfg_from bmap None (init ir_cfg, init ir_cfg)); exact (Hub default_draw_strat).
     - right; left; exists fuel_e, rf_e, mstk_e, env_out, dv_ir.
       split; [exact Hme | split; [exact Hcs | split; [exact Hra | split]]].
@@ -5366,16 +5961,20 @@ Proof.
                   Es_body) as Hmc_body.
     apply rv_seg_exec_to_mc in Hmc_body.
     pose proof (check_mc_loop_obls_sound _ _ _ _ _ penv_mc dummy_freeze_oracle true Hchk Hwf_mc Hctx_c) as Hobls_all_b.
-    rewrite Forall_app in Hobls_all_b; destruct Hobls_all_b as [_ Hobls_b].
-    destruct (collect_mc_ir_obls_sound EA_Riscv64 ls ret_w hdr_ws (allowed0 ++ cut_vars_from_ws 0%nat hdr_ws) true penv_ir penv_mc
+    assert (Hobls_all_b' : Forall (mc_obl_holds penv_mc dummy_freeze_oracle (ml_inv ls) true)
+      (collect_mc_ir_obls_acc EA_Riscv64 ls ret_w hdr_ws false [] t_ir_ent (rv_seg_to_mc_seg seg_ent)
+         (collect_mc_ir_obls_acc EA_Riscv64 ls ret_w hdr_ws true [] t_ir_body (rv_seg_to_mc_seg seg_body) [])))
+      by exact Hobls_all_b.
+    pose proof (collect_mc_ir_obls_acc_sub _ _ _ _ _ _ _ _ _ _ Hobls_all_b') as Hobls_b.
+    destruct (collect_mc_ir_obls_acc_sound EA_Riscv64 ls ret_w hdr_ws (allowed0 ++ cut_vars_from_ws 0%nat hdr_ws) true penv_ir penv_mc
                 bmap hdr_id hdr_phis (lmap_keys lmap_base) env_c bid_c hdr_id t_ir_body
-                _ _ (rv_seg_to_mc_seg seg_body) (ml_inv ls) [] eq_refl Hwf_tb Hnf_bdy Href_c
+                _ _ (rv_seg_to_mc_seg seg_body) (ml_inv ls) [] [] eq_refl Hwf_tb Hnf_bdy Href_c
                 Hir_body Hmc_body (fun _ => Hmi_c) (fun _ _ Hin => ltac:(contradiction Hin)) Hobls_b)
-      as [Hub | [(env_out & dv_ir & ret_mc & dv_mc & Hst & (fuel_e & rf_e & mstk_e & Hme & Hcs & Hra & Hev_mc) & Hev_mc2 & Href_d)
+      as [_ [Hub | [(env_out & dv_ir & ret_mc & dv_mc & Hst & (fuel_e & rf_e & mstk_e & Hme & Hcs & Hra & Hev_mc) & Hev_mc2 & Href_d)
                 | (env_c' & bid_c' & b_hdr0 & dvs' & lmap_cut' & phis_ir & sp' & rr' & astk' &
                    Htau & Ebh0 & _ & Hlm_m & Hkp_lb & Hstp & Hids' & Hws_m & Hpwf_m & Hph_m & Hsp' &
                    (n & rf' & mstk' & Hn & Hst_mc & _ & Hsp2' & Hag' & Hastk') &
-                   Hunsp & Hphi_d & Hregs_o & Hsav & Hslts_o & Hmi_o)]].
+                   Hunsp & Hphi_d & Hregs_o & Hsav & Hslts_o & Hmi_o)]]].
     - left; change (denote_cfg ir_cfg None) with (denote_cfg_from bmap None (init ir_cfg, init ir_cfg)).
       exact (ir_at_cut_ub bmap (init ir_cfg) hdr_id (init_cfg_locals (args ir_cfg) vs) env_c bid_c default_draw_strat Hcut (Hub default_draw_strat)).
     - right; left; exists fuel_e, rf_e, mstk_e, env_out, dv_ir; repeat split; try assumption.
@@ -5582,7 +6181,7 @@ Proof.
   destruct (Nat.leb (List.length arg_specs) 8) eqn:Hlen_args; cbn [negb orb] in Hval; [| discriminate Hval].
   destruct (forallb a64_valid_arg_spec arg_specs) eqn:Hws; cbn [negb orb] in Hval; [| discriminate Hval].
   destruct (prepare_mc_loop_ir ir_cfg allowed0 ls) as [prep |] eqn:Eprep; [| discriminate Hval].
-  set (mc_fuel := S (2 * List.length insts)) in *.
+  rewrite elf_length_tr_eq in Hval; set (mc_fuel := S (2 * List.length insts)) in *.
   set (hdr_ws := extract_hdr_phi_widths (mlip_hdr_phis prep)) in *.
   destruct (summarize_a64_seg mc_fuel insts (ml_mc_pc ls) false [] 0%N 0%Z (a64_build_init_val_regs 0%N arg_specs) [] a64_init_sym_flags false ret_w)
     as [seg_ent |] eqn:Es_ent; [| discriminate Hval].
@@ -5637,8 +6236,11 @@ Proof.
     as (Hnb_ext & Hpenv_ext & Hctx_ext).
   set (penv_ext := overlay_penv (@zero_ghost_binds Pa (cut_vars_from_ws 0%nat hdr_ws ++ hi32_vars ls)) penv0) in *.
   cbn [mlcb_ctx mlcb_known mlcb_obls] in Hchk; rewrite cut_vars_from_eq_ws in Hchk; change (extract_hdr_phi_widths hdr_phis) with hdr_ws in Hchk.
-  pose proof (check_mc_loop_obls_sound _ _ _ _ _ penv_ext dummy_freeze_oracle false Hchk Hpenv_ext Hctx_ext) as Hobls_all_ent.
-  rewrite Forall_app in Hobls_all_ent; destruct Hobls_all_ent as [Hobls_ent _].
+  pose proof (check_mc_loop_obls_sound _ _ _ _ _ penv_ext dummy_freeze_oracle false Hchk Hpenv_ext Hctx_ext) as Hobls_ent_body.
+  assert (Hobls_ent : Forall (mc_obl_holds penv_ext dummy_freeze_oracle (ml_inv ls) false)
+    (collect_mc_ir_obls_acc EA_AArch64 ls ret_w hdr_ws false [] t_ir_ent (a64_seg_to_mc_seg seg_ent)
+       (collect_mc_ir_obls_acc EA_AArch64 ls ret_w hdr_ws true [] t_ir_body (a64_seg_to_mc_seg seg_body) [])))
+    by exact Hobls_ent_body.
   assert (Hpenv_ext_ref : forall nm w, In (nm, w) allowed0 ->
     exists d1 d2 : @dvalue Pa, penv_ext nm = Some d1 /\ penv_ext nm = Some d2 /\ wf_scalar_dvalue w d1 /\ wf_scalar_dvalue w d2 /\ dvalue_refines d1 d2).
   { intros nm w Hin; destruct (Hpenv0 nm w Hin) as [d0 [Hp0 Hw0]]; rewrite (Hnb_ext nm (Hnb_al nm w Hin)).
@@ -5782,15 +6384,17 @@ Proof.
                   ltac:(unfold mc_frame_cap; lia) Hsp0_eq Ha64_init_agrees (mc_sym_stack_agrees_empty _ _ _ _ _)
                   (fun C => ltac:(discriminate C)) Es_ent) as Hmc_ent.
     apply a64_seg_exec_to_mc in Hmc_ent.
-    destruct (collect_mc_ir_obls_sound EA_AArch64 ls ret_w hdr_ws allowed0 false penv_ext penv_ext
+    destruct (collect_mc_ir_obls_acc_sound EA_AArch64 ls ret_w hdr_ws allowed0 false penv_ext penv_ext
                 bmap hdr_id hdr_phis [] (init_cfg_locals (args ir_cfg) vs) (init ir_cfg) (init ir_cfg) t_ir_ent
-                _ _ (a64_seg_to_mc_seg seg_ent) (ml_inv ls) [] eq_refl Hwf_te Hnf_ent Hpenv_ext_ref
+                _ _ (a64_seg_to_mc_seg seg_ent) (ml_inv ls) []
+                (collect_mc_ir_obls_acc EA_AArch64 ls ret_w hdr_ws true [] t_ir_body (a64_seg_to_mc_seg seg_body) [])
+                eq_refl Hwf_te Hnf_ent Hpenv_ext_ref
                 Hir_ent Hmc_ent (fun C => ltac:(discriminate C)) (fun _ _ Hin => ltac:(contradiction Hin)) Hobls_ent)
-      as [Hub | [(env_out & dv_ir & ret_mc & dv_mc & Hst & (fuel_e & rf_e & fl_e & mstk_e & Hme & Hcs & Hev_mc) & Hev_mc2 & Href_d)
+      as [_ [Hub | [(env_out & dv_ir & ret_mc & dv_mc & Hst & (fuel_e & rf_e & fl_e & mstk_e & Hme & Hcs & Hev_mc) & Hev_mc2 & Href_d)
                 | (env_c & bid_c & b_hdr0 & dvs & lmap_cut0 & phis_ir & sp' & rr' & astk' &
                    Htau & Ebh0 & Hin_lm & Hlm_m & _ & Hstp & Hids & Hws_m & Hpwf_m & Hph_m & Hsp' &
                    (n & rf1 & sp1 & fl1 & mstk1 & _ & Hst_mc & _ & Hsp_c & Hag' & Hastk') &
-                   Hunsp & Hphi_d & Hregs_o & Hsav & Hslts_o & Hmi_o)]].
+                   Hunsp & Hphi_d & Hregs_o & Hsav & Hslts_o & Hmi_o)]]].
     - left; change (denote_cfg ir_cfg None) with (denote_cfg_from bmap None (init ir_cfg, init ir_cfg)); exact (Hub default_draw_strat).
     - right; left; exists fuel_e, rf_e, fl_e, mstk_e, env_out, dv_ir.
       split; [exact Hme | split; [exact Hcs | split]].
@@ -5874,16 +6478,20 @@ Proof.
                   (fun C => ltac:(discriminate C)) Es_body) as Hmc_body.
     apply a64_seg_exec_to_mc in Hmc_body.
     pose proof (check_mc_loop_obls_sound _ _ _ _ _ penv_mc dummy_freeze_oracle true Hchk Hwf_mc Hctx_c) as Hobls_all_b.
-    rewrite Forall_app in Hobls_all_b; destruct Hobls_all_b as [_ Hobls_b].
-    destruct (collect_mc_ir_obls_sound EA_AArch64 ls ret_w hdr_ws (allowed0 ++ cut_vars_from_ws 0%nat hdr_ws) true penv_ir penv_mc
+    assert (Hobls_all_b' : Forall (mc_obl_holds penv_mc dummy_freeze_oracle (ml_inv ls) true)
+      (collect_mc_ir_obls_acc EA_AArch64 ls ret_w hdr_ws false [] t_ir_ent (a64_seg_to_mc_seg seg_ent)
+         (collect_mc_ir_obls_acc EA_AArch64 ls ret_w hdr_ws true [] t_ir_body (a64_seg_to_mc_seg seg_body) [])))
+      by exact Hobls_all_b.
+    pose proof (collect_mc_ir_obls_acc_sub _ _ _ _ _ _ _ _ _ _ Hobls_all_b') as Hobls_b.
+    destruct (collect_mc_ir_obls_acc_sound EA_AArch64 ls ret_w hdr_ws (allowed0 ++ cut_vars_from_ws 0%nat hdr_ws) true penv_ir penv_mc
                 bmap hdr_id hdr_phis (lmap_keys lmap_base) env_c bid_c hdr_id t_ir_body
-                _ _ (a64_seg_to_mc_seg seg_body) (ml_inv ls) [] eq_refl Hwf_tb Hnf_bdy Href_c
+                _ _ (a64_seg_to_mc_seg seg_body) (ml_inv ls) [] [] eq_refl Hwf_tb Hnf_bdy Href_c
                 Hir_body Hmc_body (fun _ => Hmi_c) (fun _ _ Hin => ltac:(contradiction Hin)) Hobls_b)
-      as [Hub | [(env_out & dv_ir & ret_mc & dv_mc & Hst & (fuel_e & rf_e & fl_e & mstk_e & Hme & Hcs & Hev_mc) & Hev_mc2 & Href_d)
+      as [_ [Hub | [(env_out & dv_ir & ret_mc & dv_mc & Hst & (fuel_e & rf_e & fl_e & mstk_e & Hme & Hcs & Hev_mc) & Hev_mc2 & Href_d)
                 | (env_c' & bid_c' & b_hdr0 & dvs' & lmap_cut' & phis_ir & sp' & rr' & astk' &
                    Htau & Ebh0 & _ & Hlm_m & Hkp_lb & Hstp & Hids' & Hws_m & Hpwf_m & Hph_m & Hsp' &
                    (n & rf' & sp_c' & fl_c' & mstk' & Hn & Hst_mc & _ & Hsp_c' & Hag' & Hastk') &
-                   Hunsp & Hphi_d & Hregs_o & Hsav & Hslts_o & Hmi_o)]].
+                   Hunsp & Hphi_d & Hregs_o & Hsav & Hslts_o & Hmi_o)]]].
     - left; change (denote_cfg ir_cfg None) with (denote_cfg_from bmap None (init ir_cfg, init ir_cfg)).
       exact (ir_at_cut_ub bmap (init ir_cfg) hdr_id (init_cfg_locals (args ir_cfg) vs) env_c bid_c default_draw_strat Hcut (Hub default_draw_strat)).
     - right; left; exists fuel_e, rf_e, fl_e, mstk_e, env_out, dv_ir; repeat split; try assumption.
