@@ -101,69 +101,69 @@ let smt2_bv_const w v =
   let mv = Z.logand v mask in
   Printf.sprintf "(_ bv%s %d)" (Z.to_string mv) w
 
-let rec smt2_of_cert_expr (e : CertFormat.cert_expr) : string =
+let rec smt2_of_cert_expr (e : CertFormatAst.cert_expr) : string =
   match e with
-  | CertFormat.CE_BvConst (w, n) ->
+  | CertFormatAst.CE_BvConst (w, n) ->
       smt2_bv_const (int_of_pos w) (z_of_coq_n n)
-  | CertFormat.CE_Poison w ->
+  | CertFormatAst.CE_Poison w ->
       failwith (Printf.sprintf "unexpected CE_Poison(%d)" (int_of_pos w))
-  | CertFormat.CE_Var (nm, _w) ->
+  | CertFormatAst.CE_Var (nm, _w) ->
       smt2_ident (string_of_coq_chars nm)
-  | CertFormat.CE_BinOp (op, _w, _fl, l, r) ->
+  | CertFormatAst.CE_BinOp (op, _w, _fl, l, r) ->
       let sop =
         match op with
-        | CertFormat.CB_Add -> "bvadd"
-        | CertFormat.CB_Sub -> "bvsub"
-        | CertFormat.CB_Mul -> "bvmul"
-        | CertFormat.CB_UDiv -> "bvudiv"
-        | CertFormat.CB_SDiv -> "bvsdiv"
-        | CertFormat.CB_URem -> "bvurem"
-        | CertFormat.CB_SRem -> "bvsrem"
-        | CertFormat.CB_Shl -> "bvshl"
-        | CertFormat.CB_LShr -> "bvlshr"
-        | CertFormat.CB_AShr -> "bvashr"
-        | CertFormat.CB_And -> "bvand"
-        | CertFormat.CB_Or -> "bvor"
-        | CertFormat.CB_Xor -> "bvxor"
+        | CertFormatAst.CB_Add -> "bvadd"
+        | CertFormatAst.CB_Sub -> "bvsub"
+        | CertFormatAst.CB_Mul -> "bvmul"
+        | CertFormatAst.CB_UDiv -> "bvudiv"
+        | CertFormatAst.CB_SDiv -> "bvsdiv"
+        | CertFormatAst.CB_URem -> "bvurem"
+        | CertFormatAst.CB_SRem -> "bvsrem"
+        | CertFormatAst.CB_Shl -> "bvshl"
+        | CertFormatAst.CB_LShr -> "bvlshr"
+        | CertFormatAst.CB_AShr -> "bvashr"
+        | CertFormatAst.CB_And -> "bvand"
+        | CertFormatAst.CB_Or -> "bvor"
+        | CertFormatAst.CB_Xor -> "bvxor"
       in
       Printf.sprintf "(%s %s %s)" sop (smt2_of_cert_expr l) (smt2_of_cert_expr r)
-  | CertFormat.CE_ICmp (pred, _ss, _w, l, r) ->
+  | CertFormatAst.CE_ICmp (pred, _ss, _w, l, r) ->
       let sl = smt2_of_cert_expr l in
       let sr = smt2_of_cert_expr r in
       let cond =
         match pred with
-        | CertFormat.CIP_Eq -> Printf.sprintf "(= %s %s)" sl sr
-        | CertFormat.CIP_Ne -> Printf.sprintf "(not (= %s %s))" sl sr
-        | CertFormat.CIP_Ult -> Printf.sprintf "(bvult %s %s)" sl sr
-        | CertFormat.CIP_Ule -> Printf.sprintf "(bvule %s %s)" sl sr
-        | CertFormat.CIP_Ugt -> Printf.sprintf "(bvugt %s %s)" sl sr
-        | CertFormat.CIP_Uge -> Printf.sprintf "(bvuge %s %s)" sl sr
-        | CertFormat.CIP_Slt -> Printf.sprintf "(bvslt %s %s)" sl sr
-        | CertFormat.CIP_Sle -> Printf.sprintf "(bvsle %s %s)" sl sr
-        | CertFormat.CIP_Sgt -> Printf.sprintf "(bvsgt %s %s)" sl sr
-        | CertFormat.CIP_Sge -> Printf.sprintf "(bvsge %s %s)" sl sr
+        | CertFormatAst.CIP_Eq -> Printf.sprintf "(= %s %s)" sl sr
+        | CertFormatAst.CIP_Ne -> Printf.sprintf "(not (= %s %s))" sl sr
+        | CertFormatAst.CIP_Ult -> Printf.sprintf "(bvult %s %s)" sl sr
+        | CertFormatAst.CIP_Ule -> Printf.sprintf "(bvule %s %s)" sl sr
+        | CertFormatAst.CIP_Ugt -> Printf.sprintf "(bvugt %s %s)" sl sr
+        | CertFormatAst.CIP_Uge -> Printf.sprintf "(bvuge %s %s)" sl sr
+        | CertFormatAst.CIP_Slt -> Printf.sprintf "(bvslt %s %s)" sl sr
+        | CertFormatAst.CIP_Sle -> Printf.sprintf "(bvsle %s %s)" sl sr
+        | CertFormatAst.CIP_Sgt -> Printf.sprintf "(bvsgt %s %s)" sl sr
+        | CertFormatAst.CIP_Sge -> Printf.sprintf "(bvsge %s %s)" sl sr
       in
       Printf.sprintf "(ite %s (_ bv1 1) (_ bv0 1))" cond
-  | CertFormat.CE_Cast (kind, fw_p, tw_p, _fl, inner) ->
+  | CertFormatAst.CE_Cast (kind, fw_p, tw_p, _fl, inner) ->
       let fw = int_of_pos fw_p in
       let tw = int_of_pos tw_p in
       let si = smt2_of_cert_expr inner in
       (match kind with
-       | CertFormat.CCK_Trunc ->
+       | CertFormatAst.CCK_Trunc ->
            if tw = fw then si
            else Printf.sprintf "((_ extract %d 0) %s)" (tw - 1) si
-       | CertFormat.CCK_ZExt ->
+       | CertFormatAst.CCK_ZExt ->
            if tw = fw then si
            else Printf.sprintf "((_ zero_extend %d) %s)" (tw - fw) si
-       | CertFormat.CCK_SExt ->
+       | CertFormatAst.CCK_SExt ->
            if tw = fw then si
            else Printf.sprintf "((_ sign_extend %d) %s)" (tw - fw) si)
-  | CertFormat.CE_Select (_w, c, t, f) ->
+  | CertFormatAst.CE_Select (_w, c, t, f) ->
       Printf.sprintf "(ite (= %s (_ bv1 1)) %s %s)"
         (smt2_of_cert_expr c) (smt2_of_cert_expr t) (smt2_of_cert_expr f)
-  | CertFormat.CE_Freeze (_w, inner) ->
+  | CertFormatAst.CE_Freeze (_w, inner) ->
       smt2_of_cert_expr inner
-  | CertFormat.CE_Let (bindings, body) ->
+  | CertFormatAst.CE_Let (bindings, body) ->
       List.fold_right
         (fun (nm, rhs) acc ->
            Printf.sprintf "(let ((%s %s)) %s)"

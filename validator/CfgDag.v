@@ -25,8 +25,9 @@ From Vellvm Require Import
   Semantics.DynamicValues.
 
 From CertValidator Require Import
-  CertFormat
-  AlgRules.
+  CertFormatAst
+  AlgRulesEval
+  AlgRulesNormBinop.
 
 Unset Implicit Arguments.
 Unset Strict Implicit.

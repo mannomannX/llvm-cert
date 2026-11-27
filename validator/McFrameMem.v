@@ -42,8 +42,8 @@ From Vellvm Require Import
   Semantics.Operations.Conversion.
 
 From CertValidator Require Import
-  CertFormat
-  AlgRules.
+  CertFormatAst
+  AlgRulesEval.
 
 Unset Implicit Arguments.
 Unset Strict Implicit.

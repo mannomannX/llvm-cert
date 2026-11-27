@@ -149,7 +149,13 @@ jobs:
                 Vellvm.Semantics.TopLevel Vellvm.Theory.Equational \
                 CertValidator.common.Options CertValidator.common.Diag CertValidator.common.CoreTactics CertValidator.common.BvTactics CertValidator.common.IntBvTactics CertValidator.common.EouTactics CertPasses.common.ItreeTactics \
                 CertPasses.Pipeline CertPasses.McfgExport \
-                CertPasses.ModuleMerge CertValidator.CfgDag CertValidator.CertValidator CertValidator.Elf64Spec \
+                CertPasses.ModuleMerge \
+                CertValidator.LratCore CertValidator.AigGates CertValidator.AigArith CertValidator.AigLrat \
+                CertValidator.CertFormatAst CertValidator.CertFormatParse CertValidator.CertFormatGates CertValidator.CertFormat \
+                CertValidator.AlgRulesEval CertValidator.AlgRulesNormBinop CertValidator.AlgRulesNormRefines CertValidator.AlgRules \
+                CertValidator.CfgDag \
+                CertValidator.CertValOpenWorld CertValidator.CertValExpReify CertValidator.CertValCfgDag CertValidator.CertValCfgSum CertValidator.CertValUbCheck CertValidator.CertValPathCheck CertValidator.CertValLoop CertValidator.CertValProto CertValidator.CertValidator \
+                CertValidator.Elf64Spec \
                 CertValidator.McFrameMem CertValidator.McIsaCommon CertValidator.McFormat \
                 CertValidator.Rv64Decode CertValidator.Rv64ExecSym CertValidator.Rv64DagProof CertValidator.Rv64SymOracle CertValidator.Rv64LoopSeg CertValidator.Rv64Sem \
                 CertValidator.A64Decode CertValidator.A64ExecSym CertValidator.A64DagProof CertValidator.A64SymOracle CertValidator.A64LoopSeg CertValidator.A64CoreSem \
@@ -161,7 +167,13 @@ jobs:
               Vellvm.Semantics.TopLevel Vellvm.Theory.Equational \
               CertValidator.common.Options CertValidator.common.Diag CertValidator.common.CoreTactics CertValidator.common.BvTactics CertValidator.common.IntBvTactics CertValidator.common.EouTactics CertPasses.common.ItreeTactics \
               CertPasses.Pipeline CertPasses.McfgExport \
-              CertPasses.ModuleMerge CertValidator.CfgDag CertValidator.CertValidator CertValidator.Elf64Spec \
+              CertPasses.ModuleMerge \
+              CertValidator.LratCore CertValidator.AigGates CertValidator.AigArith CertValidator.AigLrat \
+              CertValidator.CertFormatAst CertValidator.CertFormatParse CertValidator.CertFormatGates CertValidator.CertFormat \
+              CertValidator.AlgRulesEval CertValidator.AlgRulesNormBinop CertValidator.AlgRulesNormRefines CertValidator.AlgRules \
+              CertValidator.CfgDag \
+              CertValidator.CertValOpenWorld CertValidator.CertValExpReify CertValidator.CertValCfgDag CertValidator.CertValCfgSum CertValidator.CertValUbCheck CertValidator.CertValPathCheck CertValidator.CertValLoop CertValidator.CertValProto CertValidator.CertValidator \
+              CertValidator.Elf64Spec \
               CertValidator.McFrameMem CertValidator.McIsaCommon CertValidator.McFormat \
               CertValidator.Rv64Decode CertValidator.Rv64ExecSym CertValidator.Rv64DagProof CertValidator.Rv64SymOracle CertValidator.Rv64LoopSeg CertValidator.Rv64Sem \
               CertValidator.A64Decode CertValidator.A64ExecSym CertValidator.A64DagProof CertValidator.A64SymOracle CertValidator.A64LoopSeg CertValidator.A64CoreSem \
@@ -178,13 +190,13 @@ jobs:
           Set Printing Width 10000.
           From Vellvm Require Theory.I2F.I2F_toplevel.
           From CertPasses Require Pipeline ModuleMerge.
-          From CertValidator Require CertFormat AigLrat AlgRules CertValidator Elf64Spec McFormat Rv64DagProof Rv64SymOracle A64DagProof A64SymOracle McLoop McCall McValidator.
+          From CertValidator Require CertFormat LratCore AigLrat AlgRules CertValidator Elf64Spec McFormat Rv64DagProof Rv64SymOracle A64DagProof A64SymOracle McLoop McCall McValidator.
           Redirect "$PA_DIR/vellvm_i2f" Print Assumptions Vellvm.Theory.I2F.I2F_toplevel.model_refine.
           Redirect "$PA_DIR/pipeline" Print Assumptions CertPasses.Pipeline.optimize_mcfg_I2F_model_refine.
           Redirect "$PA_DIR/merge_i2f" Print Assumptions CertPasses.ModuleMerge.validate_module_merge_parsed_I2F_model_refine.
           Redirect "$PA_DIR/merge_tle" Print Assumptions CertPasses.ModuleMerge.validate_module_merge_tle_refines.
           Redirect "$PA_DIR/merge_cert" Print Assumptions CertPasses.ModuleMerge.validate_module_merge_certified_tle_refines.
-          Redirect "$PA_DIR/aig_lrat" Print Assumptions CertValidator.AigLrat.check_lrat_unsat_sound.
+          Redirect "$PA_DIR/aig_lrat" Print Assumptions CertValidator.LratCore.check_lrat_unsat_sound.
           Redirect "$PA_DIR/dimacs_lrat" Print Assumptions CertValidator.CertFormat.validate_dimacs_lrat_str_sound.
           Redirect "$PA_DIR/elf64_extract" Print Assumptions CertValidator.Elf64Spec.elf64_extract_func_sound.
           Redirect "$PA_DIR/elf64_extract_calls" Print Assumptions CertValidator.Elf64Spec.elf64_extract_func_with_calls_sound.

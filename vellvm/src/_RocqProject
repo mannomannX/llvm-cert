@@ -121,10 +121,27 @@
 ../../passes/McfgExport.v
 ../../passes/ModuleMerge.v
 
+../../validator/LratCore.v
+../../validator/AigGates.v
+../../validator/AigArith.v
 ../../validator/AigLrat.v
+../../validator/CertFormatAst.v
+../../validator/CertFormatParse.v
+../../validator/CertFormatGates.v
 ../../validator/CertFormat.v
+../../validator/AlgRulesEval.v
+../../validator/AlgRulesNormBinop.v
+../../validator/AlgRulesNormRefines.v
 ../../validator/AlgRules.v
 ../../validator/CfgDag.v
+../../validator/CertValOpenWorld.v
+../../validator/CertValExpReify.v
+../../validator/CertValCfgDag.v
+../../validator/CertValCfgSum.v
+../../validator/CertValUbCheck.v
+../../validator/CertValPathCheck.v
+../../validator/CertValLoop.v
+../../validator/CertValProto.v
 ../../validator/CertValidator.v
 ../../validator/Elf64Spec.v
 ../../validator/McFrameMem.v

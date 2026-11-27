@@ -35,9 +35,10 @@ From Vellvm Require Import
   Semantics.Operations.Select.
 
 From CertValidator Require Import
-  CertFormat
-  AigLrat
-  AlgRules.
+  LratCore
+  AigGates
+  CertFormatAst
+  AlgRulesEval.
 
 Unset Implicit Arguments.
 Unset Strict Implicit.

@@ -23,7 +23,10 @@ From CertPasses Require
 
 From CertValidator Require
   CertFormat
+  LratCore
+  AigGates
   AigLrat
+  AlgRulesNormRefines
   AlgRules
   CertValidator
   Elf64Spec
@@ -46,9 +49,9 @@ Check @CertPasses.ModuleMerge.validate_module_merge_parsed_I2F_model_refine.
 Check @CertPasses.ModuleMerge.validate_module_merge_tle_refines.
 Check @CertPasses.ModuleMerge.validate_module_merge_certified_tle_refines.
 Check @CertPasses.ModuleMerge.validate_module_merge_certified_tle_composed_refines.
-Check @CertValidator.AigLrat.check_lrat_unsat_sound.
-Check @CertValidator.AigLrat.blast_refinement_cex_unsat_sound.
-Check @CertValidator.AlgRules.check_expr_refines_sound.
+Check @CertValidator.LratCore.check_lrat_unsat_sound.
+Check @CertValidator.AigGates.blast_refinement_cex_unsat_sound.
+Check @CertValidator.AlgRulesNormRefines.check_expr_refines_sound.
 Check @CertValidator.AlgRules.check_expr_refines_with_lrat_sound.
 Check @CertValidator.CertFormat.validate_dimacs_lrat_str_sound.
 Check @CertValidator.CertValidator.validate_mcfg_with_cert_sound.

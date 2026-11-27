@@ -39,8 +39,12 @@ From CertPasses Require
      ModuleMerge.
 
 From CertValidator Require
+     CertFormatParse
+     CertFormatGates
      CertFormat
+     LratCore
      AigLrat
+     AlgRulesNormRefines
      AlgRules
      CertValidator
      Elf64Spec
@@ -160,9 +164,9 @@ Separate Extraction ExtrOcamlIntConv TopLevel AstLib ParserHelper ShowAST ReprAS
   ModuleMerge.validate_module_merge ModuleMerge.validate_module_merge_parsed ModuleMerge.validate_module_merge_tle
   ModuleMerge.check_safe_slice_tle ModuleMerge.check_module_merge_certified_tle ModuleMerge.validate_module_merge_certified_tle
   ModuleMerge.check_module_merge_certified_tle_composed ModuleMerge.validate_module_merge_certified_tle_composed
-  CertFormat.parse_sexp CertFormat.parse_cert CertFormat.parse_dimacs_cnf CertFormat.parse_ascii_lrat CertFormat.validate_dimacs_lrat_str CertFormat.check_validator_syntax_gates CertFormat.check_prototype_contract
-  AigLrat.check_lrat_unsat
-  AlgRules.check_expr_refines AlgRules.check_expr_refines_with_lrat
+  CertFormatParse.parse_sexp CertFormatParse.parse_cert CertFormat.parse_dimacs_cnf CertFormat.parse_ascii_lrat CertFormat.validate_dimacs_lrat_str CertFormatGates.check_validator_syntax_gates CertFormatGates.check_prototype_contract
+  LratCore.check_lrat_unsat
+  AlgRulesNormRefines.check_expr_refines AlgRules.check_expr_refines_with_lrat
   CertValidator.check_cert_cfg CertValidator.check_cert_cfg_with_lrat CertValidator.check_cert_defn
   CertValidator.validate_mcfg_with_cert CertValidator.validate_tle_pair_with_cert CertValidator.validate_tle_pair_with_cert_str
   Elf64Spec.elf64_extract_func McFormat.parse_mc_cert
