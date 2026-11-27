@@ -6,8 +6,8 @@ on:
     branches:
       - main
     paths:
-      - "validator/A64CoreSem.v"
-      - "validator/Rv64Sem.v"
+      - "validator/A64*.v"
+      - "validator/Rv64*.v"
       - "validator/McIsaCommon.v"
       - "validator/CfgDag.v"
       - "validator/CertFormat.v"
@@ -18,8 +18,8 @@ on:
       - ".github/workflows/isa-sail-oracle.yml"
   pull_request:
     paths:
-      - "validator/A64CoreSem.v"
-      - "validator/Rv64Sem.v"
+      - "validator/A64*.v"
+      - "validator/Rv64*.v"
       - "validator/McIsaCommon.v"
       - "validator/CfgDag.v"
       - "validator/CertFormat.v"

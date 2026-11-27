@@ -28,7 +28,12 @@ From CertValidator Require
   CertValidator
   Elf64Spec
   McFrameMem
+  Rv64DagProof
+  Rv64SymOracle
   Rv64Sem
+  A64Decode
+  A64DagProof
+  A64SymOracle
   A64CoreSem
   McFormat
   McLoop
@@ -55,14 +60,14 @@ Check @CertValidator.McFrameMem.mc_stk_load_store_disjoint.
 Check @CertValidator.McFrameMem.mc_sym_stk_store_agrees.
 Check @CertValidator.McFrameMem.mc_sym_stk_load_sound.
 Check @CertValidator.McFormat.parse_mc_cert_wf.
-Check @CertValidator.Rv64Sem.summarize_rv64_dag_wf.
-Check @CertValidator.Rv64Sem.summarize_rv64_dag_sound.
-Check @CertValidator.Rv64Sem.rv_step_sym_oracle_sound.
-Check @CertValidator.Rv64Sem.sail_divrem_128_width_reduce.
-Check @CertValidator.A64CoreSem.decode_a64_bytes_valid.
-Check @CertValidator.A64CoreSem.summarize_a64_dag_wf.
-Check @CertValidator.A64CoreSem.summarize_a64_dag_sound.
-Check @CertValidator.A64CoreSem.a64_step_sym_oracle_sound.
+Check @CertValidator.Rv64DagProof.summarize_rv64_dag_wf.
+Check @CertValidator.Rv64DagProof.summarize_rv64_dag_sound.
+Check @CertValidator.Rv64SymOracle.rv_step_sym_oracle_sound.
+Check @CertValidator.Rv64SymOracle.sail_divrem_128_width_reduce.
+Check @CertValidator.A64Decode.decode_a64_bytes_valid.
+Check @CertValidator.A64DagProof.summarize_a64_dag_wf.
+Check @CertValidator.A64DagProof.summarize_a64_dag_sound.
+Check @CertValidator.A64SymOracle.a64_step_sym_oracle_sound.
 Check @CertValidator.McLoop.validate_mc_loop_rv64_sound.
 Check @CertValidator.McLoop.validate_mc_loop_a64_sound.
 Check @CertValidator.McCall.validate_mc_call_rv64_sound.

@@ -187,7 +187,7 @@ let handle_line line =
       Printf.printf "PONG\n%!"
   | [ "A64_BITMASK"; sf; n; imms; immr ] ->
       (match
-         A64CoreSem.a64_decode_bitmasks
+         A64Decode.a64_decode_bitmasks
            (bool_of_tok sf) (bool_of_tok n)
            (coq_n_of_int (int_of_string imms))
            (coq_n_of_int (int_of_string immr))
@@ -195,7 +195,7 @@ let handle_line line =
        | Some m -> Printf.printf "OK %s\n%!" (hex64_of_coq_n m)
        | None -> Printf.printf "NONE\n%!")
   | [ "A64_DECODE"; word_hex ] ->
-      if A64CoreSem.a64_decode_word_ok (coq_n_of_hex word_hex) then
+      if A64SymOracle.a64_decode_word_ok (coq_n_of_hex word_hex) then
         Printf.printf "OK\n%!"
       else
         Printf.printf "ERR\n%!"
@@ -204,7 +204,7 @@ let handle_line line =
       let code = bytes_of_hex hex_bytes in
       let regs = List.map coq_n_of_hex reg_toks in
       (match
-         A64CoreSem.a64_eval_bytes_concrete
+         A64SymOracle.a64_eval_bytes_concrete
            (nat_of_int fuel) code regs
            (bool_of_tok ns) (bool_of_tok zs) (bool_of_tok cs) (bool_of_tok vs)
        with
@@ -215,23 +215,23 @@ let handle_line line =
            Printf.printf "OK %d %d %d %d %s\n%!"
              (bit_of_bool on) (bit_of_bool oz) (bit_of_bool oc) (bit_of_bool ov) regs_s)
   | [ "RV64_DECODE"; rvc_s; hex_bytes ] ->
-      if Rv64Sem.rv_decode_bytes_ok (bool_of_tok rvc_s) (bytes_of_hex hex_bytes) then
+      if Rv64SymOracle.rv_decode_bytes_ok (bool_of_tok rvc_s) (bytes_of_hex hex_bytes) then
         Printf.printf "OK\n%!"
       else
         Printf.printf "ERR\n%!"
   | [ "A64_SYM"; word_hex ] ->
       (try
-         match A64CoreSem.a64_step_sym_oracle (coq_n_of_hex word_hex) with
+         match A64SymOracle.a64_step_sym_oracle (coq_n_of_hex word_hex) with
          | None -> Printf.printf "NONE\n%!"
          | Some out ->
              let rd_json, rd_expr_json =
-               match out.A64CoreSem.aso_rd_write with
+               match out.A64SymOracle.aso_rd_write with
                | None -> ("null", "null")
                | Some (rd, e) ->
                    (Z.to_string (z_of_coq_n rd), json_str (smt2_of_cert_expr e))
              in
              let flags_json =
-               match out.A64CoreSem.aso_flags_write with
+               match out.A64SymOracle.aso_flags_write with
                | None -> "null"
                | Some (((fn, fz), fc), fv) ->
                    Printf.sprintf "[%s,%s,%s,%s]"
@@ -241,42 +241,42 @@ let handle_line line =
                      (json_str (smt2_of_cert_expr fv))
              in
              let br_json =
-               json_opt_str (Option.map smt2_of_cert_expr out.A64CoreSem.aso_br_cond)
+               json_opt_str (Option.map smt2_of_cert_expr out.A64SymOracle.aso_br_cond)
              in
              Printf.printf
                "OK {\"rd\":%s,\"rd_expr\":%s,\"flags\":%s,\"pc_kind\":%s,\"br_cond\":%s,\"rel_bytes\":%s}\n%!"
                rd_json rd_expr_json flags_json
-               (Z.to_string (z_of_coq_n out.A64CoreSem.aso_pc_kind))
+               (Z.to_string (z_of_coq_n out.A64SymOracle.aso_pc_kind))
                br_json
-               (Z.to_string (z_of_coq_z out.A64CoreSem.aso_rel_bytes))
+               (Z.to_string (z_of_coq_z out.A64SymOracle.aso_rel_bytes))
        with Failure msg -> Printf.printf "ERR %s\n%!" (clean_err msg))
   | [ "RV64_SYM"; rvc_s; hex_bytes ] ->
       (try
-         match Rv64Sem.rv_step_sym_oracle (bool_of_tok rvc_s) (bytes_of_hex hex_bytes) with
+         match Rv64SymOracle.rv_step_sym_oracle (bool_of_tok rvc_s) (bytes_of_hex hex_bytes) with
          | None -> Printf.printf "NONE\n%!"
          | Some out ->
              let rd_json, rd_expr_json =
-               match out.Rv64Sem.rso_rd_write with
+               match out.Rv64SymOracle.rso_rd_write with
                | None -> ("null", "null")
                | Some (rd, e) ->
                    (Z.to_string (z_of_coq_n rd), json_str (smt2_of_cert_expr e))
              in
              let br_json =
-               json_opt_str (Option.map smt2_of_cert_expr out.Rv64Sem.rso_br_cond)
+               json_opt_str (Option.map smt2_of_cert_expr out.Rv64SymOracle.rso_br_cond)
              in
              Printf.printf
                "OK {\"len\":%s,\"rd\":%s,\"rd_expr\":%s,\"pc_kind\":%s,\"br_cond\":%s,\"rel_bytes\":%s}\n%!"
-               (Z.to_string (z_of_coq_n out.Rv64Sem.rso_len))
+               (Z.to_string (z_of_coq_n out.Rv64SymOracle.rso_len))
                rd_json rd_expr_json
-               (Z.to_string (z_of_coq_n out.Rv64Sem.rso_pc_kind))
+               (Z.to_string (z_of_coq_n out.Rv64SymOracle.rso_pc_kind))
                br_json
-               (Z.to_string (z_of_coq_z out.Rv64Sem.rso_rel_bytes))
+               (Z.to_string (z_of_coq_z out.Rv64SymOracle.rso_rel_bytes))
        with Failure msg -> Printf.printf "ERR %s\n%!" (clean_err msg))
   | "RV64_EXEC" :: rvc_s :: fuel_s :: hex_bytes :: reg_toks ->
       let fuel = int_of_string fuel_s in
       let code = bytes_of_hex hex_bytes in
       let regs = List.map coq_n_of_hex reg_toks in
-      (match Rv64Sem.rv_eval_bytes_concrete (bool_of_tok rvc_s) (nat_of_int fuel) code regs with
+      (match Rv64SymOracle.rv_eval_bytes_concrete (bool_of_tok rvc_s) (nat_of_int fuel) code regs with
        | Datatypes.Coq_inl err ->
            Printf.printf "ERR %s\n%!" (clean_err (string_of_coq_chars err))
        | Datatypes.Coq_inr out_regs ->

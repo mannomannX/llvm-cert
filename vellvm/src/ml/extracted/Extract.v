@@ -44,8 +44,10 @@ From CertValidator Require
      AlgRules
      CertValidator
      Elf64Spec
-     Rv64Sem
-     A64CoreSem
+     Rv64Decode
+     Rv64SymOracle
+     A64Decode
+     A64SymOracle
      McFormat
      McValidator.
 
@@ -164,7 +166,7 @@ Separate Extraction ExtrOcamlIntConv TopLevel AstLib ParserHelper ShowAST ReprAS
   CertValidator.check_cert_cfg CertValidator.check_cert_cfg_with_lrat CertValidator.check_cert_defn
   CertValidator.validate_mcfg_with_cert CertValidator.validate_tle_pair_with_cert CertValidator.validate_tle_pair_with_cert_str
   Elf64Spec.elf64_extract_func McFormat.parse_mc_cert
-  Rv64Sem.decode_rv64_bytes Rv64Sem.rv_eval_bytes_concrete Rv64Sem.rv_decode_bytes_ok Rv64Sem.rv_step_sym_oracle
-  A64CoreSem.decode_a64_bytes A64CoreSem.a64_eval_bytes_concrete
-  A64CoreSem.a64_decode_word_ok A64CoreSem.a64_decode_bitmasks A64CoreSem.a64_step_sym_oracle
+  Rv64Decode.decode_rv64_bytes Rv64SymOracle.rv_eval_bytes_concrete Rv64SymOracle.rv_decode_bytes_ok Rv64SymOracle.rv_step_sym_oracle
+  A64Decode.decode_a64_bytes A64SymOracle.a64_eval_bytes_concrete
+  A64SymOracle.a64_decode_word_ok A64Decode.a64_decode_bitmasks A64SymOracle.a64_step_sym_oracle
   McValidator.validate_mc_tle_with_cert_str McValidator.emit_mc_dimacs_cnf_str (* QCVellvm *).

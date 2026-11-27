@@ -150,14 +150,24 @@ jobs:
                 CertValidator.common.Options CertValidator.common.Diag CertValidator.common.CoreTactics CertValidator.common.BvTactics CertValidator.common.IntBvTactics CertValidator.common.EouTactics CertPasses.common.ItreeTactics \
                 CertPasses.Pipeline CertPasses.McfgExport \
                 CertPasses.ModuleMerge CertValidator.CfgDag CertValidator.CertValidator CertValidator.Elf64Spec \
-                CertValidator.McFrameMem CertValidator.McIsaCommon CertValidator.McFormat CertValidator.Rv64Sem CertValidator.A64CoreSem CertValidator.McOblDischarger CertValidator.McLoop CertValidator.McCall CertValidator.McValidator CertValidator.CheckAssumptions
+                CertValidator.McFrameMem CertValidator.McIsaCommon CertValidator.McFormat \
+                CertValidator.Rv64Decode CertValidator.Rv64ExecSym CertValidator.Rv64DagProof CertValidator.Rv64SymOracle CertValidator.Rv64LoopSeg CertValidator.Rv64Sem \
+                CertValidator.A64Decode CertValidator.A64ExecSym CertValidator.A64DagProof CertValidator.A64SymOracle CertValidator.A64LoopSeg CertValidator.A64CoreSem \
+                CertValidator.McOblDischarger CertValidator.McLoopIrSpec CertValidator.McLoopCheck CertValidator.McLoop \
+                CertValidator.McCallSpec CertValidator.McCallMcWitness CertValidator.McCallIrExec CertValidator.McCall \
+                CertValidator.McExprRewrite CertValidator.McValidator CertValidator.CheckAssumptions
           else
             (ulimit -v 13107200 && exec opam exec -- rocq check -o -R rocq Vellvm -Q ../../passes CertPasses -Q ../../validator CertValidator \
               Vellvm.Semantics.TopLevel Vellvm.Theory.Equational \
               CertValidator.common.Options CertValidator.common.Diag CertValidator.common.CoreTactics CertValidator.common.BvTactics CertValidator.common.IntBvTactics CertValidator.common.EouTactics CertPasses.common.ItreeTactics \
               CertPasses.Pipeline CertPasses.McfgExport \
               CertPasses.ModuleMerge CertValidator.CfgDag CertValidator.CertValidator CertValidator.Elf64Spec \
-              CertValidator.McFrameMem CertValidator.McIsaCommon CertValidator.McFormat CertValidator.Rv64Sem CertValidator.A64CoreSem CertValidator.McOblDischarger CertValidator.McLoop CertValidator.McCall CertValidator.McValidator CertValidator.CheckAssumptions)
+              CertValidator.McFrameMem CertValidator.McIsaCommon CertValidator.McFormat \
+              CertValidator.Rv64Decode CertValidator.Rv64ExecSym CertValidator.Rv64DagProof CertValidator.Rv64SymOracle CertValidator.Rv64LoopSeg CertValidator.Rv64Sem \
+              CertValidator.A64Decode CertValidator.A64ExecSym CertValidator.A64DagProof CertValidator.A64SymOracle CertValidator.A64LoopSeg CertValidator.A64CoreSem \
+              CertValidator.McOblDischarger CertValidator.McLoopIrSpec CertValidator.McLoopCheck CertValidator.McLoop \
+              CertValidator.McCallSpec CertValidator.McCallMcWitness CertValidator.McCallIrExec CertValidator.McCall \
+              CertValidator.McExprRewrite CertValidator.McValidator CertValidator.CheckAssumptions)
           fi
 
       - name: Layer-1 kernel Print Assumptions audit gate
@@ -168,7 +178,7 @@ jobs:
           Set Printing Width 10000.
           From Vellvm Require Theory.I2F.I2F_toplevel.
           From CertPasses Require Pipeline ModuleMerge.
-          From CertValidator Require CertFormat AigLrat AlgRules CertValidator Elf64Spec McFormat Rv64Sem A64CoreSem McLoop McCall McValidator.
+          From CertValidator Require CertFormat AigLrat AlgRules CertValidator Elf64Spec McFormat Rv64DagProof Rv64SymOracle A64DagProof A64SymOracle McLoop McCall McValidator.
           Redirect "$PA_DIR/vellvm_i2f" Print Assumptions Vellvm.Theory.I2F.I2F_toplevel.model_refine.
           Redirect "$PA_DIR/pipeline" Print Assumptions CertPasses.Pipeline.optimize_mcfg_I2F_model_refine.
           Redirect "$PA_DIR/merge_i2f" Print Assumptions CertPasses.ModuleMerge.validate_module_merge_parsed_I2F_model_refine.
@@ -179,15 +189,15 @@ jobs:
           Redirect "$PA_DIR/elf64_extract" Print Assumptions CertValidator.Elf64Spec.elf64_extract_func_sound.
           Redirect "$PA_DIR/elf64_extract_calls" Print Assumptions CertValidator.Elf64Spec.elf64_extract_func_with_calls_sound.
           Redirect "$PA_DIR/mc_format_wf" Print Assumptions CertValidator.McFormat.parse_mc_cert_wf.
-          Redirect "$PA_DIR/rv64_dag_wf" Print Assumptions CertValidator.Rv64Sem.summarize_rv64_dag_wf.
-          Redirect "$PA_DIR/a64_dag_wf" Print Assumptions CertValidator.A64CoreSem.summarize_a64_dag_wf.
+          Redirect "$PA_DIR/rv64_dag_wf" Print Assumptions CertValidator.Rv64DagProof.summarize_rv64_dag_wf.
+          Redirect "$PA_DIR/a64_dag_wf" Print Assumptions CertValidator.A64DagProof.summarize_a64_dag_wf.
           Redirect "$PA_DIR/alg_rules" Print Assumptions CertValidator.AlgRules.check_expr_refines_with_lrat_sound.
           Redirect "$PA_DIR/cert_val" Print Assumptions CertValidator.CertValidator.validate_tle_pair_with_cert_str_sound.
-          Redirect "$PA_DIR/rv64_dag_sound" Print Assumptions CertValidator.Rv64Sem.summarize_rv64_dag_sound.
-          Redirect "$PA_DIR/a64_dag_sound" Print Assumptions CertValidator.A64CoreSem.summarize_a64_dag_sound.
-          Redirect "$PA_DIR/rv64_sym_oracle" Print Assumptions CertValidator.Rv64Sem.rv_step_sym_oracle_sound.
-          Redirect "$PA_DIR/a64_sym_oracle" Print Assumptions CertValidator.A64CoreSem.a64_step_sym_oracle_sound.
-          Redirect "$PA_DIR/sail_divrem_bridge" Print Assumptions CertValidator.Rv64Sem.sail_divrem_128_width_reduce.
+          Redirect "$PA_DIR/rv64_dag_sound" Print Assumptions CertValidator.Rv64DagProof.summarize_rv64_dag_sound.
+          Redirect "$PA_DIR/a64_dag_sound" Print Assumptions CertValidator.A64DagProof.summarize_a64_dag_sound.
+          Redirect "$PA_DIR/rv64_sym_oracle" Print Assumptions CertValidator.Rv64SymOracle.rv_step_sym_oracle_sound.
+          Redirect "$PA_DIR/a64_sym_oracle" Print Assumptions CertValidator.A64SymOracle.a64_step_sym_oracle_sound.
+          Redirect "$PA_DIR/sail_divrem_bridge" Print Assumptions CertValidator.Rv64SymOracle.sail_divrem_128_width_reduce.
           Redirect "$PA_DIR/mc_loop_rv64" Print Assumptions CertValidator.McLoop.validate_mc_loop_rv64_sound.
           Redirect "$PA_DIR/mc_loop_a64" Print Assumptions CertValidator.McLoop.validate_mc_loop_a64_sound.
           Redirect "$PA_DIR/mc_call_rv64" Print Assumptions CertValidator.McCall.validate_mc_call_rv64_sound.
