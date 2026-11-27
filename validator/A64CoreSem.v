@@ -52,10 +52,10 @@ From CertValidator Require Import
   CertFormat
   AigLrat
   AlgRules
-  CertValidator
+  CfgDag
   Elf64Spec
   McFrameMem
-  Rv64Sem.
+  McIsaCommon.
 
 Unset Implicit Arguments.
 Unset Strict Implicit.
@@ -7519,4 +7519,52 @@ Proof.
   pose proof (a64_exec_mem_mono f1 (Nat.max f1 f2) insts pc sp0 rf sp fl mstk r1 (Nat.le_max_l f1 f2) H1) as Hm1.
   pose proof (a64_exec_mem_mono f2 (Nat.max f1 f2) insts pc sp0 rf sp fl mstk r2 (Nat.le_max_r f1 f2) H2) as Hm2.
   rewrite Hm1 in Hm2; inversion Hm2; reflexivity.
+Qed.
+
+Lemma a64_init_arg_expr_vars : forall sp,
+  is_let_free_expr (a64_init_arg_expr sp) = true /\
+  (forall nm w,
+     In (nm, w) (collect_free_vars [] (a64_init_arg_expr sp)) ->
+     (nm = ras_name sp /\ w = ras_width sp) \/
+     ((ras_width sp =? 64)%positive = false /\ nm = a64_hi_var_name (ras_name sp) /\ w = 64%positive)).
+Proof.
+  intros sp; unfold a64_init_arg_expr.
+  destruct (Pos.eqb (ras_width sp) 64%positive) eqn:E64.
+  - cbn [is_let_free_expr collect_free_vars]; split; [reflexivity |].
+    intros nm w [Heq | []]; inversion Heq; left; split; reflexivity.
+  - destruct (Pos.eqb (ras_width sp) 32%positive) eqn:E32.
+    + cbn [is_let_free_expr collect_free_vars]; split; [reflexivity |].
+      intros nm w [Heq | [Heq | []]]; inversion Heq;
+        [left; split; reflexivity | right; repeat split; try assumption; reflexivity].
+    + destruct (ras_ext sp); cbn [is_let_free_expr collect_free_vars]; split; try reflexivity;
+        intros nm w [Heq | [Heq | []]]; inversion Heq;
+        [left; split; reflexivity | right; repeat split; try assumption; reflexivity
+        | left; split; reflexivity | right; repeat split; try assumption; reflexivity
+        | left; split; reflexivity | right; repeat split; try assumption; reflexivity].
+Qed.
+
+Lemma a64_build_init_val_regs_vars : forall idx specs r e,
+  a64_val_read r (a64_build_init_val_regs idx specs) = MSV_Expr e ->
+  is_let_free_expr e = true /\
+  (forall nm w,
+     In (nm, w) (collect_free_vars [] e) ->
+     exists sp,
+       In sp specs /\
+       ((nm = ras_name sp /\ w = ras_width sp) \/
+        ((ras_width sp =? 64)%positive = false /\ nm = a64_hi_var_name (ras_name sp) /\ w = 64%positive))).
+Proof.
+  intros idx specs; revert idx; induction specs as [| sp rest IH];
+    intros idx r e Hrd; unfold a64_val_read in Hrd;
+    destruct (N.leb 31%N r) eqn:Er31.
+  - inversion Hrd; subst; split; [reflexivity | intros nm w []].
+  - cbn [a64_build_init_val_regs] in Hrd; unfold a64_empty_val_regs in Hrd; rewrite Er31 in Hrd.
+    destruct (a64_is_callee_saved r); discriminate Hrd.
+  - inversion Hrd; subst; split; [reflexivity | intros nm w []].
+  - cbn [a64_build_init_val_regs] in Hrd; destruct (N.eqb r idx) eqn:Eeq.
+    + inversion Hrd; subst e; destruct (a64_init_arg_expr_vars sp) as [Hlf Hfv].
+      split; [exact Hlf | intros nm w Hin; exists sp; split; [left; reflexivity | exact (Hfv nm w Hin)]].
+    + assert (Hrd' : a64_val_read r (a64_build_init_val_regs (N.succ idx) rest) = MSV_Expr e)
+        by (unfold a64_val_read; rewrite Er31; exact Hrd).
+      destruct (IH (N.succ idx) r e Hrd') as [Hlf Hfv].
+      split; [exact Hlf | intros nm w Hin; destruct (Hfv nm w Hin) as [sp0 [Hin0 Hcase]]; exists sp0; split; [right; exact Hin0 | exact Hcase]].
 Qed.

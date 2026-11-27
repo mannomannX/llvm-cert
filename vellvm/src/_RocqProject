@@ -124,12 +124,15 @@
 ../../validator/AigLrat.v
 ../../validator/CertFormat.v
 ../../validator/AlgRules.v
+../../validator/CfgDag.v
 ../../validator/CertValidator.v
 ../../validator/Elf64Spec.v
 ../../validator/McFrameMem.v
+../../validator/McIsaCommon.v
 ../../validator/Rv64Sem.v
 ../../validator/A64CoreSem.v
 ../../validator/McFormat.v
+../../validator/McOblDischarger.v
 ../../validator/McLoop.v
 ../../validator/McCall.v
 ../../validator/McValidator.v

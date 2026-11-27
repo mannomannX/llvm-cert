@@ -35,7 +35,7 @@ From CertValidator Require Import
   AlgRules
   Elf64Spec
   McFrameMem
-  Rv64Sem.
+  McIsaCommon.
 
 Unset Implicit Arguments.
 Unset Strict Implicit.

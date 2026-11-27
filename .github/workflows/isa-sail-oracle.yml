@@ -8,6 +8,8 @@ on:
     paths:
       - "validator/A64CoreSem.v"
       - "validator/Rv64Sem.v"
+      - "validator/McIsaCommon.v"
+      - "validator/CfgDag.v"
       - "validator/CertFormat.v"
       - "validator/CheckAssumptions.v"
       - "vellvm/src/ml/extracted/Extract.v"
@@ -18,6 +20,8 @@ on:
     paths:
       - "validator/A64CoreSem.v"
       - "validator/Rv64Sem.v"
+      - "validator/McIsaCommon.v"
+      - "validator/CfgDag.v"
       - "validator/CertFormat.v"
       - "validator/CheckAssumptions.v"
       - "vellvm/src/ml/extracted/Extract.v"

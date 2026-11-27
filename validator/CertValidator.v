@@ -90,6 +90,9 @@ From CertValidator Require Import
   AigLrat
   AlgRules.
 
+From CertValidator Require Export
+  CfgDag.
+
 Import ListNotations.
 Import Sum.
 Import Subevent.
@@ -4358,72 +4361,6 @@ Proof.
     + rewrite (assoc_hd bid e' rest) in H; inversion H; subst; left; reflexivity.
     + rewrite (assoc_tl bid b' e' rest Hneq) in H; right; exact (IH H).
 Qed.
-
-Inductive cfg_dag : Set :=
-| CD_Unreachable
-| CD_RetVoid
-| CD_RetScalar (w : positive) (ret_e : cert_expr)
-| CD_Eval (w : positive) (step_e : cert_expr) (next : cfg_dag)
-| CD_BlockAssume (uas : list ub_assumption) (next : cfg_dag)
-| CD_Branch (cond : cert_expr) (on_true on_false : cfg_dag).
-
-Variant dag_outcome {Pa : Params} : Type :=
-| DO_UB
-| DO_Ret (dv : @dvalue Pa).
-
-Fixpoint eval_cfg_dag {Pa : Params}
-  (penv : param_env Pa) (foracle : freeze_oracle) (d : cfg_dag)
-  {struct d} : @dag_outcome Pa :=
-  match d with
-  | CD_Unreachable => DO_UB
-  | CD_RetVoid => DO_Ret NONE
-  | CD_RetScalar _ ret_e =>
-      match eval_closed_cert_expr penv foracle ret_e with
-      | raise_ret dv => DO_Ret dv
-      | _ => DO_UB
-      end
-  | CD_Eval _ step_e next =>
-      match eval_closed_cert_expr penv foracle step_e with
-      | raise_ret _ => eval_cfg_dag penv foracle next
-      | _ => DO_UB
-      end
-  | CD_BlockAssume _ next =>
-      eval_cfg_dag penv foracle next
-  | CD_Branch cond on_true on_false =>
-      match eval_closed_cert_expr penv foracle cond with
-      | raise_ret (DVALUE_Base (@DVALUE_I _ 1%positive cbit)) =>
-          if (@Integers.unsigned 1 cbit =? 1)%Z
-          then eval_cfg_dag penv foracle on_true
-          else eval_cfg_dag penv foracle on_false
-      | _ => DO_UB
-      end
-  end.
-
-Fixpoint wf_cfg_dag (allowed : list (string * positive)) (d : cfg_dag)
-  {struct d} : bool :=
-  match d with
-  | CD_Unreachable | CD_RetVoid => true
-  | CD_RetScalar w ret_e =>
-      wt_cert_expr [] ret_e &&
-      Pos.eqb (cert_expr_bit_width ret_e) w &&
-      is_let_free_expr ret_e &&
-      vars_subset_b (collect_free_vars [] ret_e) allowed
-  | CD_Eval w step_e next =>
-      wt_cert_expr [] step_e &&
-      Pos.eqb (cert_expr_bit_width step_e) w &&
-      is_let_free_expr step_e &&
-      vars_subset_b (collect_free_vars [] step_e) allowed &&
-      wf_cfg_dag allowed next
-  | CD_BlockAssume _ next =>
-      wf_cfg_dag allowed next
-  | CD_Branch cond on_true on_false =>
-      wt_cert_expr [] cond &&
-      Pos.eqb (cert_expr_bit_width cond) 1%positive &&
-      is_let_free_expr cond &&
-      vars_subset_b (collect_free_vars [] cond) allowed &&
-      wf_cfg_dag allowed on_true &&
-      wf_cfg_dag allowed on_false
-  end.
 
 Lemma wf_smap_entries_empty :
   forall allowed defs seen uf,

@@ -18,7 +18,7 @@
        [summarize_rv64_call_tree], [summarize_a64_call_tree]) using fresh
        width-tagged call result variables ([!call_<k>_<w>], [!call_hi_<k>]).
     4. Path-flattened call & return obligation generation reusing
-       [McLoop.check_mc_loop_obls] and [McLoop.emit_mc_loop_cnf].
+       [McOblDischarger.check_mc_loop_obls] and [McOblDischarger.emit_mc_loop_cnf].
     5. End-to-end call-validator soundness ([validate_mc_call_rv64_sound],
        [validate_mc_call_a64_sound]) and caller/callee composition theorems
        ([compose_rv64_caller_callee_sound], [compose_a64_caller_callee_sound]). *)
@@ -74,7 +74,7 @@ From CertValidator Require Import
   A64CoreSem
   McFormat
   Diag
-  McLoop.
+  McOblDischarger.
 
 Unset Implicit Arguments.
 Unset Strict Implicit.
