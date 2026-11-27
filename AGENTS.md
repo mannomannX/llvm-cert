@@ -17,6 +17,7 @@ All AI coding agents operating in this repository MUST follow these rules withou
 5. **Fast Incremental Checks & Read-Only Gates:**
    - Never trigger full LLVM or full 87-file Vellvm rebuilds on single-file edits; compile single targets incrementally and run full builds only at phase/group milestones.
    - **One-Pass Full-File Rocq Diagnostics:** Because `rocq compile` halts at the first error within a `.v` file, always run [`scripts/rocq_onepass_diag.py`](./scripts/rocq_onepass_diag.py) (`opam exec -- python3 -u /work/scripts/rocq_onepass_diag.py /work/vellvm/src /work/<path/to/File.v>`) on edited or newly created `.v` files to collect **all** failing proof/command chunks (`X failing proof/cmd chunks out of Y`) in a single pass and fix them together before compiling `.vo` targets (`make -k -j2`).
+   - **Two-Tier Loop vs. Milestone Gate (`.agent/rules/fast_verification_loop.md`):** During iterative edits, use incremental `-j4` target builds plus `run_forged_mc_suite.py --adv-only` (~22s); reserve full `make all`, `rocq check -o`, 26 `Print Assumptions`, and the full `run_forged_mc_suite.py` (`-j4`) for grouped wave/milestone gates.
    - Never create auto-mutating formatting/tagging scripts; all CI gates are strictly read-only.
    - Always run `python scripts/verify_repo_integrity.py` before finishing any task.
 6. **Workflow Runbook ([`plan/dev-and-verification-workflow.md`](./plan/dev-and-verification-workflow.md)):**
