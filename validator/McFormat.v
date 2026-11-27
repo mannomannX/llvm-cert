@@ -1058,7 +1058,7 @@ Definition parse_mc_loop_and_lrat (arch : elf_arch) (tail : list sexp)
             match parse_nonempty_tagged_section "lrat" parse_lrat_step_sexp sec_sx with
             | inr (s :: sr) => inr (None, Some (s :: sr))
             | inr [] => inl (diag "mc-cert-parse" "empty 'lrat' section in mc-cert-v1")
-            | inl err => inl err
+            | inl err => inl (diag "mc-cert-parse" err)
             end
           else if String.eqb tag "loop" then
             match parse_mc_loop_sexp arch sec_sx with
@@ -1074,7 +1074,7 @@ Definition parse_mc_loop_and_lrat (arch : elf_arch) (tail : list sexp)
       | inr ls, inr (s :: sr) => inr (Some ls, Some (s :: sr))
       | inr _, inr [] => inl (diag "mc-cert-parse" "empty 'lrat' section in mc-cert-v1")
       | inl err, _ => inl err
-      | _, inl err => inl err
+      | _, inl err => inl (diag "mc-cert-parse" err)
       end
   | _ => inl (diag "mc-cert-parse" "unexpected trailing section in mc-cert-v1")
   end.
@@ -1108,7 +1108,7 @@ Definition parse_mc_tail (arch : elf_arch) (fn_name : string) (tail : list sexp)
   | SList (SAtom tag :: cre) :: rest =>
       if String.eqb tag "calls" then
         match parse_nonempty_tagged_section "calls" parse_mc_callee_sexp (SList (SAtom "calls" :: cre)) with
-        | inl err => inl err
+        | inl err => inl (diag "mc-cert-parse" err)
         | inr cs =>
             match check_mc_calls_diag fn_name cs with
             | inl err => inl err
@@ -1178,7 +1178,7 @@ Definition parse_mc_cert_sexp (root : sexp) : string + mc_certificate :=
             end
         | inl err, _, _, _, _, _ => inl err
         | _, inl err, _, _, _, _ => inl err
-        | _, _, inl err, _, _, _ => inl err
+        | _, _, inl err, _, _, _ => inl (diag "mc-cert-parse" err)
         | _, _, _, inl err, _, _ => inl err
         | _, _, _, _, inl err, _ => inl err
         | _, _, _, _, _, inl err => inl err

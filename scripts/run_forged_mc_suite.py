@@ -9,6 +9,7 @@ for cert-validator --check-mc and --emit-mc-cnf (Phase 8.3a M1 RV64IM+RVC & M2 A
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import os
 import re
 import shutil
@@ -18,6 +19,96 @@ import sys
 import tempfile
 import time
 from typing import Dict, List, Optional, Tuple
+
+
+CRASH_STDERR_MARKERS = (
+    "Stack_overflow",
+    "Fatal error: exception",
+    "Out_of_memory",
+    "Assert_failure",
+)
+
+ADV_EXPECTED_DIAGS: Dict[str, Tuple[str, ...]] = {
+    "bad_elf_magic": ("[elf-hdr]", "invalid ELF magic"),
+    "bad_elf_class_32": ("[elf-hdr]", "EI_CLASS=1"),
+    "bad_elf_endian_be": ("[elf-hdr]", "EI_DATA=2"),
+    "bad_elf_machine_x86": ("[elf-hdr]", "e_machine=62"),
+    "et_rel_with_rela_relax": ("[elf-reloc]", "R_RISCV_RELAX(51)", "offset=0x0"),
+    "et_rel_with_rela_branch": ("[elf-reloc]", "offset=0x2", "R_RISCV_16(16)"),
+    "truncated_elf_header": ("[elf-hdr]", "len=48"),
+    "oob_symbol_slice": ("[elf-slice]", "'pack_sensor_u64'", "shdr#1"),
+    "zero_size_symbol": ("[elf-slice]", "zero-sized", "'pack_sensor_u64'"),
+    "missing_symbol": ("[elf-sym]", "missing", "'pack_sensor_u64'"),
+    "forged_elf_kind_exec_on_rel": ("[elf-hdr]", "expected ET_EXEC", "ET_REL"),
+    "forged_rvc0_on_rvc1_bytes": ("[mc-decode]", "byte length 10"),
+    "forged_rvc_flag_mismatch": ("[mc-rvc]", "'pack_sensor_u64'"),
+    "wrong_abi_signext_vs_zeroext": ("[mc-ir-abi]", "arg #0 ('%0', i32)", "rv64"),
+    "wrong_abi_missing_attr": ("[mc-ir-abi]", "arg #0 ('%0', i32)", "rv64"),
+    "wrong_ret_width": ("[mc-ir-proto]", "'pid_clamp_i32'", "ret-width 64"),
+    "single_bit_inst_flip": ("[mc-frame]", "pc=0x0 sp-off=0"),
+    "corrupted_lrat_empty_proof": ("[mc-cert-parse]", "non-empty tagged list"),
+    "corrupted_lrat_bad_hint": ("[lrat-check]", "1 step(s)"),
+    "unapproved_jalr_call_inst": ("[mc-decode]", "0x80e7", "offset 0x0"),
+    "unsupported_ir_ext_call": ("[mc-cert-parse]", "non-empty tagged list"),
+    "a64_wrong_arch_rv64_on_a64_elf": ("[mc-ir-abi]", "arg #0 ('%0', i32)", "rv64"),
+    "a64_wrong_arch_a64_on_rv64_elf": ("[elf-hdr]", "expected aarch64", "binary is rv64"),
+    "a64_forged_rvc1": ("[mc-rvc]", "'pack_sensor_u64'"),
+    "a64_forged_elf_kind_exec_on_rel": ("[elf-hdr]", "expected ET_EXEC", "ET_REL"),
+    "a64_callee_saved_x19_clobber": ("[mc-frame]", "callee-saved", "pc=0x8 sp-off=0"),
+    "a64_single_bit_inst_flip": ("[mc-exec]", "pc=0x4 sp-off=0"),
+    "a64_upper_bits_garbage_bug": ("[mc-refine]", "no LRAT proof provided"),
+    "a64_missing_ret": ("[mc-exec]", "escaped function slice", "pc=0x8"),
+    "a64_unaligned_2byte_slice": ("[mc-decode]", "byte length 14"),
+    "a64_sp_access_add": ("[mc-exec]", "return register x0", "pc=0x4"),
+    "a64_unmodeled_wfi_opcode": ("[mc-decode]", "0xd503207f", "offset 0x0"),
+    "a64_corrupted_lrat_bad_hint": ("[lrat-check]", "1 step(s)"),
+    "a64_swapped_args_pack": ("[mc-refine]", "no LRAT proof provided"),
+    "a64_wrong_ret_width": ("[mc-ir-proto]", "'pack_sensor_u64'", "ret-width 32"),
+    "rv64_stk_unbalanced_sp": ("[mc-frame]", "unrestored stack pointer", "pc=0x8 sp-off=-8"),
+    "rv64_stk_clobber_s0": ("[mc-frame]", "callee-saved", "pc=0xa sp-off=0"),
+    "rv64_stk_clobber_s1": ("[mc-frame]", "callee-saved", "pc=0x4 sp-off=0"),
+    "rv64_stk_oob_load": ("[mc-frame]", "sp+8", "out of frame bounds", "pc=0x0"),
+    "rv64_stk_oob_store": ("[mc-frame]", "sp+8", "out of frame bounds", "pc=0x0"),
+    "rv64_stk_unaligned_sd": ("[mc-frame]", "sp+-12", "out of frame bounds", "pc=0x2"),
+    "rv64_stk_sp_above_sp0": ("[mc-frame]", "out-of-frame sp update", "pc=0x0"),
+    "rv64_stk_wrong_slot_load": ("[mc-refine]", "no LRAT proof provided"),
+    "rv64_stk_half_overwrite": ("[mc-frame]", "uninitialized stack slot sp+-8", "pc=0x6"),
+    "a64_stk_unbalanced_sp": ("[mc-frame]", "unrestored stack pointer", "pc=0x10 sp-off=-16"),
+    "a64_stk_clobber_x19": ("[mc-frame]", "callee-saved", "pc=0x10 sp-off=0"),
+    "a64_stk_clobber_x29": ("[mc-frame]", "callee-saved", "pc=0x4 sp-off=0"),
+    "a64_stk_oob_load": ("[mc-frame]", "sp+8", "out of frame bounds", "pc=0x0"),
+    "a64_stk_oob_store": ("[mc-frame]", "sp+8", "out of frame bounds", "pc=0x0"),
+    "a64_stk_sp_above_sp0": ("[mc-frame]", "out-of-frame sp update", "pc=0x0"),
+    "a64_stk_ldp_same_reg": ("[mc-decode]", "0xa94003e0", "offset 0x8"),
+    "a64_stk_wb_alias": ("[mc-decode]", "0xf8408e73", "offset 0x8"),
+    "a64_stk_wrong_slot_load": ("[mc-refine]", "no LRAT proof provided"),
+    "a64_stk_partial_overwrite": ("[mc-frame]", "sp+-8", "pc=0xc sp-off=-16"),
+    "m3b_rv64_wrong_mc_pc": ("[mc-loop-mc]", "pc=0x1e cut=0x16 sp-off=-16"),
+    "m3b_rv64_wrong_ir_header": ("[mc-loop-ir]", "block '7'"),
+    "m3b_rv64_missing_live_reg_bind": ("[mc-loop-mc]", "pc=0x16 cut=0x14 sp-off=-16"),
+    "m3b_rv64_wrong_reg_bind_expr": ("[lrat-check]", "failed to discharge"),
+    "m3b_rv64_wrong_sp_off": ("[mc-loop-mc]", "pc=0x14 cut=0x14 sp-off=-32"),
+    "m3b_rv64_missing_saved_reg": ("[mc-loop-mc]", "pc=0x2c cut=0x14 sp-off=-16"),
+    "m3b_a64_invalid_inv": ("[lrat-check]", "failed to discharge"),
+    "m3b_rv64_tampered_loop_lrat": ("[lrat-check]", "1 step(s)"),
+    "m3b_a64_loop_body_bitflip": ("[lrat-check]", "failed to discharge"),
+    "m3b_a64_loop_forged_rvc1": ("[mc-rvc]", "'spilled_loop_u32'"),
+    "m3c_rv64_missing_calls_section": ("[elf-reloc]", "offset=0x6", "R_RISCV_CALL_PLT(19)"),
+    "m3c_rv64_undef_notype_callee": ("[elf-reloc]", "sym='helper_id'", "st_type=0"),
+    "m3c_rv64_wrong_callee_name": ("[mc-call-contract]", "'@other_helper'"),
+    "m3c_a64_wrong_callee_name": ("[mc-call-contract]", "'@other_helper'"),
+    "m3c_rv64_wrong_callee_ret_width": ("[mc-call-contract]", "'@helper_id'", "width i64"),
+    "m3c_rv64_wrong_callee_arg_ext": ("[mc-call-contract]", "'@helper_id'", "argument #0"),
+    "m3c_rv64_wrong_callee_arg_count": ("[mc-call-contract]", "'@helper_id'", "argument count mismatch"),
+    "m3c_rv64_direct_self_recursion": ("[mc-cert-call]", "'@caller_id'", "self-recursion"),
+    "m3c_rv64_duplicate_callee": ("[mc-cert-call]", "duplicate callee name 'helper_id'"),
+    "m3c_rv64_calls_plus_loop_combined": ("[mc-mode]", "combining (calls ...) and (loop ...)"),
+    "m3c_rv64_swapped_call_arg": ("[mc-call-sat]", "failed to discharge"),
+    "m3c_rv64_clobbered_s0_across_call": ("[mc-call-mc]", "pc 0x6 (sp-off=-16)"),
+    "m3c_rv64_wrong_ret_after_call": ("[mc-call-mc]", "pc 0xe (sp-off=-16)"),
+    "m3c_rv64_call_with_rela_relax": ("[elf-reloc]", "R_RISCV_RELAX(51)", "offset=0x6"),
+    "m3c_a64_unbound_extra_reloc": ("[mc-call-decode]", "'helper_id'", "offset 0x4"),
+}
 
 
 # Ground-truth LLVM IR emitted by clang-22 (--target=riscv64-unknown-none-elf
@@ -527,32 +618,33 @@ def solve_lrat_sexp(cnf_text: str, tmpdir: str) -> str:
     """Prove CNF UNSAT and return canonical LRAT S-expression body (prefers CaDiCaL, falls back to Python CDCL)."""
     cadical = shutil.which("cadical")
     if cadical:
-        cnf_p = os.path.join(tmpdir, "solve.cnf")
-        lrat_p = os.path.join(tmpdir, "solve.lrat")
-        with open(cnf_p, "w", encoding="utf-8") as f:
-            f.write(cnf_text)
-        res = subprocess.run(
-            [cadical, "-q", "--lrat", "--no-binary", cnf_p, lrat_p],
-            text=True,
-            capture_output=True,
-        )
-        if res.returncode != 20:
-            raise RuntimeError(f"cadical expected UNSAT rc=20, got {res.returncode}: {res.stderr}")
-        adds: Dict[int, Tuple[List[str], List[int]]] = {}
-        empty_cid: Optional[int] = None
-        with open(lrat_p, "r", encoding="utf-8") as f:
-            for raw in f:
-                toks = raw.strip().split()
-                if not toks or (len(toks) >= 2 and toks[1] == "d"):
-                    continue
-                cid = int(toks[0])
-                z1 = toks.index("0", 1)
-                lits = toks[1:z1]
-                z2 = toks.index("0", z1 + 1)
-                hints = [int(x) for x in toks[z1 + 1 : z2]]
-                adds[cid] = (lits, hints)
-                if not lits and empty_cid is None:
-                    empty_cid = cid
+        with tempfile.TemporaryDirectory(prefix="lrat_", dir=tmpdir) as work:
+            cnf_p = os.path.join(work, "solve.cnf")
+            lrat_p = os.path.join(work, "solve.lrat")
+            with open(cnf_p, "w", encoding="utf-8") as f:
+                f.write(cnf_text)
+            res = subprocess.run(
+                [cadical, "-q", "--lrat", "--no-binary", cnf_p, lrat_p],
+                text=True,
+                capture_output=True,
+            )
+            if res.returncode != 20:
+                raise RuntimeError(f"cadical expected UNSAT rc=20, got {res.returncode}: {res.stderr}")
+            adds: Dict[int, Tuple[List[str], List[int]]] = {}
+            empty_cid: Optional[int] = None
+            with open(lrat_p, "r", encoding="utf-8") as f:
+                for raw in f:
+                    toks = raw.strip().split()
+                    if not toks or (len(toks) >= 2 and toks[1] == "d"):
+                        continue
+                    cid = int(toks[0])
+                    z1 = toks.index("0", 1)
+                    lits = toks[1:z1]
+                    z2 = toks.index("0", z1 + 1)
+                    hints = [int(x) for x in toks[z1 + 1 : z2]]
+                    adds[cid] = (lits, hints)
+                    if not lits and empty_cid is None:
+                        empty_cid = cid
         if empty_cid is None:
             raise RuntimeError("cadical LRAT missing empty clause")
         needed = {empty_cid}
@@ -716,15 +808,25 @@ def emit_and_solve_lrat(
     loop_sexp: Optional[str] = None,
     calls_sexp: Optional[str] = None,
 ) -> Optional[str]:
-    bare_cert = os.path.join(tmpdir, f"bare_{arch}_{fn}.mc.cert")
-    with open(bare_cert, "w", encoding="utf-8") as f:
-        f.write(format_mc_cert("rel", fn, rvc, rw, args, arch=arch, loop_sexp=loop_sexp, calls_sexp=calls_sexp))
-    em = run_cmd([bin_path, "--emit-mc-cnf", "--ir", ir_path, "--elf", elf_path, "--cert", bare_cert])
-    if em.returncode != 0:
-        raise RuntimeError(f"--emit-mc-cnf failed ({arch}, {fn}): rc={em.returncode} err={em.stderr}")
-    if em.stdout.strip().startswith("c ALGEBRAIC_OK"):
-        return None
-    return solve_lrat_sexp(em.stdout, tmpdir)
+    with tempfile.TemporaryDirectory(prefix="emit_", dir=tmpdir) as work:
+        bare_cert = os.path.join(work, f"bare_{arch}_{fn}.mc.cert")
+        with open(bare_cert, "w", encoding="utf-8") as f:
+            f.write(format_mc_cert("rel", fn, rvc, rw, args, arch=arch, loop_sexp=loop_sexp, calls_sexp=calls_sexp))
+        em = run_cmd([bin_path, "--emit-mc-cnf", "--ir", ir_path, "--elf", elf_path, "--cert", bare_cert])
+        if em.returncode != 0:
+            raise RuntimeError(f"--emit-mc-cnf failed ({arch}, {fn}): rc={em.returncode} err={em.stderr}")
+        if em.stdout.strip().startswith("c ALGEBRAIC_OK"):
+            return None
+        return solve_lrat_sexp(em.stdout, work)
+
+
+def _check_mc_pair(
+    bins: List[str], ir_path: str, elf_path: str, cert_path: str, label: str
+) -> None:
+    for b in bins:
+        res = run_cmd([b, "--check-mc", "--ir", ir_path, "--elf", elf_path, "--cert", cert_path])
+        if res.returncode != 0:
+            raise RuntimeError(f"FAIL {label} ({b}): {res.stderr.strip()}")
 
 
 def run_live_corpus(
@@ -772,10 +874,15 @@ def run_live_corpus(
                     raise RuntimeError(f"live rv64 --check-mc failed ({b}, {fn}, {kind}): rc={res.returncode} {res.stderr}")
             count += 1
     rel_cert_pid = os.path.join(tmpdir, "live_rv64_pid_clamp_i32.rel.mc.cert")
-    for b in bins:
-        rej = run_cmd([b, "--check-mc", "--ir", ll_rv, "--elf", relax_o, "--cert", rel_cert_pid])
+    rejs = [run_cmd([b, "--check-mc", "--ir", ll_rv, "--elf", relax_o, "--cert", rel_cert_pid]) for b in bins]
+    for b, rej in zip(bins, rejs):
         if rej.returncode != 4:
             raise RuntimeError(f"expected relax rejection rc=4 on live_rv64_relax.o ({b}), got {rej.returncode}")
+    if rejs[0].stderr != rejs[1].stderr:
+        raise RuntimeError(f"live_rv64_relax.o stderr parity mismatch:\nN: {rejs[0].stderr}\nBC: {rejs[1].stderr}")
+    for sub in ("[elf-reloc]", "R_RISCV_RELAX"):
+        if sub not in rejs[0].stderr:
+            raise RuntimeError(f"live_rv64_relax.o missing expected diagnostic {sub!r}: {rejs[0].stderr.strip()}")
 
     # --- 2. Live AArch64 corpus ---
     ll_a64 = os.path.join(tmpdir, "live_a64.ll")
@@ -813,7 +920,16 @@ def main(argv: List[str]) -> int:
     parser.add_argument("cert_validator", nargs="?", default=default_native, help="Path to native cert-validator.")
     parser.add_argument("cert_validator_bc", nargs="?", default=default_bc, help="Path to bytecode cert-validator.bc.")
     parser.add_argument("--live-corpus", metavar="C_FILE", help="Also compile and verify a live C corpus with clang-22/ld.lld (RV64 + AArch64).")
+    parser.add_argument(
+        "-j", "--jobs", type=int, default=min(4, os.cpu_count() or 1),
+        help="Parallel worker threads for independent MC checks (default: min(4, cpu_count)).",
+    )
+    parser.add_argument(
+        "--adv-only", action="store_true",
+        help="Fast loop: run only the 79 adversarial checks + required base LRATs.",
+    )
     ns = parser.parse_args(argv)
+    jobs = max(1, ns.jobs)
 
     bins = [ns.cert_validator, ns.cert_validator_bc]
     for b in bins:
@@ -822,7 +938,8 @@ def main(argv: List[str]) -> int:
             return 2
 
     t_start = time.time()
-    with tempfile.TemporaryDirectory(prefix="forged_mc_") as tmpdir:
+    with tempfile.TemporaryDirectory(prefix="forged_mc_") as tmpdir, \
+         concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
         ir_rv_path = os.path.join(tmpdir, "corpus_rv64.ll")
         with open(ir_rv_path, "w", encoding="utf-8") as f:
             f.write(CORPUS_IR)
@@ -838,35 +955,42 @@ def main(argv: List[str]) -> int:
             ("rv64", 243, 0x1, 1, ir_rv_path, CORPUS_FUNCS),
             ("aarch64", 183, 0x0, 0, ir_a64_path, CORPUS_FUNCS_A64),
         ]
-        for arch, e_mach, e_flg, rvc, ir_path, fn_list in arch_suites:
-            for fn, rw, args, hex_bytes in fn_list:
-                code = bytes.fromhex(hex_bytes)
-                rel_elf = build_elf64(fn, code, e_type=1, e_machine=e_mach, e_flags=e_flg)
+
+        def _run_corpus_entry(arch: str, e_mach: int, e_flg: int, rvc: int, ir_path: str, fn: str, rw: int, args: List[Tuple[str, int, str]], hex_bytes: str, verify: bool):
+            code = bytes.fromhex(hex_bytes)
+            rel_elf = build_elf64(fn, code, e_type=1, e_machine=e_mach, e_flags=e_flg)
+            rel_path = os.path.join(tmpdir, f"{arch}_{fn}.o")
+            with open(rel_path, "wb") as f:
+                f.write(rel_elf)
+            t0 = time.time()
+            lrat_s = emit_and_solve_lrat(bins[0], arch, rvc, ir_path, rel_path, fn, rw, args, tmpdir)
+            solve_dt = time.time() - t0
+            checked = 0
+            if verify:
                 exec_elf = build_elf64(fn, code, e_type=2, e_machine=e_mach, e_flags=e_flg)
-                rel_path = os.path.join(tmpdir, f"{arch}_{fn}.o")
                 exec_path = os.path.join(tmpdir, f"{arch}_{fn}.elf")
-                with open(rel_path, "wb") as f:
-                    f.write(rel_elf)
                 with open(exec_path, "wb") as f:
                     f.write(exec_elf)
-
-                t0 = time.time()
-                lrat_s = emit_and_solve_lrat(bins[0], arch, rvc, ir_path, rel_path, fn, rw, args, tmpdir)
-                lrat_cache[(arch, fn)] = lrat_s
-                solve_dt = time.time() - t0
-
                 for kind, epath in [("rel", rel_path), ("exec", exec_path)]:
                     cert_path = os.path.join(tmpdir, f"{arch}_{fn}.{kind}.mc.cert")
                     with open(cert_path, "w", encoding="utf-8") as f:
                         f.write(format_mc_cert(kind, fn, rvc, rw, args, lrat_s, arch=arch))
-                    rcs = []
-                    for b in bins:
-                        r = run_cmd([b, "--check-mc", "--ir", ir_path, "--elf", epath, "--cert", cert_path])
-                        rcs.append((b, r.returncode, r.stderr.strip()))
-                    if any(rc != 0 for _, rc, _ in rcs):
-                        print(f"FAIL positive {arch}/{fn} ({kind}): {rcs}", file=sys.stderr)
-                        return 1
-                    pos_passed += 1
+                    _check_mc_pair(bins, ir_path, epath, cert_path, f"positive {arch}/{fn} ({kind})")
+                    checked += 1
+            return (arch, fn, lrat_s, solve_dt, checked)
+
+        needed_for_adv = {("rv64", CORPUS_FUNCS[4][0]), ("rv64", CORPUS_FUNCS[0][0]), ("aarch64", CORPUS_FUNCS_A64[4][0])}
+        corpus_futs = [
+            pool.submit(_run_corpus_entry, arch, e_mach, e_flg, rvc, ir_path, fn, rw, args, hex_bytes, not ns.adv_only)
+            for arch, e_mach, e_flg, rvc, ir_path, fn_list in arch_suites
+            for fn, rw, args, hex_bytes in fn_list
+            if (not ns.adv_only) or ((arch, fn) in needed_for_adv)
+        ]
+        for fut in corpus_futs:
+            arch, fn, lrat_s, solve_dt, checked = fut.result()
+            lrat_cache[(arch, fn)] = lrat_s
+            pos_passed += checked
+            if checked:
                 print(f"PASS {arch}/{fn} (rel+exec, native+bc, prove {solve_dt:.2f}s)")
 
         # Adversarial forged-ELF / forged-MC rejection suite (all parity-checked native vs bytecode).
@@ -1111,14 +1235,18 @@ def main(argv: List[str]) -> int:
         m3b_a64_pre_rel = os.path.join(tmpdir, "m3b_pre_a64.rel.elf")
         with open(m3b_a64_pre_rel, "wb") as f:
             f.write(build_elf64("spilled_loop_u32", m3b_a64_loop_bytes, e_type=1, e_machine=183, e_flags=0))
-        m3b_rv_loop_lrat = emit_and_solve_lrat(
+        m3b_rv_fut = pool.submit(
+            emit_and_solve_lrat,
             bins[0], "rv64", 1, m3b_rv_loop_ir, m3b_rv_pre_rel,
             "spilled_loop_u32", 32, m3b_rv_loop_args, tmpdir, loop_sexp=m3b_rv_loop_spec,
         )
-        m3b_a64_loop_lrat = emit_and_solve_lrat(
+        m3b_a64_fut = pool.submit(
+            emit_and_solve_lrat,
             bins[0], "aarch64", 0, m3b_a64_loop_ir, m3b_a64_pre_rel,
             "spilled_loop_u32", 32, m3b_a64_loop_args, tmpdir, loop_sexp=m3b_a64_loop_spec,
         )
+        m3b_rv_loop_lrat = m3b_rv_fut.result()
+        m3b_a64_loop_lrat = m3b_a64_fut.result()
         m3b_a64_flipped_body = bytearray(m3b_a64_loop_bytes)
         m3b_a64_flipped_body[24] ^= 0x01
         m3b_rv_elf_raw = build_elf64("spilled_loop_u32", m3b_rv_loop_bytes, e_type=1, e_machine=243, e_flags=1)
@@ -1223,23 +1351,27 @@ def main(argv: List[str]) -> int:
 
         m3c_rv_pre_rel_raw = build_m3c_rv_rel(m3c_rv_call_bytes, [(6, (2 << 32) | 19, 0)])
         m3c_a64_pre_rel_raw = build_m3c_a64_rel(m3c_a64_call_bytes, [(8, (2 << 32) | 283, 0)])
-        for p_arch, p_rvc, p_ir, p_raw, p_args, p_calls in [
-            ("rv64", 1, m3c_rv_ir, m3c_rv_pre_rel_raw, m3c_rv_args, m3c_rv_calls),
-            ("aarch64", 0, m3c_a64_ir, m3c_a64_pre_rel_raw, m3c_a64_args, m3c_a64_calls),
-        ]:
-            p_ep = os.path.join(tmpdir, f"m3c_pre_{p_arch}.rel.elf")
-            with open(p_ep, "wb") as f:
-                f.write(p_raw)
-            p_lrat = emit_and_solve_lrat(bins[0], p_arch, p_rvc, p_ir, p_ep, "caller_id", 32, p_args, tmpdir, calls_sexp=p_calls)
-            p_cp = os.path.join(tmpdir, f"m3c_pre_{p_arch}.rel.mc.cert")
-            with open(p_cp, "w", encoding="utf-8") as f:
-                f.write(format_mc_cert("rel", "caller_id", p_rvc, 32, p_args, p_lrat, arch=p_arch, calls_sexp=p_calls))
-            for b in bins:
-                res = run_cmd([b, "--check-mc", "--ir", p_ir, "--elf", p_ep, "--cert", p_cp])
-                if res.returncode != 0:
-                    print(f"FAIL M3c prebuilt {p_arch} rel ({b}): {res.stderr}", file=sys.stderr)
-                    return 1
-            pos_passed += 1
+        if not ns.adv_only:
+            def _run_m3c_pre(p_arch: str, p_rvc: int, p_ir: str, p_raw: bytes, p_args: List[Tuple[str, int, str]], p_calls: str) -> None:
+                p_ep = os.path.join(tmpdir, f"m3c_pre_{p_arch}.rel.elf")
+                with open(p_ep, "wb") as f:
+                    f.write(p_raw)
+                p_lrat = emit_and_solve_lrat(bins[0], p_arch, p_rvc, p_ir, p_ep, "caller_id", 32, p_args, tmpdir, calls_sexp=p_calls)
+                p_cp = os.path.join(tmpdir, f"m3c_pre_{p_arch}.rel.mc.cert")
+                with open(p_cp, "w", encoding="utf-8") as f:
+                    f.write(format_mc_cert("rel", "caller_id", p_rvc, 32, p_args, p_lrat, arch=p_arch, calls_sexp=p_calls))
+                _check_mc_pair(bins, p_ir, p_ep, p_cp, f"M3c prebuilt {p_arch} rel")
+
+            m3c_pre_futs = [
+                pool.submit(_run_m3c_pre, p_arch, p_rvc, p_ir, p_raw, p_args, p_calls)
+                for p_arch, p_rvc, p_ir, p_raw, p_args, p_calls in [
+                    ("rv64", 1, m3c_rv_ir, m3c_rv_pre_rel_raw, m3c_rv_args, m3c_rv_calls),
+                    ("aarch64", 0, m3c_a64_ir, m3c_a64_pre_rel_raw, m3c_a64_args, m3c_a64_calls),
+                ]
+            ]
+            for fut in m3c_pre_futs:
+                fut.result()
+                pos_passed += 1
 
         adv_cases.extend([
             ("m3c_rv64_missing_calls_section", m3c_rv_pre_rel_raw,
@@ -1296,18 +1428,45 @@ def main(argv: List[str]) -> int:
              format_mc_cert("rel", "caller_id", 0, 32, m3c_a64_args, arch="aarch64", calls_sexp=m3c_a64_calls), m3c_a64_ir),
         ])
 
-        for name, elf_bytes, cert_str, case_ir in adv_cases:
+        adv_names = {name for name, *_ in adv_cases}
+        if set(ADV_EXPECTED_DIAGS.keys()) != adv_names:
+            missing_k = sorted(adv_names - set(ADV_EXPECTED_DIAGS.keys()))
+            extra_k = sorted(set(ADV_EXPECTED_DIAGS.keys()) - adv_names)
+            print(f"FAIL ADV_EXPECTED_DIAGS key mismatch missing={missing_k} extra={extra_k}", file=sys.stderr)
+            return 1
+
+        def _check_adv_case(item: Tuple[str, bytes, str, str]) -> Optional[str]:
+            name, elf_bytes, cert_str, case_ir = item
             ep = os.path.join(tmpdir, f"adv_{name}.elf")
             cp = os.path.join(tmpdir, f"adv_{name}.mc.cert")
             with open(ep, "wb") as f:
                 f.write(elf_bytes)
             with open(cp, "w", encoding="utf-8") as f:
                 f.write(cert_str)
-            rcs = [run_cmd([b, "--check-mc", "--ir", case_ir, "--elf", ep, "--cert", cp]).returncode for b in bins]
-            if rcs[0] == 0 or rcs[0] != rcs[1]:
-                print(f"FAIL adversarial {name}: rcs={rcs}", file=sys.stderr)
+            outcomes = [run_cmd([b, "--check-mc", "--ir", case_ir, "--elf", ep, "--cert", cp]) for b in bins]
+            for b, out in zip(bins, outcomes):
+                for marker in CRASH_STDERR_MARKERS:
+                    if marker in out.stdout or marker in out.stderr:
+                        return f"FAIL adversarial {name} ({b}): crash marker {marker!r} in output"
+            if outcomes[0].returncode <= 0 or outcomes[0].returncode != outcomes[1].returncode:
+                return f"FAIL adversarial {name}: rcs={[o.returncode for o in outcomes]}"
+            if outcomes[0].stderr != outcomes[1].stderr:
+                return f"FAIL adversarial {name}: stderr native != bytecode:\nN: {outcomes[0].stderr}\nBC: {outcomes[1].stderr}"
+            for sub in ADV_EXPECTED_DIAGS[name]:
+                if sub not in outcomes[0].stderr:
+                    return f"FAIL adversarial {name}: expected diagnostic substring {sub!r} missing from stderr: {outcomes[0].stderr.strip()}"
+            return None
+
+        for adv_err in pool.map(_check_adv_case, adv_cases):
+            if adv_err is not None:
+                print(adv_err, file=sys.stderr)
                 return 1
-        print(f"PASS {len(adv_cases)} adversarial forged-ELF/forged-MC rejection cases (native == bytecode parity)")
+        print(f"PASS {len(adv_cases)} adversarial forged-ELF/forged-MC rejection cases (native == bytecode rc+stderr parity + diagnostics)")
+
+        if ns.adv_only:
+            dt = time.time() - t_start
+            print(f"MC FORGED SUITE ADV-ONLY OK: {len(adv_cases)} adversarial ({dt:.2f}s, jobs={jobs})")
+            return 0
 
         # M3a positive stack-frame & spill cases (prebuilt rel/exec + live clang -O0).
         m3a_rv_mix_ir = os.path.join(tmpdir, "m3a_rv_mix.ll")
@@ -1362,15 +1521,14 @@ def main(argv: List[str]) -> int:
             )
         m3a_rv_hex = "397106fc22f880002324a4fe2322b4fe2320c4fe232ed4fc032584fe232ca4fc032544fe232aa4fc032504fe2328a4fc0325c4fd2326a4fc032584fd836544fd3706ff001306f60ff18d2d8db7555555938555552d8d2324a4fc032584fd8325c4fc2d8d058901cd09a0032584fc832504fd9b9535002d8d2326a4fe11a8032584fc8365c4fc95812d8d2326a4fe09a00325c4fee270427421618280"
         m3a_a64_hex = "ffc300d1e02b00b9e12700b9e22300b9e31f00b9e82b40b9e81b00b9e82740b9e81700b9e82340b9e81300b9e81f40b9e80f00b9e81b40b908f10052e91740b9299d00120801094ae80b00b9e81b40b9e90f40b90801094ae800003601000014e80b40b9e91340b9080d094ae82f00b906000014e80b40b9e90f40b90815494ae82f00b901000014e02f40b9ffc30091c0035fd6"
-        for m_arch, m_rvc, m_mach, m_fl, m_ir, m_hex, m_ext in [
-            ("rv64", 1, 243, 1, m3a_rv_mix_ir, m3a_rv_hex, "signext"),
-            ("aarch64", 0, 183, 0, m3a_a64_mix_ir, m3a_a64_hex, "none"),
-        ]:
+
+        def _run_m3a_pre(m_arch: str, m_rvc: int, m_mach: int, m_fl: int, m_ir: str, m_hex: str, m_ext: str) -> int:
             m_args = [(f"%{i}", 32, m_ext) for i in range(4)]
             m_rel = os.path.join(tmpdir, f"m3a_pre_{m_arch}.rel.elf")
             with open(m_rel, "wb") as f:
                 f.write(build_elf64("stack_frame_mix_i32", bytes.fromhex(m_hex), e_type=1, e_machine=m_mach, e_flags=m_fl))
             m_lrat = emit_and_solve_lrat(bins[0], m_arch, m_rvc, m_ir, m_rel, "stack_frame_mix_i32", 32, m_args, tmpdir)
+            cnt = 0
             for m_kind, m_et in [("rel", 1), ("exec", 2)]:
                 m_ep = os.path.join(tmpdir, f"m3a_pre_{m_arch}.{m_kind}.elf")
                 if m_et != 1:
@@ -1381,12 +1539,19 @@ def main(argv: List[str]) -> int:
                 m_cp = os.path.join(tmpdir, f"m3a_pre_{m_arch}.{m_kind}.mc.cert")
                 with open(m_cp, "w", encoding="utf-8") as f:
                     f.write(format_mc_cert(m_kind, "stack_frame_mix_i32", m_rvc, 32, m_args, m_lrat, arch=m_arch))
-                for b in bins:
-                    res = run_cmd([b, "--check-mc", "--ir", m_ir, "--elf", m_ep, "--cert", m_cp])
-                    if res.returncode != 0:
-                        print(f"FAIL M3a prebuilt {m_arch} {m_kind} ({b}): {res.stderr}", file=sys.stderr)
-                        return 1
-                pos_passed += 1
+                _check_mc_pair(bins, m_ir, m_ep, m_cp, f"M3a prebuilt {m_arch} {m_kind}")
+                cnt += 1
+            return cnt
+
+        m3a_pre_futs = [
+            pool.submit(_run_m3a_pre, m_arch, m_rvc, m_mach, m_fl, m_ir, m_hex, m_ext)
+            for m_arch, m_rvc, m_mach, m_fl, m_ir, m_hex, m_ext in [
+                ("rv64", 1, 243, 1, m3a_rv_mix_ir, m3a_rv_hex, "signext"),
+                ("aarch64", 0, 183, 0, m3a_a64_mix_ir, m3a_a64_hex, "none"),
+            ]
+        ]
+        for fut in m3a_pre_futs:
+            pos_passed += fut.result()
 
         clang_22 = "/usr/lib/llvm-22/bin/clang"
         lld_22 = "/usr/lib/llvm-22/bin/ld.lld"
@@ -1411,6 +1576,7 @@ def main(argv: List[str]) -> int:
                     "    return (int32_t)(x ^ y ^ z);\n"
                     "}\n"
                 )
+            m3a_live_futs = []
             for m_arch, m_triple, m_flags, m_ldm, m_ldx, m_rvc, m_ext in [
                 ("rv64", "riscv64-unknown-none-elf", ["-march=rv64imc", "-mno-relax", "-mabi=lp64"], "elf64lriscv", ["--no-relax"], 1, "signext"),
                 ("aarch64", "aarch64-unknown-none-elf", [], "aarch64linux", [], 0, "none"),
@@ -1421,26 +1587,28 @@ def main(argv: List[str]) -> int:
                 subprocess.run([clang_22, "--target=" + m_triple, *m_flags, "-O2", "-fno-builtin", "-S", "-emit-llvm", m3a_c_path, "-o", m_ll], check=True)
                 subprocess.run([clang_22, "--target=" + m_triple, *m_flags, "-O0", "-fno-builtin", "-c", m3a_c_path, "-o", m_o], check=True)
                 subprocess.run([lld_22, "-m", m_ldm, *m_ldx, "-e", "stack_frame_mix_i32", m_o, "-o", m_elf], check=True)
-                for fn_m, n_args in [("stack_frame_mix_i32", 4), ("spill_mix_i32", 8)]:
+
+                def _run_m3a_live(m_arch=m_arch, m_rvc=m_rvc, m_ext=m_ext, m_ll=m_ll, m_o=m_o, m_elf=m_elf, fn_m="", n_args=0) -> int:
                     m_args = [(f"%{i}", 32, m_ext) for i in range(n_args)]
                     m_lrat = emit_and_solve_lrat(bins[0], m_arch, m_rvc, m_ll, m_o, fn_m, 32, m_args, tmpdir)
+                    cnt = 0
                     for m_kind, m_ep in [("rel", m_o), ("exec", m_elf)]:
                         m_cp = os.path.join(tmpdir, f"m3a_live_{m_arch}_{fn_m}.{m_kind}.mc.cert")
                         with open(m_cp, "w", encoding="utf-8") as f:
                             f.write(format_mc_cert(m_kind, fn_m, m_rvc, 32, m_args, m_lrat, arch=m_arch))
-                        for b in bins:
-                            res = run_cmd([b, "--check-mc", "--ir", m_ll, "--elf", m_ep, "--cert", m_cp])
-                            if res.returncode != 0:
-                                print(f"FAIL M3a live {m_arch} {fn_m} {m_kind} ({b}): {res.stderr}", file=sys.stderr)
-                                return 1
-                        pos_passed += 1
+                        _check_mc_pair(bins, m_ll, m_ep, m_cp, f"M3a live {m_arch} {fn_m} {m_kind}")
+                        cnt += 1
+                    return cnt
+
+                for fn_m, n_args in [("stack_frame_mix_i32", 4), ("spill_mix_i32", 8)]:
+                    m3a_live_futs.append(pool.submit(_run_m3a_live, fn_m=fn_m, n_args=n_args))
+            for fut in m3a_live_futs:
+                pos_passed += fut.result()
         print(f"PASS M3a stack-frame & spill suite ({pos_passed} total positive checks)")
 
         # M3b positive structured-loop suite: prebuilt saved-reg + spill loop + live clang-22 loops.
-        for l_arch, l_rvc, l_mach, l_fl, l_ir, l_bytes, l_args, l_spec, l_lrat in [
-            ("rv64", 1, 243, 1, m3b_rv_loop_ir, m3b_rv_loop_bytes, m3b_rv_loop_args, m3b_rv_loop_spec, m3b_rv_loop_lrat),
-            ("aarch64", 0, 183, 0, m3b_a64_loop_ir, m3b_a64_loop_bytes, m3b_a64_loop_args, m3b_a64_loop_spec, m3b_a64_loop_lrat),
-        ]:
+        def _run_m3b_pre(l_arch: str, l_rvc: int, l_mach: int, l_fl: int, l_ir: str, l_bytes: bytes, l_args: List[Tuple[str, int, str]], l_spec: str, l_lrat: Optional[str]) -> int:
+            cnt = 0
             for l_kind, l_et in [("rel", 1), ("exec", 2)]:
                 l_ep = os.path.join(tmpdir, f"m3b_pre_{l_arch}.{l_kind}.elf")
                 with open(l_ep, "wb") as f:
@@ -1448,12 +1616,19 @@ def main(argv: List[str]) -> int:
                 l_cp = os.path.join(tmpdir, f"m3b_pre_{l_arch}.{l_kind}.mc.cert")
                 with open(l_cp, "w", encoding="utf-8") as f:
                     f.write(format_mc_cert(l_kind, "spilled_loop_u32", l_rvc, 32, l_args, l_lrat, arch=l_arch, loop_sexp=l_spec))
-                for b in bins:
-                    res = run_cmd([b, "--check-mc", "--ir", l_ir, "--elf", l_ep, "--cert", l_cp])
-                    if res.returncode != 0:
-                        print(f"FAIL M3b prebuilt {l_arch} {l_kind} ({b}): {res.stderr}", file=sys.stderr)
-                        return 1
-                pos_passed += 1
+                _check_mc_pair(bins, l_ir, l_ep, l_cp, f"M3b prebuilt {l_arch} {l_kind}")
+                cnt += 1
+            return cnt
+
+        m3b_pre_futs = [
+            pool.submit(_run_m3b_pre, l_arch, l_rvc, l_mach, l_fl, l_ir, l_bytes, l_args, l_spec, l_lrat)
+            for l_arch, l_rvc, l_mach, l_fl, l_ir, l_bytes, l_args, l_spec, l_lrat in [
+                ("rv64", 1, 243, 1, m3b_rv_loop_ir, m3b_rv_loop_bytes, m3b_rv_loop_args, m3b_rv_loop_spec, m3b_rv_loop_lrat),
+                ("aarch64", 0, 183, 0, m3b_a64_loop_ir, m3b_a64_loop_bytes, m3b_a64_loop_args, m3b_a64_loop_spec, m3b_a64_loop_lrat),
+            ]
+        ]
+        for fut in m3b_pre_futs:
+            pos_passed += fut.result()
 
         if os.path.exists(clang_22) and os.path.exists(lld_22):
             m3b_loops_c = os.path.join(tmpdir, "m3b_live_loops.c")
@@ -1523,6 +1698,7 @@ def main(argv: List[str]) -> int:
                 "rv64": '(loop (ir-header "7") (mc-pc 32) (sp-off -16) (regs) (slots (slot -12 4 (var "!cut_1" 32)) (slot -16 4 (var "!cut_0" 32))) (inv (icmp ne 0 32 (var "!cut_0" 32) (bv 32 0))))',
                 "aarch64": '(loop (ir-header "7") (mc-pc 48) (sp-off -16) (regs) (slots (slot -12 4 (var "!cut_1" 32)) (slot -16 4 (var "!cut_0" 32))) (inv (icmp ne 0 32 (var "!cut_0" 32) (bv 32 0))))',
             }
+            m3b_live_futs = []
             for l_arch, l_triple, l_flags, l_ldm, l_ldx, l_rvc, l_ext in [
                 ("rv64", "riscv64-unknown-none-elf", ["-march=rv64imc", "-mno-relax", "-mabi=lp64"], "elf64lriscv", ["--no-relax"], 1, "signext"),
                 ("aarch64", "aarch64-unknown-none-elf", [], "aarch64linux", [], 0, "none"),
@@ -1534,19 +1710,21 @@ def main(argv: List[str]) -> int:
                 subprocess.run([clang_22, "--target=" + l_triple, *l_flags, *o2_flags, "-S", "-emit-llvm", m3b_loops_c, "-o", l_ll], check=True)
                 subprocess.run([clang_22, "--target=" + l_triple, *l_flags, *o2_flags, "-c", m3b_loops_c, "-o", l_o], check=True)
                 subprocess.run([lld_22, "-m", l_ldm, *l_ldx, "-e", "checksum_loop_u32", l_o, "-o", l_elf], check=True)
-                for fn_l, n_args, l_spec in o2_loop_specs[l_arch]:
+
+                def _run_m3b_o2(l_arch=l_arch, l_rvc=l_rvc, l_ext=l_ext, l_ll=l_ll, l_o=l_o, l_elf=l_elf, fn_l="", n_args=0, l_spec="") -> int:
                     l_args = [(f"%{i}", 32, l_ext) for i in range(n_args)]
                     l_lrat = emit_and_solve_lrat(bins[0], l_arch, l_rvc, l_ll, l_o, fn_l, 32, l_args, tmpdir, loop_sexp=l_spec)
+                    cnt = 0
                     for l_kind, l_ep in [("rel", l_o), ("exec", l_elf)]:
                         l_cp = os.path.join(tmpdir, f"m3b_live_{l_arch}_{fn_l}.{l_kind}.mc.cert")
                         with open(l_cp, "w", encoding="utf-8") as f:
                             f.write(format_mc_cert(l_kind, fn_l, l_rvc, 32, l_args, l_lrat, arch=l_arch, loop_sexp=l_spec))
-                        for b in bins:
-                            res = run_cmd([b, "--check-mc", "--ir", l_ll, "--elf", l_ep, "--cert", l_cp])
-                            if res.returncode != 0:
-                                print(f"FAIL M3b live {l_arch} {fn_l} {l_kind} ({b}): {res.stderr}", file=sys.stderr)
-                                return 1
-                        pos_passed += 1
+                        _check_mc_pair(bins, l_ll, l_ep, l_cp, f"M3b live {l_arch} {fn_l} {l_kind}")
+                        cnt += 1
+                    return cnt
+
+                for fn_l, n_args, l_spec in o2_loop_specs[l_arch]:
+                    m3b_live_futs.append(pool.submit(_run_m3b_o2, fn_l=fn_l, n_args=n_args, l_spec=l_spec))
 
                 sp_ll = os.path.join(tmpdir, f"m3b_spill_{l_arch}.ll")
                 sp_o = os.path.join(tmpdir, f"m3b_spill_{l_arch}.o")
@@ -1554,19 +1732,23 @@ def main(argv: List[str]) -> int:
                 subprocess.run([clang_22, "--target=" + l_triple, *l_flags, "-O2", "-fno-unroll-loops", "-fno-vectorize", "-fno-builtin", "-S", "-emit-llvm", m3b_spill_c, "-o", sp_ll], check=True)
                 subprocess.run([clang_22, "--target=" + l_triple, *l_flags, "-O0", "-fomit-frame-pointer", "-fno-builtin", "-c", m3b_spill_c, "-o", sp_o], check=True)
                 subprocess.run([lld_22, "-m", l_ldm, *l_ldx, "-e", "spilled_loop_u32", sp_o, "-o", sp_elf], check=True)
-                sp_args = [("%0", 32, l_ext), ("%1", 32, l_ext)]
-                sp_spec = spill_loop_specs[l_arch]
-                sp_lrat = emit_and_solve_lrat(bins[0], l_arch, l_rvc, sp_ll, sp_o, "spilled_loop_u32", 32, sp_args, tmpdir, loop_sexp=sp_spec)
-                for l_kind, l_ep in [("rel", sp_o), ("exec", sp_elf)]:
-                    l_cp = os.path.join(tmpdir, f"m3b_spill_{l_arch}.{l_kind}.mc.cert")
-                    with open(l_cp, "w", encoding="utf-8") as f:
-                        f.write(format_mc_cert(l_kind, "spilled_loop_u32", l_rvc, 32, sp_args, sp_lrat, arch=l_arch, loop_sexp=sp_spec))
-                    for b in bins:
-                        res = run_cmd([b, "--check-mc", "--ir", sp_ll, "--elf", l_ep, "--cert", l_cp])
-                        if res.returncode != 0:
-                            print(f"FAIL M3b live spill {l_arch} {l_kind} ({b}): {res.stderr}", file=sys.stderr)
-                            return 1
-                    pos_passed += 1
+
+                def _run_m3b_spill(l_arch=l_arch, l_rvc=l_rvc, l_ext=l_ext, sp_ll=sp_ll, sp_o=sp_o, sp_elf=sp_elf) -> int:
+                    sp_args = [("%0", 32, l_ext), ("%1", 32, l_ext)]
+                    sp_spec = spill_loop_specs[l_arch]
+                    sp_lrat = emit_and_solve_lrat(bins[0], l_arch, l_rvc, sp_ll, sp_o, "spilled_loop_u32", 32, sp_args, tmpdir, loop_sexp=sp_spec)
+                    cnt = 0
+                    for l_kind, l_ep in [("rel", sp_o), ("exec", sp_elf)]:
+                        l_cp = os.path.join(tmpdir, f"m3b_spill_{l_arch}.{l_kind}.mc.cert")
+                        with open(l_cp, "w", encoding="utf-8") as f:
+                            f.write(format_mc_cert(l_kind, "spilled_loop_u32", l_rvc, 32, sp_args, sp_lrat, arch=l_arch, loop_sexp=sp_spec))
+                        _check_mc_pair(bins, sp_ll, l_ep, l_cp, f"M3b live spill {l_arch} {l_kind}")
+                        cnt += 1
+                    return cnt
+
+                m3b_live_futs.append(pool.submit(_run_m3b_spill))
+            for fut in m3b_live_futs:
+                pos_passed += fut.result()
         print(f"PASS M3b verified structured-loop suite ({pos_passed} total positive checks)")
 
         # M3c live clang-22 -O2 verified call-summary + caller/leaf-callee composition suite.
@@ -1618,6 +1800,7 @@ def main(argv: List[str]) -> int:
                     "    }\n"
                     "}\n"
                 )
+            m3c_live_futs = []
             for c_arch, c_triple, c_flags, c_ldm, c_ldx, c_rvc, c_ext32, c_ext16_u, c_ext16_s in [
                 ("rv64", "riscv64-unknown-none-elf", ["-march=rv64imc", "-mno-relax", "-mabi=lp64"], "elf64lriscv", ["--no-relax"], 1, "signext", "zeroext", "signext"),
                 ("aarch64", "aarch64-unknown-none-elf", [], "aarch64linux", [], 0, "none", "none", "none"),
@@ -1644,18 +1827,22 @@ def main(argv: List[str]) -> int:
                     ("caller_narrow_u16", 16, [("%0", 16, c_ext16_u), ("%1", 16, c_ext16_s)], f"(calls {cal_u16})"),
                     ("caller_branch_i64", 64, [("%0", 64, "none"), ("%1", 64, "none"), ("%2", 64, "none")], f"(calls {cal_xor})"),
                 ]
-                for fn_c, rw_c, args_c, calls_c in m3c_live_cases:
+
+                def _run_m3c_live(c_arch=c_arch, c_rvc=c_rvc, c_ll=c_ll, c_o=c_o, c_elf=c_elf, fn_c="", rw_c=0, args_c=None, calls_c=None) -> int:
                     lrat_c = emit_and_solve_lrat(bins[0], c_arch, c_rvc, c_ll, c_o, fn_c, rw_c, args_c, tmpdir, calls_sexp=calls_c)
+                    cnt = 0
                     for kind_c, ep_c in [("rel", c_o), ("exec", c_elf)]:
                         cp_c = os.path.join(tmpdir, f"m3c_live_{c_arch}_{fn_c}.{kind_c}.mc.cert")
                         with open(cp_c, "w", encoding="utf-8") as f:
                             f.write(format_mc_cert(kind_c, fn_c, c_rvc, rw_c, args_c, lrat_c, arch=c_arch, calls_sexp=calls_c))
-                        for b in bins:
-                            res = run_cmd([b, "--check-mc", "--ir", c_ll, "--elf", ep_c, "--cert", cp_c])
-                            if res.returncode != 0:
-                                print(f"FAIL M3c live {c_arch} {fn_c} {kind_c} ({b}): {res.stderr}", file=sys.stderr)
-                                return 1
-                        pos_passed += 1
+                        _check_mc_pair(bins, c_ll, ep_c, cp_c, f"M3c live {c_arch} {fn_c} {kind_c}")
+                        cnt += 1
+                    return cnt
+
+                for fn_c, rw_c, args_c, calls_c in m3c_live_cases:
+                    m3c_live_futs.append(pool.submit(_run_m3c_live, fn_c=fn_c, rw_c=rw_c, args_c=args_c, calls_c=calls_c))
+            for fut in m3c_live_futs:
+                pos_passed += fut.result()
         print(f"PASS M3c verified call-summary suite ({pos_passed} total positive checks)")
 
         live_count = 0

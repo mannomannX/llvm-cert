@@ -89,6 +89,7 @@ class SuiteCase:
     timeout_sec: float = DEFAULT_TIMEOUT_SEC
     allowed_reject_codes: tuple[int, ...] | None = None
     expect_cert_parse_ok: bool | None = None
+    expected_diag_substrings: tuple[str, ...] = ()
 
 
 def sha256_hex(data: bytes | str) -> str:
@@ -257,6 +258,13 @@ def evaluate_outcome(
             f"expected clean rejection exit in {case.allowed_reject_codes}, "
             f"got exit {outcome.returncode}: {outcome.stderr.strip()}",
         )
+    for sub in case.expected_diag_substrings:
+        if sub not in outcome.stderr:
+            return (
+                False,
+                f"expected diagnostic substring {sub!r} missing from stderr: "
+                f"{outcome.stderr.strip()}",
+            )
     return (
         True,
         f"rejected cleanly (exit {outcome.returncode}) in {outcome.elapsed_sec * 1000.0:.1f} ms",
@@ -2042,12 +2050,54 @@ def build_suite_cases() -> list[SuiteCase]:
         )
     )
 
+    neg_expected_diags: dict[str, tuple[str, ...]] = {
+        "neg_wrong_const": ("[ir-refine]", "no LRAT proof provided"),
+        "neg_target_invented_nsw": ("[ir-refine]", "no LRAT proof provided"),
+        "neg_target_invented_gep_inbounds": ("[ir-syntax-F21]", "GEP inbounds"),
+        "neg_target_invented_fast_math": ("[ir-syntax-F17]", "block 'entry' instr #0"),
+        "neg_target_invented_fp_to_int_bitcast": ("[ir-syntax-F39]", "FP-to-integer bitcast"),
+        "neg_forged_noreturn_dc_attr": ("[ir-proto]", "function 'f'", "function attributes"),
+        "neg_forged_nocreateundeforpoison_dc_attr": ("[ir-proto]", "function 'f'", "function attributes"),
+        "neg_target_invented_freeze_poison": ("[ir-refine]", "no LRAT proof provided"),
+        "neg_unjustified_param_noundef": ("[ir-ub]", "UB assumptions"),
+        "neg_poison_lhs_div_zero_inference": ("[ir-ub]", "UB assumptions"),
+        "neg_let_dag_30_exponential_bomb": ("[ir-refine]", "no LRAT proof provided"),
+        "neg_deep_sexp_1100_parens": ("[cert-parse]", "maximum nesting depth 1024"),
+        "neg_large_4mib_padded_cert_no_stack_overflow": ("[cert-parse]", "malformed cert-v1 root"),
+        "neg_bare_dollar_let_name": ("[cert-parse]", "let binding name"),
+        "neg_nul_byte_in_cert": ("[cert-parse]", "invalid character"),
+        "neg_bad_sha256_uppercase_hex": ("[cert-parse]", "64-character lowercase hex SHA-256"),
+        "neg_bad_sha256_short_63_hex": ("[cert-parse]", "64-character lowercase hex SHA-256"),
+        "neg_merge_legacy_unverified_slice_flag": ("unauthenticated --slice is forbidden",),
+        "neg_merge_tampered_safe_slice": ("validate_module_merge_certified_tle:", "Safe-Path replay on @g"),
+        "neg_merge_smuggled_prototype_attr": ("validate_module_merge_certified_tle:", "prototype/attribute desync on @f"),
+        "neg_merge_global_initializer_tamper": ("validate_module_merge_certified_tle:", "m_globals layout or alignment mismatch"),
+        "neg_merge_extern_weak_injection": ("validate_module_merge_certified_tle:", "extern_weak global linkage is unsupported"),
+        "neg_merge_composed_forged_mid_safe": ("validate_module_merge_certified_tle:", "Safe-Path replay on @g"),
+        "neg_merge_composed_forged_cert": ("[ir-refine]", "no LRAT proof provided"),
+        "neg_intrinsic_uadd_sat_vs_usub_sat": ("[ir-refine]", "no LRAT proof provided"),
+        "neg_annotated_intrinsic_call_rejected": ("[ir-reify]", "instruction #0", "source block 'entry'"),
+        "neg_merge_non_intrinsic_declare_vs_smin": ("validate_module_merge_certified_tle:", "m_declarations symbol table mismatch"),
+    }
+    from dataclasses import replace
+
+    neg_names = {c.name for c in cases if not c.expect_accept}
+    if set(neg_expected_diags.keys()) != neg_names:
+        raise AssertionError(
+            f"neg_expected_diags mismatch: missing={sorted(neg_names - set(neg_expected_diags.keys()))}, "
+            f"extra={sorted(set(neg_expected_diags.keys()) - neg_names)}"
+        )
+    cases = [
+        c if c.expect_accept else replace(c, expected_diag_substrings=neg_expected_diags[c.name])
+        for c in cases
+    ]
     return cases
 
 
 def run_suite(
     cert_validator_bin: pathlib.Path,
     verified_opt_fallback_bin: pathlib.Path,
+    parity_bc_bin: pathlib.Path | None = None,
 ) -> int:
     for label, binary in (
         ("cert-validator", cert_validator_bin),
@@ -2056,6 +2106,9 @@ def run_suite(
         if not binary.is_file():
             print(f"[FAIL] {label} binary not found: {binary}", file=sys.stderr)
             return 2
+    if parity_bc_bin is not None and not parity_bc_bin.is_file():
+        print(f"[FAIL] cert-validator.bc binary not found: {parity_bc_bin}", file=sys.stderr)
+        return 2
 
     cases = build_suite_cases()
     passed = 0
@@ -2073,6 +2126,31 @@ def run_suite(
                 )
                 outcome = run_process(prepared.argv, case.timeout_sec)
                 ok, summary = evaluate_outcome(case, outcome)
+                if ok and parity_bc_bin is not None:
+                    bc_argv = [
+                        str(parity_bc_bin) if a == str(cert_validator_bin) else a
+                        for a in prepared.argv
+                    ]
+                    bc_outcome = run_process(bc_argv, max(case.timeout_sec, 30.0))
+                    if bc_outcome.timed_out:
+                        ok = False
+                        summary = f"bytecode parity timed out after {bc_outcome.elapsed_sec:.2f}s"
+                    else:
+                        for marker in CRASH_STDERR_MARKERS:
+                            if marker in bc_outcome.stderr or marker in bc_outcome.stdout:
+                                ok = False
+                                summary = f"bytecode uncaught crash marker `{marker}`"
+                                break
+                    if ok and (
+                        bc_outcome.returncode != outcome.returncode
+                        or bc_outcome.stderr != outcome.stderr
+                    ):
+                        ok = False
+                        summary = (
+                            f"native != bytecode parity mismatch: "
+                            f"rc {outcome.returncode} vs {bc_outcome.returncode}, "
+                            f"stderr {outcome.stderr!r} vs {bc_outcome.stderr!r}"
+                        )
             except Exception as exc:  # noqa: BLE001
                 ok = False
                 summary = f"preparation raised {type(exc).__name__}: {exc}"
@@ -2095,14 +2173,17 @@ def run_suite(
             print(f"  - {fail}", file=sys.stderr)
         return 1
 
+    parity_note = ", 100% native == bytecode parity" if parity_bc_bin is not None else ""
     print(
         f"\nLayer-2 Forged-Certificate Suite OK: {passed}/{len(cases)} passed "
-        f"({pos_count} positive, {neg_count} adversarial rejections, 0 crashes/timeouts)."
+        f"({pos_count} positive, {neg_count} adversarial rejections{parity_note}, 0 crashes/timeouts)."
     )
     return 0
 
 
 def run_self_test() -> int:
+    import json
+
     cases = build_suite_cases()
     if len(cases) < 25:
         raise AssertionError(f"expected >= 25 cases, got {len(cases)}")
@@ -2114,18 +2195,24 @@ def run_self_test() -> int:
     neg_cases = [c for c in cases if not c.expect_accept]
     if len(pos_cases) < 6 or len(neg_cases) < 20:
         raise AssertionError("insufficient positive or negative case count")
+    for nc in neg_cases:
+        if not nc.expected_diag_substrings:
+            raise AssertionError(f"missing expected_diag_substrings on {nc.name}")
 
-    # 1. Verify evaluate_outcome catches signal deaths, Stack_overflow, timeouts, and exit-code polarity.
+    # 1. Verify evaluate_outcome catches signal deaths, Stack_overflow, timeouts, exit-code polarity, and missing diagnostics.
     sample_pos = pos_cases[0]
     sample_neg = neg_cases[0]
     sample_4m = next(
         c for c in cases if c.name == "neg_large_4mib_padded_cert_no_stack_overflow"
     )
+    sample_neg_err = " ".join(sample_neg.expected_diag_substrings)
+    sample_4m_err = " ".join(sample_4m.expected_diag_substrings)
 
     assert evaluate_outcome(sample_pos, CommandOutcome(0, "", "", 0.01))[0]
     assert not evaluate_outcome(sample_pos, CommandOutcome(4, "", "rejected", 0.01))[0]
     assert not evaluate_outcome(sample_neg, CommandOutcome(0, "", "", 0.01))[0]
-    assert evaluate_outcome(sample_neg, CommandOutcome(4, "", "rejected", 0.01))[0]
+    assert not evaluate_outcome(sample_neg, CommandOutcome(4, "", "rejected", 0.01))[0]
+    assert evaluate_outcome(sample_neg, CommandOutcome(4, "", sample_neg_err, 0.01))[0]
     assert not evaluate_outcome(sample_neg, CommandOutcome(-11, "", "", 0.01))[0]
     assert not evaluate_outcome(
         sample_neg,
@@ -2134,11 +2221,13 @@ def run_self_test() -> int:
     assert not evaluate_outcome(
         sample_neg, CommandOutcome(124, "", "", 10.1, timed_out=True)
     )[0]
-    assert evaluate_outcome(sample_4m, CommandOutcome(4, "", "rejected", 0.05))[0]
-    assert not evaluate_outcome(sample_4m, CommandOutcome(2, "", "bad exit", 0.05))[0]
+    assert not evaluate_outcome(sample_4m, CommandOutcome(4, "", "rejected", 0.05))[0]
+    assert evaluate_outcome(sample_4m, CommandOutcome(4, "", sample_4m_err, 0.05))[0]
+    assert not evaluate_outcome(sample_4m, CommandOutcome(2, "", sample_4m_err, 0.05))[0]
 
-    # 2. Materialize all 28 cases, validate every .cert against the CertFormat.v grammar mirror,
+    # 2. Materialize all 34 cases, validate every .cert against the CertFormat.v grammar mirror,
     #    and run an end-to-end subprocess dry-run via synthetic wrapper executables.
+    diag_map_json = json.dumps({c.name: list(c.expected_diag_substrings) for c in neg_cases})
     with tempfile.TemporaryDirectory(prefix="llvmcert-selftest-") as tmp_str:
         tmp = pathlib.Path(tmp_str)
         mock_fallback_py = tmp / "mock_fallback.py"
@@ -2164,11 +2253,15 @@ def run_self_test() -> int:
         )
 
         mock_validator_py.write_text(
-            "import pathlib, sys\n"
+            "import json, pathlib, sys\n"
+            f"DIAG_MAP = {diag_map_json!r}\n"
+            "diags = json.loads(DIAG_MAP)\n"
             "args = sys.argv[1:]\n"
             "case_dir = pathlib.Path(args[args.index('--orig') + 1] if '--check-merge' in args else args[args.index('--src') + 1]).parent\n"
-            "if case_dir.name.split('_', 1)[1].startswith('pos_'):\n"
+            "case_name = case_dir.name.split('_', 1)[1]\n"
+            "if case_name.startswith('pos_'):\n"
             "    sys.exit(0)\n"
+            "sys.stderr.write(' '.join(diags.get(case_name, [])) + '\\n')\n"
             "if '--slice' in args:\n"
             "    sys.exit(2)\n"
             "sys.exit(4)\n",
@@ -2230,7 +2323,7 @@ def run_self_test() -> int:
         if not hang_out.timed_out:
             raise AssertionError("expected timeout detection on sleeping subprocess")
 
-        rc = run_suite(vbin, fbin)
+        rc = run_suite(vbin, fbin, parity_bc_bin=vbin)
         if rc != 0:
             raise AssertionError(f"mock end-to-end run_suite returned {rc}")
 
@@ -2247,6 +2340,12 @@ def parse_cli_args(argv: list[str]) -> argparse.Namespace:
         "--self-test",
         action="store_true",
         help="Validate corpus grammar, crash/timeout guards, and mock runner offline.",
+    )
+    parser.add_argument(
+        "--check-parity-bc",
+        type=pathlib.Path,
+        default=None,
+        help="Optional bytecode cert-validator.bc executable to check native == bytecode rc+stderr parity.",
     )
     parser.add_argument(
         "cert_validator",
@@ -2274,6 +2373,7 @@ def main(argv: list[str] | None = None) -> int:
     return run_suite(
         pathlib.Path(args.cert_validator).resolve(),
         pathlib.Path(args.verified_opt_fallback).resolve(),
+        parity_bc_bin=args.check_parity_bc.resolve() if args.check_parity_bc else None,
     )
 
 
