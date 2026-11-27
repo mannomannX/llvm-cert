@@ -12,9 +12,9 @@ let die code msg =
 
 let select_pass = function
   | "pipeline" -> Pipeline.optimize_mcfg_typ
-  | "mem2reg" -> Mem2Reg.mem2reg_mcfg_typ
-  | "inline" -> Inline.inline_mcfg_typ
-  | "sccp" -> SCCP.sccp_mcfg_typ
+  | "mem2reg" -> Mem2RegSpec.mem2reg_mcfg_typ
+  | "inline" -> InlineSpec.inline_mcfg_typ
+  | "sccp" -> SCCPSpec.sccp_mcfg_typ
   | "dce" -> DCE.dce_mcfg_typ
   | "simplifycfg" -> SimplifyCFG.simplifycfg_mcfg_typ
   | p -> die 2 (Stdlib.Printf.sprintf "unknown --pass '%s' (%s)" p usage)

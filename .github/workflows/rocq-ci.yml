@@ -148,8 +148,14 @@ jobs:
               opam exec -- rocq check -o -R rocq Vellvm -Q ../../passes CertPasses -Q ../../validator CertValidator \
                 Vellvm.Semantics.TopLevel Vellvm.Theory.Equational \
                 CertValidator.common.Options CertValidator.common.Diag CertValidator.common.CoreTactics CertValidator.common.BvTactics CertValidator.common.IntBvTactics CertValidator.common.EouTactics CertPasses.common.ItreeTactics \
+                CertPasses.PassCommonSyntax CertPasses.PassCommonModel CertPasses.PassCommon \
+                CertPasses.SimplifyCFG \
+                CertPasses.DCESpec CertPasses.DCESafety CertPasses.DCE \
+                CertPasses.SCCPSpec CertPasses.SCCP \
+                CertPasses.Mem2RegSpec CertPasses.Mem2RegModel CertPasses.Mem2RegMemBase CertPasses.Mem2RegGhostInv CertPasses.Mem2RegExprLift CertPasses.Mem2RegCpsSSA CertPasses.Mem2RegLeafKnot CertPasses.Mem2RegStage2 CertPasses.Mem2RegStage1 CertPasses.Mem2Reg \
+                CertPasses.InlineSpec CertPasses.InlineSyntaxProof CertPasses.InlineFrameGenv CertPasses.InlineSim CertPasses.InlineCalleeProof CertPasses.InlineCallerProof CertPasses.Inline \
                 CertPasses.Pipeline CertPasses.McfgExport \
-                CertPasses.ModuleMerge \
+                CertPasses.ModuleMergeEqb CertPasses.ModuleMergeLink CertPasses.ModuleMergeVDrawCore CertPasses.ModuleMergeVDrawLift CertPasses.ModuleMerge \
                 CertValidator.LratCore CertValidator.AigGates CertValidator.AigArith CertValidator.AigLrat \
                 CertValidator.CertFormatAst CertValidator.CertFormatParse CertValidator.CertFormatGates CertValidator.CertFormat \
                 CertValidator.AlgRulesEval CertValidator.AlgRulesNormBinop CertValidator.AlgRulesNormRefines CertValidator.AlgRules \
@@ -166,8 +172,14 @@ jobs:
             (ulimit -v 13107200 && exec opam exec -- rocq check -o -R rocq Vellvm -Q ../../passes CertPasses -Q ../../validator CertValidator \
               Vellvm.Semantics.TopLevel Vellvm.Theory.Equational \
               CertValidator.common.Options CertValidator.common.Diag CertValidator.common.CoreTactics CertValidator.common.BvTactics CertValidator.common.IntBvTactics CertValidator.common.EouTactics CertPasses.common.ItreeTactics \
+              CertPasses.PassCommonSyntax CertPasses.PassCommonModel CertPasses.PassCommon \
+              CertPasses.SimplifyCFG \
+              CertPasses.DCESpec CertPasses.DCESafety CertPasses.DCE \
+              CertPasses.SCCPSpec CertPasses.SCCP \
+              CertPasses.Mem2RegSpec CertPasses.Mem2RegModel CertPasses.Mem2RegMemBase CertPasses.Mem2RegGhostInv CertPasses.Mem2RegExprLift CertPasses.Mem2RegCpsSSA CertPasses.Mem2RegLeafKnot CertPasses.Mem2RegStage2 CertPasses.Mem2RegStage1 CertPasses.Mem2Reg \
+              CertPasses.InlineSpec CertPasses.InlineSyntaxProof CertPasses.InlineFrameGenv CertPasses.InlineSim CertPasses.InlineCalleeProof CertPasses.InlineCallerProof CertPasses.Inline \
               CertPasses.Pipeline CertPasses.McfgExport \
-              CertPasses.ModuleMerge \
+              CertPasses.ModuleMergeEqb CertPasses.ModuleMergeLink CertPasses.ModuleMergeVDrawCore CertPasses.ModuleMergeVDrawLift CertPasses.ModuleMerge \
               CertValidator.LratCore CertValidator.AigGates CertValidator.AigArith CertValidator.AigLrat \
               CertValidator.CertFormatAst CertValidator.CertFormatParse CertValidator.CertFormatGates CertValidator.CertFormat \
               CertValidator.AlgRulesEval CertValidator.AlgRulesNormBinop CertValidator.AlgRulesNormRefines CertValidator.AlgRules \

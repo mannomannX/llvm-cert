@@ -31,11 +31,15 @@ From Vellvm Require
 From CertPasses Require
      SimplifyCFG
      DCE
+     SCCPSpec
      SCCP
+     Mem2RegSpec
      Mem2Reg
+     InlineSpec
      Inline
      Pipeline
      McfgExport
+     ModuleMergeLink
      ModuleMerge.
 
 From CertValidator Require
@@ -154,14 +158,14 @@ Separate Extraction ExtrOcamlIntConv TopLevel AstLib ParserHelper ShowAST ReprAS
   LLVMAst.nofpclass_mask LLVMAst.nofpclass_mask_valid
   SimplifyCFG.simplifycfg_mcfg SimplifyCFG.simplifycfg_mcfg_typ
   DCE.dce_mcfg DCE.dce_mcfg_typ
-  SCCP.sccp_mcfg SCCP.sccp_mcfg_typ
-  Mem2Reg.mem2reg_mcfg Mem2Reg.mem2reg_mcfg_typ
-  Inline.inline_mcfg Inline.inline_mcfg_typ
+  SCCPSpec.sccp_mcfg SCCPSpec.sccp_mcfg_typ
+  Mem2RegSpec.mem2reg_mcfg Mem2RegSpec.mem2reg_mcfg_typ
+  InlineSpec.inline_mcfg InlineSpec.inline_mcfg_typ
   Pipeline.optimize_mcfg Pipeline.optimize_mcfg_typ
   ModuleRefs.resolve_module_refs
   McfgExport.resolve_for_opt_tle
   McfgExport.export_mcfg_to_tle McfgExport.export_mcfg_with_typ McfgExport.export_mcfg_with_tle
-  ModuleMerge.validate_module_merge ModuleMerge.validate_module_merge_parsed ModuleMerge.validate_module_merge_tle
+  ModuleMergeLink.validate_module_merge ModuleMerge.validate_module_merge_parsed ModuleMerge.validate_module_merge_tle
   ModuleMerge.check_safe_slice_tle ModuleMerge.check_module_merge_certified_tle ModuleMerge.validate_module_merge_certified_tle
   ModuleMerge.check_module_merge_certified_tle_composed ModuleMerge.validate_module_merge_certified_tle_composed
   CertFormatParse.parse_sexp CertFormatParse.parse_cert CertFormat.parse_dimacs_cnf CertFormat.parse_ascii_lrat CertFormat.validate_dimacs_lrat_str CertFormatGates.check_validator_syntax_gates CertFormatGates.check_prototype_contract
