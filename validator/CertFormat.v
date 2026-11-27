@@ -52,6 +52,9 @@ From Vellvm Require Import
   Semantics.Attributes
   Semantics.IntrinsicsDefinitions.
 
+From CertValidator.common Require Import
+  Diag.
+
 From CertValidator Require Import
   AigLrat.
 
@@ -719,6 +722,97 @@ Definition wf_proof_certificate (cert : proof_certificate) : bool :=
   forallb wf_loop_cutpoint_invariant (pc_loop_invariants cert) &&
   forallb wf_alias_witness (pc_alias_witnesses cert) &&
   wf_return_obligation (pc_return_obligation cert).
+
+Fixpoint cf_check_idx_diag_acc {A : Type}
+  (chk : nat -> A -> string + unit) (idx : nat) (xs : list A) {struct xs} : string + unit :=
+  match xs with
+  | [] => inr tt
+  | x :: rest =>
+      match chk idx x with
+      | inl err => inl err
+      | inr tt => cf_check_idx_diag_acc chk (S idx) rest
+      end
+  end.
+
+Lemma cf_check_idx_diag_acc_sound :
+  forall {A : Type} (chk : nat -> A -> string + unit) (p : A -> bool) idx xs,
+    (forall i x, chk i x = inr tt -> p x = true) ->
+    cf_check_idx_diag_acc chk idx xs = inr tt ->
+    forallb p xs = true.
+Proof.
+  intros A chk p idx xs Hc; revert idx; induction xs as [| x rest IH]; intros idx H;
+    cbn [cf_check_idx_diag_acc forallb] in *; [reflexivity |].
+  destruct (chk idx x) as [| []] eqn:E1; [discriminate H |].
+  rewrite (Hc idx x E1), (IH (S idx) H); reflexivity.
+Qed.
+
+Definition check_wf_proof_certificate_diag (cert : proof_certificate) : string + unit :=
+  bind_err
+    (guard_err (negb (String.eqb (pc_function_name cert) ""))
+      (fun _ => diag "cert-wf" "empty cert-v1 function name"))
+    (fun _ =>
+  bind_err
+    (guard_err (is_sha256_hex (pc_src_ir_sha256 cert))
+      (fun _ => diag "cert-wf" "invalid cert-v1 src-sha256 digest"))
+    (fun _ =>
+  bind_err
+    (guard_err (is_sha256_hex (pc_tgt_ir_sha256 cert))
+      (fun _ => diag "cert-wf" "invalid cert-v1 tgt-sha256 digest"))
+    (fun _ =>
+  bind_err
+    (cf_check_idx_diag_acc
+      (fun idx bc =>
+        guard_err (wf_block_certificate bc)
+          (fun _ => diag "cert-wf" ("malformed block certificate #" ++ diag_nat_dec idx)))
+      0 (pc_blocks cert))
+    (fun _ =>
+  bind_err
+    (cf_check_idx_diag_acc
+      (fun idx lci =>
+        guard_err (wf_loop_cutpoint_invariant lci)
+          (fun _ => diag "cert-wf" ("malformed loop invariant #" ++ diag_nat_dec idx)))
+      0 (pc_loop_invariants cert))
+    (fun _ =>
+  bind_err
+    (cf_check_idx_diag_acc
+      (fun idx aw =>
+        guard_err (wf_alias_witness aw)
+          (fun _ => diag "cert-wf" ("malformed alias witness #" ++ diag_nat_dec idx)))
+      0 (pc_alias_witnesses cert))
+    (fun _ =>
+  guard_err (wf_return_obligation (pc_return_obligation cert))
+    (fun _ => diag "cert-wf" "malformed return obligation in cert-v1"))))))).
+
+Lemma check_wf_proof_certificate_diag_sound :
+  forall cert,
+    check_wf_proof_certificate_diag cert = inr tt ->
+    wf_proof_certificate cert = true.
+Proof.
+  intros cert H; unfold check_wf_proof_certificate_diag in H; unfold wf_proof_certificate.
+  destruct (negb (String.eqb (pc_function_name cert) "")); cbn [guard_err bind_err] in H; [| discriminate H].
+  destruct (is_sha256_hex (pc_src_ir_sha256 cert)); cbn [guard_err bind_err] in H; [| discriminate H].
+  destruct (is_sha256_hex (pc_tgt_ir_sha256 cert)); cbn [guard_err bind_err] in H; [| discriminate H].
+  destruct (cf_check_idx_diag_acc
+              (fun idx bc =>
+                guard_err (wf_block_certificate bc)
+                  (fun _ => diag "cert-wf" ("malformed block certificate #" ++ diag_nat_dec idx)))
+              0 (pc_blocks cert)) as [| []] eqn:Eblks; cbn [bind_err] in H; [discriminate H |].
+  destruct (cf_check_idx_diag_acc
+              (fun idx lci =>
+                guard_err (wf_loop_cutpoint_invariant lci)
+                  (fun _ => diag "cert-wf" ("malformed loop invariant #" ++ diag_nat_dec idx)))
+              0 (pc_loop_invariants cert)) as [| []] eqn:Elcis; cbn [bind_err] in H; [discriminate H |].
+  destruct (cf_check_idx_diag_acc
+              (fun idx aw =>
+                guard_err (wf_alias_witness aw)
+                  (fun _ => diag "cert-wf" ("malformed alias witness #" ++ diag_nat_dec idx)))
+              0 (pc_alias_witnesses cert)) as [| []] eqn:Eaws; cbn [bind_err] in H; [discriminate H |].
+  destruct (wf_return_obligation (pc_return_obligation cert)); cbn [guard_err] in H; [| discriminate H].
+  rewrite (cf_check_idx_diag_acc_sound _ _ _ _ (fun _ _ Hx => guard_err_inr _ _ Hx) Eblks),
+          (cf_check_idx_diag_acc_sound _ _ _ _ (fun _ _ Hx => guard_err_inr _ _ Hx) Elcis),
+          (cf_check_idx_diag_acc_sound _ _ _ _ (fun _ _ Hx => guard_err_inr _ _ Hx) Eaws).
+  reflexivity.
+Qed.
 
 Definition var_pair_eqb (u1 u2 : string * positive) : bool :=
   String.eqb (fst u1) (fst u2) && Pos.eqb (snd u1) (snd u2).
@@ -2375,8 +2469,12 @@ Definition parse_cert_sexp (root : sexp) : string + proof_certificate :=
 
 Definition parse_cert (input : string) : string + proof_certificate :=
   match parse_sexp input with
-  | inl err => inl err
-  | inr root => parse_cert_sexp root
+  | inl err => inl (diag "cert-parse" err)
+  | inr root =>
+      match parse_cert_sexp root with
+      | inl err => inl (diag "cert-parse" err)
+      | inr cert => inr cert
+      end
   end.
 
 Theorem parse_cert_sexp_wf : forall root cert,
@@ -2406,7 +2504,8 @@ Theorem parse_cert_wf : forall input cert,
 Proof.
   intros input cert H; unfold parse_cert in H.
   destruct (parse_sexp input) as [| root]; [discriminate |].
-  exact (parse_cert_sexp_wf root cert H).
+  destruct (parse_cert_sexp root) as [| c0] eqn:Es; [discriminate |].
+  inversion H; subst c0; exact (parse_cert_sexp_wf root cert Es).
 Qed.
 
 (** ** 6. Syntax & Prototype Contract Soundness Gates ([F-17], [F-18], [F-19], [F-21], [F-30], [F-31], [F-32], [F-34]) *)
@@ -3135,6 +3234,13 @@ Definition decl_ann_supported {T : Set} (a : annotation T) : bool :=
   | _ => true
   end.
 
+Definition cf_raw_id_str (rid : raw_id) : string :=
+  match rid with
+  | Name s => s
+  | Anon z => diag_Z_dec z
+  | Raw z => "_RAW_" ++ diag_Z_dec z
+  end.
+
 Definition check_prototype_contract (src_decl tgt_decl : declaration typ) : bool :=
   raw_id_eqb (dc_name src_decl) (dc_name tgt_decl) &&
   match dc_type src_decl, dc_type tgt_decl with
@@ -3157,6 +3263,108 @@ Definition check_prototype_contract (src_decl tgt_decl : declaration typ) : bool
       forallb decl_ann_supported (dc_annotations tgt_decl)
   | _, _ => false
   end.
+
+Fixpoint cf_first_mismatch_idx {A B : Type}
+  (p : A -> B -> bool) (idx : nat) (xs : list A) (ys : list B) {struct xs} : nat :=
+  match xs, ys with
+  | x :: rx, y :: ry =>
+      if p x y then cf_first_mismatch_idx p (S idx) rx ry else idx
+  | _, _ => idx
+  end.
+
+Definition check_prototype_contract_diag
+  (src_decl tgt_decl : declaration typ) : string + unit :=
+  let fn_s := cf_raw_id_str (dc_name src_decl) in
+  let pfx : string := ("function '" ++ fn_s ++ "': ")%string in
+  bind_err
+    (guard_err (raw_id_eqb (dc_name src_decl) (dc_name tgt_decl))
+      (fun _ => diag "ir-proto"
+        ("function name mismatch: source '" ++ fn_s ++ "' vs target '" ++
+         cf_raw_id_str (dc_name tgt_decl) ++ "'")))
+    (fun _ =>
+  match dc_type src_decl, dc_type tgt_decl with
+  | TYPE_Function sret sargs false, TYPE_Function tret targs false =>
+      let '(s_rattrs, s_pattrs) := dc_param_attrs src_decl in
+      let '(t_rattrs, t_pattrs) := dc_param_attrs tgt_decl in
+      bind_err
+        (guard_err (typ_eqb sret tret)
+          (fun _ => diag "ir-proto" (pfx ++ "source and target return types differ")))
+        (fun _ =>
+      bind_err
+        (guard_err (forallb2 typ_eqb sargs targs)
+          (fun _ => diag "ir-proto"
+            (pfx ++ "parameter type or arity mismatch at param #" ++
+             diag_nat_dec (cf_first_mismatch_idx typ_eqb 0 sargs targs))))
+        (fun _ =>
+      bind_err
+        (guard_err (Nat.eqb (List.length s_pattrs) (List.length sargs))
+          (fun _ => diag "ir-proto"
+            (pfx ++ "source param attribute list length disagrees with argument count")))
+        (fun _ =>
+      bind_err
+        (guard_err (Nat.eqb (List.length t_pattrs) (List.length targs))
+          (fun _ => diag "ir-proto"
+            (pfx ++ "target param attribute list length disagrees with argument count")))
+        (fun _ =>
+      bind_err
+        (guard_err
+          (cconv_eqb (anns_cconv (dc_annotations src_decl))
+                     (anns_cconv (dc_annotations tgt_decl)))
+          (fun _ => diag "ir-proto" (pfx ++ "calling convention mismatch between source and target")))
+        (fun _ =>
+      bind_err
+        (guard_err (ret_attrs_refine_b s_rattrs t_rattrs)
+          (fun _ => diag "ir-proto" (pfx ++ "target return attributes violate refinement contract")))
+        (fun _ =>
+      bind_err
+        (guard_err (forallb2 param_attrs_refine_b s_pattrs t_pattrs)
+          (fun _ => diag "ir-proto"
+            (pfx ++ "target parameter attributes violate refinement contract at param #" ++
+             diag_nat_dec (cf_first_mismatch_idx param_attrs_refine_b 0 s_pattrs t_pattrs))))
+        (fun _ =>
+      bind_err
+        (guard_err (check_fn_attrs_contract (dc_attrs src_decl) (dc_attrs tgt_decl))
+          (fun _ => diag "ir-proto" (pfx ++ "function attributes violate refinement/modeling contract")))
+        (fun _ =>
+      bind_err
+        (guard_err
+          (check_fn_attrs_contract
+            (dc_attrs src_decl ++ ann_fun_attributes (dc_annotations src_decl))
+            (dc_attrs tgt_decl ++ ann_fun_attributes (dc_annotations tgt_decl)))
+          (fun _ => diag "ir-proto" (pfx ++ "annotation function attributes violate refinement/modeling contract")))
+        (fun _ =>
+      bind_err
+        (guard_err (forallb decl_ann_supported (dc_annotations src_decl))
+          (fun _ => diag "ir-proto" (pfx ++ "unsupported declaration annotation on source function")))
+        (fun _ =>
+      guard_err (forallb decl_ann_supported (dc_annotations tgt_decl))
+        (fun _ => diag "ir-proto" (pfx ++ "unsupported declaration annotation on target function"))))))))))))
+  | _, _ =>
+      inl (diag "ir-proto" (pfx ++ "varargs or non-function prototype is unsupported"))
+  end).
+
+Lemma check_prototype_contract_diag_sound :
+  forall src_decl tgt_decl,
+    check_prototype_contract_diag src_decl tgt_decl = inr tt ->
+    check_prototype_contract src_decl tgt_decl = true.
+Proof.
+  intros src_decl tgt_decl H.
+  unfold check_prototype_contract_diag in H; unfold check_prototype_contract.
+  destruct (raw_id_eqb (dc_name src_decl) (dc_name tgt_decl));
+    cbn [guard_err bind_err] in H; [| discriminate H].
+  destruct (dc_type src_decl) as [| | | | | | | | | | | sret sargs [|] | | | | |],
+           (dc_type tgt_decl) as [| | | | | | | | | | | tret targs [|] | | | | |];
+    try discriminate H.
+  destruct (dc_param_attrs src_decl) as [s_rattrs s_pattrs],
+           (dc_param_attrs tgt_decl) as [t_rattrs t_pattrs].
+  repeat match type of H with
+  | bind_err (guard_err ?c _) _ = inr tt =>
+      destruct c; cbn [guard_err bind_err] in H; [| discriminate H]
+  | guard_err ?c _ = inr tt =>
+      destruct c; cbn [guard_err] in H; [| discriminate H]
+  end.
+  reflexivity.
+Qed.
 
 Definition ann_supported_abi {T : Set} (a : annotation T) : bool :=
   match a with
@@ -3556,6 +3764,129 @@ Proof.
   repeat split; assumption.
 Qed.
 
+Fixpoint cf_find_bad_instr_idx {T : Set}
+  (p : instr T -> bool) (idx : nat) (c : code T) {struct c} : option nat :=
+  match c with
+  | [] => None
+  | (_, ins, _) :: rest =>
+      if p ins then cf_find_bad_instr_idx p (S idx) rest else Some idx
+  end.
+
+Fixpoint cf_find_bad_block_loc {T : Set}
+  (bp : block T -> bool) (ip : option (instr T -> bool)) (bs : list (block T))
+  {struct bs} : string :=
+  match bs with
+  | [] => ""
+  | b :: rest =>
+      if bp b then cf_find_bad_block_loc bp ip rest
+      else
+        let blk_part := (" in block '" ++ cf_raw_id_str (blk_id b) ++ "'")%string in
+        match ip with
+        | None => blk_part
+        | Some p =>
+            match cf_find_bad_instr_idx p 0 (blk_code b) with
+            | Some i => (blk_part ++ " instr #" ++ diag_nat_dec i)%string
+            | None => blk_part
+            end
+        end
+  end.
+
+Definition check_validator_syntax_gates_diag (src_cfg tgt_cfg : CFG.cfg dtyp) : string + unit :=
+  bind_err
+    (guard_err (cfg_no_fast_math tgt_cfg)
+      (fun _ => diag "ir-syntax-F17"
+        ("fast-math flags not allowed in target IR" ++
+         cf_find_bad_block_loc block_no_fast_math (Some instr_no_fast_math) (blks tgt_cfg))))
+    (fun _ =>
+  bind_err
+    (guard_err (cfg_no_concurrency src_cfg)
+      (fun _ => diag "ir-syntax-F18"
+        ("volatile/atomic/fence/inline-asm not allowed in source IR" ++
+         cf_find_bad_block_loc block_no_concurrency (Some instr_no_concurrency) (blks src_cfg))))
+    (fun _ =>
+  bind_err
+    (guard_err (cfg_no_concurrency tgt_cfg)
+      (fun _ => diag "ir-syntax-F18"
+        ("volatile/atomic/fence/inline-asm not allowed in target IR" ++
+         cf_find_bad_block_loc block_no_concurrency (Some instr_no_concurrency) (blks tgt_cfg))))
+    (fun _ =>
+  bind_err
+    (guard_err (cfg_supported_abi src_cfg)
+      (fun _ => diag "ir-syntax-F19"
+        ("unsupported ABI/call annotation in source IR" ++
+         cf_find_bad_block_loc (fun b => forallb (fun '(_, ins, _) => instr_supported_abi ins) (blk_code b))
+           (Some instr_supported_abi) (blks src_cfg))))
+    (fun _ =>
+  bind_err
+    (guard_err (cfg_supported_abi tgt_cfg)
+      (fun _ => diag "ir-syntax-F19"
+        ("unsupported ABI/call annotation in target IR" ++
+         cf_find_bad_block_loc (fun b => forallb (fun '(_, ins, _) => instr_supported_abi ins) (blk_code b))
+           (Some instr_supported_abi) (blks tgt_cfg))))
+    (fun _ =>
+  bind_err
+    (guard_err (cfg_no_invented_gep_flags src_cfg tgt_cfg)
+      (fun _ => diag "ir-syntax-F21" "target-invented GEP inbounds/nusw/nuw flag"))
+    (fun _ =>
+  bind_err
+    (guard_err (cfg_intrinsics_allowlisted src_cfg)
+      (fun _ => diag "ir-syntax-F30"
+        ("disallowed or variadic intrinsic call in source IR" ++
+         cf_find_bad_block_loc (fun b => forallb (fun '(_, ins, _) => instr_intrinsics_allowlisted ins) (blk_code b))
+           (Some instr_intrinsics_allowlisted) (blks src_cfg))))
+    (fun _ =>
+  bind_err
+    (guard_err (cfg_intrinsics_allowlisted tgt_cfg)
+      (fun _ => diag "ir-syntax-F30"
+        ("disallowed or variadic intrinsic call in target IR" ++
+         cf_find_bad_block_loc (fun b => forallb (fun '(_, ins, _) => instr_intrinsics_allowlisted ins) (blk_code b))
+           (Some instr_intrinsics_allowlisted) (blks tgt_cfg))))
+    (fun _ =>
+  bind_err
+    (guard_err (cfg_no_vaarg src_cfg)
+      (fun _ => diag "ir-syntax-F31"
+        ("va_arg instruction not supported in source IR" ++
+         cf_find_bad_block_loc (fun b => forallb (fun '(_, ins, _) => instr_no_vaarg ins) (blk_code b))
+           (Some instr_no_vaarg) (blks src_cfg))))
+    (fun _ =>
+  bind_err
+    (guard_err (cfg_no_vaarg tgt_cfg)
+      (fun _ => diag "ir-syntax-F31"
+        ("va_arg instruction not supported in target IR" ++
+         cf_find_bad_block_loc (fun b => forallb (fun '(_, ins, _) => instr_no_vaarg ins) (blk_code b))
+           (Some instr_no_vaarg) (blks tgt_cfg))))
+    (fun _ =>
+  bind_err
+    (guard_err (cfg_no_exceptions src_cfg)
+      (fun _ => diag "ir-syntax-F34"
+        ("exception/unwind/personality construct not allowed in source IR" ++
+         cf_find_bad_block_loc block_no_exceptions (Some instr_no_exceptions) (blks src_cfg))))
+    (fun _ =>
+  bind_err
+    (guard_err (cfg_no_exceptions tgt_cfg)
+      (fun _ => diag "ir-syntax-F34"
+        ("exception/unwind/personality construct not allowed in target IR" ++
+         cf_find_bad_block_loc block_no_exceptions (Some instr_no_exceptions) (blks tgt_cfg))))
+    (fun _ =>
+  guard_err (cfg_no_invented_fp_int_bitcast src_cfg tgt_cfg)
+    (fun _ => diag "ir-syntax-F39" "target-invented FP-to-integer bitcast"))))))))))))).
+
+Lemma check_validator_syntax_gates_diag_sound :
+  forall src_cfg tgt_cfg,
+    check_validator_syntax_gates_diag src_cfg tgt_cfg = inr tt ->
+    check_validator_syntax_gates src_cfg tgt_cfg = true.
+Proof.
+  intros src_cfg tgt_cfg H.
+  unfold check_validator_syntax_gates_diag in H; unfold check_validator_syntax_gates.
+  repeat match type of H with
+  | bind_err (guard_err ?c _) _ = inr tt =>
+      destruct c; cbn [guard_err bind_err] in H; [| discriminate H]
+  | guard_err ?c _ = inr tt =>
+      destruct c; cbn [guard_err] in H; [| discriminate H]
+  end.
+  reflexivity.
+Qed.
+
 Lemma cfg_no_fast_math_block_inv {T : Set} :
   forall (G : CFG.cfg T) b,
     cfg_no_fast_math G = true -> In b (blks G) -> block_no_fast_math b = true.
@@ -3876,6 +4207,81 @@ Definition mcfg_identified_typs_defined (M : CFG.mcfg typ) : bool :=
   forallb (decl_identified_defined env) (m_declarations M) &&
   forallb (defn_identified_defined env) (m_definitions M).
 
+Definition cf_ident_str (id : ident) : string :=
+  match id with
+  | ID_Global r => "@" ++ cf_raw_id_str r
+  | ID_Local r => "%" ++ cf_raw_id_str r
+  end.
+
+Definition check_mcfg_identified_typs_defined_diag (side : string) (M : CFG.mcfg typ) : string + unit :=
+  let env := m_type_defs M in
+  bind_err
+    (cf_check_idx_diag_acc
+      (fun _ p =>
+        guard_err (typ_identified_defined env (snd p))
+          (fun _ => diag "ir-type"
+            ("undefined identified type referenced by " ++ side ++ " type def '" ++ cf_ident_str (fst p) ++ "'")))
+      0 env)
+    (fun _ =>
+  bind_err
+    (cf_check_idx_diag_acc
+      (fun _ g =>
+        guard_err (global_identified_defined env g)
+          (fun _ => diag "ir-type"
+            ("undefined identified type referenced by " ++ side ++ " global '" ++ cf_raw_id_str (g_ident g) ++ "'")))
+      0 (m_globals M))
+    (fun _ =>
+  bind_err
+    (cf_check_idx_diag_acc
+      (fun _ dc =>
+        guard_err (decl_identified_defined env dc)
+          (fun _ => diag "ir-type"
+            ("undefined identified type referenced by " ++ side ++ " declaration '" ++ cf_raw_id_str (dc_name dc) ++ "'")))
+      0 (m_declarations M))
+    (fun _ =>
+  cf_check_idx_diag_acc
+    (fun _ df =>
+      guard_err (defn_identified_defined env df)
+        (fun _ => diag "ir-type"
+          ("undefined identified type referenced in " ++ side ++ " definition '" ++
+           cf_raw_id_str (dc_name (df_prototype df)) ++ "'")))
+    0 (m_definitions M)))).
+
+Lemma check_mcfg_identified_typs_defined_diag_sound :
+  forall side M,
+    check_mcfg_identified_typs_defined_diag side M = inr tt ->
+    mcfg_identified_typs_defined M = true.
+Proof.
+  intros side M H; unfold check_mcfg_identified_typs_defined_diag in H; unfold mcfg_identified_typs_defined.
+  destruct (cf_check_idx_diag_acc
+              (fun _ p =>
+                guard_err (typ_identified_defined (m_type_defs M) (snd p))
+                  (fun _ => diag "ir-type"
+                    ("undefined identified type referenced by " ++ side ++ " type def '" ++ cf_ident_str (fst p) ++ "'")))
+              0 (m_type_defs M)) as [| []] eqn:E1; cbn [bind_err] in H; [discriminate H |].
+  destruct (cf_check_idx_diag_acc
+              (fun _ g =>
+                guard_err (global_identified_defined (m_type_defs M) g)
+                  (fun _ => diag "ir-type"
+                    ("undefined identified type referenced by " ++ side ++ " global '" ++ cf_raw_id_str (g_ident g) ++ "'")))
+              0 (m_globals M)) as [| []] eqn:E2; cbn [bind_err] in H; [discriminate H |].
+  destruct (cf_check_idx_diag_acc
+              (fun _ dc =>
+                guard_err (decl_identified_defined (m_type_defs M) dc)
+                  (fun _ => diag "ir-type"
+                    ("undefined identified type referenced by " ++ side ++ " declaration '" ++ cf_raw_id_str (dc_name dc) ++ "'")))
+              0 (m_declarations M)) as [| []] eqn:E3; cbn [bind_err] in H; [discriminate H |].
+  pose proof (cf_check_idx_diag_acc_sound _ (fun p => typ_identified_defined (m_type_defs M) (snd p)) _ _
+                (fun _ p Ht => guard_err_inr _ _ Ht) E1) as Ht1.
+  assert (Ht1' : forallb (fun '(_, t) => typ_identified_defined (m_type_defs M) t) (m_type_defs M) = true).
+  { rewrite forallb_forall in Ht1 |- *; intros [tid t] Hin; exact (Ht1 (tid, t) Hin). }
+  rewrite Ht1',
+          (cf_check_idx_diag_acc_sound _ _ _ _ (fun _ _ Hg => guard_err_inr _ _ Hg) E2),
+          (cf_check_idx_diag_acc_sound _ _ _ _ (fun _ _ Hdc => guard_err_inr _ _ Hdc) E3),
+          (cf_check_idx_diag_acc_sound _ _ _ _ (fun _ _ Hdf => guard_err_inr _ _ Hdf) H).
+  reflexivity.
+Qed.
+
 (** ** 7. Tail-Recursive DIMACS CNF & Standard ASCII LRAT Parsers ([D-01]) *)
 
 Fixpoint split_lines_acc (cur_rev : list ascii) (acc : list string) (cs : list ascii)
@@ -4086,9 +4492,11 @@ Definition validate_dimacs_lrat_str (cnf_str lrat_str : string) : string + unit 
   match parse_dimacs_cnf cnf_str, parse_ascii_lrat lrat_str with
   | inr f, inr pf =>
       if check_lrat_unsat f pf then inr tt
-      else inl "LRAT UNSAT proof verification failed"
-  | inl err, _ => inl err
-  | _, inl err => inl err
+      else
+        inl (diag "lrat-check"
+          ("LRAT UNSAT proof (" ++ diag_nat_dec (length_tr pf) ++ " step(s)) verification failed"))
+  | inl err, _ => inl (diag "dimacs-parse" err)
+  | _, inl err => inl (diag "lrat-parse" err)
   end.
 
 Theorem validate_dimacs_lrat_str_sound :

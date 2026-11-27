@@ -1189,7 +1189,7 @@ Definition parse_mc_cert_sexp (root : sexp) : string + mc_certificate :=
 
 Definition parse_mc_cert (input : string) : string + mc_certificate :=
   match parse_sexp input with
-  | inl err => inl err
+  | inl err => inl (diag "mc-cert-parse" err)
   | inr root => parse_mc_cert_sexp root
   end.
 
