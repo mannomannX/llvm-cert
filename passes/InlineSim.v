@@ -3,10 +3,26 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Interprocedural Function Inlining Pass — Elastic Simulation ([CertPasses.InlineSim])
+(** * Elastic Coinductive Inlining Simulation ([CertPasses.InlineSim])
 
-    Defines [gen_inline_sim], [cfg_inline_sim], [mcfg_inline_sim], coinduction
-    principles, structural combinators, and handler lifting lemmas. *)
+    Purpose:
+      Defines finite [Tau] prefixes ([itree_tau_star]), inlining contexts
+      ([inline_ctx]), the generic coinductive simulation [gen_inline_sim],
+      concrete [cfg_inline_sim]/[mcfg_inline_sim] instances, and lifting across
+      [mrec], [interp_intrinsics], and [interp_state] ([mcfg_inline_sim_to_model]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml.
+
+    Assumptions:
+      Depends on Stdlib, Paco, ITree, ExtLib, Vellvm, [CertPasses.PassCommon],
+      [CertPasses.common.ItreeTactics], and [CertPasses.InlineFrameGenv]; zero
+      custom axioms (arbitrary [IPtr] / [IPtrTheory]).
+
+    Section Outline:
+      (8A) [itree_tau_star] & [inline_ctx]; (8B) [GenInlineSim] combinators;
+      (8C) Concrete [CFGtop]/[MCFGtop] instances; (8D) Lifting across [mrec],
+      [interp_intrinsics], & [mcfg_inline_sim_to_model]. *)
 
 From Stdlib Require Import
   ZArith

@@ -3,14 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * [CertValidator.AlgRulesNormBinop] Source UB Context & Binop Normalization
+(** * Source UB Context & Binop Normalization ([CertValidator.AlgRulesNormBinop])
 
-    Defines:
-    - Source UB assumption semantics ([ub_ctx], [ub_ctx_holds]) and
-      guaranteed-definedness checks ([expr_guaranteed_defined]).
-    - Bitvector constant folding, signed range bounds ([expr_srange]),
-      safe [nsw] flag stripping, and algebraic binary-operator normalization
-      ([norm_binop_step], [norm_binop_step_typing], [norm_binop_step_eval]). *)
+    Purpose:
+      Defines source UB assumption semantics ([ub_ctx], [ub_ctx_holds]),
+      guaranteed-definedness checks ([expr_guaranteed_defined]), constant
+      folding, signed range bounds, and binop normalization ([norm_binop_step]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Sound semantic analyzer and normalizer; [expr_guaranteed_defined_sound]
+      and [norm_binop_step_*] guarantee that flag stripping and algebraic
+      rewrites preserve or refine source evaluation under [ub_ctx_holds].
+
+    Assumptions:
+      Depends on Stdlib, Vellvm ([Syntax.*], [Numeric.*], [Semantics.*]),
+      [CertValidator.common.CoreTactics], and [LratCore]/[AigGates]/[CertFormatAst]/[AlgRulesEval].
+
+    Section Outline:
+      6. Source UB Context, Algebraic Normalization & Directional Refinement
+      (6.1 Guaranteed Non-Poison & UB-Free Analysis; 6.2 Constant Folding/Binop). *)
 
 From Stdlib Require Import
   ZArith

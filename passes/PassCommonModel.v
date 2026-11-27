@@ -3,12 +3,26 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Provenance-Choice Model Semantics & Whole-Program Refinement ([CertPasses.PassCommonModel])
+(** * Provenance-Choice Model & Whole-Program Refinement ([CertPasses.PassCommonModel])
 
-    Provides vanilla-CIC event relations (zero [JMeq], zero [Equations]),
-    provenance-choice elasticity ([ProvE] / [refine_prov]), the [PreOrder]
-    whole-program refinement relation ([prog_refines]), and the modular
-    whole-CFG lifter ([lift_cfg_pass]). *)
+    Purpose:
+      Defines vanilla-CIC event relations (zero [JMeq], zero [Equations]),
+      provenance-elastic refinement ([ProvE]/[refine_prov]), whole-program
+      refinement ([prog_refines]), and the modular CFG lifter ([lift_cfg_pass]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml. [prog_refines] preserves
+      external call traces and [FailureE] 1-to-1 while allowing UB/OOM drop.
+
+    Assumptions:
+      Parametric over [IP : IPtr] and [IPT : @IPtrTheory IP]; depends on
+      [PassCommonSyntax], [ItreeTactics], [Paco], [ITree], and [Vellvm];
+      zero custom axioms or [Admitted].
+
+    Section Outline:
+      - [EventRelations]: [EqE_*]/[EqA_*], [refine_cfg], [refine_mcfg].
+      - [ModelSemantics]: [interp_mcfg_model], [refine_prov], [prog_refines],
+        and [lift_cfg_pass]. *)
 
 From Stdlib Require Import
   ZArith
@@ -108,6 +122,7 @@ Variant cutNone {E : Type -> Type} : forall [A : Type], E A -> Prop := .
 Variant cutUB_rel {E : Type -> Type} `{UBE -< E} : forall [A : Type], E A -> Prop :=
   | CutUB_rel u : cutUB_rel (subevent _ (ThrowUB u)).
 
+(** Intentionally exported for [sum_prerel_c]/[sum_postrel_c] callers across [CertPasses]. *)
 Ltac destruct_sum2 e1 e2 HE :=
   repeat (let Te := type of e1 in
           let Te' := eval hnf in Te in
@@ -123,7 +138,7 @@ Ltac destruct_sum2 e1 e2 HE :=
               try contradiction
           end).
 
-Ltac destruct_sum3 e1 e2 e3 H12 H23 :=
+Local Ltac destruct_sum3 e1 e2 e3 H12 H23 :=
   repeat (let Te := type of e1 in
           let Te' := eval hnf in Te in
           match Te' with

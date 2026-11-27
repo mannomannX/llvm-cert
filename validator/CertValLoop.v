@@ -3,7 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Single-Header Natural Loop Cut-Point Validator & Coinductive Soundness (Sec 5.6c) *)
+(** * Single-Header Natural Loop Cut-Point Validator ([CertValidator.CertValLoop])
+
+    Purpose:
+      Defines pure loop-body reification ([reify_pure_exp], [reify_pure_phis],
+      [reify_pure_code]), natural-loop extraction ([reify_natural_loop]), and
+      coinductive loop validation ([check_loop_cutpoint_cfg]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Fail-closed loop cut-point validator ([F-26],
+      [check_loop_cutpoint_cfg_open_sound]); accepts only single-header natural
+      loops whose cut-point, branch, and return checks pass UB/LRAT checks.
+
+    Assumptions:
+      Depends on Stdlib, [Paco], [ITree], [ExtLib], [Vellvm], [Diag], and
+      [CertFormat]/[AigLrat]/[AlgRules]/[CfgDag]/[CertVal*]; zero custom axioms.
+
+    Section Outline:
+      5.6c [F-26] Single-Header Natural Loop Cut-Point Validator: pure SSA
+      reification & stepping; Relational Cut-State Bijection & Coinductive Check. *)
 
 From Stdlib Require Import
   ZArith

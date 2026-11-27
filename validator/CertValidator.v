@@ -3,30 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Top-Level Verified CFG Translation Validator ([F-44] Relational [DrawE] & [F-33] Open-World [CallE])
+(** * Top-Level Verified CFG Translation Validator ([CertValidator.CertValidator])
 
-    Implements:
-    1. Open-world per-function event interpretation ([run_cfg_locals],
-       [eval_cfg_open]) keeping [CallE], [ExternalCallE], [IntrinsicE],
-       [GlobalE], [StackE], [MemoryE], and [DrawE] uninterpreted ([F-33]).
-    2. Relational [DrawE] refinement ([ow_itree_refines], [F-44]) over
-       well-formed [Draw] strategies ([valid_draw_value]), proving reflexivity,
-       transitivity, source existential / universal [Draw] introduction,
-       target universal [Draw] inversion, refutation of target-invented
-       [0 -> freeze poison], and soundness of [or(freeze x, 1) -> -1] (on [i1])
-       and [or(freeze x, -1) -> -1] (at arbitrary width [sz : positive]).
-    3. Small-step/big-step operational stepping ([mcfg_steps_to_ret],
-       [mcfg_steps_to_ub], [cfg_steps_to_ret], [cfg_steps_to_ub]) bridging
-       Vellvm's [denote_cfg] to [det_ref] with zero dependent-equality axioms.
-    4. Reflexive and transitive per-function open-world refinement
-       [validator_cfg_refines].
-    5. Computable bounded-DAG SSA reification, distinct target [freeze]-key
-       checking, source-verified UB assumption discharge, [cert-v1] block &
-       return obligation checking ([check_cert_cfg_with_lrat], [check_cert_cfg],
-       [check_cert_defn]), and [check_cert_cfg_sound] ([0 Admitted]).
-    6. Extraction-ready module and string-level entrypoints
-       ([validate_mcfg_with_cert], [validate_tle_pair_with_cert],
-       [validate_tle_pair_with_cert_str]) and [validate_tle_pair_with_cert_str_sound]. *)
+    Purpose:
+      Re-exports [CfgDag] and the [CertVal*] stack, wires diagnostic CFG/loop/
+      definition checkers, and provides extraction-ready entrypoints
+      ([validate_mcfg_with_cert], [validate_tle_pair_with_cert_str]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Fail-closed top-level translation validator ([check_cert_cfg_sound],
+      [validate_mcfg_with_cert_sound], [validate_tle_pair_with_cert_str_sound]);
+      parse errors, gate failures, or unproved obligations return tagged [inl].
+
+    Assumptions:
+      Depends on Stdlib, [Paco], [ITree], [ExtLib], [Vellvm], [Diag], and
+      [CertFormat]/[AigLrat]/[AlgRules]; re-exports [CfgDag] & [CertVal*].
+
+    Section Outline:
+      Umbrella [CertVal*] re-exports & wrappers; 5.7 Per-Function Soundness;
+      6. Extraction-Ready Module & String-Level CLI Entrypoints. *)
 
 From Stdlib Require Import
   ZArith

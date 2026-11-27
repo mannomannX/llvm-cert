@@ -3,12 +3,26 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified [AArch64] ([A64]) Concrete Differential Oracle & Symbolic Step Soundness
+(** * AArch64 (A64) Concrete Oracle & Step Soundness ([CertValidator.A64SymOracle])
 
-    Implements for Milestone M2/M4 ([CertValidator.A64SymOracle]):
-    concrete extracted ISA oracle helpers for Layer-3 differential testing
-    and single-step symbolic oracle soundness ([a64_step_sym_oracle],
-    [a64_step_sym_oracle_sound]). *)
+    Purpose:
+      Provides Layer-3 differential oracle helpers ([a64_eval_bytes_concrete],
+      [a64_decode_word_ok]) and the proven single-step symbolic oracle ([a64_step_sym_oracle],
+      [a64_step_sym_oracle_sound]).
+
+    Trust Contract & Fail-Closed Boundary:
+      [a64_step_sym_oracle] returns [None] on decode failure or unsupported instructions;
+      [Some] outputs are proven sound against [a64_step_concrete] by
+      [a64_step_sym_oracle_sound]. Extracted to OCaml via [Extract.v].
+
+    Assumptions:
+      [Stdlib], [Vellvm], [CertValidator.common.Diag], and [CertValidator.{CertFormat,AigLrat,
+      AlgRules,CfgDag,Elf64Spec,McFrameMem,McIsaCommon,A64Decode,A64ExecSym,A64DagProof}];
+      zero custom axioms.
+
+    Section Outline:
+      6. Concrete differential oracle helpers; 7. Single-step symbolic oracle
+      ([a64_step_sym_oracle]) and [a64_step_sym_oracle_sound]. *)
 
 From Stdlib Require Import
   ZArith

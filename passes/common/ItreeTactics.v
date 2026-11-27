@@ -6,13 +6,21 @@
 (** * Deterministic [ITree] & Event-Sum Tactics ([CertPasses.common.ItreeTactics])
 
     Purpose:
-      Targets the exact [ITree] idioms used across [CertPasses] and validator
-      open-world proofs: strong [eq_itree] ([≅]), [paco] stepping, [observe_bind],
-      monadic bind normalization, and [subevent]/[ReSum] dispatch.
+      Provides deterministic tactics for strong [eq_itree] ([≅]), [paco]
+      stepping, [observe_bind] rewriting, and [subevent]/[ReSum] dispatch
+      across [CertPasses] and validator open-world proofs.
 
-    Trust Contract & Guardrails:
-      No [repeat match goal] sledgehammers, no [eutt]/[tau_eutt] bloat.
-      Tactics lie completely outside the kernel TCB. *)
+    Trust Contract & Fail-Closed Boundary:
+      Shared tactic library; outside the kernel TCB (no definitions or proofs).
+      Avoids [repeat match goal] search and [eutt]/[tau_eutt] bloat.
+
+    Assumptions:
+      Depends on [Paco], [ITree], and [CertValidator.common.Options]; zero
+      Vellvm dependencies and zero custom axioms.
+
+    Section Outline:
+      Top-level tactics: [norm_subevent], [destruct_sum1], [itree_step_bind],
+      and [itree_obs_bind]. *)
 
 From Paco Require Import paco.
 

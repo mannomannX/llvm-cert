@@ -5,10 +5,23 @@
 
 (** * Symbolic CFG DAG Representation & Evaluator ([CertValidator.CfgDag])
 
-    Defines [cfg_dag], [dag_outcome], [eval_cfg_dag], and [wf_cfg_dag] shared
-    between [CertValidator.CertValidator] and the machine-code ISA semantics
-    ([Rv64Sem], [A64CoreSem]), breaking the circular dependency on the LLVM
-    certificate validator. *)
+    Purpose:
+      Defines the shared symbolic CFG DAG AST ([cfg_dag]), outcome type
+      ([dag_outcome]), closed evaluator ([eval_cfg_dag]), and well-formedness
+      check ([wf_cfg_dag]) shared between IR validation and ISA semantics.
+
+    Trust Contract & Fail-Closed Boundary:
+      Shared IR/MC interface module; breaks circular dependencies between
+      [CertValidator] and ISA modules ([Rv64Sem], [A64CoreSem]) while modeling
+      [CD_Unreachable], [CD_Eval], [CD_BlockAssume], and [CD_Branch] explicitly.
+
+    Assumptions:
+      Depends on Stdlib, [Vellvm.{Numeric.Integers,Semantics.*}], and
+      [CertValidator.{CertFormatAst,AlgRulesEval,AlgRulesNormBinop}]; zero axioms.
+
+    Section Outline:
+      Single flat module defining [cfg_dag], [dag_outcome], [eval_cfg_dag],
+      and [wf_cfg_dag]. *)
 
 From Stdlib Require Import
   ZArith

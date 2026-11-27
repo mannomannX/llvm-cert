@@ -5,24 +5,23 @@
 
 (** * Verified Structured Loop Cutpoint Validator ([CertValidator.McLoop])
 
-    Implements Milestone M3b of Phase 8.3a for single-header structured loops
-    on RV64IM+RVC and AArch64:
-    1. Cutpoint variable naming ([!cut_k], [!mc_hi_rk], [!mc_ur_r], [!mc_us_i]
-       — never [$]-prefixed), let-free substitution ([subst_cert_expr]), and
-       32-bit upper-half recombination ([combine_hi32_expr]).
-    2. General pure-SSA IR segment reification ([ir_seg_tree], [reify_ir_seg])
-       supporting rotated loops, entry guards, exit-block phis, LICM, and
-       self-loops.
-    3. Single-CNF multi-obligation SAT/LRAT refinement discharger
-       ([check_mc_loop_obls]) where [ml_inv] guards ONLY Body obligations
-       (never asserted as a global unit clause).
-    4. Cutpoint & skeleton state construction and leaf-pair obligation
-       collection for RV64 and AArch64.
-    5. End-to-end validators & CNF emitters ([validate_mc_loop_rv64],
-       [validate_mc_loop_a64], [emit_mc_loop_cnf_rv64], [emit_mc_loop_cnf_a64]).
-    6. Backward partial-correctness and arbitrary-depth forward progress
-       soundness theorems ([validate_mc_loop_rv64_sound],
-       [validate_mc_loop_a64_sound]) with [0 Admitted] and zero custom axioms. *)
+    Purpose:
+      Top-level structured loop validator re-exporting [McOblDischarger], [McLoopIrSpec], and
+      [McLoopCheck], proving backward partial-correctness and arbitrary-depth forward progress
+      soundness ([validate_mc_loop_rv64_sound], [validate_mc_loop_a64_sound]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not directly named in [Extract.v] (consumed by [McValidator]). Proves
+      that [inr tt] from [validate_mc_loop_rv64] or [validate_mc_loop_a64] establishes
+      [rv_loop_sound_spec] or [a64_loop_sound_spec] with zero admitted obligations.
+
+    Assumptions:
+      [Stdlib], [Vellvm], [CertValidator.common.Diag], RV64/A64 loop-seg & [McFormat] imports,
+      and exported [McOblDischarger], [McLoopIrSpec], [McLoopCheck]; zero custom axioms.
+
+    Section Outline:
+      6. Skeleton backward soundness, [ir_at_cut], constructive cutpoint [penv] construction,
+      and [validate_mc_loop_rv64_sound] / [validate_mc_loop_a64_sound]. *)
 
 From Stdlib Require Import
   ZArith

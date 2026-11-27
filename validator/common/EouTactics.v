@@ -6,12 +6,20 @@
 (** * Pure [EOU] Outcome Tactics ([CertValidator.common.EouTactics])
 
     Purpose:
-      Deterministic 1-step eliminators for Vellvm's [EOU] monad ([eou_bind],
-      [raise_ret], [raise_ub], [raise_error], [raise_oom]) in symbolic DAG
-      evaluators and validator proofs ([PS-12]).
+      Provides deterministic 1-step eliminators ([eou_inv], [eou_step]) for
+      Vellvm's [EOU] outcome monad ([raise_ret], [raise_ub], [raise_error],
+      [raise_oom]) in symbolic DAG evaluator and validator proofs.
 
-    Trust Contract & Guardrails:
-      Deterministic 1-step rewriting/inversion only; outside the kernel TCB. *)
+    Trust Contract & Fail-Closed Boundary:
+      Shared tactic library (Ltac only); outside the Rocq trusted kernel and not
+      extracted to OCaml.
+
+    Assumptions:
+      Depends on [ExtLib.Structures.Monad], [Vellvm.Semantics.EOU], and
+      [CertValidator.common.Options]; zero custom axioms.
+
+    Section Outline:
+      Single flat library defining [eou_inv] and [eou_step]. *)
 
 From ExtLib Require Import
   Structures.Monad.

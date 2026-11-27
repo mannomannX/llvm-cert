@@ -3,10 +3,26 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Interprocedural Function Inlining Pass — Syntax Proofs ([CertPasses.InlineSyntaxProof])
+(** * Inlining Syntax, Lookup & Global-Env Proofs ([CertPasses.InlineSyntaxProof])
 
-    Freshness partition lemmas, finder inversion, block lookup, hygiene validator
-    soundness, and global-environment construction preservation. *)
+    Purpose:
+      Proves fresh-ID partition lemmas ([all_fresh_partition]), finder
+      inversions, [find_block] and [assoc] preservation across split caller and
+      renamed callee blocks, definite-init soundness, and global-environment
+      preservation ([inline_one_site_build_global_env]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml.
+
+    Assumptions:
+      Depends on Stdlib, Paco, ITree, ExtLib, Vellvm, [CertPasses.PassCommon],
+      [CertPasses.common.ItreeTactics], and [CertPasses.InlineSpec]; zero custom
+      axioms.
+
+    Section Outline:
+      (5) Freshness partition, ID-membership, finder inversions,
+      [find_block]/[assoc] lemmas, & validator soundness; (6) Block-address
+      preservation & [inline_one_site_build_global_env]. *)
 
 From Stdlib Require Import
   ZArith

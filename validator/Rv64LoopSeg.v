@@ -3,11 +3,26 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Loop-Segment Symbolic Summarizer & Multi-Step Concrete Lemmas
+(** * RV64 Loop-Segment Symbolic Summarizer & Multi-Step Lemmas ([CertValidator.Rv64LoopSeg])
 
-    Implements for [CertValidator.Rv64LoopSeg]:
-    M3b loop-segment symbolic summarizer ([summarize_rv64_seg_wf],
-    [summarize_rv64_seg_sound]) and multi-step concrete execution lemmas. *)
+    Purpose:
+      Provides multi-step concrete execution lemmas ([rv_exec_steps]) and the RV64 loop-segment
+      symbolic summarizer ([summarize_rv64_seg]) producing [rv_seg_tree] trees backed by
+      [summarize_rv64_seg_wf] and [summarize_rv64_seg_sound].
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml directly. [summarize_rv64_seg] fails closed
+      ([inl err]) on missing instructions, invalid branches/cutpoints, undefined reads, or fuel
+      exhaustion; accepted trees satisfy [rv_seg_wf] and multi-step execution soundness.
+
+    Assumptions:
+      [Stdlib], [Vellvm], [CertValidator.common.Diag], and [CertValidator.{CertFormat,AigLrat,
+      AlgRules,CfgDag,Elf64Spec,McFrameMem,McIsaCommon,Rv64Decode,Rv64ExecSym,Rv64DagProof}];
+      zero custom axioms.
+
+    Section Outline:
+      8. Multi-step lemmas ([rv_exec_steps]), [rv_seg_tree], [rv_sym_step_one],
+      [summarize_rv64_seg], and [summarize_rv64_seg_wf] / [summarize_rv64_seg_sound]. *)
 
 From Stdlib Require Import
   ZArith

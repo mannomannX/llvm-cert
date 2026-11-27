@@ -5,11 +5,26 @@
 
 (** * Sparse Conditional Constant Propagation Specification ([CertPasses.SCCPSpec])
 
-    Defines the lattice, dataflow solver, translation-validation certificate
-    builder and checker ([check_sccp_valid]), forward must-definedness
-    analysis, and CFG/MCFG rewriting ([sccp_mcfg], [sccp_mcfg_typ]) for
-    Sparse Conditional Constant Propagation (SCCP). Soundness proofs live
-    in [CertPasses.SCCP]. *)
+    Purpose:
+      Defines the constant domain and lattice ([const_val], [lat_val]),
+      bit-vector constant evaluators, SCCP dataflow solver ([sccp_solve]),
+      must-definedness analysis, certificate checker ([check_sccp_valid]), and
+      CFG/MCFG rewriting ([sccp_mcfg], [sccp_mcfg_typ]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Extracted to OCaml ([Extract.v]: [sccp_mcfg], [sccp_mcfg_typ]).
+      [sccp_cfg] validates [sccp_check_guards] and [check_sccp_valid] on the
+      pruned constant certificate, falling back to the identity CFG [c] if
+      either check fails.
+
+    Assumptions:
+      Depends on Stdlib, Vellvm, and [CertPasses.PassCommon]; zero custom axioms
+      (decidable equality and Hedberg UIP on [positive] proved in vanilla CIC).
+
+    Section Outline:
+      (1) Decidable equality, bit-vector, & edge helpers; (2) Constant domain,
+      lattice, & evaluators; (3) Solver, must-definedness, [check_sccp_valid],
+      & CFG/MCFG rewriting. *)
 
 From Stdlib Require Import
   ZArith

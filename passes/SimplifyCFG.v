@@ -5,18 +5,28 @@
 
 (** * Verified Control-Flow Graph Simplification ([CertPasses.SimplifyCFG])
 
-    Implements and proves whole-program refinement ([prog_refines]) for three
-    composable control-flow optimizations over [CFG.mcfg dtyp]:
-    1. Constant Terminator Folding ([fold_const_term_mcfg]): folds constant
-       boolean/integer [TERM_Br] and constant integer [TERM_Switch] terminators
-       to unconditional [TERM_Br_1] branches.
-    2. Unreachable Block & Phi-Edge Elimination ([elim_unreachable_mcfg]):
-       computes reachable blocks from [init c], validates reachability closure,
-       removes unreachable blocks, and prunes dead incoming phi edges.
-    3. Iterated Single-Predecessor Block Coalescing ([coalesce_mcfg]):
-       boundedly merges linear block pairs [(b1, b2)] where [b1] branches
-       unconditionally to non-entry, phi-free [b2] as its unique predecessor,
-       updating downstream phi predecessors without shadowing. *)
+    Purpose:
+      Implements and proves whole-program refinement ([prog_refines]) for three
+      composable CFG passes over [CFG.mcfg dtyp]: constant terminator folding
+      ([fold_const_term_mcfg]), unreachable block and phi pruning
+      ([elim_unreachable_mcfg]), and bounded coalescing ([coalesce_mcfg]),
+      composed into [simplifycfg_mcfg] and [simplifycfg_mcfg_typ].
+
+    Trust Contract & Fail-Closed Boundary:
+      Extracted to OCaml ([Extract.v]: [simplifycfg_mcfg],
+      [simplifycfg_mcfg_typ]). Unreachable pruning checks [check_reach_closed]
+      and coalescing checks [nodup_raw_ids] and [can_coalesce_pair], falling back
+      to the identity CFG [c] when validation fails.
+
+    Assumptions:
+      Depends on Stdlib, Paco, ITree, ExtLib, Vellvm, and
+      [CertPasses.PassCommon]; zero custom axioms (vanilla CIC over arbitrary
+      [IPtr] / [IPtrTheory]).
+
+    Section Outline:
+      (1) Helpers & [refine_cfg] lemmas; (2) [fold_const_term_cfg];
+      (3) [elim_unreachable_cfg]; (4) [coalesce_mcfg]; (5) Composed pass &
+      [simplifycfg_mcfg_refines]. *)
 
 From Stdlib Require Import
   ZArith

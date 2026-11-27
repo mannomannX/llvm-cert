@@ -3,13 +3,24 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Stack-Slot to SSA Register Promotion ([CertPasses.Mem2Reg])
+(** * Mem2Reg Leaf-Call Synchronization Knot ([CertPasses.Mem2RegLeafKnot])
 
-    Promotes non-escaping scalar [alloca] stack slots in function entry blocks
-    to SSA registers and block-entry [Phi] nodes (Stage 1), followed by
-    reverse-order dead scalar [alloca] elimination in leaf functions (Stage 2)
-    so inlinable callees become [alloca]-free before [CertPasses.Inline].
-    Composed across bounded rounds via [prog_refines_trans]. *)
+    Purpose:
+      Defines the [ev_ok] predicate and global-environment-preserving leaf
+      knot ([LeafKnotG], [lg_rel], [cfg_leaf_g_sync], [mrec_knot_leaf_call_sim])
+      to synchronize unpromoted leaf callees across [CallE] boundaries.
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml. Isolates non-recursive leaf
+      call simulation under preserved safe provenance and global state.
+
+    Assumptions:
+      Parametric over [IP : IPtr] and [IPT : @IPtrTheory IP]; depends on
+      [PassCommon] and [Mem2RegSpec]..[Mem2RegCpsSSA]; zero custom axioms.
+
+    Section Outline:
+      - [MemoryAndSerialization]: 3M. [mcfg_eq_g_post], [ev_ok] syntactic/denote
+        closure, [leaf_ctx_fn_rel], and [Section LeafKnotG]. *)
 
 From Stdlib Require Import
   ZArith

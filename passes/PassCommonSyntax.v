@@ -3,11 +3,26 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Shared Syntactic Pass Utilities & Complete Use-Site Collectors ([CertPasses.PassCommonSyntax])
+(** * Shared Syntactic Utilities & Use-Site Collectors ([CertPasses.PassCommonSyntax])
 
-    Provides extraction-clean equality deciders, fresh [Name] generation,
-    canonical poison-preserving copy expressions, and complete SSA use-site
-    and syntax-guard collectors (remediating upstream [Scope.v] gaps). *)
+    Purpose:
+      Provides extraction-clean equality deciders, collision-free fresh [Name]
+      generation, poison-preserving copy expressions, and complete SSA
+      use-site and syntax-guard collectors (closing upstream [Scope.v] gaps).
+
+    Trust Contract & Fail-Closed Boundary:
+      Purely syntactic AST utilities and boolean guards consumed by extracted
+      passes; [mcfg_no_inttoptr] and [cfg_no_block_addresses] fail closed.
+
+    Assumptions:
+      Depends on Rocq [Stdlib], [ITree], [ExtLib], and [Vellvm] AST/semantics;
+      zero custom axioms or [Admitted].
+
+    Section Outline:
+      1. Extraction-clean equality deciders and list membership.
+      2. Fresh [Name] generation.
+      3. Canonical poison-preserving copy expression ([mk_copy_exp]).
+      4. [SyntaxCollectors]: complete use/def, block-address, and [inttoptr] checks. *)
 
 From Stdlib Require Import
   ZArith

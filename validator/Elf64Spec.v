@@ -3,19 +3,27 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Bounds-Checked ELF64 Inspector & Relocation Security Gate ([CertValidator.Elf64Spec])
+(** * Verified Bounds-Checked ELF64 Inspector & Relocation Gate ([CertValidator.Elf64Spec])
 
-    Pure, total, axiom-free Rocq specification for parsing little-endian
-    ELF64 relocatable objects ([ET_REL]) and post-[ld.lld] linked binaries
-    ([ET_EXEC] / [ET_DYN]) on [RISC-V] and [AArch64].
+    Purpose:
+      Pure, total specification for parsing little-endian ELF64 relocatable ([ET_REL]) and
+      linked ([ET_EXEC] / [ET_DYN]) binaries on RISC-V and AArch64, slicing [STT_FUNC]
+      bodies and collecting direct-call relocations and target symbol addresses.
 
-    Enforces:
-    1. Exact ELF64 header, section table, unique [SHT_SYMTAB], and [F-27]
-       [EF_RISCV_RVE] / [R_RISCV_RELAX] / [R_RISCV_ALIGN] checks.
-    2. Unique [STT_FUNC] resolution into a valid [SHF_EXECINSTR] non-[SHT_NOBITS]
-       section with non-overlapping relocations across [[fn_lo, fn_hi)).
-    3. Exact bounds-checked byte slicing proved by [elf64_extract_func_sound]
-       with zero axioms ([Closed under the global context]). *)
+    Trust Contract & Fail-Closed Boundary:
+      [elf64_extract_func] and [elf64_extract_func_with_calls] fail closed ([inl err]) on
+      invalid headers, missing/duplicate [SHT_SYMTAB] or [STT_FUNC], disallowed relocations
+      ([R_RISCV_RELAX] / [R_RISCV_ALIGN] or non-call relocs), or out-of-bounds slices; [inr]
+      outputs satisfy [elf64_extract_func_sound] / [elf64_extract_func_with_calls_sound].
+      Extracted to OCaml via [Extract.v].
+
+    Assumptions:
+      [Stdlib] and [CertValidator.common.{Options,Diag}] only; zero Vellvm dependencies and
+      zero custom axioms.
+
+    Section Outline:
+      1. Byte-stream slicing & LE decoders; 2. ELF64 types & constants; 3. Header/section/
+      symbol parsers; 4. Relocation gate; 5. Function slicing; 6. Call-reloc extraction. *)
 
 From CertValidator.common Require Import Options Diag.
 

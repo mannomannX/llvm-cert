@@ -6,12 +6,20 @@
 (** * Shared Rocq 9.1 Proof-Hygiene Options ([CertValidator.common.Options])
 
     Purpose:
-      Provides uniform, exported Rocq vernacular flags so refactored and newly
-      written modules inherit strict bullet/goal-selector hygiene and parallel
-      [-vos]/[-vok] section checking without per-lemma boilerplate.
+      Provides uniform exported vernacular flags ([Default Goal Selector "!"] and
+      [Default Proof Using "Type"]) so modules inherit strict goal-selector
+      hygiene and parallel [-vos]/[-vok] checking without per-lemma boilerplate.
 
-    Trust Contract & Assumptions:
-      Contains vernacular option flags only (zero definitions, zero axioms). *)
+    Trust Contract & Fail-Closed Boundary:
+      Vernacular option flags only; no definitions, runtime code, or extraction
+      surface.
+
+    Assumptions:
+      Zero dependencies and zero custom axioms.
+
+    Section Outline:
+      Single flat file exporting [Default Goal Selector "!"] and
+      [Default Proof Using "Type"]. *)
 
 #[export] Set Default Goal Selector "!".
 #[export] Set Default Proof Using "Type".

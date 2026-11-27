@@ -5,14 +5,23 @@
 
 (** * Canonical [mc-cert-v1] Certificate AST & Total S-Expression Parser ([CertValidator.McFormat])
 
-    Implements for Milestone M1 of Phase [8.3a]:
-    1. Canonical AST ([mc_certificate]) and decidable well-formedness predicate
-       ([wf_mc_cert]) for machine-code refinement certificates.
-    2. Stack-safe tail-recursive byte conversion ([mc_string_to_bytes]) using
-       [List.rev_append] so multi-MiB ELF binaries never overflow the OCaml stack.
-    3. Total bounded-depth S-expression parser ([parse_mc_cert]) reusing
-       [CertFormat.parse_sexp] and [CertFormat.parse_lrat_step_sexp], backed
-       by the axiom-free theorem [parse_mc_cert_wf]. *)
+    Purpose:
+      Defines the canonical [mc_certificate] AST, decidable and diagnostic well-formedness
+      checkers ([wf_mc_cert]), stack-safe [mc_string_to_bytes], and total bounded-depth
+      S-expression parser ([parse_mc_cert]) backed by [parse_mc_cert_wf].
+
+    Trust Contract & Fail-Closed Boundary:
+      [parse_mc_cert] fails closed ([inl err]) on malformed S-expressions, wrong schema tag,
+      unsupported architectures/widths, duplicate bindings, or invalid loop/call specs; every
+      [inr c] satisfies [wf_mc_cert c = true] by [parse_mc_cert_wf]. Extracted via [Extract.v].
+
+    Assumptions:
+      [Stdlib], [CertValidator.common.{Options,Diag}], and [CertValidator.{AigLrat,CertFormat,
+      AlgRules,Elf64Spec,McFrameMem,McIsaCommon}]; zero custom axioms.
+
+    Section Outline:
+      1. Tail-recursive byte/map helpers; 2. [mc_certificate] AST & [wf_mc_cert]; 2b. Diagnostic
+      well-formedness checkers & bridge proofs; 3. S-expression parser ([parse_mc_cert]). *)
 
 From Stdlib Require Import
   ZArith

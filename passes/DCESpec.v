@@ -3,12 +3,29 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Dead Code & Dead Phi Elimination Specification ([CertPasses.DCESpec])
+(** * Dead Code & Dead Phi Elimination Specification ([CertPasses.DCESpec])
 
-    Syntax utilities, forward reachability and scalar-type/definedness
-    dataflow analysis with boolean validator ([check_fwd_cfg]), backward
-    liveness fixpoint with boolean validator ([check_live_cfg]), and block/CFG
-    dead code and dead phi transformations ([dce_block], [dce_cfg_once]). *)
+    Purpose:
+      Defines finite ID-set utilities, a nested [exp] induction principle
+      ([exp_ind_nested]), forward reachability and scalar-type/definedness
+      analysis with validator ([check_fwd_cfg]), backward liveness with
+      validator ([check_live_cfg]), and CFG rewriting ([dce_cfg_once]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Computational specification re-exported by [CertPasses.DCE] for OCaml
+      extraction. [dce_cfg_once] gates on [cfg_no_block_addresses],
+      [nodup_raw_ids], [check_fwd_cfg], and [check_live_cfg], falling back to
+      the identity CFG [c] if any check fails.
+
+    Assumptions:
+      Depends on Stdlib, Paco, ITree, ExtLib, Vellvm, and
+      [CertPasses.PassCommon]; zero custom axioms.
+
+    Section Outline:
+      (1) Finite ID-set & sublist utilities; (2) [exp_ind_nested];
+      (3) Forward reachability, scalar safety, & [check_fwd_cfg];
+      (4) Backward liveness, [dce_code]/[dce_phis], [check_live_cfg], &
+      [dce_cfg_once]. *)
 
 From Stdlib Require Import
   ZArith

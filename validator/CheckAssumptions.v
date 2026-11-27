@@ -3,16 +3,24 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Layer-1 Kernel Assumption & Top-Level Theorem Gate ([CertValidator.CheckAssumptions])
+(** * Layer-1 Kernel Assumption & Theorem Gate ([CertValidator.CheckAssumptions])
 
-    Re-checks and binds all top-level soundness theorems across:
-    1. [CertPasses.Pipeline] (Safe-Path optimization pipeline & I2F composition),
-    2. [CertPasses.ModuleMerge] (Compositional split/merge verification),
-    3. [CertValidator.AigLrat] & [CertValidator.AlgRules] (LRAT & 2-rail bitvector soundness),
-    4. [CertValidator.CertValidator] (End-to-end string-to-TLE translation validator).
+    Purpose:
+      Re-checks and binds top-level soundness theorems across
+      [CertPasses.{Pipeline,ModuleMerge}], IR [CertValidator], and machine-code
+      [McValidator] modules for CI axiom and kernel auditing.
 
-    Evaluated under [rocq check -o] and audited via [Print Assumptions] in CI to
-    enforce that zero unapproved axioms enter the proof dependency closure. *)
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only CI audit gate; not extracted to OCaml. Evaluated under
+      [rocq check -o] and [Print Assumptions] to block unapproved axioms.
+
+    Assumptions:
+      Imports [CertPasses.{Pipeline,McfgExport,ModuleMerge}] and [CertValidator]
+      modules only to [Check] theorem types; zero definitions and zero axioms.
+
+    Section Outline:
+      Single flat [Check @...] audit list across [CertPasses], IR
+      [CertValidator], and machine-code [McValidator] soundness theorems. *)
 
 Set Default Goal Selector "!".
 

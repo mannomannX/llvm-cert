@@ -3,7 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * CFG DAG Summarization, Block UB Assumption Extraction & Summary Soundness (Sec 5.5b) *)
+(** * CFG DAG Summarization & Block UB Extraction ([CertValidator.CertValCfgSum])
+
+    Purpose:
+      Defines acyclic CFG-to-[cfg_dag] summarization ([summarize_ocfg_dag],
+      [summarize_cfg_dag_with_uas]), block UB assumption lookup ([block_uas_for]),
+      and well-formedness plus source/target operational soundness theorems.
+
+    Trust Contract & Fail-Closed Boundary:
+      Fail-closed CFG summarizer ([summarize_src_dag_sound],
+      [summarize_tgt_dag_sound]); cycles (exhausted fuel), unsupported terminators,
+      or reification errors yield [None], never dropping CFG paths.
+
+    Assumptions:
+      Depends on Stdlib, [Paco], [ITree], [ExtLib], [Vellvm], [Diag], and
+      [CertFormat]/[AigLrat]/[AlgRules]/[CfgDag]/[CertVal*]; zero custom axioms.
+
+    Section Outline:
+      Single section defining [try_const_i1], [block_uas_for],
+      [summarize_ocfg_dag]/[summarize_cfg_dag_with_uas], WF, and src/tgt soundness. *)
 
 From Stdlib Require Import
   ZArith

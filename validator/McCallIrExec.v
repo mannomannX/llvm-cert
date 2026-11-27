@@ -5,9 +5,23 @@
 
 (** * IR Call-Tree Execution & Lockstep Soundness ([CertValidator.McCallIrExec])
 
-    Implements Section 5.4 of Milestone M3c of Phase 8.3a: IR call-tree
-    denotation ([Section IrTreeDenote]), argument obligation checking, and
-    lockstep soundness on top of [CertValidator.McCallSpec]. *)
+    Purpose:
+      Defines IR call-tree denotation ([Section IrTreeDenote]), proves callee argument
+      obligation matching ([build_call_arg_obls_rv64_matches], [build_call_arg_obls_a64_matches]),
+      and establishes lockstep IR/MC call-tree soundness ([ir_mc_call_trees_sound]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml. Connects accepted call-tree obligation checks
+      to lockstep [cfg_call_steps_to_ret] / [cfg_call_steps_to_ub] IR semantics and machine
+      call traces.
+
+    Assumptions:
+      [Stdlib], [ITree], [Vellvm], and [CertValidator] (including [McOblDischarger] and
+      [McCallSpec]); uses [Section IrTreeDenote] over [Pa : Params] with zero custom axioms.
+
+    Section Outline:
+      5.4 Attribute/argument stepping, [Section IrTreeDenote], [reify_ir_call_tree_exec],
+      call-tree summarizer well-formedness, and [ir_mc_call_trees_sound]. *)
 
 From Stdlib Require Import
   ZArith

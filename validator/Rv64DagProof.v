@@ -3,13 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Bitvector Arithmetic & Semantic Equivalence Proofs for [RV64IM] DAG Lowering
+(** * Bitvector & Soundness Proofs for RV64 DAG Lowering ([CertValidator.Rv64DagProof])
 
-    Implements for [CertValidator.Rv64DagProof]:
-    Machine-checked semantic equivalence ([summarize_rv64_dag_at_wf],
-    [summarize_rv64_dag_at_sound], [summarize_rv64_dag_wf],
-    [summarize_rv64_dag_sound], [Qed.]) between [rv_exec] and [eval_cfg_dag],
-    checked with zero custom axioms. *)
+    Purpose:
+      Proves bitvector arithmetic soundness, symbolic well-formedness ([summarize_rv64_dag_wf]),
+      and semantic equivalence ([summarize_rv64_dag_sound]) between concrete [rv_exec] and
+      [eval_cfg_dag].
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml. Establishes that any DAG accepted by
+      [summarize_rv64_dag] is well-formed and preserves concrete RV64 semantics and LP64
+      callee-saved registers.
+
+    Assumptions:
+      [Stdlib], [Vellvm], [CertValidator.common.Diag], and [CertValidator.{CertFormat,AigLrat,
+      AlgRules,CfgDag,Elf64Spec,McFrameMem,McIsaCommon,Rv64Decode,Rv64ExecSym}]; zero custom axioms.
+
+    Section Outline:
+      5. Bitvector arithmetic lemmas, [summarize_rv64_dag_at_sound], [summarize_rv64_dag_at_wf],
+      [inst_no_word_mulh] invariants, and [summarize_rv64_dag_wf] / [summarize_rv64_dag_sound]. *)
 
 From Stdlib Require Import
   ZArith

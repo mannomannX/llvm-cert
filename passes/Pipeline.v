@@ -3,13 +3,28 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(* ========================================================================= *)
-(* CertPasses.Pipeline                                                       *)
-(*                                                                           *)
-(* End-to-End Verified Optimization Pipeline for LLVMCert (Phase 2.2).       *)
-(* Composes Mem2Reg, Inline, SCCP, SimplifyCFG, and DCE via the transitive   *)
-(* whole-module semantic refinement relation [prog_refines].                 *)
-(* ========================================================================= *)
+(** * End-to-End Verified Optimization Pipeline ([CertPasses.Pipeline])
+
+    Purpose:
+      Composes [mem2reg_mcfg], [inline_mcfg], [sccp_mcfg], [simplifycfg_mcfg],
+      and [dce_mcfg] into a 7-stage pipeline ([optimize_mcfg],
+      [optimize_mcfg_typ]) and proves whole-program refinement over
+      [IPtrWellBehaved], [IPZ], [IP64Bit], and [I2F_toplevel.model_refine].
+
+    Trust Contract & Fail-Closed Boundary:
+      Extracted to OCaml ([Extract.v]: [optimize_mcfg], [optimize_mcfg_typ]).
+      Every stage is a verified total pass that preserves [prog_refines] or
+      fails closed to an equivalent/identity CFG.
+
+    Assumptions:
+      Depends on Stdlib, ITree, Vellvm (syntax, semantics, [I2F]), and
+      [CertPasses.{PassCommon,SimplifyCFG,DCE,SCCP,Mem2Reg,Inline}]; zero custom
+      axioms.
+
+    Section Outline:
+      Top-level pipeline defining [optimize_mcfg], [optimize_mcfg_typ],
+      [optimize_mcfg_refines], [IPZ]/[IP64Bit] corollaries, and
+      [optimize_mcfg_I2F_model_refine]. *)
 
 From Stdlib Require Import
   List.

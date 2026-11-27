@@ -5,17 +5,23 @@
 
 (** * Machine-Code Expression Lowering & Rewrite Verification ([CertValidator.McExprRewrite])
 
-    Implements Sections 1-4 of the ELF64-to-IR backend translation validator:
-    1. Pure MC DAG flattening ([flatten_mc_dag_to_expr]) reducing [cfg_dag]
-       symbolic execution trees into a single total, UB-free [CE_Select] term.
-    2. Verified power-of-2 signed-division lowering ([lower_sdiv_pow2], exact
-       semantic equivalence [lower_sdiv_pow2_sound]) matching LLVM's
-       [srai; srli; add; srai] strength reduction across all bitwidths [w >= 3].
-    3. Verified congruence-closure / uninterpreted-multiplier abstraction
-       ([abstract_shared_muls], [abstract_shared_muls_sound]) discharging shared
-       wide multiplications without 64x64 bit-blasting.
-    4. Normalized/abstracted expression refinement checks
-       ([check_mc_expr_refines], [check_mc_expr_refines_sound]). *)
+    Purpose:
+      Implements pure MC DAG flattening ([flatten_mc_dag_to_expr]), verified power-of-2
+      [CB_SDiv] lowering ([lower_sdiv_pow2]), shared-multiplier congruence abstraction
+      ([abstract_shared_muls]), and unified refinement checks ([check_mc_expr_refines_diag]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only helper module (re-exported by [McValidator]). [check_mc_expr_refines_diag]
+      fails closed ([inl err]) whenever normalized/abstracted expressions fail
+      [check_expr_refines_with_lrat_diag]; [inr tt] implies [check_mc_expr_refines ... = true].
+
+    Assumptions:
+      [Stdlib], [Vellvm], [CertValidator.common.Diag], and [CertValidator.{AigLrat,CertFormat,
+      AlgRules,CertValidator}]; zero custom axioms.
+
+    Section Outline:
+      1. DAG flattening; 2. Power-of-2 [CB_SDiv] lowering; 3. Shared-multiplier congruence
+      abstraction; 4. Unified MC expression refinement checks. *)
 
 From Stdlib Require Import
   ZArith

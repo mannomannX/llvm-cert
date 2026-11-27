@@ -3,10 +3,28 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Interprocedural Function Inlining Pass — Syntax & Specification ([CertPasses.InlineSpec])
+(** * Interprocedural Function Inlining Specification ([CertPasses.InlineSpec])
 
-    Computable ID sets, hygienic renaming maps, block splitting, and the
-    single-site / iterated module inlining transformation ([inline_mcfg], [inline_mcfg_typ]). *)
+    Purpose:
+      Defines computable ID sets, hygienic renaming maps, AST alpha-renaming,
+      callee definite-initialization analysis ([check_cfg_def_before_use]),
+      eligibility guards ([is_hygienic_module], [is_inlinable_callee]), and
+      bounded module inlining ([inline_mcfg], [inline_mcfg_typ]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Extracted to OCaml ([Extract.v]: [inline_mcfg], [inline_mcfg_typ]).
+      [inline_one_site_mcfg] skips inlining and returns [M] unchanged whenever
+      [is_hygienic_module] fails or no eligible non-recursive leaf call site
+      matches.
+
+    Assumptions:
+      Depends on Stdlib, Paco, ITree, ExtLib, Vellvm, [CertPasses.PassCommon],
+      and [CertPasses.common.ItreeTactics]; zero custom axioms.
+
+    Section Outline:
+      (1) ID sets & renaming maps; (2) Alpha-renaming & predecessor remapping;
+      (3) Definite-initialization analysis; (4) Eligibility guards, caller
+      splitting, & [inline_mcfg]. *)
 
 From Stdlib Require Import
   ZArith

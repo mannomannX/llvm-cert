@@ -3,10 +3,26 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Interprocedural Function Inlining Pass — Callee Simulation ([CertPasses.InlineCalleeProof])
+(** * Inlining Callee Block & Parameter-Copy Simulation ([CertPasses.InlineCalleeProof])
 
-    Local-environment invariants, expression/attribute renaming simulation,
-    parameter-copy simulation, and renamed callee block simulation. *)
+    Purpose:
+      Proves local-environment invariants ([env_agree_outside],
+      [callee_defs_bound]), primitive [lread]/[lwrite]/[stack_push]/[stack_pop]
+      steps, renamed expression/attribute simulation, [denote_block_callee_sim],
+      and parameter-copy simulation.
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml.
+
+    Assumptions:
+      Depends on Stdlib, Paco, ITree, ExtLib, Vellvm, [CertPasses.PassCommon],
+      [CertPasses.common.ItreeTactics], and
+      [CertPasses.Inline{Spec,SyntaxProof,FrameGenv,Sim}]; zero custom axioms.
+
+    Section Outline:
+      (9A) Local-env invariants & [ren_exp_id]; (9B) Primitive local/stack/exc
+      lemmas; (9C) Expression simulation; (9D) Attributes & [select_switch];
+      (9E) Callee block & parameter-copy simulation. *)
 
 From Stdlib Require Import
   ZArith

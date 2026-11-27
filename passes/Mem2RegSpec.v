@@ -3,13 +3,27 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Stack-Slot to SSA Register Promotion ([CertPasses.Mem2Reg])
+(** * Stack-Slot Promotion & Dead-Alloca Spec ([CertPasses.Mem2RegSpec])
 
-    Promotes non-escaping scalar [alloca] stack slots in function entry blocks
-    to SSA registers and block-entry [Phi] nodes (Stage 1), followed by
-    reverse-order dead scalar [alloca] elimination in leaf functions (Stage 2)
-    so inlinable callees become [alloca]-free before [CertPasses.Inline].
-    Composed across bounded rounds via [prog_refines_trans]. *)
+    Purpose:
+      Defines the computable Stage 1 scalar [alloca]-to-SSA promotion pass,
+      Stage 2 reverse-order dead scalar [alloca] elimination, and the bounded
+      top-level entry points [mem2reg_mcfg] and [mem2reg_mcfg_typ].
+
+    Trust Contract & Fail-Closed Boundary:
+      Extracted to OCaml. Purely syntactic, fail-closed transform over
+      [CFG.mcfg dtyp] (default fuel 32); returns input unchanged whenever
+      [mcfg_no_inttoptr], entry-block, or slot safety guards fail.
+
+    Assumptions:
+      Depends on [PassCommon] and [Vellvm] AST/semantics; zero custom axioms
+      or [Admitted].
+
+    Section Outline:
+      1. Computable syntax inspectors and [m2r_module_interproc_safe].
+      2. Stage 1: single-slot SSA promotion ([promote_slot_iter]).
+      3. Stage 2: reverse-order dead scalar [alloca] elimination ([elim_dead_alloca_iter]).
+      4. Top-level entry points ([mem2reg_mcfg], [mem2reg_mcfg_typ]). *)
 
 From Stdlib Require Import
   ZArith

@@ -3,12 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified [AArch64] ([A64]) Concrete Operational Semantics & Symbolic DAG Lowering
+(** * AArch64 (A64) Semantics & Symbolic DAG Lowering ([CertValidator.A64ExecSym])
 
-    Implements for Milestone M2/M4 ([CertValidator.A64ExecSym]):
-    concrete ARMv8-A operational semantics ([a64_exec]) over 64-bit/32-bit
-    registers and 4-bit [NZCV] flags, plus AAPCS64-sound symbolic execution
-    and DAG lowering ([summarize_a64_dag]). *)
+    Purpose:
+      Defines concrete ARMv8-A operational semantics ([a64_exec]) over 64/32-bit registers,
+      4-bit [NZCV] flags, and private stack memory, plus AAPCS64-sound symbolic execution and
+      DAG lowering ([summarize_a64_dag]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml directly. [summarize_a64_dag] fails closed
+      ([inl err]) on unsupported instructions, undefined-register/flag reads, invalid stack or
+      epilogue state, or fuel exhaustion, emitting UB/poison-free [cfg_dag] terms.
+
+    Assumptions:
+      [Stdlib], [Vellvm], [CertValidator.common.Diag], and [CertValidator.{CertFormat,AigLrat,
+      AlgRules,CfgDag,Elf64Spec,McFrameMem,McIsaCommon,A64Decode}]; zero custom axioms.
+
+    Section Outline:
+      3. Concrete ARMv8-A operational semantics ([a64_exec]); 4. AAPCS64 argument ABI & total
+      symbolic DAG lowering ([summarize_a64_dag_at], [summarize_a64_dag]). *)
 
 From Stdlib Require Import
   ZArith

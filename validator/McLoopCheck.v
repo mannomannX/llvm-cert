@@ -5,10 +5,23 @@
 
 (** * Loop Cutpoint MC Tree, Validators & CNF Emitters ([CertValidator.McLoopCheck])
 
-    4. Cutpoint & skeleton state construction and leaf-pair obligation
-       collection for RV64 and AArch64.
-    5. End-to-end validators & CNF emitters ([validate_mc_loop_rv64],
-       [validate_mc_loop_a64], [emit_mc_loop_cnf_rv64], [emit_mc_loop_cnf_a64]). *)
+    Purpose:
+      Implements shared MC loop trees ([mc_seg_tree]), cutpoint/skeleton state builders,
+      leaf-pair obligation collection ([collect_mc_ir_obls]), and end-to-end loop validators
+      and CNF emitters ([validate_mc_loop_rv64], [validate_mc_loop_a64], [emit_mc_loop_cnf_*]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only helper module (re-exported by [McLoop]). [validate_mc_loop_rv64] and
+      [validate_mc_loop_a64] fail closed ([inl err]) on ill-formed loop specs, freeze or
+      skeleton violations, IR/MC reification errors, or failed LRAT obligation discharge.
+
+    Assumptions:
+      [Stdlib], [Vellvm], [CertValidator.common.Diag], and [CertValidator] core, RV64/A64
+      loop-seg, [McFormat], [McOblDischarger], and [McLoopIrSpec] modules; zero custom axioms.
+
+    Section Outline:
+      4. Shared [mc_seg_tree], cutpoint/skeleton states & [collect_mc_ir_obls_sound]; 5. Loop
+      validators & CNF emitters ([validate_mc_loop_*], [emit_mc_loop_cnf_*]). *)
 
 From Stdlib Require Import
   ZArith

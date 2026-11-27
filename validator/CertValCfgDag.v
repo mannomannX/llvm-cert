@@ -3,7 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Bounded-DAG Control-Flow Reifier ([cfg_dag]) & Operational Soundness (Sec 5.5a) *)
+(** * Bounded-DAG Control-Flow Reifier & Soundness ([CertValidator.CertValCfgDag])
+
+    Purpose:
+      Defines phi reification ([reify_phi_evals]), instruction and block-body
+      reification ([reify_code_step], [reify_code]) covering pure intrinsics,
+      [vec1] poison extraction, and return-only calls, with src/tgt soundness.
+
+    Trust Contract & Fail-Closed Boundary:
+      Fail-closed code-block reifier ([reify_code_typing],
+      [eval_reified_code_src], [eval_reified_code_tgt]); unmodeled instructions,
+      unsupported calls, or typing mismatches fail closed ([None]).
+
+    Assumptions:
+      Depends on Stdlib, [Paco], [ITree], [ExtLib], [Vellvm], [Diag], and
+      [CertFormat]/[AigLrat]/[AlgRules]/[CfgDag]/[CertValOpenWorld]/[CertValExpReify].
+
+    Section Outline:
+      5.5 Bounded-DAG Control-Flow Reifier ([cfg_dag]) & Operational Soundness:
+      phi reification, [vec1]/call helpers, [reify_code], and src/tgt soundness. *)
 
 From Stdlib Require Import
   ZArith

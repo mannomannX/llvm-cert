@@ -3,11 +3,27 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Dead Code & Dead Phi Elimination Pure Safety ([CertPasses.DCESafety])
+(** * Dead Code & Dead Phi Elimination Pure Safety ([CertPasses.DCESafety])
 
-    Pure [EOU] expression safety, scalar runtime typing ([dvalue_has_dtyp]),
-    live-variable environment agreement, and [withCall] lemmas for
-    [CertPasses.DCESpec]. *)
+    Purpose:
+      Proves pure [EOU] safety and scalar runtime typing ([dvalue_has_dtyp]) for
+      constants, arithmetic, comparisons, conversions, select, GEP, and attrs,
+      plus [env_agree_on], [tenv_sound], and [left_evals_to] combinators for
+      [CertPasses.DCESpec].
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml (re-exported by [CertPasses.DCE]
+      for downstream simulation proofs).
+
+    Assumptions:
+      Depends on Stdlib, Paco, ITree, ExtLib, Vellvm, [CertPasses.PassCommon],
+      and [CertPasses.DCESpec]; zero custom axioms (parameterized over
+      [IP : IPtr] and [IPT : @IPtrTheory IP]).
+
+    Section Outline:
+      (5) Pure [EOU] safety, [dvalue_has_dtyp] inversions, & op typing;
+      (6) [env_agree_on], [tenv_sound], [withCall] equations, & [left_evals_to]
+      combinators. *)
 
 From Stdlib Require Import
   ZArith

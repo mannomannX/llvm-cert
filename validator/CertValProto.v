@@ -3,7 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Prototype Attribute Seeding & [denote_function] Refinement (Sec 5.6d) *)
+(** * Prototype Attribute Seeding & Function Refinement ([CertValidator.CertValProto])
+
+    Purpose:
+      Seeds initial [ub_ctx] assumptions from prototype parameter attributes
+      ([seed_proto_param_ctx], [F-61]), models function frames ([eval_defn_open]),
+      and lifts CFG refinement to [denote_function] ([proto_cfg_to_defn_refines]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Fail-closed prototype and frame-refinement bridge; requires
+      [check_prototype_contract], [proto_deref_preserved_b], ABI preservation,
+      and [no_stack_det] guarantees before asserting [validator_defn_refines].
+
+    Assumptions:
+      Depends on Stdlib, [Paco], [ITree], [ExtLib], [Vellvm], [Diag], and
+      [CertFormat]/[AigLrat]/[AlgRules]/[CfgDag]/[CertVal*]; zero custom axioms.
+
+    Section Outline:
+      5.6d [F-61] & [F-60] Prototype Attribute Seeding & [denote_function]
+      Refinement ([seed_proto_param_ctx_sound], [proto_cfg_to_defn_refines]). *)
 
 From Stdlib Require Import
   ZArith

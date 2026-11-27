@@ -5,11 +5,27 @@
 
 (** * Verified Stack-Slot to SSA Register Promotion ([CertPasses.Mem2Reg])
 
-    Promotes non-escaping scalar [alloca] stack slots in function entry blocks
-    to SSA registers and block-entry [Phi] nodes (Stage 1), followed by
-    reverse-order dead scalar [alloca] elimination in leaf functions (Stage 2)
-    so inlinable callees become [alloca]-free before [CertPasses.Inline].
-    Composed across bounded rounds via [prog_refines_trans]. *)
+    Purpose:
+      Proves the Stage 1 interprocedural knot ([InterprocKnot], [s1_phi],
+      [s1_lfp]) and top-level whole-program refinement theorems
+      ([mem2reg_mcfg_refines], [mem2reg_mcfg_typ_refines]), and re-exports
+      [Mem2RegSpec]..[Mem2RegStage1].
+
+    Trust Contract & Fail-Closed Boundary:
+      Soundness facade for extracted [Mem2RegSpec.mem2reg_mcfg{,_typ}];
+      bounded-fuel Stage 1 promotion + Stage 2 dead-alloca elimination
+      refines input IR under [prog_refines] and fails closed on unsafe IR.
+
+    Assumptions:
+      Parametric over [IP : IPtr] and [IPT : @IPtrTheory IP] (with
+      [IPtrWellBehaved IP] for Stage 2 / top-level theorems); depends on
+      [PassCommon] and [Mem2RegSpec]..[Mem2RegStage1]; zero custom axioms.
+
+    Section Outline:
+      - [MemoryAndSerialization]: 3Q. [InterprocKnot] ([s1_interproc_mrec_sim])
+        and module-level spec lemmas.
+      - Top-level refinement theorems ([promote_slot_iter_refines],
+        [elim_dead_alloca_iter_refines], [mem2reg_mcfg{,_typ}_refines]). *)
 
 From Stdlib Require Import
   ZArith

@@ -6,14 +6,21 @@
 (** * Core Deterministic Single-Step Proof Tactics ([CertValidator.common.CoreTactics])
 
     Purpose:
-      Stdlib-only (zero Vellvm dependency) deterministic 1-step eliminators
-      for option/sum monads, boolean reflections, decidable equalities, and
-      nested boolean conditionals. Naming deliberately avoids collisions with
-      [Vellvm.Utils.Tactics].
+      Provides Stdlib-only deterministic 1-step eliminators ([inv_some],
+      [inv_inr], [inv_inl]), boolean reflections, decidable equalities, and
+      branch splitters named to avoid collisions with [Vellvm.Utils.Tactics].
 
-    Trust Contract & Guardrails:
-      No backtracking search ([eauto with *], deep [repeat match goal]).
-      Tactics lie completely outside the trusted kernel (checked by [rocq check]). *)
+    Trust Contract & Fail-Closed Boundary:
+      Shared tactic library (Ltac only); outside the Rocq trusted kernel and not
+      extracted to OCaml. Rejects backtracking search ([eauto with *]).
+
+    Assumptions:
+      Stdlib-only plus [CertValidator.common.Options]; zero Vellvm dependencies
+      and zero custom axioms.
+
+    Section Outline:
+      Single flat library of option/sum eliminators, boolean reflection
+      helpers, and conditional splitters. *)
 
 From Stdlib Require Import
   Bool

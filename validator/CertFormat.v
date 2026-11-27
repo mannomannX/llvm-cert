@@ -3,12 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * [CertValidator.CertFormat]: Umbrella Certificate Format, DIMACS/LRAT Parsers & Soundness
+(** * Umbrella Certificate Format, DIMACS/LRAT Parsers ([CertValidator.CertFormat])
 
-    Re-exports [CertFormatAst], [CertFormatParse], and [CertFormatGates],
-    and provides tail-recursive DIMACS CNF and standard ASCII LRAT parsers
-    ([parse_dimacs_cnf], [parse_ascii_lrat], [validate_dimacs_lrat_str])
-    together with [validate_dimacs_lrat_str_sound]. *)
+    Purpose:
+      Re-exports [CertFormatAst], [CertFormatParse], and [CertFormatGates], and
+      defines tail-recursive DIMACS CNF and ASCII LRAT parsers
+      ([parse_dimacs_cnf], [parse_ascii_lrat], [validate_dimacs_lrat_str]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Fail-closed DIMACS/LRAT validator ([validate_dimacs_lrat_str_sound]);
+      malformed headers, bad literals, or failed LRAT steps return [inl], while
+      [inr tt] proves the parsed CNF unsatisfiable.
+
+    Assumptions:
+      Depends on Stdlib, [CertValidator.common.Diag], and [CertValidator.LratCore];
+      re-exports [CertFormatAst], [CertFormatParse], and [CertFormatGates].
+
+    Section Outline:
+      Umbrella re-exports of [CertFormatAst], [CertFormatParse], and
+      [CertFormatGates]; 7. Tail-Recursive DIMACS & ASCII LRAT Parsers. *)
 
 From Stdlib Require Import
   ZArith

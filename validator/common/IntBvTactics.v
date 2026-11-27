@@ -6,11 +6,21 @@
 (** * Machine-Integer [@Integers.bit_int] Tactics ([CertValidator.common.IntBvTactics])
 
     Purpose:
-      Deterministic helpers for Vellvm's width-indexed [@Integers.bit_int]
-      type across validator, ISA semantics, and stack-frame proofs ([PS-03]).
+      Provides deterministic Ltac helpers ([int_bit_solve], [int_unsigned_repr],
+      [int_signed_repr], [int_mkint_eq]) for Vellvm's width-indexed
+      [@Integers.bit_int] type across validator and ISA proofs.
 
-    Trust Contract & Guardrails:
-      Layered above [BvTactics] and [Vellvm.Numeric.Integers]; outside the kernel TCB. *)
+    Trust Contract & Fail-Closed Boundary:
+      Shared tactic library (Ltac only); outside the Rocq trusted kernel and not
+      extracted to OCaml. Re-exports [CertValidator.common.BvTactics].
+
+    Assumptions:
+      Depends on [Vellvm.Numeric.Integers], [CertValidator.common.Options], and
+      [CertValidator.common.BvTactics]; zero custom axioms.
+
+    Section Outline:
+      Single flat library re-exporting [BvTactics] and defining
+      [@Integers.bit_int] simplification tactics. *)
 
 From Vellvm Require Import
   Numeric.Integers.

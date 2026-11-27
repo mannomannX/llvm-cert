@@ -3,13 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Stack-Slot to SSA Register Promotion ([CertPasses.Mem2Reg])
+(** * Mem2Reg Semantic Model & Interpreter Combinators ([CertPasses.Mem2RegModel])
 
-    Promotes non-escaping scalar [alloca] stack slots in function entry blocks
-    to SSA registers and block-entry [Phi] nodes (Stage 1), followed by
-    reverse-order dead scalar [alloca] elimination in leaf functions (Stage 2)
-    so inlinable callees become [alloca]-free before [CertPasses.Inline].
-    Composed across bounded rounds via [prog_refines_trans]. *)
+    Purpose:
+      Proves strong bisimulation laws for [interp_mrec], [interp_mcfg_model],
+      and [interp_cfg_model], [refine_prov] combinators with [tau_star],
+      primitive event reductions, and the [interp_cfg_exc] layer.
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml. Supports [Mem2Reg] soundness
+      under [refine_prov] without [Eqdep] or [JMeq].
+
+    Assumptions:
+      Parametric over [IP : IPtr] and [IPT : @IPtrTheory IP]; depends on
+      [PassCommon] and [Vellvm]; zero custom axioms or [Admitted].
+
+    Section Outline:
+      - [BindCompat] and [mrec_ctx].
+      - [ModelCombinators]: interpreter equations, [refine_prov]/[tau_star]
+        combinators, primitive reductions, and [interp_cfg_exc] lemmas. *)
 
 From Stdlib Require Import
   ZArith

@@ -3,14 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * [CertValidator.AlgRulesNormRefines] Expression Normalization & Algebraic Refinement
+(** * Expression Normalization & Algebraic Refinement ([CertValidator.AlgRulesNormRefines])
 
-    Defines:
-    - [icmp], [cast], [select], and [freeze] constant folding and algebraic
-      normalization ([try_fold_const_icmp] through [normalize_cert_expr]).
-    - Directional poison/flag/identity refinement checking
-      ([check_expr_refines]) and its soundness proof
-      ([check_expr_refines_sound]). *)
+    Purpose:
+      Defines normalization passes for [icmp], casts, [select], and [freeze]
+      ([normalize_cert_expr]) together with the structural/algebraic refinement
+      checker ([check_expr_refines]) proved by [check_expr_refines_sound].
+
+    Trust Contract & Fail-Closed Boundary:
+      Fail-closed algebraic refinement checker ([check_expr_refines_sound]);
+      returns [true] only when target [eval_closed_cert_expr] refines source
+      under [ub_ctx_holds] without introducing UB, poison, or unsound flags.
+
+    Assumptions:
+      Depends on Stdlib, Vellvm ([Syntax.*], [Numeric.*], [Semantics.*]),
+      [CertValidator.common.CoreTactics], and [AlgRulesEval]/[AlgRulesNormBinop].
+
+    Section Outline:
+      Normalization passes ([icmp], cast, [select], [normalize_cert_expr]);
+      6.3 Directional Refinement Checker ([check_expr_refines]) & Soundness. *)
 
 From Stdlib Require Import
   ZArith

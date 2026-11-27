@@ -3,13 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Stack-Slot to SSA Register Promotion ([CertPasses.Mem2Reg])
+(** * Mem2Reg Stage 2 Dead-Alloca Elimination Soundness ([CertPasses.Mem2RegStage2])
 
-    Promotes non-escaping scalar [alloca] stack slots in function entry blocks
-    to SSA registers and block-entry [Phi] nodes (Stage 1), followed by
-    reverse-order dead scalar [alloca] elimination in leaf functions (Stage 2)
-    so inlinable callees become [alloca]-free before [CertPasses.Inline].
-    Composed across bounded rounds via [prog_refines_trans]. *)
+    Purpose:
+      Proves CFG-level simulation for non-invoke terminators, [Phi] writes
+      ([write_phi_dvs]), Stage 1 no-call blocks, and Stage 2 reverse-order
+      dead scalar [alloca] elimination ([try_elim_dead_alloca_denote_function_sim]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml. Establishes per-function
+      refinement for dead [alloca] removal on guarded leaf functions.
+
+    Assumptions:
+      Parametric over [IP : IPtr] and [IPT : @IPtrTheory IP] (with
+      [IPtrWellBehaved IP] for Stage 2 [alloca] deletion); depends on
+      [PassCommon] and [Mem2RegSpec]..[Mem2RegLeafKnot]; zero custom axioms.
+
+    Section Outline:
+      - [MemoryAndSerialization]: terminator/[Phi] sims, Stage 1 no-call code
+        sim ([stage1_no_call_code_exc_sim]), and Stage 2 function sim. *)
 
 From Stdlib Require Import
   ZArith

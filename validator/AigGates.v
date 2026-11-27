@@ -3,16 +3,26 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * [CertValidator.AigGates]: 2-Rail Bitvector Bridge, Tseitin Gate Builder & Peephole Combinators
+(** * 2-Rail Bitvector Bridge, Tseitin Gates & Peepholes ([CertValidator.AigGates])
 
-    Builds on [CertValidator.LratCore] and Vellvm's [@Integers.bit_int] to provide:
-    - The 2-rail [(val_bits, poison_bit)] representation ([rail_bv]) and bridge
-      lemmas ([eval_rail_val], [bit_int_to_bools_repr], [modulus_pow_sz]),
-    - Monotone Tseitin gate encodings and 2-rail refinement counterexample
-      queries ([blast_refinement_cex], [blast_refinement_cex_unsat_sound],
-      [blast_refinement_cex_auto_unsat_sound]),
-    - Monotone [sat_blast_st], [step_spec], peephole gate combinators, and
-      peephole refinement soundness theorems ([blast_refinement_cex_opt_*]). *)
+    Purpose:
+      Defines the 2-rail [(val_bits, poison_bit)] representation ([rail_bv])
+      bridged to [@Integers.bit_int], monotone Tseitin gates, 2-rail encoders,
+      monotone [sat_blast_st] peepholes, and counterexample UNSAT checks.
+
+    Trust Contract & Fail-Closed Boundary:
+      Fail-closed SAT counterexample queries ([blast_refinement_cex_unsat_sound],
+      [blast_refinement_cex_opt_lrat_sound]); returns [true] only when [LRAT] or
+      bounded DPLL refutes the counterexample CNF.
+
+    Assumptions:
+      Depends on Stdlib, [Vellvm.Numeric.{Rocqlib,Zbits,Integers}], and
+      [CertValidator.LratCore]; zero custom axioms.
+
+    Section Outline:
+      3. 2-Rail Representation & Bridge; 4. Monotone Tseitin Builder & Encodings
+      (4.1 Gates, 4.2 Bitwise/Const, 4.3 Eq/Select/Freeze, 4.4 CEX Queries);
+      6. Monotone [sat_blast_st] & Peephole Gates (6.1 Bounds & Combinators). *)
 
 From Stdlib Require Import
   ZArith

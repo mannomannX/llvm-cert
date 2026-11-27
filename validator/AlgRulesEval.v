@@ -3,23 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * [CertValidator.AlgRulesEval] Verified Symbolic [(val, poison)] DAG Evaluator
+(** * Verified Symbolic [(val, poison)] DAG Evaluator ([CertValidator.AlgRulesEval])
 
-    Defines:
-    1. Vanilla-CIC Hedberg proof-irrelevance for [Pos.eq_dec] and bitvector
-       constant characterizations ([all_ones_N], [repr_all_ones_N]) over
-       Vellvm's [@Integers.bit_int sz].
-    2. Exact bijections between canonical [cert-v1] operators and Vellvm's
-       [ibinop], [icmp], and [pure_conversion] AST operators.
-    3. Relational scalar value refinement ([dvalue_refines]) and [EOU]
-       outcome equivalence/refinement ([equiv_eou_dvalue], [refine_eou_dvalue]).
-    4. The relational [(val, poison)] symbolic DAG evaluator [eval_cert_expr]
-       over [param_env] + [let_env] + [freeze_oracle], supporting closed
-       [$n0..] [CE_Let] DAG bindings ([E-10]), constants, arbitrary bitwidths
-       [sz : positive], all 13 integer binary operators, [icmp], [select],
-       [zext]/[sext]/[trunc] (with [nneg]/[nuw]/[nsw]), and [freeze].
-    5. Closed [CE_Let] DAG expansion ([expand_lets]) and its exact evaluation
-       equivalence ([eval_expand_lets_equiv]). *)
+    Purpose:
+      Proves Hedberg UIP on [positive], operator bijections to Vellvm ASTs,
+      scalar/EOU refinement ([dvalue_refines], [refine_eou_dvalue]), the
+      symbolic evaluator [eval_cert_expr], and [CE_Let] expansion [expand_lets].
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only semantics and evaluator library ([eval_cert_div_rem_poison_rhs_ub],
+      [eval_cert_shift_oob_poison], [eval_cert_expr_totality],
+      [eval_expand_lets_equiv]); models all UB and poison cases explicitly.
+
+    Assumptions:
+      Depends on Stdlib, Vellvm ([Syntax.*], [Numeric.*], [Semantics.*]),
+      [CertValidator.common.CoreTactics], and [CertValidator.{LratCore,AigGates,CertFormatAst}].
+
+    Section Outline:
+      1. Hedberg & BV Foundations; 2. Operator Bijections; 3. Scalar Typing &
+      EOU; 4. Symbolic Evaluator (Bounded DoS Check, 4.1-4.2); 5. [expand_lets]. *)
 
 From Stdlib Require Import
   ZArith

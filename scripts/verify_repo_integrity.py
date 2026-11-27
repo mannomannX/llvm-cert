@@ -54,6 +54,18 @@ ALLOWED_ROCQ_ABORT_FILES: set[str] = {
     "vellvm/src/rocq/Syntax/SurfaceSyntax.v",
 }
 
+APPROVED_TACTIC_EXPORT_FILES: set[str] = {
+    "validator/common/CoreTactics.v",
+    "validator/common/BvTactics.v",
+    "validator/common/IntBvTactics.v",
+    "validator/common/EouTactics.v",
+    "passes/common/ItreeTactics.v",
+}
+
+ALLOWED_EXPORTED_LTACS: set[tuple[str, str]] = {
+    ("passes/PassCommonModel.v", "destruct_sum2"),
+}
+
 # Current baseline is ~501 LOC across 5 minimal glue files (`IO.ml`, `Camlcoq.ml`, printers,
 # `parse_util.ml`). Headroom of ~250 LOC is reserved strictly for thin CLI entrypoints of
 # `verified-opt-fallback` and `cert-validator`; all unverified systems code belongs in Rust.
@@ -86,8 +98,15 @@ FORBIDDEN_AXIOM_IMPORT_RE = re.compile(
 )
 
 
-def strip_rocq_comments_and_strings(src: str) -> str:
-    """Replaces Rocq `(* ... *)` nested comments and string literals with spaces, keeping newlines."""
+BARE_GLOBAL_LEAK_RE = re.compile(
+    r"^(?:(?:Global|#\[(?:global|export)\])\s+)?(Hint|Transparent|Ltac)\s+([A-Za-z0-9_']+)"
+)
+GOAL_SELECTOR_BANG_RE = re.compile(r'^\s*Set\s+Default\s+Goal\s+Selector\s+"!"\s*\.', re.MULTILINE)
+OPTIONS_IMPORT_RE = re.compile(r"\bFrom\s+CertValidator\.common\s+Require\s+Import\s+Options\b")
+
+
+def _scan_rocq_comments_and_strings(src: str) -> tuple[str, int, bool]:
+    """Replaces Rocq `(* ... *)` nested comments and string literals with spaces, returning state."""
     out: list[str] = []
     i = 0
     n = len(src)
@@ -142,7 +161,12 @@ def strip_rocq_comments_and_strings(src: str) -> str:
         out.append(ch)
         i += 1
 
-    return "".join(out)
+    return "".join(out), depth, in_string
+
+
+def strip_rocq_comments_and_strings(src: str) -> str:
+    """Replaces Rocq `(* ... *)` nested comments and string literals with spaces, keeping newlines."""
+    return _scan_rocq_comments_and_strings(src)[0]
 
 
 def check_required_licenses(root: pathlib.Path, errors: list[str]) -> None:
@@ -383,6 +407,72 @@ def check_rocq_proofs(root: pathlib.Path, errors: list[str]) -> int:
     return checked_files
 
 
+def check_rocq_style_hygiene(root: pathlib.Path, errors: list[str]) -> None:
+    """Enforces unique Separate Extraction leaf names, goal-selector hygiene,
+    zero global Hint/Transparent/Ltac leaks, balanced comments, and Coqdoc banners
+    across LLVMCert-authored `passes/` and `validator/` modules."""
+    basenames: dict[str, list[str]] = {}
+    for d in ("passes", "validator"):
+        base = root / d
+        if not base.exists():
+            continue
+        for path in sorted(base.rglob("*.v")):
+            if "_build" in path.parts:
+                continue
+            rel = path.relative_to(root).as_posix()
+            basenames.setdefault(path.name, []).append(rel)
+
+            raw = path.read_text(encoding="utf-8", errors="replace")
+            stripped, depth, in_string = _scan_rocq_comments_and_strings(raw)
+            if depth != 0 or in_string:
+                errors.append(f"Unbalanced Rocq comment/string in {rel} (depth={depth}, in_string={in_string})")
+
+            head = "\n".join(raw.splitlines()[:50])
+            for marker in ("(** *", "Purpose:", "Assumptions:"):
+                if marker not in head:
+                    errors.append(f"Missing `{marker}` in top-50-line Coqdoc audit banner of {rel}")
+
+            if rel != "validator/common/Options.v":
+                has_selector = bool(GOAL_SELECTOR_BANG_RE.search(raw))
+                has_options = bool(OPTIONS_IMPORT_RE.search(stripped))
+                if not (has_selector or has_options):
+                    errors.append(
+                        f"Missing `Set Default Goal Selector \"!\".` or `Options` import in {rel}"
+                    )
+
+            pos = 0
+            line_cursor = 1
+            for m_end in STMT_END_RE.finditer(stripped):
+                chunk = stripped[pos : m_end.start()]
+                lead_len = len(chunk) - len(chunk.lstrip())
+                stmt_lineno = line_cursor + chunk[:lead_len].count("\n")
+                line_cursor += stripped[pos : m_end.end()].count("\n")
+                pos = m_end.end()
+
+                st = chunk.strip()
+                if not st:
+                    continue
+                m_leak = BARE_GLOBAL_LEAK_RE.match(st)
+                if m_leak:
+                    kw, ident = m_leak.group(1), m_leak.group(2)
+                    if kw == "Hint" and st.startswith("#[export]") and re.search(r":\s*paco\s*$", st):
+                        continue
+                    if kw == "Ltac" and (
+                        rel in APPROVED_TACTIC_EXPORT_FILES
+                        or (rel, ident) in ALLOWED_EXPORTED_LTACS
+                    ):
+                        continue
+                    errors.append(
+                        f"Global `{kw} {ident}` leak in {rel}:{stmt_lineno} (use `Local` / `#[local]`)"
+                    )
+
+    for leaf, paths in sorted(basenames.items()):
+        if len(paths) > 1:
+            errors.append(
+                f"Duplicate Rocq leaf basename `{leaf}` breaks Separate Extraction: {', '.join(paths)}"
+            )
+
+
 def check_ocaml_budget(root: pathlib.Path, errors: list[str]) -> int:
     total_loc = 0
     for d in ("vellvm", "passes", "validator"):
@@ -458,6 +548,7 @@ def main() -> int:
     check_tracked_secrets(root, errors)
     check_github_workflows(root, errors)
     rocq_count = check_rocq_proofs(root, errors)
+    check_rocq_style_hygiene(root, errors)
     ocaml_loc = check_ocaml_budget(root, errors)
     if args.base:
         check_frozen_upstream_diff(root, args.base, args.head, errors)

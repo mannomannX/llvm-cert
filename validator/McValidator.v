@@ -5,20 +5,24 @@
 
 (** * Verified ELF64-to-IR Backend Translation Validator ([CertValidator.McValidator])
 
-    Implements for Milestone M1 of Phase [8.3a]:
-    1. Pure MC DAG flattening ([flatten_mc_dag_to_expr]) reducing [Rv64Sem]'s
-       symbolic execution tree into a single total, UB-free [CE_Select] term.
-    2. Verified power-of-2 signed-division lowering ([lower_sdiv_pow2], exact
-       semantic equivalence [lower_sdiv_pow2_sound]) matching LLVM's
-       [srai; srli; add; srai] strength reduction across all bitwidths [w >= 3].
-    3. Verified congruence-closure / uninterpreted-multiplier abstraction
-       ([abstract_shared_muls], [abstract_shared_muls_sound]) discharging shared
-       wide multiplications without 64x64 bit-blasting.
-    4. Strict IR-to-MC prototype, LP64 [signext]/[zeroext] ABI, syntax, and
-       relocation gates integrated into [validate_mc_tle_with_cert_str], backed
-       by [validate_mc_tle_with_cert_str_sound] ([0 Admitted], zero custom axioms).
-    5. Diagnostic DIMACS CNF emitter ([emit_mc_dimacs_cnf_str]) blasting the
-       exact normalized/abstracted pair for offline LRAT proof generation. *)
+    Purpose:
+      Top-level ELF64-to-IR backend validator re-exporting [McExprRewrite], integrating
+      certificate parsing, IR syntax/prototype/ABI gates, ELF slicing, straight-line/loop/call
+      validation ([validate_mc_tle_with_cert_str]), and DIMACS emission ([emit_mc_dimacs_cnf_str]).
+
+    Trust Contract & Fail-Closed Boundary:
+      [validate_mc_tle_with_cert_str] fails closed ([inl err]) on parse, well-formedness,
+      syntax/prototype/ABI gate, ELF relocation/slice, decode, symbolic lowering, or LRAT
+      discharge failures; [inr tt] is backed by [validate_mc_tle_with_cert_str_sound].
+      Extracted to OCaml via [Extract.v].
+
+    Assumptions:
+      [Stdlib], [Vellvm], [CertValidator.common.Diag], [CertValidator] MC/RV64/A64 modules,
+      and exported [McExprRewrite]; zero [Admitted] and zero custom axioms.
+
+    Section Outline:
+      5. Prototype, ABI & syntax gates, [validate_mc_mcfg_with_cert],
+      [validate_mc_tle_with_cert_str], and soundness proof; 6. DIMACS CNF emitter. *)
 
 From Stdlib Require Import
   ZArith

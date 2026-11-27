@@ -5,10 +5,27 @@
 
 (** * Verified Interprocedural Function Inlining Pass ([CertPasses.Inline])
 
-    Inlines eligible direct calls to non-recursive leaf internal definitions
-    across a module ([CFG.mcfg dtyp]) via hygienic fresh [Name] alpha-renaming,
-    caller basic-block splitting, and multi-round iteration composed with
-    [prog_refines_trans]. *)
+    Purpose:
+      Re-exports the [Inline*] stack, builds the 7-state coinductive caller
+      inline-loop invariant ([r_caller]) for [denote_function_caller_sim],
+      lifts standard-library simulations, and proves [inline_one_site_refines]
+      and [inline_mcfg_refines].
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only top-level theorem module (extraction targets
+      [InlineSpec.inline_mcfg] and [InlineSpec.inline_mcfg_typ] in [Extract.v]);
+      runtime execution fails closed via [InlineSpec.inline_one_site_mcfg] when
+      hygiene or eligibility checks fail.
+
+    Assumptions:
+      Depends on Stdlib, Paco, ITree, ExtLib, Vellvm, [CertPasses.PassCommon],
+      [CertPasses.common.ItreeTactics], and
+      [CertPasses.Inline{Spec,SyntaxProof,FrameGenv,Sim,CalleeProof,CallerProof}];
+      zero custom axioms.
+
+    Section Outline:
+      7-state [CallerInlineLoop] ([r_caller]) & [denote_function_caller_sim];
+      (10C) Library simulations; (10D) Whole-program [inline_mcfg_refines]. *)
 
 From Stdlib Require Import
   ZArith

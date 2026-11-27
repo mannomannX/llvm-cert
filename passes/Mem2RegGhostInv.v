@@ -3,13 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Stack-Slot to SSA Register Promotion ([CertPasses.Mem2Reg])
+(** * Mem2Reg Ghost-Slot & Dead-Alloca Memory Invariants ([CertPasses.Mem2RegGhostInv])
 
-    Promotes non-escaping scalar [alloca] stack slots in function entry blocks
-    to SSA registers and block-entry [Phi] nodes (Stage 1), followed by
-    reverse-order dead scalar [alloca] elimination in leaf functions (Stage 2)
-    so inlinable callees become [alloca]-free before [CertPasses.Inline].
-    Composed across bounded rounds via [prog_refines_trans]. *)
+    Purpose:
+      Defines the Stage 1 ghost-slot invariant ([stage1_mem_inv]) and Stage 2
+      dead-alloca invariant ([stage2_mem_inv]), and proves primitive memory
+      simulations across [Mempush], [Alloca], [Load], [Store], and [Mempop].
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml. Encapsulates ghost-allocation
+      provenance isolation so promoted slots never alias unpromoted memory.
+
+    Assumptions:
+      Parametric over [IP : IPtr] and [IPT : @IPtrTheory IP] (with
+      [IPtrWellBehaved IP] for [stage2_alloca_dead_l]); depends on
+      [PassCommon], [Mem2RegModel], and [Mem2RegMemBase]; zero custom axioms.
+
+    Section Outline:
+      - [MemoryAndSerialization]: 3D. Stage 1 [ghost_slot]/[stage1_mem_inv]
+        primitive sims; 3E. Stage 2 [stage2_mem_inv] primitive sims. *)
 
 From Stdlib Require Import
   ZArith

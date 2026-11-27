@@ -3,17 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * [CertValidator.CertFormatGates]: IR Syntax & Prototype Contract Soundness Gates
+(** * IR Syntax & Prototype Contract Soundness Gates ([CertValidator.CertFormatGates])
 
-    Defines computable IR syntax and prototype contract soundness gates
-    ([check_validator_syntax_gates], [check_prototype_contract]) enforcing
-    [F-17] (no target fast-math flags), [F-18] (no volatile/atomic/ordering
-    or fences), [F-19]/[F-32]/[F-60] (matching prototype/calling-convention/
-    ABI/function attributes), [F-21] (no target-invented [gep] flags),
-    [F-39] (no target-invented FP-to-integer [bitcast]), and
-    [F-30]/[F-31]/[F-34] (verified intrinsic allowlist, non-variadic IR,
-    and no [invoke]/[landingpad]/[resume]), together with [Qed.] inversion
-    lemmas and undefined [TYPE_Identified] checks. *)
+    Purpose:
+      Defines computable IR syntax and prototype contract gates
+      ([check_validator_syntax_gates_diag], [check_prototype_contract_diag],
+      [check_mcfg_identified_typs_defined_diag]) with [Qed.] inversion lemmas.
+
+    Trust Contract & Fail-Closed Boundary:
+      Fail-closed syntactic gates; rejects fast-math ([F-17]), volatile/atomic/
+      fences/asm ([F-18]), prototype/ABI mismatches ([F-19]/[F-32]/[F-60]), GEP
+      flags ([F-21]), FP bitcasts ([F-39]), bad intrinsics, and undef types.
+
+    Assumptions:
+      Depends on Stdlib, Vellvm ([Syntax.*], [Attributes], [IntrinsicsDefinitions]),
+      [CertValidator.common.Diag], and [CertValidator.{LratCore,CertFormatAst}].
+
+    Section Outline:
+      6. Syntax & Prototype Gates: 6.1 Comparators; 6.2-6.6b Flag/Intrinsic
+      Checks; 6.7 Combined Gates & Inversions; 6.8 Identified-Type Check. *)
 
 From Stdlib Require Import
   ZArith

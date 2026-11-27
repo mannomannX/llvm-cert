@@ -5,15 +5,27 @@
 
 (** * Verified Dead Code & Dead Phi Elimination ([CertPasses.DCE])
 
-    Eliminates dead side-effect-free SSA operations ([INSTR_Op]) and dead
-    [Phi] nodes across each function CFG using:
-    1. A fuel-bounded forward reachability and scalar-type/definedness
-       dataflow analysis backed by a boolean validator ([check_fwd_cfg]),
-       guaranteeing that every deleted expression or incoming phi operand
-       evaluates without raising [FailureE], [OOME], or observable events.
-    2. A fuel-bounded backward liveness fixpoint backed by a boolean
-       validator ([check_live_cfg]), combined with single-sweep intra-block
-       backward dead-chain elimination and multi-round module iteration. *)
+    Purpose:
+      Re-exports [CertPasses.DCESpec] and [CertPasses.DCESafety], proves lockstep
+      [cfg_local_sim] simulation for expressions, instructions, [denote_phis],
+      and terminators, and establishes whole-program refinement
+      ([dce_mcfg_refines]) for the 3-round [dce_mcfg] pass.
+
+    Trust Contract & Fail-Closed Boundary:
+      Extracted to OCaml ([Extract.v]: [dce_mcfg], [dce_mcfg_typ]). Each round
+      invokes [dce_cfg_once], which fails closed to the identity CFG [c] unless
+      [cfg_no_block_addresses], [nodup_raw_ids], [check_fwd_cfg], and
+      [check_live_cfg] all succeed.
+
+    Assumptions:
+      Depends on Stdlib, Paco, ITree, ExtLib, Vellvm, [CertPasses.PassCommon],
+      [CertPasses.DCESpec], and [CertPasses.DCESafety]; zero custom axioms
+      (arbitrary [IPtr] / [IPtrTheory]).
+
+    Section Outline:
+      Lockstep [cfg_local_sim] combinators; (7) Expression safety & simulation;
+      (8) Instruction, code, phi, terminator, & [dce_cfg_once_sim];
+      (9) [dce_mcfg], [dce_mcfg_typ], & [dce_mcfg_refines]. *)
 
 From Stdlib Require Import
   ZArith

@@ -5,10 +5,23 @@
 
 (** * Machine-Code Call Execution Witnesses ([CertValidator.McCallMcWitness])
 
-    Implements Sections 5.1-5.3 of Milestone M3c of Phase 8.3a: call-variable
-    disjointness, incremental context invariance, and [RV64IM+RVC] / [AArch64]
-    machine-code call-tree execution witnesses on top of
-    [CertValidator.McCallSpec]. *)
+    Purpose:
+      Proves call-variable disjointness, incremental freshness invariance
+      ([allowed_ge_cid_fresh]), and concrete RV64IM+RVC / AArch64 call-tree execution
+      witnesses ([summarize_rv64_call_at_exec], [summarize_a64_call_at_exec]) over [McCallSpec].
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml. Establishes that well-formed RV64 and AArch64
+      call-tree summaries correspond to concrete [rv_exec_with_calls] / [a64_exec_with_calls]
+      executions along satisfied paths.
+
+    Assumptions:
+      [Stdlib], [ITree], [Vellvm], and [CertValidator] (including [McOblDischarger],
+      [McCallSpec], and RV64/A64 modules); zero custom axioms.
+
+    Section Outline:
+      5.1 Call variable disjointness & context invariance; 5.2 Concrete path execution
+      witnesses for RV64 & AArch64; 5.3 AArch64 call-tree execution witness. *)
 
 From Stdlib Require Import
   ZArith

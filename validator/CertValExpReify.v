@@ -3,7 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Freeze-Key Tracking, Parameter Environments & SSA Expression Reification (Sec 5.1-5.4) *)
+(** * Freeze-Key Tracking, Parameter Envs & Exp Reification ([CertValidator.CertValExpReify])
+
+    Purpose:
+      Defines canonical register naming, freeze-key tracking and oracle
+      agreement ([collect_freeze_keys], [oracle_of_fmap]), parameter environments
+      ([build_param_env]), and bounded-DAG expression reification ([reify_exp]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Fail-closed SSA expression reifier ([reify_exp_typing],
+      [eval_reified_exp_src], [eval_reified_exp_tgt]); unsupported types, ops,
+      or exhausted fuel return [None] and preserve exact [freeze]-key tracking.
+
+    Assumptions:
+      Depends on Stdlib, [Paco], [ITree], [ExtLib], [Vellvm], [Diag], and
+      [CertFormatAst]/[CertFormatGates]/[AlgRulesEval]/[CfgDag]/[CertValOpenWorld].
+
+    Section Outline:
+      5. Bounded-DAG SSA Reification: 5.1 Naming & [ocfg_map]; 5.2 Freeze Keys;
+      5.3 Parameter Environments & Frame Locals; 5.4 [reify_exp] & Soundness. *)
 
 From Stdlib Require Import
   ZArith

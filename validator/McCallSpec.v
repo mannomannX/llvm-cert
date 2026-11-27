@@ -5,21 +5,23 @@
 
 (** * Direct Call Specifications, Decoders & Tree Summarizers ([CertValidator.McCallSpec])
 
-    Implements Sections 1-4 of Milestone M3c of Phase 8.3a for direct
-    non-recursive acyclic calls on [RV64IM+RVC] and [AArch64]:
-    1. Call-site decoders ([decode_rv64_bytes_with_calls], [decode_a64_bytes_with_calls])
-       binding [ET_REL] call relocations ([R_RISCV_CALL_PLT] / [R_RISCV_CALL] /
-       [R_RISCV_JAL] / [R_AARCH64_CALL26]) and [ET_EXEC]/[ET_DYN] resolved PC-relative
-       target addresses to unique callee symbols.
-    2. Callee prototype/ABI contract checks ([check_mc_callee_contracts]) and
-       call-trace operational semantics ([rv_exec_with_calls], [a64_exec_with_calls],
-       [cfg_call_steps_to_ret], [cfg_call_steps_to_ub]).
-    3. Acyclic symbolic call-tree summarizers ([reify_ir_call_tree],
-       [summarize_rv64_call_tree], [summarize_a64_call_tree]) using fresh
-       width-tagged call result variables ([!call_<k>_<w>], [!call_hi_<k>]).
-    4. Path-flattened call & return obligation generation reusing
-       [McOblDischarger.check_mc_loop_obls] and [McOblDischarger.emit_mc_loop_cnf],
-       together with [mc_tree_path_ok] and call-variable collection helpers. *)
+    Purpose:
+      Defines direct non-recursive call-site decoders ([decode_rv64_bytes_with_calls],
+      [decode_a64_bytes_with_calls]), callee prototype/ABI contract checks, call-trace
+      operational semantics, acyclic call-tree summarizers, and obligation validators/emitters.
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only specification module (re-exported by [McCall]). Decoders and validators fail
+      closed ([inl err]) on unbound/stray call relocations, ABI/attribute mismatches, cycles or
+      fuel exhaustion, and failed SAT/LRAT obligation discharge.
+
+    Assumptions:
+      [Stdlib], [ITree], [Vellvm], and [CertValidator] ([Diag], [McFormat], [McOblDischarger],
+      RV64/A64 modules); uses [Section IRCallStep] over [Pa : Params] with zero custom axioms.
+
+    Section Outline:
+      1. Call-site decoders (1.1 RV64, 1.2 A64); 2. Callee contracts & call-trace semantics;
+      3. Width-tagged call vars & summarizers; 4. Obligation builders & validators. *)
 
 From Stdlib Require Import
   ZArith

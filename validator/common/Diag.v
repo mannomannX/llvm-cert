@@ -13,12 +13,16 @@
 
     Trust Contract & Fail-Closed Boundary:
       Refines only error ([inl msg]) reporting. Success ([inr x]) results carry
-      simple algebraic specifications so callers' soundness proofs stay decoupled
-      from string formatting. On valid inputs, lazy closures ([unit -> string])
-      ensure zero diagnostic string allocation on hot paths.
+      algebraic specs ([guard_err_inr], [opt_to_err_inr], [bind_err_inr],
+      [find_unique_diag_spec]), while [unit -> string] thunks avoid allocation.
 
     Assumptions:
-      Stdlib-only (zero Vellvm dependencies, zero custom axioms). *)
+      Stdlib-only plus [CertValidator.common.Options]; zero Vellvm dependencies
+      and zero custom axioms.
+
+    Section Outline:
+      1. Tagged Diagnostic Builders & Lazy Combinators; 2. Stack-Safe Numeric
+      Formatters; 3. Unique-Match Lookup ([unique_match], [find_unique_diag]). *)
 
 From CertValidator.common Require Import Options.
 

@@ -3,12 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * [CertValidator.CertFormatParse]: Total S-Expression Lexer & [cert-v1] Parser
+(** * Total S-Expression Lexer & [cert-v1] Parser ([CertValidator.CertFormatParse])
 
-    Defines a total, extraction-ready S-expression lexer and bounded-depth
-    stack parser ([parse_sexp], [parse_cert]) enforcing canonical integer,
-    64-character lowercase SHA-256 hex, and closed [$n0..] [CE_Let] scoping
-    invariants, backed by [parse_cert_wf]. *)
+    Purpose:
+      Defines a total, extraction-ready S-expression tokenizer, bounded-depth
+      stack parser ([parse_sexp], depth [1024]), and canonical [cert-v1]
+      deserializer ([parse_cert]) enforcing SHA-256 hex and closed [CE_Let]s.
+
+    Trust Contract & Fail-Closed Boundary:
+      Fail-closed total parser ([parse_cert_sexp_wf], [parse_cert_wf]); syntax
+      errors, depth overflow, or non-canonical literals yield [inl] diagnostics,
+      while [inr cert] guarantees [wf_proof_certificate cert = true].
+
+    Assumptions:
+      Depends on Stdlib, [CertValidator.common.Diag], and
+      [CertValidator.{LratCore,CertFormatAst}]; zero Vellvm deps or axioms.
+
+    Section Outline:
+      4. Total S-Expression Tokenizer & Bounded-Depth Parser ([parse_sexp]);
+      5. Canonical [cert-v1] S-Expression Deserializer ([parse_cert]). *)
 
 From Stdlib Require Import
   ZArith

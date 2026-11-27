@@ -3,15 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * [CertValidator.LratCore]: Stdlib-Only Positive-Indexed Trie, [LRAT] Checker & Bounded DPLL Auto-Solver
+(** * Positive-Indexed Trie, [LRAT] Checker & Bounded DPLL ([CertValidator.LratCore])
 
-    Self-contained, zero-axiom, extraction-ready SAT core over integer-indexed
-    CNF clauses ([lit := Z], [clause := list lit], [cnf := list (positive * clause)]):
-    - [O(log N)] binary positive-index trie ([pos_trie]),
-    - Linear Reverse Asymmetric Tautology ([LRAT]) UNSAT proof checker
-      ([check_lrat_unsat], [check_lrat_unsat_sound]),
-    - Bounded DPLL + BCP UNSAT auto-solver ([solve_cnf_unsat],
-      [solve_cnf_unsat_sound]), and tail-recursive list length ([length_tr]). *)
+    Purpose:
+      Defines a self-contained, extraction-ready SAT core over [Z]-indexed CNF
+      clauses: an $O(\log N)$ positive-index trie ([pos_trie]), a linear [LRAT]
+      UNSAT checker ([check_lrat_unsat]), and bounded DPLL ([solve_cnf_unsat]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Fail-closed boolean checkers ([check_lrat_unsat_sound],
+      [solve_cnf_unsat_sound]); [true] guarantees [eval_cnf assign f = false] for
+      all assignments, while invalid hints or exhausted fuel return [false].
+
+    Assumptions:
+      Stdlib-only ([ZArith], [NArith], [PArith], [List], [Bool], [Lia]); zero
+      Vellvm dependencies and zero custom axioms.
+
+    Section Outline:
+      Prelude ([length_tr]); 1. Positive-Indexed Binary Trie ([PosTrie]); 2. CNF
+      Syntax & Verified [LRAT] UNSAT Checker; 5. Verified Bounded DPLL Solver. *)
 
 From Stdlib Require Import
   ZArith

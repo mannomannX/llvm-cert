@@ -3,12 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified [AArch64] ([A64]) Symbolic DAG Well-Formedness & Soundness Proofs
+(** * AArch64 (A64) DAG Well-Formedness & Soundness Proofs ([CertValidator.A64DagProof])
 
-    Implements for Milestone M2/M4 ([CertValidator.A64DagProof]):
-    zero-axiom bitvector arithmetic lemmas, well-formedness
-    ([summarize_a64_dag_at_wf], [summarize_a64_dag_wf]), and semantic
-    equivalence proofs ([summarize_a64_dag_at_sound], [summarize_a64_dag_sound]). *)
+    Purpose:
+      Proves bitvector and [NZCV] flag arithmetic equivalence, zero-axiom symbolic
+      well-formedness ([summarize_a64_dag_wf]), and AAPCS64 upper-bits semantic soundness
+      ([summarize_a64_dag_sound]) linking [a64_exec] to [eval_cfg_dag].
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml. Establishes that any DAG accepted by
+      [summarize_a64_dag] is well-formed and preserves concrete [a64_exec] semantics and
+      callee-saved registers.
+
+    Assumptions:
+      [Stdlib], [Vellvm], [CertValidator.common.Diag], and [CertValidator.{CertFormat,AigLrat,
+      AlgRules,CfgDag,Elf64Spec,McFrameMem,McIsaCommon,A64Decode,A64ExecSym}]; zero custom axioms.
+
+    Section Outline:
+      5. Flag/bitvector soundness proofs; 5.2 Symbolic well-formedness ([summarize_a64_dag_at_wf]);
+      5.3 AAPCS64 upper-bits extension & [summarize_a64_dag_wf] / [summarize_a64_dag_sound]. *)
 
 From Stdlib Require Import
   ZArith

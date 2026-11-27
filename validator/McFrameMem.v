@@ -5,19 +5,23 @@
 
 (** * Verified Byte-Addressed Private Stack-Frame Memory Model ([CertValidator.McFrameMem])
 
-    Implements the shared concrete and symbolic stack-frame memory model for
-    Phase [8.3a] Milestone M3 across both [RISC-V] ([Rv64Sem]) and [AArch64]
-    ([A64CoreSem]):
-    1. Access widths ([mc_mem_size]) and 64 KiB frame geometry with 16-byte
-       aligned [SP0] offset normalization ([mc_addr_to_off_add], [mc_add_ptr_off]).
-    2. Concrete little-endian byte-addressed stack memory ([mc_stack_mem],
-       [mc_stk_store], [mc_stk_load]) with zero-axiom disjointness and
-       read-after-write soundness ([mc_stk_load_store_disjoint],
-       [mc_stk_load_store_same]).
-    3. Interval-disjoint symbolic stack domain ([mc_sym_val], [mc_sym_stack])
-       tracking symbolic 64-bit values ([MSV_Expr]), callee-saved register saves
-       ([MSV_SavedReg]), and frame-relative pointers ([MSV_StackPtr]), with
-       complete well-formedness and relational agreement proofs. *)
+    Purpose:
+      Implements the shared concrete little-endian byte-addressed 64 KiB private stack-frame
+      memory model ([mc_stack_mem]) and interval-disjoint symbolic stack domain
+      ([mc_sym_val], [mc_sym_stack]) used across both [Rv64Sem] and [A64CoreSem].
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml directly. Symbolic stack accesses fail closed
+      ([None]) on out-of-frame or unverified overlapping slots; [mc_stk_load_store_same],
+      [mc_stk_load_store_disjoint], [mc_sym_stk_store_agrees], and [mc_sym_stk_load_sound]
+      prove concrete-symbolic agreement.
+
+    Assumptions:
+      [Stdlib], [Vellvm], and [CertValidator.{CertFormatAst,AlgRulesEval}]; zero custom axioms.
+
+    Section Outline:
+      1. Memory widths ([mc_mem_size]) & 64 KiB frame geometry; 2. Concrete byte-addressed
+      stack memory ([mc_stack_mem]); 3. Symbolic stack domain & agreement proofs. *)
 
 From Stdlib Require Import
   ZArith

@@ -3,32 +3,27 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Module Split/Merge Composition Checker ([CertPasses.ModuleMerge])
+(** * Module-Merge Poison Value & Relational DrawE Core ([CertPasses.ModuleMergeVDrawCore])
 
-    Removes [ir-bridge]'s module splitter and merger from the semantic TCB by
-    validating [m_merged] directly against [m_orig] and a list of verified
-    per-function slices [verified_slices]:
+    Purpose:
+      Defines poison-to-concrete value refinement ([mm_dvalue_refines],
+      [prog_value_refines]), the relational [DrawE]+[ProvE] model
+      ([refine_prov_draw], [prog_value_draw_refines]), and the generalized
+      stack/CFG simulation ([vds_sim], [cfg_vdraw_sim], [mcfg_vdraw_sim]).
 
-    1. **Global Layout & Alignment Identity (F-33, F-47)**:
-       Enforces [m_globals m_merged = m_globals m_orig], rejects
-       [LINKAGE_Extern_weak] on globals, and checks exact preservation of
-       deduplicated module [blockaddress] allocations.
-    2. **Declaration & Symbol Table Preservation (F-33)**:
-       Enforces [m_declarations m_merged = m_declarations m_orig], rejects
-       [LINKAGE_Extern_weak] on declarations and definitions, and enforces
-       [NoDup] across all declared and defined function identifiers.
-    3. **Prototype & Attribute Contract Preservation (F-19)**:
-       Enforces positional [Forall2] alignment of [m_definitions] with exact
-       equality of [df_prototype] and [df_args], statically blocking unverified
-       [-O2]-inferred attributes ([willreturn], [readonly], [noalias],
-       [memory(...)], [noundef], etc.) on merged function headers.
-    4. **Per-Function Provenance & Compositional Linking (F-20, F-24, F-33)**:
-       Requires every definition pair [(df_orig, df_merged)] either to be an
-       unchanged pass-through ([df_merged = df_orig]) or to match a verified
-       single-function slice [(fid, m_slice_src, m_slice_tgt)] (allowing
-       externalized linkage on [m_slice_src] as emitted by [ir-bridge split]),
-       and lifts open-world per-slice refinement to whole-module [@prog_refines]
-       and end-to-end [IPZ -> IP64Bit] [I2F_toplevel.model_refine]. *)
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml (imported by
+      [ModuleMergeVDrawLift] and re-exported by [CertPasses.ModuleMerge]).
+
+    Assumptions:
+      Depends on Stdlib, Paco, ITree, ExtLib, Vellvm, and
+      [CertPasses.{PassCommon,SimplifyCFG,DCE,SCCP,Mem2Reg,Inline,Pipeline,
+      McfgExport}]; zero custom axioms (arbitrary [IPtr] / [IPtrTheory]).
+
+    Section Outline:
+      (8) Value-refinement & relational [DrawE] composition: (8.1)
+      [prog_value_refines]; (8.2) [refine_prov_draw] &
+      [prog_value_draw_refines]; (8.3) [VDrawGenSim] ([vds_sim], [mcfg_vdraw_sim]). *)
 
 From Stdlib Require Import
   ZArith

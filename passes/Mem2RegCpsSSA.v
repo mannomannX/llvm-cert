@@ -3,13 +3,24 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Stack-Slot to SSA Register Promotion ([CertPasses.Mem2Reg])
+(** * Mem2Reg CPS Coinduction & Promoted SSA Simulation ([CertPasses.Mem2RegCpsSSA])
 
-    Promotes non-escaping scalar [alloca] stack slots in function entry blocks
-    to SSA registers and block-entry [Phi] nodes (Stage 1), followed by
-    reverse-order dead scalar [alloca] elimination in leaf functions (Stage 2)
-    so inlinable callees become [alloca]-free before [CertPasses.Inline].
-    Composed across bounded rounds via [prog_refines_trans]. *)
+    Purpose:
+      Proves equal-memory sync ([mcfg_equal_sync], [cfg_equal_sync]), global-env
+      safe-provenance initialization, parameterized CPS coinduction ([m2r_paco],
+      [m2r_cps]), and call-frame plus promoted SSA [Load]/[Store] simulations.
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml. Establishes the CPS reasoning
+      combinators and per-instruction SSA replacement soundness proofs.
+
+    Assumptions:
+      Parametric over [IP : IPtr] and [IPT : @IPtrTheory IP]; depends on
+      [PassCommon] and [Mem2RegSpec]..[Mem2RegExprLift]; zero custom axioms.
+
+    Section Outline:
+      - [MemoryAndSerialization]: 3I. [InterpStateEqualSync]/[CfgEqualSync];
+        3J. [genv_safe] init; 3K. [m2r_paco]/[m2r_cps]; 3L. frame & SSA sims. *)
 
 From Stdlib Require Import
   ZArith

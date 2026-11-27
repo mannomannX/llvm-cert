@@ -3,13 +3,26 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified [AArch64] ([A64]) Loop-Segment Symbolic Summarizer (M3b)
+(** * Verified AArch64 (A64) Loop-Segment Symbolic Summarizer ([CertValidator.A64LoopSeg])
 
-    Implements for Milestone M3b/M4 ([CertValidator.A64LoopSeg]):
-    multi-step concrete non-ret execution lemmas, loop-segment symbolic
-    summarizer ([summarize_a64_seg_wf], [summarize_a64_seg_sound]), and
-    initial argument variable tracking ([a64_init_arg_expr_vars],
-    [a64_build_init_val_regs_vars]). *)
+    Purpose:
+      Provides multi-step concrete non-ret execution lemmas ([a64_exec_steps]), the A64
+      loop-segment symbolic summarizer ([summarize_a64_seg]) backed by [summarize_a64_seg_wf]
+      and [summarize_a64_seg_sound], and initial argument variable tracking.
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml directly. [summarize_a64_seg] fails closed
+      ([inl err]) on missing instructions, invalid branches/cutpoints, undefined reads, or fuel
+      exhaustion; accepted [a64_seg_tree] trees satisfy [a64_seg_wf] and concrete soundness.
+
+    Assumptions:
+      [Stdlib], [Vellvm], [CertValidator.common.Diag], and [CertValidator.{CertFormat,AigLrat,
+      AlgRules,CfgDag,Elf64Spec,McFrameMem,McIsaCommon,A64Decode,A64ExecSym,A64DagProof}];
+      zero custom axioms.
+
+    Section Outline:
+      8. Multi-step execution lemmas ([a64_exec_steps]), [a64_seg_tree], [a64_sym_step_one],
+      [summarize_a64_seg], [summarize_a64_seg_wf] / [summarize_a64_seg_sound], and init vars. *)
 
 From Stdlib Require Import
   ZArith

@@ -3,32 +3,28 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Module Split/Merge Composition Checker ([CertPasses.ModuleMerge])
+(** * Module-Merge Transparent Boolean Equality Deciders ([CertPasses.ModuleMergeEqb])
 
-    Removes [ir-bridge]'s module splitter and merger from the semantic TCB by
-    validating [m_merged] directly against [m_orig] and a list of verified
-    per-function slices [verified_slices]:
+    Purpose:
+      Defines transparent structural boolean equality deciders ([mm_typ_eqb],
+      [mm_exp_eqb], [mm_instr_eqb], [mm_block_eqb], [mm_global_eqb],
+      [mm_declaration_eqb], [mm_definition_eqb], etc.) and proves soundness
+      reflections to Leibniz equality over Vellvm [mcfg dtyp] ASTs.
 
-    1. **Global Layout & Alignment Identity (F-33, F-47)**:
-       Enforces [m_globals m_merged = m_globals m_orig], rejects
-       [LINKAGE_Extern_weak] on globals, and checks exact preservation of
-       deduplicated module [blockaddress] allocations.
-    2. **Declaration & Symbol Table Preservation (F-33)**:
-       Enforces [m_declarations m_merged = m_declarations m_orig], rejects
-       [LINKAGE_Extern_weak] on declarations and definitions, and enforces
-       [NoDup] across all declared and defined function identifiers.
-    3. **Prototype & Attribute Contract Preservation (F-19)**:
-       Enforces positional [Forall2] alignment of [m_definitions] with exact
-       equality of [df_prototype] and [df_args], statically blocking unverified
-       [-O2]-inferred attributes ([willreturn], [readonly], [noalias],
-       [memory(...)], [noundef], etc.) on merged function headers.
-    4. **Per-Function Provenance & Compositional Linking (F-20, F-24, F-33)**:
-       Requires every definition pair [(df_orig, df_merged)] either to be an
-       unchanged pass-through ([df_merged = df_orig]) or to match a verified
-       single-function slice [(fid, m_slice_src, m_slice_tgt)] (allowing
-       externalized linkage on [m_slice_src] as emitted by [ir-bridge split]),
-       and lifts open-world per-slice refinement to whole-module [@prog_refines]
-       and end-to-end [IPZ -> IP64Bit] [I2F_toplevel.model_refine]. *)
+    Trust Contract & Fail-Closed Boundary:
+      Helper/proof module extracted transitively via [ModuleMergeLink] and
+      [ModuleMerge]; every [mm_*_eqb] returns [true] only when compared AST
+      terms are propositionally equal, ensuring conservative rejection.
+
+    Assumptions:
+      Depends on Stdlib, Paco, ITree, ExtLib, Vellvm, and
+      [CertPasses.{PassCommon,SimplifyCFG,DCE,SCCP,Mem2Reg,Inline,Pipeline,
+      McfgExport}]; zero custom axioms.
+
+    Section Outline:
+      (1) Transparent boolean equality deciders and Leibniz reflection lemmas
+      from primitives and LLVM attributes up to [mm_declaration_eqb] and
+      [mm_definition_eqb]. *)
 
 From Stdlib Require Import
   ZArith

@@ -3,14 +3,26 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Concrete Extracted ISA Oracle Helpers & Symbolic Step Oracle
+(** * RV64 Concrete Oracle & Single-Step Symbolic Oracle ([CertValidator.Rv64SymOracle])
 
-    Implements for [CertValidator.Rv64SymOracle]:
-    1. Concrete Layer-3 differential harness oracle helpers ([rv_regfile_of_list],
-       [rv_eval_oracle]).
-    2. Symbolic step oracle ([rv_step_sym_oracle], [rv_step_sym_oracle_sound])
-       and 128-bit division/remainder width-reduction lemmas
-       ([sail_divrem_128_width_reduce]). *)
+    Purpose:
+      Provides Layer-3 differential oracle helpers ([rv_eval_bytes_concrete],
+      [rv_decode_bytes_ok]), the single-step symbolic oracle ([rv_step_sym_oracle],
+      [rv_step_sym_oracle_sound]), and 128-bit div/rem width-reduction lemmas.
+
+    Trust Contract & Fail-Closed Boundary:
+      [rv_step_sym_oracle] returns [None] on decode failure or non-single/unsupported
+      instructions; [Some] outputs are proven sound by [rv_step_sym_oracle_sound]. Extracted to
+      OCaml via [Extract.v].
+
+    Assumptions:
+      [Stdlib], [Vellvm], [CertValidator.common.Diag], and [CertValidator.{CertFormat,AigLrat,
+      AlgRules,CfgDag,Elf64Spec,McFrameMem,McIsaCommon,Rv64Decode,Rv64ExecSym,Rv64DagProof}];
+      zero custom axioms.
+
+    Section Outline:
+      6. Concrete differential oracle helpers; 7. Single-step symbolic oracle
+      ([rv_step_sym_oracle]), [rv_step_sym_oracle_sound], and [sail_divrem_128_width_reduce]. *)
 
 From Stdlib Require Import
   ZArith

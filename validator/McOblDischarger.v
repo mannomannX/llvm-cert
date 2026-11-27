@@ -5,10 +5,23 @@
 
 (** * Multi-Obligation SAT/LRAT Discharger & Shared MC Helpers ([CertValidator.McOblDischarger])
 
-    Provides the ISA-agnostic single-CNF multi-obligation SAT/LRAT discharger
-    ([mc_loop_obl], [check_mc_loop_obls], [emit_mc_loop_cnf],
-    [check_mc_loop_obls_sound]) plus shared proof helpers used by both
-    [CertValidator.McLoop] and [CertValidator.McCall]. *)
+    Purpose:
+      Provides the ISA-agnostic single-CNF multi-obligation SAT/LRAT discharger
+      ([mc_loop_obl], [check_mc_loop_obls], [emit_mc_loop_cnf], [check_mc_loop_obls_sound])
+      plus shared naming, phi-map, and environment overlay helpers for [McLoop] and [McCall].
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only helper module (not directly named in [Extract.v]). [check_mc_loop_obls] fails
+      closed ([inl err]) on ill-typed/unknown-var obligations or missing/invalid LRAT proofs;
+      [inr tt] implies [Forall mc_obl_holds] by [check_mc_loop_obls_sound].
+
+    Assumptions:
+      [Stdlib], [Vellvm], [CertValidator.common.Diag], and [CertValidator.{AigLrat,CertFormat,
+      AlgRules,CertValidator,Elf64Spec,McFrameMem}]; zero custom axioms.
+
+    Section Outline:
+      1. Naming, phi-map & overlay helpers; 2/3. Single-CNF multi-obligation discharger
+      ([mc_loop_obl], [check_mc_loop_obls], [emit_mc_loop_cnf], [check_mc_loop_obls_sound]). *)
 
 From Stdlib Require Import
   ZArith

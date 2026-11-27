@@ -3,12 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Shared Pass Infrastructure & Whole-Program Refinement Framework ([CertPasses.PassCommon])
+(** * Shared Pass Infrastructure & Refinement Framework ([CertPasses.PassCommon])
 
-    Re-exports [CertPasses.PassCommonSyntax] and [CertPasses.PassCommonModel],
-    and provides scalar runtime type guarantees, local-environment and stack-frame
-    simulations ([cfg_local_sim], [cfg_stack_sim], [mcfg_stack_sim]), the modular
-    local lifter ([lift_cfg_with_args_local_pass]), and [IPtrWellBehaved]. *)
+    Purpose:
+      Re-exports [ItreeTactics], [PassCommonSyntax], and [PassCommonModel], and
+      adds scalar runtime type guarantees, local/stack simulations, the local
+      CFG lifter ([lift_cfg_with_args_local_pass]), and [IPtrWellBehaved].
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only infrastructure and facade module; not extracted to OCaml.
+      Lifts per-function [cfg_local_sim]/[cfg_stack_sim] to [prog_refines].
+
+    Assumptions:
+      Parametric over [IP : IPtr] and [IPT : @IPtrTheory IP] (plus
+      [IPtrWellBehaved] instances for [IPZ]/[IP64Bit]); zero custom axioms.
+
+    Section Outline:
+      - [ModelSemantics]: scalar type guarantees, [cfg_local_sim], [IterSim],
+        [GenStackSim], [cfg_stack_sim]/[mcfg_stack_sim], and local lifters.
+      - [IPtrWellBehaved] class and [IPZ]/[IP64Bit] instances. *)
 
 From Stdlib Require Import
   ZArith

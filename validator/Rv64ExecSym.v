@@ -3,15 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Sail-Aligned [RV64IM] Concrete Semantics & Symbolic DAG Lowering
+(** * RV64IM Operational Semantics & Symbolic DAG Lowering ([CertValidator.Rv64ExecSym])
 
-    Implements for [CertValidator.Rv64ExecSym]:
-    1. Concrete Sail-RISC-V-aligned operational semantics ([rv_eval_alu_imm],
-       [rv_eval_alu_reg], [rv_eval_br_cond], [rv_exec]) over [@Integers.bit_int 64]
-       and [@Integers.bit_int 32] with exact LP64 callee-saved preservation.
-    2. Symbolic execution ([summarize_rv64_dag]) emitting well-typed, total,
-       UB-free and poison-free [CertValidator.CfgDag.cfg_dag] terms with an
-       explicit undefined-register mask. *)
+    Purpose:
+      Defines concrete Sail-RISC-V-aligned operational semantics ([rv_exec]) over 64/32-bit
+      registers and private stack memory, plus total symbolic execution ([summarize_rv64_dag])
+      lowering RV64IM+RVC streams to [CfgDag.cfg_dag].
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml directly. [summarize_rv64_dag] fails closed
+      ([inl err]) on unsupported instructions, undefined-register reads, invalid stack or
+      epilogue state, or fuel exhaustion, emitting UB/poison-free [cfg_dag] terms.
+
+    Assumptions:
+      [Stdlib], [Vellvm], [CertValidator.common.Diag], and [CertValidator.{CertFormat,AigLrat,
+      AlgRules,CfgDag,Elf64Spec,McFrameMem,McIsaCommon,Rv64Decode}]; zero custom axioms.
+
+    Section Outline:
+      3. Sail-aligned operational semantics ([rv_exec]); 4. Total symbolic DAG lowering
+      ([summarize_rv64_dag_at], [summarize_rv64_dag]). *)
 
 From Stdlib Require Import
   ZArith

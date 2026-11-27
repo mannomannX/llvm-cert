@@ -3,12 +3,24 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Shared ISA-Agnostic Bitvector, ABI & Symbolic Expression Utilities ([CertValidator.McIsaCommon])
+(** * Shared ISA-Agnostic Bitvector & ABI Utilities ([CertValidator.McIsaCommon])
 
-    Provides bit slicing, signed extension, argument/return width helpers,
-    first-wins [pos_trie] instruction indexing and visited-set operations,
-    [eval_closed_cert_expr] bitvector lemmas, and [wf_sym_expr] proofs shared
-    between [Rv64Sem], [A64CoreSem], and [McFormat]. *)
+    Purpose:
+      Provides bit slicing, sign extension, ABI argument/return width helpers, first-wins
+      [pos_trie] instruction indexing and visited sets, [eval_closed_cert_expr] bitvector
+      lemmas, and [wf_sym_expr] proofs shared by [Rv64Sem], [A64CoreSem], and [McFormat].
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only helper module; not extracted to OCaml directly. [rv_supported_arg_width] and
+      [rv_valid_arg_spec] fail closed ([false]) on unsupported widths or invalid arg specs.
+
+    Assumptions:
+      [Stdlib], [Vellvm], and [CertValidator.{LratCore,AigGates,CertFormatAst,AlgRulesEval}];
+      zero custom axioms.
+
+    Section Outline:
+      1. Bit-level helpers & relative offsets; 2. Argument width specs, shared [cert_expr]
+      constructors & [pos_trie] indexing; 3. Bitvector arithmetic lemmas; 4. [wf_sym_expr]. *)
 
 From Stdlib Require Import
   ZArith

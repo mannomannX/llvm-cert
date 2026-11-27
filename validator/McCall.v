@@ -5,13 +5,23 @@
 
 (** * Verified Direct Call Summaries & Caller/Callee Composition ([CertValidator.McCall])
 
-    Top-level entry point for Milestone M3c of Phase 8.3a for direct
-    non-recursive acyclic calls on [RV64IM+RVC] and [AArch64]:
-    re-exports [CertValidator.McCallSpec], [CertValidator.McCallMcWitness], and
-    [CertValidator.McCallIrExec], and proves Sections 5.5-5.6 end-to-end
-    call-validator soundness ([validate_mc_call_rv64_sound],
-    [validate_mc_call_a64_sound]) and caller/callee composition theorems
-    ([compose_rv64_caller_callee_sound], [compose_a64_caller_callee_sound]). *)
+    Purpose:
+      Top-level direct call-summary validator entry point re-exporting [McCallSpec],
+      [McCallMcWitness], and [McCallIrExec], proving end-to-end call-validator soundness
+      ([validate_mc_call_*_sound]) and caller/callee composition ([compose_*_caller_callee_sound]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not directly named in [Extract.v] (consumed by [McValidator]). Proves
+      that [inr tt] from [validate_mc_call_rv64] or [validate_mc_call_a64] implies
+      [rv_call_sound_spec] / [a64_call_sound_spec] and leaf-callee composition.
+
+    Assumptions:
+      [Stdlib], [ITree], [Vellvm], [CertValidator] imports, and exported [McCallSpec],
+      [McCallMcWitness], [McCallIrExec]; uses [Section CallGhostFilling], zero custom axioms.
+
+    Section Outline:
+      5.5 Ghost call-variable filling & [validate_mc_call_*_sound]; 5.6 Caller/callee
+      concrete oracle composition ([compose_rv64_caller_callee_sound], [compose_a64_*]). *)
 
 From Stdlib Require Import
   ZArith

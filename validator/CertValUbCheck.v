@@ -3,7 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Source UB Assumption Discharge & Target UB-Safety Checking (Sec 5.6a) *)
+(** * Source UB Discharge & Target UB-Safety Checking ([CertValidator.CertValUbCheck])
+
+    Purpose:
+      Defines structural justification checks for source [ub_assumption]s
+      ([check_ub_assumption_justified], [check_ub_assumptions_list]), target
+      scalar/void UB-safety checking, and [check_scalar_dag_via_ro].
+
+    Trust Contract & Fail-Closed Boundary:
+      Fail-closed UB assumption and target safety verifier
+      ([check_ub_assumptions_list_sound], [check_scalar_dag_via_ro_sound]);
+      unjustified source UBs or potentially-UB target terms are rejected ([false]).
+
+    Assumptions:
+      Depends on Stdlib, [Paco], [ITree], [ExtLib], [Vellvm], [Diag], and
+      [CertFormat]/[AigLrat]/[AlgRules]/[CfgDag]/[CertVal*]; zero custom axioms.
+
+    Section Outline:
+      5.6 Source UB Assumption Discharge, Target UB-Safety & Certificate
+      Obligation Checker ([check_ub_assumptions_list], [check_scalar_dag_via_ro]). *)
 
 From Stdlib Require Import
   ZArith

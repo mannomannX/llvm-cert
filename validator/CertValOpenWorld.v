@@ -3,7 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Open-World Event Signatures, [DrawE] Refinement & Operational Stepping (Sec 1-4) *)
+(** * Open-World Event Signatures, [DrawE] & Stepping ([CertValidator.CertValOpenWorld])
+
+    Purpose:
+      Defines open-world event interpretation ([OW_E], [eval_cfg_open]),
+      well-formed [DrawE] strategies, coinductive [det_ref] and relational
+      [ow_itree_refines] ([F-44]), operational stepping, and [validator_cfg_refines].
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml. [ow_itree_refines] enforces
+      relational [DrawE] quantification and refutes target-invented
+      [0 -> freeze poison] while admitting sound [or(freeze x, -1) -> -1].
+
+    Assumptions:
+      Depends on Stdlib, [Paco], [ITree], [ExtLib], [Vellvm], [Diag], and
+      [CertValidator.{CertFormatAst,CertFormatGates,AlgRulesEval}]; zero axioms.
+
+    Section Outline:
+      1. ITree Primitives, [OW_E] & [DrawE] (1.1 Default Strategy);
+      2. [det_ref] & [ow_itree_refines] (2.1-2.3); 3. Stepping; 4. Refines. *)
 
 From Stdlib Require Import
   ZArith

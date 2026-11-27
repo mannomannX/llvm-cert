@@ -3,12 +3,24 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Canonical [RV64IM] + [RVC] Instruction AST and Total Decoder
+(** * Canonical RV64IM+RVC Instruction AST & Total Decoder ([CertValidator.Rv64Decode])
 
-    Implements for [CertValidator.Rv64Decode]:
-    1. Canonical [RV64IM] + [RVC] instruction AST ([rv_alu_imm_op],
-       [rv_alu_reg_op], [rv_br_cond], [rv_inst], [decoded_rv_inst]).
-    2. Total little-endian mixed 16/32-bit decoder ([decode_rv64_bytes]). *)
+    Purpose:
+      Defines the canonical RV64IM+RVC instruction AST ([rv_inst], [decoded_rv_inst]) and the
+      total little-endian mixed 16/32-bit byte-stream decoder ([decode_rv64_bytes]).
+
+    Trust Contract & Fail-Closed Boundary:
+      [decode_rv64_bytes] fails closed ([inl err]) on empty, odd-length, or (when
+      [rvc_enabled = false]) non-4-byte-aligned streams, and on any unsupported or
+      unrecognized 16-bit or 32-bit opcode. Extracted to OCaml via [Extract.v].
+
+    Assumptions:
+      [Stdlib], [CertValidator.common.Diag], and [CertValidator.{Elf64Spec,McFrameMem,
+      McIsaCommon}]; zero Vellvm dependencies and zero custom axioms.
+
+    Section Outline:
+      1. Canonical RV64IM+RVC instruction AST; 2. Total mixed 16/32-bit decoder
+      ([decode_rvc_hw], [decode_rv32_word], [decode_rv64_bytes]). *)
 
 From Stdlib Require Import
   ZArith

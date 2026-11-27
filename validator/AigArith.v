@@ -3,13 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * [CertValidator.AigArith]: 2-Rail Arithmetic, Shift, Cast & ICmp Bit-Blast Encoders
+(** * 2-Rail Arithmetic, Shift, Cast & ICmp Bit-Blasting ([CertValidator.AigArith])
 
-    Builds on [CertValidator.LratCore] and [CertValidator.AigGates] to provide
-    [bools_to_Z] arithmetic/bit-slicing/MSB bridge lemmas and complete monotone
-    2-rail encoders (addition, subtraction, multiplication, shifts, casts,
-    integer comparisons, and select/freeze) proved sound against Vellvm's
-    [@Integers.bit_int] semantics. *)
+    Purpose:
+      Proves [bools_to_Z] arithmetic, bit-slicing, and MSB bridge lemmas and
+      defines monotone 2-rail encoders for bitwise ops, [add]/[sub], shifts,
+      casts ([zext]/[sext]/[trunc]), [icmp], and [select] over [bit_int].
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-backed encoder library; each [blast_*_step] theorem establishes
+      monotone [sat_blast_st] preservation and exact value/poison simulation
+      against Vellvm's [@Integers.bit_int] semantics.
+
+    Assumptions:
+      Depends on Stdlib, [Vellvm.Numeric.{Rocqlib,Zbits,Integers}], and
+      [CertValidator.{LratCore,AigGates}]; zero custom axioms.
+
+    Section Outline:
+      6.2 [bools_to_Z] Arithmetic, Bit-Slicing & MSB Bridge Lemmas;
+      6.3 Verified 2-Rail Bitwise, Arithmetic, Shift, Cast, [icmp] & [select]. *)
 
 From Stdlib Require Import
   ZArith

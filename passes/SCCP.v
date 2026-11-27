@@ -3,12 +3,29 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Sparse Conditional Constant Propagation (SCCP)
+(** * Verified Sparse Conditional Constant Propagation ([CertPasses.SCCP])
 
-    Implements Wegman-Zadeck sparse conditional constant propagation over VIR
-    CFGs with translation validation ([check_sccp_valid]) and forward
-    must-definedness verification, proved sound with respect to whole-program
-    refinement ([prog_refines]). *)
+    Purpose:
+      Re-exports [CertPasses.SCCPSpec], proves block-address preservation
+      ([sccp_cfg_block_addresses]) and constant-evaluator soundness, builds
+      local-environment simulation ([sccp_cfg_sim]) from [check_sccp_valid],
+      and proves whole-program refinement ([sccp_mcfg_refines]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only verification module over [CertPasses.SCCPSpec] (listed in
+      [Extract.v] alongside [SCCPSpec]); runtime execution relies on
+      [SCCPSpec.sccp_cfg]'s fail-closed fallback when [sccp_check_guards] or
+      [check_sccp_valid] fails.
+
+    Assumptions:
+      Depends on Stdlib, Paco, ITree, ExtLib, Vellvm, [CertPasses.PassCommon],
+      and [CertPasses.SCCPSpec]; zero custom axioms (parameterized over
+      [IP : IPtr] and [IPT : @IPtrTheory IP]).
+
+    Section Outline:
+      (4) Syntactic, lookup, block-address, & [ConstEvalSound];
+      (5) [cfg_local_sim] primitives, [env_matches_cert], expression/instr/phi/
+      terminator simulation; (6) [sccp_mcfg_refines]. *)
 
 From Stdlib Require Import
   ZArith

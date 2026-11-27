@@ -3,16 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * [CertValidator.AlgRules] Verified 2-Rail [LRAT] & Auto-DPLL Fallback Refinement Checker
+(** * Verified 2-Rail [LRAT] & Auto-DPLL Refinement Checker ([CertValidator.AlgRules])
 
-    Re-exports [AlgRulesEval], [AlgRulesNormBinop], and [AlgRulesNormRefines],
-    and defines:
-    - Tail-recursive Cone-of-Influence ([COI]) clause filtering, AIG variable
-      allocation, 2-rail multiplication, operator blasting steps, [select] and
-      [CE_Let] blasting, and [ub_ctx] assumption blasting.
-    - Verified 2-rail [LRAT] and auto-DPLL fallback refinement checking
-      ([check_expr_refines_with_lrat]) backed by
-      [check_expr_refines_with_lrat_sound]. *)
+    Purpose:
+      Re-exports [AlgRulesEval], [AlgRulesNormBinop], and [AlgRulesNormRefines],
+      and implements COI filtering, 2-rail [CB_Mul]/[CE_Let] bit-blasting,
+      [ub_ctx] encoding, and [check_expr_refines_with_lrat].
+
+    Trust Contract & Fail-Closed Boundary:
+      Fail-closed expression refinement checker ([check_expr_refines_with_lrat_sound]);
+      accepts only when algebraic normalization succeeds or COI-filtered 2-rail
+      bit-blasting yields an UNSAT proof verified by [LRAT] or bounded DPLL.
+
+    Assumptions:
+      Depends on Stdlib, Vellvm, [CoreTactics], and [LratCore]/[AigGates]/
+      [AigArith]/[CertFormatAst]; re-exports [AlgRulesEval]/[NormBinop]/[NormRefines].
+
+    Section Outline:
+      7. Verified 2-Rail [LRAT] & Auto-DPLL Checker: 7.1 COI; 7.2 Var Alloc;
+      7.3 Multiplier; 7.4 Op Steps; 7.5 [select]/[CE_Let]; 7.6 Top-Level Check. *)
 
 From Stdlib Require Import
   ZArith

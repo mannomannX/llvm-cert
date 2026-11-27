@@ -3,13 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Stack-Slot to SSA Register Promotion ([CertPasses.Mem2Reg])
+(** * Mem2Reg Expression Lifting & Structural Helpers ([CertPasses.Mem2RegExprLift])
 
-    Promotes non-escaping scalar [alloca] stack slots in function entry blocks
-    to SSA registers and block-entry [Phi] nodes (Stage 1), followed by
-    reverse-order dead scalar [alloca] elimination in leaf functions (Stage 2)
-    so inlinable callees become [alloca]-free before [CertPasses.Inline].
-    Composed across bounded rounds via [prog_refines_trans]. *)
+    Purpose:
+      Proves syntactic uniqueness invariants, [tau_expand]/[prov_te] lifting,
+      [withCall] and parametric expression simulations ([denote_exp_*_sim]),
+      exception-level memory lifters, and Stage 1 attribute/call helpers.
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml. Bridges syntactic pass guards
+      in [Mem2RegSpec] with semantic expression and call-attribute steps.
+
+    Assumptions:
+      Parametric over [IP : IPtr] and [IPT : @IPtrTheory IP]; depends on
+      [PassCommon] and [Mem2RegSpec]..[Mem2RegGhostInv]; zero custom axioms.
+
+    Section Outline:
+      - [MemoryAndSerialization]: 3F. uniqueness, [tau_expand]/[prov_te],
+        [withCall] & expression sims; 3G. exception lifters & Pass-1 specs;
+        3H. fused env steps & attribute/call helpers. *)
 
 From Stdlib Require Import
   ZArith

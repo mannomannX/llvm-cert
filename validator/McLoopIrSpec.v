@@ -3,14 +3,26 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Loop Cutpoint Naming, Substitution & Pure-SSA IR Segment Reification ([CertValidator.McLoopIrSpec])
+(** * Loop Cutpoint Naming & Pure-SSA IR Reification ([CertValidator.McLoopIrSpec])
 
-    1. Cutpoint variable naming ([!cut_k], [!mc_hi_rk], [!mc_ur_r], [!mc_us_i]
-       — never [$]-prefixed), let-free substitution ([subst_cert_expr]), and
-       32-bit upper-half recombination ([combine_hi32_expr]).
-    2. General pure-SSA IR segment reification ([ir_seg_tree], [reify_ir_seg])
-       supporting rotated loops, entry guards, exit-block phis, LICM, and
-       self-loops. *)
+    Purpose:
+      Defines [!]-prefixed cutpoint variable naming ([mc_cut_var_name], [mc_hi_var_name],
+      [mc_skel_reg_name], [mc_skel_slot_name]), let-free substitution ([subst_cert_expr]),
+      32-bit upper-half recombination, and pure-SSA IR segment reification ([reify_ir_seg]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not directly named in [Extract.v]. [reify_ir_seg] fails closed
+      ([inl err]) on impure/unsupported IR instructions, mismatched header phis, or fuel
+      exhaustion; accepted [ir_seg_tree] terms satisfy [reify_ir_seg_wf] / [reify_ir_seg_sound].
+
+    Assumptions:
+      [Stdlib], [Vellvm], [CertValidator.common.Diag], and [CertValidator.{AigLrat,CertFormat,
+      AlgRules,CertValidator,Elf64Spec,McFrameMem,McIsaCommon,A64Decode,A64ExecSym,A64DagProof,
+      McOblDischarger}]; zero custom axioms.
+
+    Section Outline:
+      1. Cutpoint names, [combine_hi32_expr] & [subst_cert_expr]; 2. Pure-SSA IR segment
+      reification ([ir_seg_tree], [reify_ir_seg], [reify_ir_seg_wf], [reify_ir_seg_sound]). *)
 
 From Stdlib Require Import
   ZArith

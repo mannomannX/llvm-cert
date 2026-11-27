@@ -3,13 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Stack-Slot to SSA Register Promotion ([CertPasses.Mem2Reg])
+(** * Mem2Reg Base Memory, Serialization & Safe Provenance ([CertPasses.Mem2RegMemBase])
 
-    Promotes non-escaping scalar [alloca] stack slots in function entry blocks
-    to SSA registers and block-entry [Phi] nodes (Stage 1), followed by
-    reverse-order dead scalar [alloca] elimination in leaf functions (Stage 2)
-    so inlinable callees become [alloca]-free before [CertPasses.Inline].
-    Composed across bounded rounds via [prog_refines_trans]. *)
+    Purpose:
+      Proves monadic laws for [memM_interp_prov], [mem_stack_equal]
+      synchronization, scalar byte-serialization identities, consecutive-pointer
+      frame facts, and safe-provenance preservation ([safe_prov], [genv_safe]).
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml. Supplies memory-model base
+      lemmas for Stage 1 and Stage 2 [Mem2Reg] simulation invariants.
+
+    Assumptions:
+      Parametric over [IP : IPtr] and [IPT : @IPtrTheory IP] (with
+      [IPtrWellBehaved IP] for [get_consecutive_ptrs_well_behaved]); depends on
+      [PassCommon] and [Mem2RegModel]; zero custom axioms or [Admitted].
+
+    Section Outline:
+      - [MemoryAndSerialization]: 3A. [mem_stack_equal] sync; 3B. scalar byte
+        serialization; 3C. allocation keys, frames, and safe provenance. *)
 
 From Stdlib Require Import
   ZArith

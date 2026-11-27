@@ -3,13 +3,24 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Stack-Slot to SSA Register Promotion ([CertPasses.Mem2Reg])
+(** * Mem2Reg Stage 1 Leaf Promotion & Module Lifter ([CertPasses.Mem2RegStage1])
 
-    Promotes non-escaping scalar [alloca] stack slots in function entry blocks
-    to SSA registers and block-entry [Phi] nodes (Stage 1), followed by
-    reverse-order dead scalar [alloca] elimination in leaf functions (Stage 2)
-    so inlinable callees become [alloca]-free before [CertPasses.Inline].
-    Composed across bounded rounds via [prog_refines_trans]. *)
+    Purpose:
+      Proves block-address preservation, Stage 1 single-slot SSA promotion in
+      leaf functions ([try_promote_slot_leaf_denote_function_sim]), whole-module
+      leaf lifting ([leaf_module_defs_refines]), and [s1_cps] combinators.
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml. Provides leaf promotion
+      soundness and the fixed-guard CPS framework for [Mem2Reg].
+
+    Assumptions:
+      Parametric over [IP : IPtr] and [IPT : @IPtrTheory IP]; depends on
+      [PassCommon] and [Mem2RegSpec]..[Mem2RegStage2]; zero custom axioms.
+
+    Section Outline:
+      - [MemoryAndSerialization]: 3N. promotion helpers & block-addr pres.;
+        3O. leaf slot promotion sim; 3P. module lifter & [s1_cps] combinators. *)
 
 From Stdlib Require Import
   ZArith

@@ -3,16 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * [CertValidator.CertFormatAst]: Canonical [cert-v1] Certificate AST & Well-Formedness
+(** * Canonical [cert-v1] Certificate AST & Well-Formedness ([CertValidator.CertFormatAst])
 
-    Defines the complete Rocq AST for [cert-v1] translation-validation
-    certificates ([cert_binop], [cert_icmp_pred], [cert_cast_kind],
-    [cert_expr] with [CE_Let] DAG bindings, [ub_assumption],
-    [value_equivalence], [memory_invariant], [return_obligation],
-    [loop_cutpoint_invariant], [alias_witness], [block_certificate],
-    [proof_certificate]), structural boolean comparators with reflection
-    lemmas, computable bitwidth/well-formedness predicates, and diagnostic
-    well-formedness checkers. *)
+    Purpose:
+      Defines the canonical [cert-v1] AST ([cert_binop], [cert_icmp_pred],
+      [cert_cast_kind], [cert_expr] with [CE_Let], [ub_assumption],
+      [proof_certificate]), boolean comparators, and closed let-DAG checks.
+
+    Trust Contract & Fail-Closed Boundary:
+      Fail-closed well-formedness checker ([check_wf_proof_certificate_diag],
+      [check_wf_proof_certificate_diag_sound]); rejects unsupported widths,
+      invalid flags, unbound vars, and malformed [CE_Let] scopes with [inl].
+
+    Assumptions:
+      Depends on Stdlib, [CertValidator.common.Diag], and
+      [CertValidator.LratCore]; zero Vellvm dependencies and zero custom axioms.
+
+    Section Outline:
+      1. Canonical [cert-v1] Certificate AST; 2. Structural Comparators &
+      Reflection Lemmas; 3. Well-Formedness ([E-10] Closed Let-DAGs). *)
 
 From Stdlib Require Import
   ZArith

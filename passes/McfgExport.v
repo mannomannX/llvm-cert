@@ -3,32 +3,28 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified [mcfg dtyp] Module Exporter ([CertPasses.McfgExport])
+(** * Fail-Fast Verified Module Exporter ([CertPasses.McfgExport])
 
-    Provides a fail-fast, extraction-clean lowering from optimized Vellvm
-    modules ([CFG.mcfg dtyp]) back to printable LLVM 23 surface syntax trees
-    ([toplevel_entities typ (block typ * list (block typ))]):
+    Purpose:
+      Lowers optimized [CFG.mcfg dtyp] modules back to printable LLVM surface
+      syntax via verified entry-block placement ([place_entry_first_cfg]),
+      fail-fast [dtyp] reification ([reify_dtyp]), pre-opt reference
+      resolution ([resolve_for_opt_tle]), and [!N]/[Anon] normalization.
 
-    1. **Entry-Block Placement & Phi-Free Invariant ([place_entry_first_cfg])**:
-       In textual LLVM IR (and [CFG.cfg_of_definition]), the first printed block
-       of a function definition is unconditionally its entry block, and LLVM 23
-       ([llvm-as]) forbids [phi] nodes in the entry block. [place_entry_first_cfg]
-       validates block-ID uniqueness, locates [init c], rejects entry-block
-       [phi]s, and places the entry block at the head of [blks] while preserving
-       [find_block] and [refine_cfg] denotational semantics ([0 Admitted]).
-    2. **Fail-Fast Dynamic-Type Reification ([reify_dtyp])**:
-       Maps [DTYPE_Pointer] to LLVM 23 opaque [ptr] ([TYPE_Pointer None]) and
-       rejects target-dependent/unprintable internal types ([DTYPE_Iptr],
-       [DTYPE_Opaque]) with explicit [inl] diagnostics rather than silent
-       fallback types.
-    3. **Prototype, Reference, & Local-ID Normalization ([resolve_for_opt_tle],
-       [export_mcfg_with_typ], [export_mcfg_with_tle])**:
-       Expands [#N] attribute groups, callee attributes, and semantic value
-       metadata prior to optimization while preserving/restoring [!N] metadata
-       node IDs, deduplicating attributes by LLVM attribute slot, reconstructing
-       [TYPE_Function] prototypes, and injectively normalizing local [Anon]/[Raw]
-       identifiers to collision-free named identifiers so LLVM 23 ([llvm-as])
-       never encounters sequential [%0, %1, ...] numbering gaps after passes. *)
+    Trust Contract & Fail-Closed Boundary:
+      Extracted to OCaml ([Extract.v]: [resolve_for_opt_tle],
+      [export_mcfg_to_tle], [export_mcfg_with_typ], [export_mcfg_with_tle]).
+      Returns [inl err] on duplicate block IDs, missing or phi-bearing entry
+      blocks, or unprintable [DTYPE_Iptr]/[DTYPE_Opaque] types.
+
+    Assumptions:
+      Depends on Stdlib, ITree, Vellvm (including [ModuleRefs]), and
+      [CertPasses.PassCommon]; zero custom axioms (0 admitted obligations).
+
+    Section Outline:
+      (1) Block-ID helpers; (2) [place_entry_first_cfg]; (3) Attr dedup &
+      [reify_dtyp]; (4) Source-type lowering; (5) AST reification;
+      (6)-(6b) Module export, [resolve_for_opt_tle], & [!N]/[Anon] passes. *)
 
 From Stdlib Require Import
   ZArith

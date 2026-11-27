@@ -3,12 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified [AArch64] ([A64]) Core AST & 32-Bit Little-Endian Decoder
+(** * Verified AArch64 (A64) Core AST & 32-Bit Little-Endian Decoder ([CertValidator.A64Decode])
 
-    Implements for Milestone M2/M4 ([CertValidator.A64Decode]):
-    canonical [A64] core bare-metal AST, total 32-bit little-endian decoder
-    ([decode_a64_bytes]), and instruction validity invariants
-    ([decode_a64_word_valid], [decode_a64_bytes_valid]). *)
+    Purpose:
+      Defines the canonical AArch64 core bare-metal AST ([a64_inst], [decoded_a64_inst]), total
+      32-bit little-endian decoder ([decode_a64_bytes]), and instruction validity invariants
+      ([decode_a64_bytes_valid]).
+
+    Trust Contract & Fail-Closed Boundary:
+      [decode_a64_bytes] fails closed ([inl err]) on empty or non-4-byte-aligned streams and
+      unsupported/unrecognized 32-bit encodings; every [inr insts] satisfies
+      [forallb a64_inst_valid insts = true] by [decode_a64_bytes_valid]. Extracted via [Extract.v].
+
+    Assumptions:
+      [Stdlib], [CertValidator.common.Diag], and [CertValidator.{Elf64Spec,McFrameMem,
+      McIsaCommon}]; zero Vellvm dependencies and zero custom axioms.
+
+    Section Outline:
+      1. Canonical A64 core instruction AST; 2. Total 32-bit LE decoder ([decode_a64_word],
+      [decode_a64_bytes]) & validity proofs ([decode_a64_bytes_valid]). *)
 
 From Stdlib Require Import
   ZArith

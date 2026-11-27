@@ -3,7 +3,25 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Path-Sensitive Certificate Obligation Checking, GEP & Padded Structs (Sec 5.6b) *)
+(** * Path-Sensitive Obligation Checking, GEP & Structs ([CertValidator.CertValPathCheck])
+
+    Purpose:
+      Defines path-sensitive [cfg_dag] refinement checking
+      ([check_dag_refines_cert]), 64-bit GEP reassociation ([F-46]), padded
+      struct slice forwarding ([F-48]), and memory/alias witness validation.
+
+    Trust Contract & Fail-Closed Boundary:
+      Fail-closed path-sensitive DAG checker ([check_dag_refines_cert_sound],
+      [check_memory_invariant_valid_sound]); rejects unverified paths, target UB,
+      unmatched [freeze] keys, or invalid pointer/memory witnesses.
+
+    Assumptions:
+      Depends on Stdlib, [Paco], [ITree], [ExtLib], [Vellvm], [Diag], and
+      [CertFormat]/[AigLrat]/[AlgRules]/[CfgDag]/[CertVal*]; zero custom axioms.
+
+    Section Outline:
+      Path-condition extraction & [check_dag_refines_cert]; 5.6a [F-46] Pointer
+      Ops & GEP Reassociation; 5.6b [F-48] Padded Structs & Memory/Alias Checks. *)
 
 From Stdlib Require Import
   ZArith

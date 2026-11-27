@@ -3,10 +3,26 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Interprocedural Function Inlining Pass — Frame & Global Env ([CertPasses.InlineFrameGenv])
+(** * Inlining Stack-Frame & Global-Env Invariants ([CertPasses.InlineFrameGenv])
 
-    Model-semantics preliminaries, empty memory frame invariants, event
-    postconditions, and [build_global_environment] invariants. *)
+    Purpose:
+      Establishes nested [dvalue]/[exp] induction principles, fused global
+      handler reductions, empty stack-frame memory simulation
+      ([handle_memoryM_empty_frame] over [push_empty_frame]), and Hoare
+      address-monotonicity invariants for [build_global_environment].
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml.
+
+    Assumptions:
+      Depends on Stdlib, Paco, ITree, ExtLib, Vellvm, [CertPasses.PassCommon],
+      [CertPasses.common.ItreeTactics], [CertPasses.InlineSpec], and
+      [CertPasses.InlineSyntaxProof]; zero custom axioms (arbitrary [IPtr]).
+
+    Section Outline:
+      (7A) Nested [dvalue]/[exp] induction; (7B) Fused global handler & attr
+      reductions; (7C) Empty stack-frame memory simulation; (7D) Address
+      monotonicity & [build_global_environment_inline_post]. *)
 
 From Stdlib Require Import
   ZArith

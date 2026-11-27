@@ -3,10 +3,27 @@
    or a separate LLVMCert Commercial Software License Agreement.
    See /LICENSE in the repository root for details. *)
 
-(** * Verified Interprocedural Function Inlining Pass — Caller Pre-Loop Simulation ([CertPasses.InlineCallerProof])
+(** * Inlining Caller Pre-Loop & Sync-Step Simulation ([CertPasses.InlineCallerProof])
 
-    Caller CFG simulation infrastructure, pre-call/post-call block helpers,
-    and call-site setup prior to the caller inline loop. *)
+    Purpose:
+      Proves caller-side instruction, code, remapped-phi, and terminator
+      simulations under [cfg_inline_sim], synced-iteration preservation,
+      unchanged-function simulation ([denote_function_other_sim]), and
+      single-step [run_exc] lifting at synced and inlined call sites.
+
+    Trust Contract & Fail-Closed Boundary:
+      Proof-only module; not extracted to OCaml.
+
+    Assumptions:
+      Depends on Stdlib, Paco, ITree, ExtLib, Vellvm, [CertPasses.PassCommon],
+      [CertPasses.common.ItreeTactics], and
+      [CertPasses.Inline{Spec,SyntaxProof,FrameGenv,Sim,CalleeProof}]; zero
+      custom axioms.
+
+    Section Outline:
+      (10A) Caller instruction, code, phi, terminator, & synced-iter
+      simulations; (10B) Unchanged-function simulation and single-step [run_exc]
+      lifting for synced and inlined blocks. *)
 
 From Stdlib Require Import
   ZArith

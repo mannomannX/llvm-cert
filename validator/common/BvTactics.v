@@ -6,13 +6,21 @@
 (** * Stdlib Bitvector & Integer-Coercion Tactics ([CertValidator.common.BvTactics])
 
     Purpose:
-      Shared deterministic helpers over Stdlib [N]/[Z]/[Pos] for coercion
-      normalization, bitwise extensionality, mask simplification, and closed
-      constant evaluation across [AigLrat], [Rv64Sem], [A64CoreSem], and
-      future Phase 7 32-bit targets.
+      Provides deterministic Ltac helpers ([bv_zify], [bv_testbit_ext],
+      [bv_mask_norm], [bv_compute_const]) over Stdlib [N]/[Z]/[positive] for
+      coercion normalization, bitwise extensionality, and constant evaluation.
 
-    Trust Contract & Guardrails:
-      Pure Stdlib only (zero Vellvm dependency). Outside the kernel TCB. *)
+    Trust Contract & Fail-Closed Boundary:
+      Shared tactic library (Ltac only); outside the Rocq trusted kernel and not
+      extracted to OCaml.
+
+    Assumptions:
+      Stdlib-only ([ZArith], [NArith], [PArith], [Lia]) plus
+      [CertValidator.common.Options]; zero Vellvm dependencies and zero axioms.
+
+    Section Outline:
+      Single flat library of coercion, bitwise extensionality, mask
+      normalization, and closed-term evaluation tactics. *)
 
 From Stdlib Require Import
   ZArith
