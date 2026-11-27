@@ -273,7 +273,8 @@ Proof.
   intros arch; induction pnms as [| p0 rp IH]; intros [| d0 rd] [| a0 ra] [| s0 rs] [| idx'] p d a s H Hp Hd Ha Hs;
     cbn in H, Hp, Hd, Ha, Hs; try discriminate;
     apply andb_true_iff in H as [H1 Hr].
-  - inversion Hp; inversion Hd; inversion Ha; inversion Hs; subst; exact H1.
+  - inversion Hp; inversion Hd; inversion Ha; inversion Hs.
+    subst; exact H1.
   - exact (IH _ _ _ _ _ _ _ _ Hr Hp Hd Ha Hs).
 Qed.
 
@@ -311,7 +312,9 @@ Proof.
   intros arch; induction pnms as [| p rp IH]; intros [| d rd] [| a ra] [| s rs] [| idx'] sp H Hs;
     cbn in H, Hs; try discriminate;
     apply andb_true_iff in H as [H1 Hr].
-  - inversion Hs; subst s; destruct (check_one_mc_arg_inv _ _ _ _ _ H1) as [Hnm [_ Hdt]]; subst; split; reflexivity.
+  - inversion Hs; subst s.
+    destruct (check_one_mc_arg_inv _ _ _ _ _ H1) as [Hnm [_ Hdt]].
+    subst; split; reflexivity.
   - exact (IH _ _ _ _ _ Hr Hs).
 Qed.
 
@@ -656,19 +659,25 @@ Definition validate_mc_mcfg_with_cert
                           let allowed := used_src_param_vars ir_cfg ++ seed_vars in
                           match mc_loop mcert with
                           | None =>
-                              match mc_decode_and_summarize (mc_arch mcert) (mc_rvc mcert) (efs_bytes sl) (mc_args mcert) (mc_ret_width mcert) with
+                              match mc_decode_and_summarize
+                                      (mc_arch mcert) (mc_rvc mcert) (efs_bytes sl)
+                                      (mc_args mcert) (mc_ret_width mcert) with
                               | inl err => inl err
                               | inr d_mc =>
                                   match flatten_mc_dag_to_expr (mc_ret_width mcert) d_mc with
                                   | inl err => inl err
                                   | inr e_mc =>
-                                      match summarize_cfg_dag_with_uas (fun _ => []) false ir_cfg ir_pnames with
+                                      match summarize_cfg_dag_with_uas
+                                              (fun _ => []) false ir_cfg ir_pnames with
                                       | None =>
-                                          inl (diag "mc-ir-reify" ("IR CFG symbolic summarization failed for '" ++ fn_bare ++ "'"))
+                                          inl (diag "mc-ir-reify"
+                                            ("IR CFG symbolic summarization failed for '"
+                                             ++ fn_bare ++ "'"))
                                       | Some d_ir =>
                                           match src_dag_to_expr (mc_ret_width mcert) d_ir with
                                           | Some e_ir =>
-                                              check_mc_expr_refines_diag mc_init_ctx allowed e_ir e_mc (mc_lrat_proof mcert)
+                                              check_mc_expr_refines_diag
+                                                mc_init_ctx allowed e_ir e_mc (mc_lrat_proof mcert)
                                           | None =>
                                               let dag_fuel := S (dag_node_count d_ir + 1) in
                                               let ro :=
@@ -685,10 +694,12 @@ Definition validate_mc_mcfg_with_cert
                                                 | Some pf =>
                                                     inl (diag "lrat-check"
                                                       ("LRAT proof (" ++ diag_nat_dec (length_tr pf) ++
-                                                       " step(s)) failed to discharge MC-to-IR DAG refinement obligation for '" ++ fn_bare ++ "'"))
+                                                       " step(s)) failed to discharge MC-to-IR DAG " ++
+                                                       "refinement obligation for '" ++ fn_bare ++ "'"))
                                                 | None =>
                                                     inl (diag "mc-refine"
-                                                      ("MC-to-IR DAG refinement obligation failed for '" ++ fn_bare ++ "'"))
+                                                      ("MC-to-IR DAG refinement obligation failed for '"
+                                                       ++ fn_bare ++ "'"))
                                                 end
                                           end
                                       end
@@ -700,33 +711,42 @@ Definition validate_mc_mcfg_with_cert
                                   match decode_rv64_bytes (mc_rvc mcert) (efs_bytes sl) with
                                   | inl err => inl err
                                   | inr insts =>
-                                      validate_mc_loop_rv64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) ls (mc_lrat_proof mcert)
+                                      validate_mc_loop_rv64 ir_cfg allowed mc_init_ctx insts
+                                        (mc_args mcert) (mc_ret_width mcert) ls (mc_lrat_proof mcert)
                                   end
                               | EA_AArch64 =>
-                                  if mc_rvc mcert then inl (diag "mc-rvc" "compressed mode (rvc 1) is not supported for AArch64")
+                                  if mc_rvc mcert then
+                                    inl (diag "mc-rvc"
+                                      "compressed mode (rvc 1) is not supported for AArch64")
                                   else
                                     match decode_a64_bytes (efs_bytes sl) with
                                     | inl err => inl err
                                     | inr insts =>
-                                        validate_mc_loop_a64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) ls (mc_lrat_proof mcert)
+                                        validate_mc_loop_a64 ir_cfg allowed mc_init_ctx insts
+                                          (mc_args mcert) (mc_ret_width mcert) ls (mc_lrat_proof mcert)
                                     end
                               end
                           end
                     end
                 | callees =>
                     match mc_loop mcert with
-                    | Some _ => inl (diag "mc-mode" "combining (calls ...) and (loop ...) in one certificate is not supported")
+                    | Some _ =>
+                        inl (diag "mc-mode"
+                          "combining (calls ...) and (loop ...) in one certificate is not supported")
                     | None =>
-                        match check_mc_callee_contracts_diag (m_type_defs ir_m) ir_m (mc_arch mcert) callees with
+                        match check_mc_callee_contracts_diag
+                                (m_type_defs ir_m) ir_m (mc_arch mcert) callees with
                         | inl err => inl err
                         | inr tt =>
-                          match elf64_extract_func_with_calls raw_elf (mc_arch mcert) (mc_elf_kind mcert) fn_bare
+                          match elf64_extract_func_with_calls raw_elf (mc_arch mcert)
+                                  (mc_elf_kind mcert) fn_bare
                                   (List.map (fun c => mc_strip_leading_at (mcs_name c)) callees) with
                           | inl err => inl err
                           | inr (sl, ci) =>
                               if negb (Bool.eqb (mc_rvc mcert) (efs_rvc sl)) then
                                 inl (diag "mc-rvc"
-                                  ("ELF64 RVC flag disagrees with mc-cert-v1 rvc mode for '" ++ fn_bare ++ "'"))
+                                  ("ELF64 RVC flag disagrees with mc-cert-v1 rvc mode for '"
+                                   ++ fn_bare ++ "'"))
                               else
                                 let tenv := m_type_defs ir_m in
                                 let ir_cfg := convert_typ tenv (df_instrs ir_defn) in
@@ -734,22 +754,31 @@ Definition validate_mc_mcfg_with_cert
                                 let arg_dtys := defn_arg_dtys tenv ir_defn in
                                 let s_pattrs := snd (dc_param_attrs (df_prototype ir_defn)) in
                                 let '(seed_vars, mc_init_ctx) :=
-                                    mc_build_init_ctx (mc_arch mcert) ir_pnames arg_dtys s_pattrs (mc_args mcert) in
+                                    mc_build_init_ctx (mc_arch mcert) ir_pnames arg_dtys
+                                      s_pattrs (mc_args mcert) in
                                 let allowed := used_src_param_vars ir_cfg ++ seed_vars in
                                 match mc_arch mcert with
                                 | EA_Riscv64 =>
-                                    match decode_rv64_bytes_with_calls (mc_rvc mcert) (mc_elf_kind mcert) (efs_range_lo sl) ci (efs_bytes sl) with
+                                    match decode_rv64_bytes_with_calls (mc_rvc mcert)
+                                            (mc_elf_kind mcert) (efs_range_lo sl) ci (efs_bytes sl) with
                                     | inl err => inl err
                                     | inr insts =>
-                                        validate_mc_call_rv64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) callees (mc_lrat_proof mcert)
+                                        validate_mc_call_rv64 ir_cfg allowed mc_init_ctx insts
+                                          (mc_args mcert) (mc_ret_width mcert) callees
+                                          (mc_lrat_proof mcert)
                                     end
                                 | EA_AArch64 =>
-                                    if mc_rvc mcert then inl (diag "mc-rvc" "compressed mode (rvc 1) is not supported for AArch64")
+                                    if mc_rvc mcert then
+                                      inl (diag "mc-rvc"
+                                        "compressed mode (rvc 1) is not supported for AArch64")
                                     else
-                                      match decode_a64_bytes_with_calls (mc_elf_kind mcert) (efs_range_lo sl) ci (efs_bytes sl) with
+                                      match decode_a64_bytes_with_calls (mc_elf_kind mcert)
+                                              (efs_range_lo sl) ci (efs_bytes sl) with
                                       | inl err => inl err
                                       | inr insts =>
-                                          validate_mc_call_a64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) callees (mc_lrat_proof mcert)
+                                          validate_mc_call_a64 ir_cfg allowed mc_init_ctx insts
+                                            (mc_args mcert) (mc_ret_width mcert) callees
+                                            (mc_lrat_proof mcert)
                                       end
                                 end
                           end
@@ -843,8 +872,13 @@ Proof.
   - rewrite !andb_true_iff in *; destruct Hwf as ((((? & ?) & ?) & Hsub) & Hn); repeat split; try assumption;
       [apply incl_vars_subset_b; eapply incl_tran; [exact (vars_subset_b_incl _ _ Hsub) | exact Hinc] | exact (IH Hn)].
   - exact (IH Hwf).
-  - rewrite !andb_true_iff in *; destruct Hwf as (((((? & ?) & ?) & Hsub) & Ht) & Hf); repeat split; try assumption;
-      [apply incl_vars_subset_b; eapply incl_tran; [exact (vars_subset_b_incl _ _ Hsub) | exact Hinc] | exact (IHt Ht) | exact (IHf Hf)].
+  - rewrite !andb_true_iff in *;
+      destruct Hwf as (((((? & ?) & ?) & Hsub) & Ht) & Hf);
+      repeat split; try assumption.
+    + apply incl_vars_subset_b; eapply incl_tran;
+        [exact (vars_subset_b_incl _ _ Hsub) | exact Hinc].
+    + exact (IHt Ht).
+    + exact (IHf Hf).
 Qed.
 
 Lemma eval_cert_expr_penv_agree {Pa : Params} :
@@ -875,8 +909,11 @@ Proof.
   - rewrite (IHo Hlf Hag); reflexivity.
   - rewrite !andb_true_iff in Hlf; destruct Hlf as [[Hlfc Hlft] Hlff].
     rewrite (IHc Hlfc (fun x wx Hx => Hag x wx (in_or_app _ _ _ (or_introl Hx)))),
-            (IHt Hlft (fun x wx Hx => Hag x wx (in_or_app _ _ _ (or_intror (in_or_app _ _ _ (or_introl Hx)))))),
-            (IHf Hlff (fun x wx Hx => Hag x wx (in_or_app _ _ _ (or_intror (in_or_app _ _ _ (or_intror Hx)))))); reflexivity.
+            (IHt Hlft (fun x wx Hx =>
+              Hag x wx (in_or_app _ _ _ (or_intror (in_or_app _ _ _ (or_introl Hx)))))),
+            (IHf Hlff (fun x wx Hx =>
+              Hag x wx (in_or_app _ _ _ (or_intror (in_or_app _ _ _ (or_intror Hx)))))).
+    reflexivity.
   - rewrite (IHo Hlf Hag); reflexivity.
   - discriminate Hlf.
 Qed.
@@ -968,6 +1005,1020 @@ Proof. intro id; unfold cert_reg_name; reflexivity. Qed.
 Lemma a64_hi_var_name_not_bang : forall nm, mc_starts_with_bang (a64_hi_var_name nm) = false.
 Proof. intro nm; unfold a64_hi_var_name; reflexivity. Qed.
 
+Local Lemma unpack_mc_proto_invariants :
+  forall tenv ir_defn mcert,
+    check_mc_ir_proto_contract tenv ir_defn mcert = true ->
+    let ir_cfg := convert_typ tenv (df_instrs ir_defn) in
+    let ir_pnames := List.map cert_reg_name (args ir_cfg) in
+    let arg_dtys := defn_arg_dtys tenv ir_defn in
+    cert_fn_matches_raw_id (mc_fn_name mcert) (dc_name (df_prototype ir_defn)) = true /\
+    NoDup (args ir_cfg) /\
+    NoDup ir_pnames /\
+    List.length ir_pnames = List.length (args ir_cfg) /\
+    List.length arg_dtys = List.length (args ir_cfg) /\
+    cfg_param_dtyp_compatible ir_cfg arg_dtys = true /\
+    (forall idx w0 pnm,
+      In (idx, DTYPE_Base (DTYPE_I w0)) (param_idx_uses_cfg ir_cfg) ->
+      nth_error ir_pnames idx = Some pnm ->
+      In (pnm, w0) (used_src_param_vars ir_cfg)) /\
+    List.map ras_name (mc_args mcert) = ir_pnames /\
+    (forall idx sp,
+      nth_error (mc_args mcert) idx = Some sp ->
+      nth_error arg_dtys idx = Some (DTYPE_Base (DTYPE_I (ras_width sp))) /\
+      nth_error ir_pnames idx = Some (ras_name sp)) /\
+    NoDup (List.map ras_name (mc_args mcert)) /\
+    (forall nm, In nm ir_pnames -> mc_starts_with_bang nm = false) /\
+    match mc_arch mcert with
+    | EA_Riscv64 => true
+    | EA_AArch64 =>
+        forallb (fun sp => negb (existsb (String.eqb (a64_hi_var_name (ras_name sp))) ir_pnames))
+          (mc_args mcert)
+    end = true.
+Proof.
+  intros tenv ir_defn mcert Hproto ir_cfg ir_pnames arg_dtys.
+  unfold check_mc_ir_proto_contract in Hproto; cbn zeta in Hproto.
+  fold ir_cfg ir_pnames in Hproto.
+  destruct (dc_param_attrs (df_prototype ir_defn)) as [s_rattrs s_pattrs0] eqn:Edcpa.
+  apply andb_true_iff in Hproto as [Hfn_m Hbody].
+  destruct (dc_type (df_prototype ir_defn))
+    as [| | | | | | | | | | | ret_ty arg_tys [|] | | | | |] eqn:Edct;
+    try discriminate Hbody.
+  rewrite !andb_true_iff in Hbody.
+  destruct Hbody as
+    (((((((((((((_ & _) & _) & _) & _) & _) & _) & _)
+      & Hnd_raw) & Hnd_sp) & Hmc_args) & Hhi_dis) & Hcomp) & _).
+  apply no_dup_raw_ids_spec in Hnd_raw.
+  apply no_dup_strings_spec in Hnd_sp.
+  assert (Hlen_sp_s : List.length ir_pnames = List.length (args ir_cfg))
+    by (unfold ir_pnames; apply List.length_map).
+  assert (Hlen_ad : List.length arg_dtys = List.length (args ir_cfg)).
+  { unfold arg_dtys, defn_arg_dtys; rewrite Edct; cbn match.
+    destruct (check_mc_arg_specs_len _ _ _ _ _ Hmc_args) as [Hlp _].
+    rewrite <- Hlp, Hlen_sp_s; reflexivity. }
+  assert (Harg_dtys_eq : arg_dtys = List.map (typ_to_dtyp tenv) arg_tys)
+    by (unfold arg_dtys, defn_arg_dtys; rewrite Edct; reflexivity).
+  rewrite <- Harg_dtys_eq in Hcomp.
+  assert (Hpu_ir : forall idx w0 pnm,
+    In (idx, DTYPE_Base (DTYPE_I w0)) (param_idx_uses_cfg ir_cfg) ->
+    nth_error ir_pnames idx = Some pnm ->
+    In (pnm, w0) (used_src_param_vars ir_cfg)).
+  { intros idx w0 pnm Hin Hpnm; unfold used_src_param_vars; apply in_flat_map.
+    exists (idx, DTYPE_Base (DTYPE_I w0)); split; [exact Hin |].
+    fold ir_pnames; rewrite Hpnm; left; reflexivity. }
+  assert (Hnames_eq : List.map ras_name (mc_args mcert) = ir_pnames)
+    by exact (check_mc_arg_specs_names _ _ _ _ _ Hmc_args).
+  assert (Hcompat_args : forall idx sp,
+    nth_error (mc_args mcert) idx = Some sp ->
+    nth_error arg_dtys idx = Some (DTYPE_Base (DTYPE_I (ras_width sp))) /\
+    nth_error ir_pnames idx = Some (ras_name sp)).
+  { intros idx sp Hnth; rewrite Harg_dtys_eq.
+    exact (check_mc_arg_specs_compat _ _ _ _ _ idx sp Hmc_args Hnth). }
+  assert (Hnd_mc : NoDup (List.map ras_name (mc_args mcert)))
+    by (rewrite Hnames_eq; exact Hnd_sp).
+  assert (Hnb_ir : forall nm, In nm ir_pnames -> mc_starts_with_bang nm = false).
+  { intros nm Hin; unfold ir_pnames in Hin; apply in_map_iff in Hin as [id [<- _]].
+    exact (cert_reg_name_not_bang id). }
+  split; [exact Hfn_m |].
+  split; [exact Hnd_raw |].
+  split; [exact Hnd_sp |].
+  split; [exact Hlen_sp_s |].
+  split; [exact Hlen_ad |].
+  split; [exact Hcomp |].
+  split; [exact Hpu_ir |].
+  split; [exact Hnames_eq |].
+  split; [exact Hcompat_args |].
+  split; [exact Hnd_mc |].
+  split; [exact Hnb_ir |].
+  exact Hhi_dis.
+Qed.
+
+Local Lemma mc_rv64_init_env_sound {Pa : Params} :
+  forall ir_cfg ir_pnames arg_dtys s_pattrs specs seed_vars mc_init_ctx vs rf0,
+    ir_pnames = List.map cert_reg_name (args ir_cfg) ->
+    NoDup ir_pnames ->
+    List.length arg_dtys = List.length (args ir_cfg) ->
+    List.length ir_pnames = List.length (args ir_cfg) ->
+    cfg_param_dtyp_compatible ir_cfg arg_dtys = true ->
+    List.map ras_name specs = ir_pnames ->
+    (forall nm, In nm ir_pnames -> mc_starts_with_bang nm = false) ->
+    mc_build_init_ctx EA_Riscv64 ir_pnames arg_dtys s_pattrs specs = (seed_vars, mc_init_ctx) ->
+    Forall2 dvalue_has_dtyp vs arg_dtys ->
+    Forall2 (fun attrs v => existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+      s_pattrs vs ->
+    rv_rf_matches_args (build_param_env ir_pnames vs) specs rf0 ->
+    let allowed := used_src_param_vars ir_cfg ++ seed_vars in
+    let penv := build_param_env ir_pnames vs in
+    wf_param_env_for allowed penv /\
+    (forall sp, In sp specs -> In (ras_name sp, ras_width sp) allowed) /\
+    (forall penv' : param_env Pa,
+      (forall nm, mc_starts_with_bang nm = false -> penv' nm = penv nm) ->
+      ub_ctx_holds penv' dummy_freeze_oracle mc_init_ctx).
+Proof.
+  intros ir_cfg ir_pnames arg_dtys s_pattrs specs seed_vars mc_init_ctx vs rf0
+         Hir_pnames Hnd_sp Hlen_ad Hlen_sp_s Hcomp Hnames_eq Hnb_ir Ectx_b Hty Hnu Hm allowed penv.
+  pose proof (used_src_param_vars_wf ir_cfg arg_dtys vs
+                ltac:(rewrite <- Hir_pnames; exact Hnd_sp) Hlen_ad Hcomp Hty) as Hpenv_used.
+  rewrite <- Hir_pnames in Hpenv_used; fold penv in Hpenv_used.
+  assert (Hlen_sp_vs : List.length ir_pnames = List.length vs)
+    by (pose proof (Forall2_length Hty); lia).
+  unfold mc_build_init_ctx in Ectx_b.
+  destruct (seed_proto_param_ctx ir_pnames arg_dtys s_pattrs) as [proto_vars proto_ctx] eqn:Eseed.
+  inversion Ectx_b; subst seed_vars mc_init_ctx; clear Ectx_b.
+  pose proof (seed_proto_param_ctx_sound ir_pnames arg_dtys s_pattrs vs dummy_freeze_oracle
+                Hnd_sp Hlen_sp_vs Hty Hnu) as [Hpenv_proto Hctx_proto].
+  rewrite Eseed in Hpenv_proto, Hctx_proto; cbn [fst snd] in Hpenv_proto, Hctx_proto.
+  assert (Hmc_vars_all : forall sp, In sp specs -> In (ras_name sp, ras_width sp) allowed).
+  { intros sp Hsp; unfold allowed; apply in_app_iff; right.
+    apply in_app_iff; right; apply in_app_iff; left.
+    apply in_map_iff; exists sp; split; [reflexivity | exact Hsp]. }
+  assert (Hmc_vars_wf :
+    wf_param_env_for (List.map (fun sp => (ras_name sp, ras_width sp)) specs ++ []) penv).
+  { intros nm w Hin; rewrite app_nil_r in Hin.
+    apply in_map_iff in Hin as [sp [Heq Hsp]]; inversion Heq; subst nm w.
+    destruct (In_nth_error specs sp Hsp) as [k Hnth].
+    destruct (nth_error_Some specs k) as [Hs1 _].
+    destruct (Hm k sp ltac:(apply Hs1; congruence) Hnth) as [v [Hp _]].
+    exists (DVALUE_Base (@DVALUE_I Pa (ras_width sp) v)).
+    split; [exact Hp | right; exists v; reflexivity]. }
+  split; [| split].
+  - intros nm w Hin; unfold allowed in Hin; apply in_app_iff in Hin as [Hu | Hs].
+    + exact (Hpenv_used nm w Hu).
+    + apply in_app_iff in Hs as [Hp | Hm_v];
+        [exact (Hpenv_proto nm w Hp) | exact (Hmc_vars_wf nm w Hm_v)].
+  - exact Hmc_vars_all.
+  - intros penv' Hag; rewrite app_nil_r; apply Forall_app; split.
+    + assert (Hlk' : forall idx pnm v,
+        nth_error ir_pnames idx = Some pnm -> nth_error vs idx = Some v -> penv' pnm = Some v).
+      { intros idx pnm v Hnp Hnv.
+        rewrite (Hag pnm (Hnb_ir pnm (nth_error_In _ _ Hnp))).
+        destruct (build_param_env_nth ir_pnames vs idx pnm Hnd_sp Hlen_sp_vs Hnp) as [dv [Hdv Hbp]].
+        rewrite Hnv in Hdv; inversion Hdv; subst dv; exact Hbp. }
+      destruct (seed_proto_param_ctx_sound_aux ir_pnames arg_dtys s_pattrs vs penv'
+                  dummy_freeze_oracle Hty Hnu Hlk') as [_ Hcp].
+      rewrite Eseed in Hcp; exact Hcp.
+    + apply mc_args_noundef_ctx_sound with (rf0 := rf0).
+      intros k sp Hlt Hnth; destruct (Hm k sp Hlt Hnth) as [v [Hp Hmt]].
+      assert (Hinnm : In (ras_name sp) ir_pnames).
+      { rewrite <- Hnames_eq; apply in_map_iff; exists sp.
+        split; [reflexivity | exact (nth_error_In _ _ Hnth)]. }
+      exists v; split; [rewrite (Hag _ (Hnb_ir _ Hinnm)); exact Hp | exact Hmt].
+Qed.
+
+Local Lemma mc_a64_init_env_sound {Pa : Params} :
+  forall ir_cfg ir_pnames arg_dtys s_pattrs specs seed_vars mc_init_ctx vs rf0,
+    ir_pnames = List.map cert_reg_name (args ir_cfg) ->
+    NoDup ir_pnames ->
+    NoDup (List.map ras_name specs) ->
+    List.length arg_dtys = List.length (args ir_cfg) ->
+    List.length ir_pnames = List.length (args ir_cfg) ->
+    cfg_param_dtyp_compatible ir_cfg arg_dtys = true ->
+    List.map ras_name specs = ir_pnames ->
+    (forall nm, In nm ir_pnames -> mc_starts_with_bang nm = false) ->
+    forallb (fun sp => negb (existsb (String.eqb (a64_hi_var_name (ras_name sp))) ir_pnames))
+      specs = true ->
+    mc_build_init_ctx EA_AArch64 ir_pnames arg_dtys s_pattrs specs = (seed_vars, mc_init_ctx) ->
+    Forall2 dvalue_has_dtyp vs arg_dtys ->
+    Forall2 (fun attrs v => existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+      s_pattrs vs ->
+    a64_rf_matches_args (build_param_env ir_pnames vs) specs rf0 ->
+    let allowed := used_src_param_vars ir_cfg ++ seed_vars in
+    let penv := build_param_env ir_pnames vs in
+    let penv' := a64_extend_penv_with_hi penv specs rf0 in
+    (forall nm, In nm ir_pnames -> penv' nm = penv nm) /\
+    (forall sp, In sp specs -> ~ In (a64_hi_var_name (ras_name sp)) (List.map ras_name specs)) /\
+    (forall sp, In sp specs -> penv' (ras_name sp) = penv (ras_name sp)) /\
+    wf_param_env_for allowed penv' /\
+    (forall sp, In sp specs -> In (ras_name sp, ras_width sp) allowed) /\
+    (forall nv, In nv (a64_hi_vars specs) -> In nv allowed) /\
+    (forall penv'' : param_env Pa,
+      (forall nm, mc_starts_with_bang nm = false -> penv'' nm = penv' nm) ->
+      ub_ctx_holds penv'' dummy_freeze_oracle mc_init_ctx).
+Proof.
+  intros ir_cfg ir_pnames arg_dtys s_pattrs specs seed_vars mc_init_ctx vs rf0
+         Hir_pnames Hnd_sp Hnd_mc Hlen_ad Hlen_sp_s Hcomp Hnames_eq Hnb_ir Hhi_dis Ectx_b
+         Hty Hnu Hm allowed penv penv'.
+  assert (Hdis_orig : forall nm, In nm ir_pnames -> penv' nm = penv nm).
+  { intros nm Hinnm; unfold penv', a64_extend_penv_with_hi; apply a64_extend_penv_at_orig.
+    intros sp Hsp Heq; rewrite forallb_forall in Hhi_dis.
+    pose proof (Hhi_dis sp Hsp) as Hneg; apply negb_true_iff in Hneg.
+    assert (Hex : existsb (String.eqb (a64_hi_var_name (ras_name sp))) ir_pnames = true).
+    { apply existsb_exists; exists nm; split; [exact Hinnm |].
+      rewrite <- Heq; apply String.eqb_refl. }
+    rewrite Hex in Hneg; discriminate Hneg. }
+  assert (Hdis_args : forall sp,
+    In sp specs -> ~ In (a64_hi_var_name (ras_name sp)) (List.map ras_name specs)).
+  { intros sp Hsp Hin; rewrite Hnames_eq in Hin; rewrite forallb_forall in Hhi_dis.
+    pose proof (Hhi_dis sp Hsp) as Hneg; apply negb_true_iff in Hneg.
+    assert (Hex : existsb (String.eqb (a64_hi_var_name (ras_name sp))) ir_pnames = true).
+    { apply existsb_exists; exists (a64_hi_var_name (ras_name sp)).
+      split; [exact Hin | apply String.eqb_refl]. }
+    rewrite Hex in Hneg; discriminate Hneg. }
+  pose proof (used_src_param_vars_wf ir_cfg arg_dtys vs
+                ltac:(rewrite <- Hir_pnames; exact Hnd_sp) Hlen_ad Hcomp Hty) as Hpenv_used0.
+  rewrite <- Hir_pnames in Hpenv_used0; fold penv in Hpenv_used0.
+  assert (Hpenv_used : wf_param_env_for (used_src_param_vars ir_cfg) penv').
+  { intros nm w Hin; destruct (Hpenv_used0 nm w Hin) as [dv [Hp Hwf_dv]].
+    assert (Hinnm : In nm ir_pnames).
+    { unfold used_src_param_vars in Hin; apply in_flat_map in Hin as [[idx dt] [_ Hhere]].
+      destruct dt as [[w0 | | | | | | | | | |] | |]; try contradiction Hhere.
+      destruct (nth_error (List.map cert_reg_name (args ir_cfg)) idx) as [nm0 |] eqn:Hnth;
+        [| contradiction Hhere].
+      destruct Hhere as [Heq | []]; inversion Heq; subst nm0.
+      rewrite <- Hir_pnames in Hnth; exact (nth_error_In _ _ Hnth). }
+    rewrite (Hdis_orig nm Hinnm); exists dv; split; assumption. }
+  assert (Hlen_sp_vs : List.length ir_pnames = List.length vs)
+    by (pose proof (Forall2_length Hty); lia).
+  unfold mc_build_init_ctx in Ectx_b.
+  destruct (seed_proto_param_ctx ir_pnames arg_dtys s_pattrs) as [proto_vars proto_ctx] eqn:Eseed.
+  inversion Ectx_b; subst seed_vars mc_init_ctx; clear Ectx_b.
+  assert (Hlookup' : forall idx pnm v,
+    nth_error ir_pnames idx = Some pnm -> nth_error vs idx = Some v -> penv' pnm = Some v).
+  { intros idx pnm v Hnp Hnv.
+    rewrite (Hdis_orig pnm (nth_error_In _ _ Hnp)).
+    destruct (build_param_env_nth ir_pnames vs idx pnm Hnd_sp Hlen_sp_vs Hnp) as [dv [Hdv Hbp]].
+    rewrite Hnv in Hdv; inversion Hdv; subst dv; exact Hbp. }
+  pose proof (seed_proto_param_ctx_sound_aux ir_pnames arg_dtys s_pattrs vs penv'
+                dummy_freeze_oracle Hty Hnu Hlookup') as [Hpenv_proto Hctx_proto].
+  rewrite Eseed in Hpenv_proto, Hctx_proto; cbn [fst snd] in Hpenv_proto, Hctx_proto.
+  assert (Hm' : a64_rf_matches_args penv' specs rf0).
+  { intros k sp Hlt Hnth; destruct (Hm k sp Hlt Hnth) as [v [Hp Hmt]].
+    assert (Hinnm : In (ras_name sp) ir_pnames).
+    { rewrite <- Hnames_eq; apply in_map_iff; exists sp.
+      split; [reflexivity | exact (nth_error_In _ _ Hnth)]. }
+    exists v; split; [rewrite (Hdis_orig _ Hinnm); exact Hp | exact Hmt]. }
+  destruct (a64_hi_vars_wf_and_ctx penv dummy_freeze_oracle specs rf0 Hnd_mc) as [Hpenv_hi Hctx_hi].
+  fold penv' in Hpenv_hi, Hctx_hi.
+  assert (Hmc_vars_all : forall sp, In sp specs -> In (ras_name sp, ras_width sp) allowed).
+  { intros sp Hsp; unfold allowed; apply in_app_iff; right.
+    apply in_app_iff; right; apply in_app_iff; left.
+    apply in_map_iff; exists sp; split; [reflexivity | exact Hsp]. }
+  assert (Hhi_vars_all : forall nv, In nv (a64_hi_vars specs) -> In nv allowed).
+  { intros nv Hnv; unfold allowed; apply in_app_iff; right.
+    apply in_app_iff; right; apply in_app_iff; right; exact Hnv. }
+  assert (Hmc_vars_wf :
+    wf_param_env_for (List.map (fun sp => (ras_name sp, ras_width sp)) specs) penv').
+  { intros nm w Hin; apply in_map_iff in Hin as [sp [Heq Hsp]]; inversion Heq; subst nm w.
+    destruct (In_nth_error specs sp Hsp) as [k Hnth].
+    destruct (nth_error_Some specs k) as [Hs1 _].
+    destruct (Hm' k sp ltac:(apply Hs1; congruence) Hnth) as [v [Hp _]].
+    exists (DVALUE_Base (@DVALUE_I Pa (ras_width sp) v)).
+    split; [exact Hp | right; exists v; reflexivity]. }
+  assert (Hpenv_all : wf_param_env_for allowed penv').
+  { intros nm w Hin; unfold allowed in Hin; apply in_app_iff in Hin as [Hu | Hs].
+    - exact (Hpenv_used nm w Hu).
+    - apply in_app_iff in Hs as [Hp | Hrest]; [exact (Hpenv_proto nm w Hp) |].
+      apply in_app_iff in Hrest as [Hmv | Hhi];
+        [exact (Hmc_vars_wf nm w Hmv) | exact (Hpenv_hi nm w Hhi)]. }
+  assert (Hctx0 : forall penv'' : param_env Pa,
+    (forall nm, mc_starts_with_bang nm = false -> penv'' nm = penv' nm) ->
+    ub_ctx_holds penv'' dummy_freeze_oracle
+      (proto_ctx ++ List.map (fun sp => UBA_ParamNoUndef (ras_name sp) (ras_width sp)) specs
+                 ++ List.map (fun nv => UBA_ParamNoUndef (fst nv) (snd nv)) (a64_hi_vars specs))).
+  { intros penv'' Hag; apply Forall_app; split.
+    - assert (Hlk'' : forall idx pnm v,
+        nth_error ir_pnames idx = Some pnm -> nth_error vs idx = Some v -> penv'' pnm = Some v).
+      { intros idx pnm v Hnp Hnv.
+        rewrite (Hag pnm (Hnb_ir pnm (nth_error_In _ _ Hnp))); exact (Hlookup' idx pnm v Hnp Hnv). }
+      destruct (seed_proto_param_ctx_sound_aux ir_pnames arg_dtys s_pattrs vs penv''
+                  dummy_freeze_oracle Hty Hnu Hlk'') as [_ Hcp].
+      rewrite Eseed in Hcp; exact Hcp.
+    - apply Forall_app; split.
+      + apply a64_args_noundef_ctx_sound with (rf0 := rf0).
+        intros k sp Hlt Hnth; destruct (Hm' k sp Hlt Hnth) as [v [Hp Hmt]].
+        assert (Hinnm : In (ras_name sp) ir_pnames).
+        { rewrite <- Hnames_eq; apply in_map_iff; exists sp.
+          split; [reflexivity | exact (nth_error_In _ _ Hnth)]. }
+        exists v; split; [rewrite (Hag _ (Hnb_ir _ Hinnm)); exact Hp | exact Hmt].
+      + unfold ub_ctx_holds in Hctx_hi |- *; rewrite Forall_forall in Hctx_hi |- *.
+        intros ua Hin; pose proof (Hctx_hi ua Hin) as Hha.
+        apply in_map_iff in Hin as [[nm w] [<- Hnv]].
+        unfold a64_hi_vars in Hnv; apply in_flat_map in Hnv as [sp [_ Hhere]].
+        destruct (Pos.eqb (ras_width sp) 64%positive); [contradiction Hhere |].
+        destruct Hhere as [Heq | []]; inversion Heq; subst nm w; cbn [fst snd] in *.
+        intros dv Hdv; rewrite (Hag _ (a64_hi_var_name_not_bang (ras_name sp))) in Hdv.
+        exact (Hha dv Hdv). }
+  assert (Hnames_p : forall sp, In sp specs -> penv' (ras_name sp) = penv (ras_name sp)).
+  { intros sp Hsp; apply Hdis_orig; rewrite <- Hnames_eq.
+    apply in_map_iff; exists sp; split; [reflexivity | exact Hsp]. }
+  split; [exact Hdis_orig |].
+  split; [exact Hdis_args |].
+  split; [exact Hnames_p |].
+  split; [exact Hpenv_all |].
+  split; [exact Hmc_vars_all |].
+  split; [exact Hhi_vars_all |].
+  exact Hctx0.
+Qed.
+
+Local Lemma validate_mc_rv64_loop_arm_sound {Pa : Params} :
+  forall ir_cfg ir_pnames arg_dtys s_pattrs specs ret_w ls lrat_pf
+         seed_vars mc_init_ctx insts vs rf0 mstk0,
+    ir_pnames = List.map cert_reg_name (args ir_cfg) ->
+    NoDup (args ir_cfg) ->
+    NoDup ir_pnames ->
+    List.length ir_pnames = List.length (args ir_cfg) ->
+    List.length arg_dtys = List.length (args ir_cfg) ->
+    cfg_param_dtyp_compatible ir_cfg arg_dtys = true ->
+    (forall idx w0 pnm,
+      In (idx, DTYPE_Base (DTYPE_I w0)) (param_idx_uses_cfg ir_cfg) ->
+      nth_error ir_pnames idx = Some pnm ->
+      In (pnm, w0) (used_src_param_vars ir_cfg)) ->
+    List.map ras_name specs = ir_pnames ->
+    (forall nm, In nm ir_pnames -> mc_starts_with_bang nm = false) ->
+    mc_build_init_ctx EA_Riscv64 ir_pnames arg_dtys s_pattrs specs = (seed_vars, mc_init_ctx) ->
+    forallb inst_no_word_mulh insts = true ->
+    validate_mc_loop_rv64 ir_cfg (used_src_param_vars ir_cfg ++ seed_vars) mc_init_ctx
+      insts specs ret_w ls lrat_pf = inr tt ->
+    Forall2 dvalue_has_dtyp vs arg_dtys ->
+    Forall2 (fun attrs v => existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+      s_pattrs vs ->
+    mc_valid_sp0 (rv_read_reg 2%N rf0) ->
+    rv_rf_matches_args (build_param_env ir_pnames vs) specs rf0 ->
+    rv_loop_sound_spec ir_cfg insts ret_w ls vs rf0 mstk0.
+Proof.
+  intros ir_cfg ir_pnames arg_dtys s_pattrs specs ret_w ls lrat_pf
+         seed_vars mc_init_ctx insts vs rf0 mstk0
+         Hir_pnames Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad Hcomp Hpu_ir Hnames_eq Hnb_ir
+         Ectx_b Hnmul Hval Hty Hnu Hsp0 Hm.
+  set (allowed := used_src_param_vars ir_cfg ++ seed_vars) in *.
+  set (penv := build_param_env ir_pnames vs) in *.
+  destruct (mc_rv64_init_env_sound ir_cfg ir_pnames arg_dtys s_pattrs specs seed_vars mc_init_ctx
+              vs rf0 Hir_pnames Hnd_sp Hlen_ad Hlen_sp_s Hcomp Hnames_eq Hnb_ir Ectx_b Hty Hnu Hm)
+    as (Hpenv_all & Hmc_vars_all & Hctx0).
+  subst ir_pnames.
+  exact (validate_mc_loop_rv64_sound ir_cfg allowed mc_init_ctx insts specs ret_w ls lrat_pf
+           arg_dtys vs penv rf0 mstk0 Hval Hnmul Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad Hcomp Hty
+           (fun idx w pnm Hin Hpnm => in_or_app _ _ _ (or_introl (Hpu_ir idx w pnm Hin Hpnm)))
+           (fun _ _ => eq_refl) Hpenv_all Hctx0 Hmc_vars_all Hsp0 Hm).
+Qed.
+
+Local Lemma validate_mc_a64_loop_arm_sound {Pa : Params} :
+  forall ir_cfg ir_pnames arg_dtys s_pattrs specs ret_w ls lrat_pf
+         seed_vars mc_init_ctx insts vs rf0 sp0 fl0 mstk0,
+    ir_pnames = List.map cert_reg_name (args ir_cfg) ->
+    NoDup (args ir_cfg) ->
+    NoDup ir_pnames ->
+    NoDup (List.map ras_name specs) ->
+    List.length ir_pnames = List.length (args ir_cfg) ->
+    List.length arg_dtys = List.length (args ir_cfg) ->
+    cfg_param_dtyp_compatible ir_cfg arg_dtys = true ->
+    (forall idx w0 pnm,
+      In (idx, DTYPE_Base (DTYPE_I w0)) (param_idx_uses_cfg ir_cfg) ->
+      nth_error ir_pnames idx = Some pnm ->
+      In (pnm, w0) (used_src_param_vars ir_cfg)) ->
+    List.map ras_name specs = ir_pnames ->
+    (forall nm, In nm ir_pnames -> mc_starts_with_bang nm = false) ->
+    forallb (fun sp => negb (existsb (String.eqb (a64_hi_var_name (ras_name sp))) ir_pnames))
+      specs = true ->
+    mc_build_init_ctx EA_AArch64 ir_pnames arg_dtys s_pattrs specs = (seed_vars, mc_init_ctx) ->
+    forallb a64_inst_valid insts = true ->
+    validate_mc_loop_a64 ir_cfg (used_src_param_vars ir_cfg ++ seed_vars) mc_init_ctx
+      insts specs ret_w ls lrat_pf = inr tt ->
+    Forall2 dvalue_has_dtyp vs arg_dtys ->
+    Forall2 (fun attrs v => existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+      s_pattrs vs ->
+    mc_valid_sp0 sp0 ->
+    a64_rf_matches_args (build_param_env ir_pnames vs) specs rf0 ->
+    a64_loop_sound_spec ir_cfg insts ret_w ls vs rf0 sp0 fl0 mstk0.
+Proof.
+  intros ir_cfg ir_pnames arg_dtys s_pattrs specs ret_w ls lrat_pf
+         seed_vars mc_init_ctx insts vs rf0 sp0 fl0 mstk0
+         Hir_pnames Hnd_raw Hnd_sp Hnd_mc Hlen_sp_s Hlen_ad Hcomp Hpu_ir Hnames_eq Hnb_ir Hhi_dis
+         Ectx_b Hval_a64 Hval Hty Hnu Hsp0 Hm.
+  set (allowed := used_src_param_vars ir_cfg ++ seed_vars) in *.
+  set (penv := build_param_env ir_pnames vs) in *.
+  set (penv' := a64_extend_penv_with_hi penv specs rf0) in *.
+  destruct (mc_a64_init_env_sound ir_cfg ir_pnames arg_dtys s_pattrs specs seed_vars mc_init_ctx
+              vs rf0 Hir_pnames Hnd_sp Hnd_mc Hlen_ad Hlen_sp_s Hcomp Hnames_eq Hnb_ir Hhi_dis
+              Ectx_b Hty Hnu Hm)
+    as (Hdis_orig & Hdis_args & Hnames_p & Hpenv_all & Hmc_vars_all & Hhi_vars_all & Hctx0).
+  subst ir_pnames.
+  exact (validate_mc_loop_a64_sound ir_cfg allowed mc_init_ctx insts specs ret_w ls lrat_pf
+           arg_dtys vs penv' rf0 sp0 fl0 mstk0 Hval Hval_a64 Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad Hcomp
+           Hty (fun idx w pnm Hin Hpnm => in_or_app _ _ _ (or_introl (Hpu_ir idx w pnm Hin Hpnm)))
+           Hdis_orig (fun _ _ => eq_refl) Hpenv_all Hctx0 Hmc_vars_all Hhi_vars_all
+           Hnd_mc Hdis_args Hnames_p Hsp0 Hm).
+Qed.
+
+Local Lemma validate_mc_rv64_dag_arm_sound {Pa : Params} :
+  forall ir_cfg ir_pnames arg_dtys s_pattrs specs ret_w lrat_pf
+         seed_vars mc_init_ctx rvc sl insts d_mc e_mc d_ir vs rf0 mstk0,
+    ir_pnames = List.map cert_reg_name (args ir_cfg) ->
+    NoDup (args ir_cfg) ->
+    NoDup ir_pnames ->
+    List.length ir_pnames = List.length (args ir_cfg) ->
+    List.length arg_dtys = List.length (args ir_cfg) ->
+    cfg_param_dtyp_compatible ir_cfg arg_dtys = true ->
+    (forall idx w0 pnm,
+      In (idx, DTYPE_Base (DTYPE_I w0)) (param_idx_uses_cfg ir_cfg) ->
+      nth_error ir_pnames idx = Some pnm ->
+      In (pnm, w0) (used_src_param_vars ir_cfg)) ->
+    List.map ras_name specs = ir_pnames ->
+    (forall nm, In nm ir_pnames -> mc_starts_with_bang nm = false) ->
+    mc_build_init_ctx EA_Riscv64 ir_pnames arg_dtys s_pattrs specs = (seed_vars, mc_init_ctx) ->
+    decode_rv64_bytes rvc (efs_bytes sl) = inr insts ->
+    summarize_rv64_dag (S (2 * List.length insts)) insts specs ret_w = inr d_mc ->
+    flatten_mc_dag_to_expr ret_w d_mc = inr e_mc ->
+    summarize_cfg_dag_with_uas (fun _ => []) false ir_cfg ir_pnames = Some d_ir ->
+    wf_cfg_dag (used_src_param_vars ir_cfg ++ seed_vars) d_ir = true ->
+    (match src_dag_to_expr ret_w d_ir with
+     | Some e_ir =>
+         check_mc_expr_refines mc_init_ctx (used_src_param_vars ir_cfg ++ seed_vars) e_ir e_mc lrat_pf
+     | None =>
+         check_dag_refines_cert (S (dag_node_count d_ir + 1))
+           (used_src_param_vars ir_cfg ++ seed_vars) mc_init_ctx
+           (RO_ScalarRefines ret_w (CE_BvConst ret_w 0%N) (CE_BvConst ret_w 0%N) false)
+           lrat_pf (spine_src_evals d_ir) (spine_branch_conds d_ir) d_ir (CD_RetScalar ret_w e_mc)
+     end) = true ->
+    Forall2 dvalue_has_dtyp vs arg_dtys ->
+    Forall2 (fun attrs v => existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+      s_pattrs vs ->
+    mc_valid_sp0 (rv_read_reg 2%N rf0) ->
+    rv_rf_matches_args (build_param_env ir_pnames vs) specs rf0 ->
+    let rv_fuel := S (2 * List.length insts) in
+    exists sigma_ir rf_end mstk_end,
+      wf_draw_strat sigma_ir /\
+      rv_exec_mem rv_fuel insts 0%N (rv_read_reg 2%N rf0) rf0 mstk0 = Some (rf_end, mstk_end) /\
+      rv_callee_saved_preserved rf0 rf_end /\
+      rf_end 1%N = rf0 1%N /\
+      (cfg_steps_to_ub sigma_ir (init_cfg_locals (args ir_cfg) vs) (denote_cfg ir_cfg None) \/
+       exists sigma_ir' env_out dv_ir,
+         cfg_steps_to_ret sigma_ir (init_cfg_locals (args ir_cfg) vs) (denote_cfg ir_cfg None)
+           sigma_ir' env_out dv_ir /\
+         dvalue_refines dv_ir
+           (DVALUE_Base (@DVALUE_I Pa ret_w
+              (rv_trunc_ret_val ret_w (rv_read_reg 10%N rf_end))))).
+Proof.
+  intros ir_cfg ir_pnames arg_dtys s_pattrs specs ret_w lrat_pf
+         seed_vars mc_init_ctx rvc sl insts d_mc e_mc d_ir vs rf0 mstk0
+         Hir_pnames Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad Hcomp Hpu_ir Hnames_eq Hnb_ir
+         Ectx_b Edec Esum_mc Eflat Esum_ir Hwfd_ir Hchk Hty Hnu Hsp0 Hm rv_fuel.
+  set (allowed := used_src_param_vars ir_cfg ++ seed_vars) in *.
+  set (penv := build_param_env ir_pnames vs) in *.
+  destruct (mc_rv64_init_env_sound ir_cfg ir_pnames arg_dtys s_pattrs specs seed_vars mc_init_ctx
+              vs rf0 Hir_pnames Hnd_sp Hlen_ad Hlen_sp_s Hcomp Hnames_eq Hnb_ir Ectx_b Hty Hnu Hm)
+    as (Hpenv_all & Hmc_vars_all & Hctx0).
+  pose proof (Hctx0 penv (fun _ _ => eq_refl)) as Hctx_all.
+  pose proof (decode_rv64_bytes_no_word_mulh rvc (efs_bytes sl) insts Edec) as Hnmul.
+  pose proof (summarize_rv64_dag_wf rv_fuel insts specs ret_w d_mc Hnmul Esum_mc) as Hwfd_mc0.
+  assert (Hwfd_mc : wf_cfg_dag allowed d_mc = true).
+  { eapply wf_cfg_dag_mono; [| exact Hwfd_mc0].
+    intros u Hu; apply in_map_iff in Hu as [sp [<- Hsp]]; exact (Hmc_vars_all sp Hsp). }
+  destruct (summarize_rv64_dag_sound rv_fuel rvc (efs_bytes sl) insts
+              specs ret_w d_mc penv dummy_freeze_oracle rf0 mstk0 Edec Esum_mc Hsp0 Hm)
+    as (rf_end & mstk_end & Hexec & Hcs & Hra & Hevd_mc).
+  destruct (summarize_src_dag_with_uas_sound (fun _ => []) ir_cfg ir_pnames arg_dtys vs
+              dummy_freeze_oracle d_ir Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad Hcomp Hty Esum_ir)
+    as (sigma_ir & Hwfsig & Hsrc_out).
+  exists sigma_ir, rf_end, mstk_end.
+  split; [exact Hwfsig |].
+  split; [exact Hexec |].
+  split; [exact Hcs |].
+  split; [exact Hra |].
+  destruct Hsrc_out as [[Hub_s _] | (sigma_ir' & env_out & dv_ir & Hevd_ir & Hst_ret)].
+  - left; exact Hub_s.
+  - right; exists sigma_ir', env_out, dv_ir; split; [exact Hst_ret |].
+    eapply validate_mc_core_refine_sound;
+      [exact Eflat | exact Hchk | exact Hwfd_ir | exact Hwfd_mc |
+       exact Hpenv_all | exact Hctx_all | exact Hevd_mc | exact Hevd_ir].
+Qed.
+
+Local Lemma validate_mc_a64_dag_arm_sound {Pa : Params} :
+  forall ir_cfg ir_pnames arg_dtys s_pattrs specs ret_w lrat_pf
+         seed_vars mc_init_ctx sl insts d_mc e_mc d_ir vs rf0 sp0 fl0 mstk0,
+    ir_pnames = List.map cert_reg_name (args ir_cfg) ->
+    NoDup (args ir_cfg) ->
+    NoDup ir_pnames ->
+    NoDup (List.map ras_name specs) ->
+    List.length ir_pnames = List.length (args ir_cfg) ->
+    List.length arg_dtys = List.length (args ir_cfg) ->
+    cfg_param_dtyp_compatible ir_cfg arg_dtys = true ->
+    (forall idx w0 pnm,
+      In (idx, DTYPE_Base (DTYPE_I w0)) (param_idx_uses_cfg ir_cfg) ->
+      nth_error ir_pnames idx = Some pnm ->
+      In (pnm, w0) (used_src_param_vars ir_cfg)) ->
+    List.map ras_name specs = ir_pnames ->
+    (forall nm, In nm ir_pnames -> mc_starts_with_bang nm = false) ->
+    forallb (fun sp => negb (existsb (String.eqb (a64_hi_var_name (ras_name sp))) ir_pnames))
+      specs = true ->
+    mc_build_init_ctx EA_AArch64 ir_pnames arg_dtys s_pattrs specs = (seed_vars, mc_init_ctx) ->
+    decode_a64_bytes (efs_bytes sl) = inr insts ->
+    summarize_a64_dag (S (2 * List.length insts)) insts specs ret_w = inr d_mc ->
+    flatten_mc_dag_to_expr ret_w d_mc = inr e_mc ->
+    summarize_cfg_dag_with_uas (fun _ => []) false ir_cfg ir_pnames = Some d_ir ->
+    wf_cfg_dag (used_src_param_vars ir_cfg) d_ir = true ->
+    wf_cfg_dag (used_src_param_vars ir_cfg ++ seed_vars) d_ir = true ->
+    (match src_dag_to_expr ret_w d_ir with
+     | Some e_ir =>
+         check_mc_expr_refines mc_init_ctx (used_src_param_vars ir_cfg ++ seed_vars) e_ir e_mc lrat_pf
+     | None =>
+         check_dag_refines_cert (S (dag_node_count d_ir + 1))
+           (used_src_param_vars ir_cfg ++ seed_vars) mc_init_ctx
+           (RO_ScalarRefines ret_w (CE_BvConst ret_w 0%N) (CE_BvConst ret_w 0%N) false)
+           lrat_pf (spine_src_evals d_ir) (spine_branch_conds d_ir) d_ir (CD_RetScalar ret_w e_mc)
+     end) = true ->
+    Forall2 dvalue_has_dtyp vs arg_dtys ->
+    Forall2 (fun attrs v => existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+      s_pattrs vs ->
+    mc_valid_sp0 sp0 ->
+    a64_rf_matches_args (build_param_env ir_pnames vs) specs rf0 ->
+    let a64_fuel := S (2 * List.length insts) in
+    exists sigma_ir rf_end fl_end mstk_end,
+      wf_draw_strat sigma_ir /\
+      a64_exec_mem a64_fuel insts 0%N sp0 rf0 sp0 fl0 mstk0 = Some (rf_end, sp0, fl_end, mstk_end) /\
+      a64_callee_saved_preserved rf0 rf_end /\
+      (cfg_steps_to_ub sigma_ir (init_cfg_locals (args ir_cfg) vs) (denote_cfg ir_cfg None) \/
+       exists sigma_ir' env_out dv_ir,
+         cfg_steps_to_ret sigma_ir (init_cfg_locals (args ir_cfg) vs) (denote_cfg ir_cfg None)
+           sigma_ir' env_out dv_ir /\
+         dvalue_refines dv_ir
+           (DVALUE_Base (@DVALUE_I Pa ret_w
+              (rv_trunc_ret_val ret_w (a64_read_reg 0%N rf_end))))).
+Proof.
+  intros ir_cfg ir_pnames arg_dtys s_pattrs specs ret_w lrat_pf
+         seed_vars mc_init_ctx sl insts d_mc e_mc d_ir vs rf0 sp0 fl0 mstk0
+         Hir_pnames Hnd_raw Hnd_sp Hnd_mc Hlen_sp_s Hlen_ad Hcomp Hpu_ir Hnames_eq Hnb_ir Hhi_dis
+         Ectx_b Edec Esum_mc Eflat Esum_ir Hwfd_ir0 Hwfd_ir Hchk Hty Hnu Hsp0 Hm a64_fuel.
+  set (allowed := used_src_param_vars ir_cfg ++ seed_vars) in *.
+  set (penv := build_param_env ir_pnames vs) in *.
+  set (penv' := a64_extend_penv_with_hi penv specs rf0) in *.
+  destruct (mc_a64_init_env_sound ir_cfg ir_pnames arg_dtys s_pattrs specs seed_vars mc_init_ctx
+              vs rf0 Hir_pnames Hnd_sp Hnd_mc Hlen_ad Hlen_sp_s Hcomp Hnames_eq Hnb_ir Hhi_dis
+              Ectx_b Hty Hnu Hm)
+    as (Hdis_orig & Hdis_args & _ & Hpenv_all & Hmc_vars_all & Hhi_vars_all & Hctx0).
+  pose proof (Hctx0 penv' (fun _ _ => eq_refl)) as Hctx_all.
+  pose proof (decode_a64_bytes_valid (efs_bytes sl) insts Edec) as Hval_a64.
+  pose proof (summarize_a64_dag_wf a64_fuel insts specs ret_w d_mc Hval_a64 Esum_mc) as Hwfd_mc0.
+  assert (Hwfd_mc : wf_cfg_dag allowed d_mc = true).
+  { eapply wf_cfg_dag_mono; [| exact Hwfd_mc0].
+    intros u Hu; apply in_app_iff in Hu as [Hu1 | Hu2].
+    - apply in_map_iff in Hu1 as [sp [<- Hsp]]; exact (Hmc_vars_all sp Hsp).
+    - exact (Hhi_vars_all u Hu2). }
+  destruct (summarize_a64_dag_sound a64_fuel (efs_bytes sl) insts specs ret_w
+              d_mc penv dummy_freeze_oracle rf0 sp0 fl0 mstk0 Edec Hnd_mc Hdis_args Esum_mc Hsp0 Hm)
+    as (rf_end & fl_end & mstk_end & Hexec & Hcs & Hevd_mc).
+  fold penv' in Hevd_mc.
+  destruct (summarize_src_dag_with_uas_sound (fun _ => []) ir_cfg ir_pnames arg_dtys vs
+              dummy_freeze_oracle d_ir Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad Hcomp Hty Esum_ir)
+    as (sigma_ir & Hwfsig & Hsrc_out).
+  exists sigma_ir, rf_end, fl_end, mstk_end.
+  split; [exact Hwfsig |].
+  split; [exact Hexec |].
+  split; [exact Hcs |].
+  destruct Hsrc_out as [[Hub_s _] | (sigma_ir' & env_out & dv_ir & Hevd_ir & Hst_ret)].
+  - left; exact Hub_s.
+  - right; exists sigma_ir', env_out, dv_ir; split; [exact Hst_ret |].
+    assert (Hevd_ir' : eval_cfg_dag penv' dummy_freeze_oracle d_ir = DO_Ret dv_ir).
+    { rewrite <- Hevd_ir; eapply eval_cfg_dag_penv_agree; [exact Hwfd_ir0 |].
+      intros nm w Hin; unfold used_src_param_vars in Hin; apply in_flat_map in Hin as [[idx dt] [_ Hhere]].
+      destruct dt as [[w0 | | | | | | | | | |] | |]; try contradiction Hhere.
+      destruct (nth_error (List.map cert_reg_name (args ir_cfg)) idx) as [nm0 |] eqn:Hnth;
+        [| contradiction Hhere].
+      destruct Hhere as [Heq | []]; inversion Heq; subst nm0.
+      rewrite <- Hir_pnames in Hnth; exact (Hdis_orig nm (nth_error_In _ _ Hnth)). }
+    eapply validate_mc_core_refine_sound;
+      [exact Eflat | exact Hchk | exact Hwfd_ir | exact Hwfd_mc |
+       exact Hpenv_all | exact Hctx_all | exact Hevd_mc | exact Hevd_ir'].
+Qed.
+
+Local Lemma validate_mc_rv64_call_arm_sound {Pa : Params} :
+  forall ir_cfg ir_pnames arg_dtys s_pattrs specs ret_w callees lrat_pf
+         seed_vars mc_init_ctx insts vs rf0 mstk0,
+    ir_pnames = List.map cert_reg_name (args ir_cfg) ->
+    NoDup (args ir_cfg) ->
+    NoDup ir_pnames ->
+    List.length ir_pnames = List.length (args ir_cfg) ->
+    List.length arg_dtys = List.length (args ir_cfg) ->
+    cfg_param_dtyp_compatible ir_cfg arg_dtys = true ->
+    (forall idx sp,
+      nth_error specs idx = Some sp ->
+      nth_error arg_dtys idx = Some (DTYPE_Base (DTYPE_I (ras_width sp))) /\
+      nth_error ir_pnames idx = Some (ras_name sp)) ->
+    (forall idx w0 pnm,
+      In (idx, DTYPE_Base (DTYPE_I w0)) (param_idx_uses_cfg ir_cfg) ->
+      nth_error ir_pnames idx = Some pnm ->
+      In (pnm, w0) (used_src_param_vars ir_cfg)) ->
+    List.map ras_name specs = ir_pnames ->
+    (forall nm, In nm ir_pnames -> mc_starts_with_bang nm = false) ->
+    mc_build_init_ctx EA_Riscv64 ir_pnames arg_dtys s_pattrs specs = (seed_vars, mc_init_ctx) ->
+    validate_mc_call_rv64 ir_cfg (used_src_param_vars ir_cfg ++ seed_vars) mc_init_ctx
+      insts specs ret_w callees lrat_pf = inr tt ->
+    Forall2 dvalue_has_dtyp vs arg_dtys ->
+    Forall2 (fun attrs v => existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+      s_pattrs vs ->
+    mc_valid_sp0_depth 2%nat (rv_read_reg 2%N rf0) ->
+    rv_rf_matches_args (build_param_env ir_pnames vs) specs rf0 ->
+    rv_call_sound_spec ir_cfg insts ret_w callees vs rf0 mstk0.
+Proof.
+  intros ir_cfg ir_pnames arg_dtys s_pattrs specs ret_w callees lrat_pf
+         seed_vars mc_init_ctx insts vs rf0 mstk0
+         Hir_pnames Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad Hcomp Hcompat_args Hpu_ir Hnames_eq Hnb_ir
+         Ectx_b Hval Hty Hnu Hsp0 Hm.
+  set (allowed := used_src_param_vars ir_cfg ++ seed_vars) in *.
+  set (penv := build_param_env ir_pnames vs) in *.
+  destruct (mc_rv64_init_env_sound ir_cfg ir_pnames arg_dtys s_pattrs specs seed_vars mc_init_ctx
+              vs rf0 Hir_pnames Hnd_sp Hlen_ad Hlen_sp_s Hcomp Hnames_eq Hnb_ir Ectx_b Hty Hnu Hm)
+    as (Hpenv_all & Hmc_vars_all & Hctx0).
+  subst ir_pnames.
+  exact (validate_mc_call_rv64_sound ir_cfg allowed mc_init_ctx insts specs ret_w callees lrat_pf
+           arg_dtys vs penv rf0 mstk0 Hval Hnd_raw Hnd_sp
+           Hlen_sp_s Hlen_ad Hcomp Hty Hcompat_args
+           (fun idx w pnm Hin Hpnm => in_or_app _ _ _ (or_introl (Hpu_ir idx w pnm Hin Hpnm)))
+           (fun _ _ => eq_refl) Hpenv_all Hctx0 Hmc_vars_all Hsp0 Hm).
+Qed.
+
+Local Lemma validate_mc_a64_call_arm_sound {Pa : Params} :
+  forall ir_cfg ir_pnames arg_dtys s_pattrs specs ret_w callees lrat_pf
+         seed_vars mc_init_ctx insts vs rf0 sp0 fl0 mstk0,
+    ir_pnames = List.map cert_reg_name (args ir_cfg) ->
+    NoDup (args ir_cfg) ->
+    NoDup ir_pnames ->
+    NoDup (List.map ras_name specs) ->
+    List.length ir_pnames = List.length (args ir_cfg) ->
+    List.length arg_dtys = List.length (args ir_cfg) ->
+    cfg_param_dtyp_compatible ir_cfg arg_dtys = true ->
+    (forall idx sp,
+      nth_error specs idx = Some sp ->
+      nth_error arg_dtys idx = Some (DTYPE_Base (DTYPE_I (ras_width sp))) /\
+      nth_error ir_pnames idx = Some (ras_name sp)) ->
+    (forall idx w0 pnm,
+      In (idx, DTYPE_Base (DTYPE_I w0)) (param_idx_uses_cfg ir_cfg) ->
+      nth_error ir_pnames idx = Some pnm ->
+      In (pnm, w0) (used_src_param_vars ir_cfg)) ->
+    List.map ras_name specs = ir_pnames ->
+    (forall nm, In nm ir_pnames -> mc_starts_with_bang nm = false) ->
+    forallb (fun sp => negb (existsb (String.eqb (a64_hi_var_name (ras_name sp))) ir_pnames))
+      specs = true ->
+    mc_build_init_ctx EA_AArch64 ir_pnames arg_dtys s_pattrs specs = (seed_vars, mc_init_ctx) ->
+    validate_mc_call_a64 ir_cfg (used_src_param_vars ir_cfg ++ seed_vars) mc_init_ctx
+      insts specs ret_w callees lrat_pf = inr tt ->
+    Forall2 dvalue_has_dtyp vs arg_dtys ->
+    Forall2 (fun attrs v => existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+      s_pattrs vs ->
+    mc_valid_sp0_depth 2%nat sp0 ->
+    a64_rf_matches_args (build_param_env ir_pnames vs) specs rf0 ->
+    a64_call_sound_spec ir_cfg insts ret_w callees vs rf0 sp0 fl0 mstk0.
+Proof.
+  intros ir_cfg ir_pnames arg_dtys s_pattrs specs ret_w callees lrat_pf
+         seed_vars mc_init_ctx insts vs rf0 sp0 fl0 mstk0
+         Hir_pnames Hnd_raw Hnd_sp Hnd_mc Hlen_sp_s Hlen_ad Hcomp Hcompat_args Hpu_ir Hnames_eq
+         Hnb_ir Hhi_dis Ectx_b Hval Hty Hnu Hsp0 Hm.
+  set (allowed := used_src_param_vars ir_cfg ++ seed_vars) in *.
+  set (penv := build_param_env ir_pnames vs) in *.
+  set (penv' := a64_extend_penv_with_hi penv specs rf0) in *.
+  destruct (mc_a64_init_env_sound ir_cfg ir_pnames arg_dtys s_pattrs specs seed_vars mc_init_ctx
+              vs rf0 Hir_pnames Hnd_sp Hnd_mc Hlen_ad Hlen_sp_s Hcomp Hnames_eq Hnb_ir Hhi_dis
+              Ectx_b Hty Hnu Hm)
+    as (Hdis_orig & Hdis_args & Hnames_p & Hpenv_all & Hmc_vars_all & Hhi_vars_all & Hctx0).
+  subst ir_pnames.
+  exact (validate_mc_call_a64_sound ir_cfg allowed mc_init_ctx insts specs ret_w callees lrat_pf
+           arg_dtys vs penv' rf0 sp0 fl0 mstk0 Hval Hnd_raw Hnd_sp
+           Hlen_sp_s Hlen_ad Hcomp Hty Hcompat_args
+           (fun idx w pnm Hin Hpnm => in_or_app _ _ _ (or_introl (Hpu_ir idx w pnm Hin Hpnm)))
+           Hdis_orig (fun _ _ => eq_refl) Hpenv_all Hctx0 Hmc_vars_all Hhi_vars_all
+           Hnd_mc Hdis_args Hnames_p Hsp0 Hm).
+Qed.
+
+Local Lemma validate_mc_loop_arch_sound {Pa : Params} :
+  forall tenv ir_defn mcert seed_vars mc_init_ctx sl ls,
+    let ir_cfg := convert_typ tenv (df_instrs ir_defn) in
+    let ir_pnames := List.map cert_reg_name (args ir_cfg) in
+    let arg_dtys := defn_arg_dtys tenv ir_defn in
+    let s_pattrs := snd (dc_param_attrs (df_prototype ir_defn)) in
+    let allowed := used_src_param_vars ir_cfg ++ seed_vars in
+    NoDup (args ir_cfg) ->
+    NoDup ir_pnames ->
+    List.length ir_pnames = List.length (args ir_cfg) ->
+    List.length arg_dtys = List.length (args ir_cfg) ->
+    cfg_param_dtyp_compatible ir_cfg arg_dtys = true ->
+    (forall idx w0 pnm,
+      In (idx, DTYPE_Base (DTYPE_I w0)) (param_idx_uses_cfg ir_cfg) ->
+      nth_error ir_pnames idx = Some pnm ->
+      In (pnm, w0) (used_src_param_vars ir_cfg)) ->
+    List.map ras_name (mc_args mcert) = ir_pnames ->
+    NoDup (List.map ras_name (mc_args mcert)) ->
+    (forall nm, In nm ir_pnames -> mc_starts_with_bang nm = false) ->
+    match mc_arch mcert with
+    | EA_Riscv64 => true
+    | EA_AArch64 =>
+        forallb (fun sp => negb (existsb (String.eqb (a64_hi_var_name (ras_name sp))) ir_pnames))
+          (mc_args mcert)
+    end = true ->
+    mc_build_init_ctx (mc_arch mcert) ir_pnames arg_dtys s_pattrs (mc_args mcert) =
+      (seed_vars, mc_init_ctx) ->
+    (match mc_arch mcert with
+     | EA_Riscv64 =>
+         match decode_rv64_bytes (mc_rvc mcert) (efs_bytes sl) with
+         | inl err => inl err
+         | inr insts =>
+             validate_mc_loop_rv64 ir_cfg allowed mc_init_ctx insts
+               (mc_args mcert) (mc_ret_width mcert) ls (mc_lrat_proof mcert)
+         end
+     | EA_AArch64 =>
+         if mc_rvc mcert then
+           inl (diag "mc-rvc" "compressed mode (rvc 1) is not supported for AArch64")
+         else
+           match decode_a64_bytes (efs_bytes sl) with
+           | inl err => inl err
+           | inr insts =>
+               validate_mc_loop_a64 ir_cfg allowed mc_init_ctx insts
+                 (mc_args mcert) (mc_ret_width mcert) ls (mc_lrat_proof mcert)
+           end
+     end) = inr tt ->
+    match mc_arch mcert with
+    | EA_Riscv64 =>
+        exists insts,
+          decode_rv64_bytes (mc_rvc mcert) (efs_bytes sl) = inr insts /\
+          forall (vs : list (@dvalue Pa)) rf0 mstk0,
+            Forall2 dvalue_has_dtyp vs arg_dtys ->
+            Forall2 (fun attrs v =>
+              existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+              s_pattrs vs ->
+            mc_valid_sp0 (rv_read_reg 2%N rf0) ->
+            rv_rf_matches_args (build_param_env ir_pnames vs) (mc_args mcert) rf0 ->
+            rv_loop_sound_spec ir_cfg insts (mc_ret_width mcert) ls vs rf0 mstk0
+    | EA_AArch64 =>
+        mc_rvc mcert = false /\
+        exists insts,
+          decode_a64_bytes (efs_bytes sl) = inr insts /\
+          forall (vs : list (@dvalue Pa)) rf0 sp0 fl0 mstk0,
+            Forall2 dvalue_has_dtyp vs arg_dtys ->
+            Forall2 (fun attrs v =>
+              existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+              s_pattrs vs ->
+            mc_valid_sp0 sp0 ->
+            a64_rf_matches_args (build_param_env ir_pnames vs) (mc_args mcert) rf0 ->
+            a64_loop_sound_spec ir_cfg insts (mc_ret_width mcert) ls vs rf0 sp0 fl0 mstk0
+    end.
+Proof.
+  intros tenv ir_defn mcert seed_vars mc_init_ctx sl ls
+         ir_cfg ir_pnames arg_dtys s_pattrs allowed
+         Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad Hcomp Hpu_ir Hnames_eq Hnd_mc Hnb_ir Hhi_dis
+         Ectx_b Hval.
+  destruct (mc_arch mcert) eqn:Earch.
+  - destruct (decode_rv64_bytes (mc_rvc mcert) (efs_bytes sl)) as [| insts] eqn:Edec;
+      [discriminate Hval |].
+    exists insts; split; [reflexivity |].
+    intros vs rf0 mstk0 Hty Hnu Hsp0 Hm.
+    exact (validate_mc_rv64_loop_arm_sound ir_cfg ir_pnames arg_dtys s_pattrs
+             (mc_args mcert) (mc_ret_width mcert) ls (mc_lrat_proof mcert)
+             seed_vars mc_init_ctx insts vs rf0 mstk0 eq_refl Hnd_raw Hnd_sp Hlen_sp_s
+             Hlen_ad Hcomp Hpu_ir Hnames_eq Hnb_ir Ectx_b
+             (decode_rv64_bytes_no_word_mulh _ _ _ Edec) Hval Hty Hnu Hsp0 Hm).
+  - destruct (mc_rvc mcert) eqn:Emrvc; [discriminate Hval |].
+    split; [reflexivity |].
+    destruct (decode_a64_bytes (efs_bytes sl)) as [| insts] eqn:Edec;
+      [discriminate Hval |].
+    exists insts; split; [reflexivity |].
+    intros vs rf0 sp0 fl0 mstk0 Hty Hnu Hsp0 Hm.
+    exact (validate_mc_a64_loop_arm_sound ir_cfg ir_pnames arg_dtys s_pattrs
+             (mc_args mcert) (mc_ret_width mcert) ls (mc_lrat_proof mcert)
+             seed_vars mc_init_ctx insts vs rf0 sp0 fl0 mstk0 eq_refl Hnd_raw Hnd_sp Hnd_mc
+             Hlen_sp_s Hlen_ad Hcomp Hpu_ir Hnames_eq Hnb_ir Hhi_dis Ectx_b
+             (decode_a64_bytes_valid _ _ Edec) Hval Hty Hnu Hsp0 Hm).
+Qed.
+
+Local Lemma validate_mc_dag_arch_sound {Pa : Params} :
+  forall tenv ir_defn mcert seed_vars mc_init_ctx sl d_mc e_mc d_ir,
+    let ir_cfg := convert_typ tenv (df_instrs ir_defn) in
+    let ir_pnames := List.map cert_reg_name (args ir_cfg) in
+    let arg_dtys := defn_arg_dtys tenv ir_defn in
+    let s_pattrs := snd (dc_param_attrs (df_prototype ir_defn)) in
+    let allowed := used_src_param_vars ir_cfg ++ seed_vars in
+    NoDup (args ir_cfg) ->
+    NoDup ir_pnames ->
+    List.length ir_pnames = List.length (args ir_cfg) ->
+    List.length arg_dtys = List.length (args ir_cfg) ->
+    cfg_param_dtyp_compatible ir_cfg arg_dtys = true ->
+    (forall idx w0 pnm,
+      In (idx, DTYPE_Base (DTYPE_I w0)) (param_idx_uses_cfg ir_cfg) ->
+      nth_error ir_pnames idx = Some pnm ->
+      In (pnm, w0) (used_src_param_vars ir_cfg)) ->
+    List.map ras_name (mc_args mcert) = ir_pnames ->
+    NoDup (List.map ras_name (mc_args mcert)) ->
+    (forall nm, In nm ir_pnames -> mc_starts_with_bang nm = false) ->
+    match mc_arch mcert with
+    | EA_Riscv64 => true
+    | EA_AArch64 =>
+        forallb (fun sp => negb (existsb (String.eqb (a64_hi_var_name (ras_name sp))) ir_pnames))
+          (mc_args mcert)
+    end = true ->
+    mc_build_init_ctx (mc_arch mcert) ir_pnames arg_dtys s_pattrs (mc_args mcert) =
+      (seed_vars, mc_init_ctx) ->
+    mc_decode_and_summarize (mc_arch mcert) (mc_rvc mcert) (efs_bytes sl)
+      (mc_args mcert) (mc_ret_width mcert) = inr d_mc ->
+    flatten_mc_dag_to_expr (mc_ret_width mcert) d_mc = inr e_mc ->
+    summarize_cfg_dag_with_uas (fun _ => []) false ir_cfg ir_pnames = Some d_ir ->
+    wf_cfg_dag (used_src_param_vars ir_cfg) d_ir = true ->
+    wf_cfg_dag allowed d_ir = true ->
+    (match src_dag_to_expr (mc_ret_width mcert) d_ir with
+     | Some e_ir =>
+         check_mc_expr_refines mc_init_ctx allowed e_ir e_mc (mc_lrat_proof mcert)
+     | None =>
+         check_dag_refines_cert (S (dag_node_count d_ir + 1)) allowed mc_init_ctx
+           (RO_ScalarRefines (mc_ret_width mcert)
+              (CE_BvConst (mc_ret_width mcert) 0%N)
+              (CE_BvConst (mc_ret_width mcert) 0%N) false)
+           (mc_lrat_proof mcert) (spine_src_evals d_ir) (spine_branch_conds d_ir)
+           d_ir (CD_RetScalar (mc_ret_width mcert) e_mc)
+     end) = true ->
+    match mc_arch mcert with
+    | EA_Riscv64 =>
+        exists insts,
+          decode_rv64_bytes (mc_rvc mcert) (efs_bytes sl) = inr insts /\
+          let rv_fuel := S (2 * List.length insts) in
+          forall (vs : list (@dvalue Pa)) rf0 mstk0,
+            Forall2 dvalue_has_dtyp vs arg_dtys ->
+            Forall2 (fun attrs v =>
+              existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+              s_pattrs vs ->
+            mc_valid_sp0 (rv_read_reg 2%N rf0) ->
+            rv_rf_matches_args (build_param_env ir_pnames vs) (mc_args mcert) rf0 ->
+            exists sigma_ir rf_end mstk_end,
+              wf_draw_strat sigma_ir /\
+              rv_exec_mem rv_fuel insts 0%N (rv_read_reg 2%N rf0) rf0 mstk0 =
+                Some (rf_end, mstk_end) /\
+              rv_callee_saved_preserved rf0 rf_end /\
+              rf_end 1%N = rf0 1%N /\
+              (cfg_steps_to_ub sigma_ir (init_cfg_locals (args ir_cfg) vs)
+                 (denote_cfg ir_cfg None) \/
+               exists sigma_ir' env_out dv_ir,
+                 cfg_steps_to_ret sigma_ir (init_cfg_locals (args ir_cfg) vs)
+                   (denote_cfg ir_cfg None) sigma_ir' env_out dv_ir /\
+                 dvalue_refines dv_ir
+                   (DVALUE_Base (@DVALUE_I Pa (mc_ret_width mcert)
+                      (rv_trunc_ret_val (mc_ret_width mcert) (rv_read_reg 10%N rf_end)))))
+    | EA_AArch64 =>
+        mc_rvc mcert = false /\
+        exists insts,
+          decode_a64_bytes (efs_bytes sl) = inr insts /\
+          let a64_fuel := S (2 * List.length insts) in
+          forall (vs : list (@dvalue Pa)) rf0 sp0 fl0 mstk0,
+            Forall2 dvalue_has_dtyp vs arg_dtys ->
+            Forall2 (fun attrs v =>
+              existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+              s_pattrs vs ->
+            mc_valid_sp0 sp0 ->
+            a64_rf_matches_args (build_param_env ir_pnames vs) (mc_args mcert) rf0 ->
+            exists sigma_ir rf_end fl_end mstk_end,
+              wf_draw_strat sigma_ir /\
+              a64_exec_mem a64_fuel insts 0%N sp0 rf0 sp0 fl0 mstk0 =
+                Some (rf_end, sp0, fl_end, mstk_end) /\
+              a64_callee_saved_preserved rf0 rf_end /\
+              (cfg_steps_to_ub sigma_ir (init_cfg_locals (args ir_cfg) vs)
+                 (denote_cfg ir_cfg None) \/
+               exists sigma_ir' env_out dv_ir,
+                 cfg_steps_to_ret sigma_ir (init_cfg_locals (args ir_cfg) vs)
+                   (denote_cfg ir_cfg None) sigma_ir' env_out dv_ir /\
+                 dvalue_refines dv_ir
+                   (DVALUE_Base (@DVALUE_I Pa (mc_ret_width mcert)
+                      (rv_trunc_ret_val (mc_ret_width mcert) (a64_read_reg 0%N rf_end)))))
+    end.
+Proof.
+  intros tenv ir_defn mcert seed_vars mc_init_ctx sl d_mc e_mc d_ir
+         ir_cfg ir_pnames arg_dtys s_pattrs allowed
+         Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad Hcomp Hpu_ir Hnames_eq Hnd_mc Hnb_ir Hhi_dis
+         Ectx_b Edec_s Eflat Esum_ir Hwfd_ir0 Hwfd_ir Hchk.
+  destruct (mc_arch mcert) eqn:Earch; unfold mc_decode_and_summarize in Edec_s.
+  - destruct (decode_rv64_bytes (mc_rvc mcert) (efs_bytes sl)) as [| insts] eqn:Edec;
+      [discriminate Edec_s |].
+    rewrite length_tr_eq in Edec_s.
+    destruct (summarize_rv64_dag (S (2 * List.length insts)) insts
+                (mc_args mcert) (mc_ret_width mcert)) as [| d_mc0] eqn:Esum_mc;
+      [discriminate Edec_s |].
+    inversion Edec_s; subst d_mc0; clear Edec_s.
+    exists insts; split; [reflexivity |].
+    intros rv_fuel vs rf0 mstk0 Hty Hnu Hsp0 Hm.
+    exact (validate_mc_rv64_dag_arm_sound ir_cfg ir_pnames arg_dtys s_pattrs
+             (mc_args mcert) (mc_ret_width mcert) (mc_lrat_proof mcert)
+             seed_vars mc_init_ctx (mc_rvc mcert) sl insts d_mc e_mc d_ir vs rf0 mstk0
+             eq_refl Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad Hcomp Hpu_ir Hnames_eq Hnb_ir
+             Ectx_b Edec Esum_mc Eflat Esum_ir Hwfd_ir Hchk Hty Hnu Hsp0 Hm).
+  - destruct (mc_rvc mcert) eqn:Emrvc; [discriminate Edec_s |].
+    split; [reflexivity |].
+    destruct (decode_a64_bytes (efs_bytes sl)) as [| insts] eqn:Edec;
+      [discriminate Edec_s |].
+    rewrite length_tr_eq in Edec_s.
+    destruct (summarize_a64_dag (S (2 * List.length insts)) insts
+                (mc_args mcert) (mc_ret_width mcert)) as [| d_mc0] eqn:Esum_mc;
+      [discriminate Edec_s |].
+    inversion Edec_s; subst d_mc0; clear Edec_s.
+    exists insts; split; [reflexivity |].
+    intros a64_fuel vs rf0 sp0 fl0 mstk0 Hty Hnu Hsp0 Hm.
+    exact (validate_mc_a64_dag_arm_sound ir_cfg ir_pnames arg_dtys s_pattrs
+             (mc_args mcert) (mc_ret_width mcert) (mc_lrat_proof mcert)
+             seed_vars mc_init_ctx sl insts d_mc e_mc d_ir vs rf0 sp0 fl0 mstk0
+             eq_refl Hnd_raw Hnd_sp Hnd_mc Hlen_sp_s Hlen_ad Hcomp Hpu_ir Hnames_eq Hnb_ir
+             Hhi_dis Ectx_b Edec Esum_mc Eflat Esum_ir Hwfd_ir0 Hwfd_ir Hchk
+             Hty Hnu Hsp0 Hm).
+Qed.
+
+Local Lemma validate_mc_calls_arch_sound {Pa : Params} :
+  forall tenv ir_defn mcert seed_vars mc_init_ctx sl ci callees,
+    let ir_cfg := convert_typ tenv (df_instrs ir_defn) in
+    let ir_pnames := List.map cert_reg_name (args ir_cfg) in
+    let arg_dtys := defn_arg_dtys tenv ir_defn in
+    let s_pattrs := snd (dc_param_attrs (df_prototype ir_defn)) in
+    let allowed := used_src_param_vars ir_cfg ++ seed_vars in
+    NoDup (args ir_cfg) ->
+    NoDup ir_pnames ->
+    List.length ir_pnames = List.length (args ir_cfg) ->
+    List.length arg_dtys = List.length (args ir_cfg) ->
+    cfg_param_dtyp_compatible ir_cfg arg_dtys = true ->
+    (forall idx sp,
+      nth_error (mc_args mcert) idx = Some sp ->
+      nth_error arg_dtys idx = Some (DTYPE_Base (DTYPE_I (ras_width sp))) /\
+      nth_error ir_pnames idx = Some (ras_name sp)) ->
+    (forall idx w0 pnm,
+      In (idx, DTYPE_Base (DTYPE_I w0)) (param_idx_uses_cfg ir_cfg) ->
+      nth_error ir_pnames idx = Some pnm ->
+      In (pnm, w0) (used_src_param_vars ir_cfg)) ->
+    List.map ras_name (mc_args mcert) = ir_pnames ->
+    NoDup (List.map ras_name (mc_args mcert)) ->
+    (forall nm, In nm ir_pnames -> mc_starts_with_bang nm = false) ->
+    match mc_arch mcert with
+    | EA_Riscv64 => true
+    | EA_AArch64 =>
+        forallb (fun sp => negb (existsb (String.eqb (a64_hi_var_name (ras_name sp))) ir_pnames))
+          (mc_args mcert)
+    end = true ->
+    mc_build_init_ctx (mc_arch mcert) ir_pnames arg_dtys s_pattrs (mc_args mcert) =
+      (seed_vars, mc_init_ctx) ->
+    (match mc_arch mcert with
+     | EA_Riscv64 =>
+         match decode_rv64_bytes_with_calls (mc_rvc mcert) (mc_elf_kind mcert)
+                 (efs_range_lo sl) ci (efs_bytes sl) with
+         | inl err => inl err
+         | inr insts =>
+             validate_mc_call_rv64 ir_cfg allowed mc_init_ctx insts
+               (mc_args mcert) (mc_ret_width mcert) callees (mc_lrat_proof mcert)
+         end
+     | EA_AArch64 =>
+         if mc_rvc mcert then
+           inl (diag "mc-rvc" "compressed mode (rvc 1) is not supported for AArch64")
+         else
+           match decode_a64_bytes_with_calls (mc_elf_kind mcert)
+                   (efs_range_lo sl) ci (efs_bytes sl) with
+           | inl err => inl err
+           | inr insts =>
+               validate_mc_call_a64 ir_cfg allowed mc_init_ctx insts
+                 (mc_args mcert) (mc_ret_width mcert) callees (mc_lrat_proof mcert)
+           end
+     end) = inr tt ->
+    match mc_arch mcert with
+    | EA_Riscv64 =>
+        exists insts,
+          decode_rv64_bytes_with_calls (mc_rvc mcert) (mc_elf_kind mcert)
+            (efs_range_lo sl) ci (efs_bytes sl) = inr insts /\
+          forall (vs : list (@dvalue Pa)) rf0 mstk0,
+            Forall2 dvalue_has_dtyp vs arg_dtys ->
+            Forall2 (fun attrs v =>
+              existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+              s_pattrs vs ->
+            mc_valid_sp0_depth 2%nat (rv_read_reg 2%N rf0) ->
+            rv_rf_matches_args (build_param_env ir_pnames vs) (mc_args mcert) rf0 ->
+            rv_call_sound_spec ir_cfg insts (mc_ret_width mcert) callees vs rf0 mstk0
+    | EA_AArch64 =>
+        mc_rvc mcert = false /\
+        exists insts,
+          decode_a64_bytes_with_calls (mc_elf_kind mcert) (efs_range_lo sl) ci (efs_bytes sl) = inr insts /\
+          forall (vs : list (@dvalue Pa)) rf0 sp0 fl0 mstk0,
+            Forall2 dvalue_has_dtyp vs arg_dtys ->
+            Forall2 (fun attrs v =>
+              existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+              s_pattrs vs ->
+            mc_valid_sp0_depth 2%nat sp0 ->
+            a64_rf_matches_args (build_param_env ir_pnames vs) (mc_args mcert) rf0 ->
+            a64_call_sound_spec ir_cfg insts (mc_ret_width mcert) callees vs rf0 sp0 fl0 mstk0
+    end.
+Proof.
+  intros tenv ir_defn mcert seed_vars mc_init_ctx sl ci callees
+         ir_cfg ir_pnames arg_dtys s_pattrs allowed
+         Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad Hcomp Hcompat_args Hpu_ir Hnames_eq Hnd_mc Hnb_ir
+         Hhi_dis Ectx_b Hval.
+  destruct (mc_arch mcert) eqn:Earch.
+  - destruct (decode_rv64_bytes_with_calls (mc_rvc mcert) (mc_elf_kind mcert)
+                (efs_range_lo sl) ci (efs_bytes sl)) as [| insts] eqn:Edec;
+      [discriminate Hval |].
+    exists insts; split; [reflexivity |].
+    intros vs rf0 mstk0 Hty Hnu Hsp0 Hm.
+    exact (validate_mc_rv64_call_arm_sound ir_cfg ir_pnames arg_dtys s_pattrs
+             (mc_args mcert) (mc_ret_width mcert) callees (mc_lrat_proof mcert)
+             seed_vars mc_init_ctx insts vs rf0 mstk0 eq_refl Hnd_raw Hnd_sp Hlen_sp_s
+             Hlen_ad Hcomp Hcompat_args Hpu_ir Hnames_eq Hnb_ir Ectx_b Hval Hty Hnu Hsp0 Hm).
+  - destruct (mc_rvc mcert) eqn:Emrvc; [discriminate Hval |].
+    split; [reflexivity |].
+    destruct (decode_a64_bytes_with_calls (mc_elf_kind mcert)
+                (efs_range_lo sl) ci (efs_bytes sl)) as [| insts] eqn:Edec;
+      [discriminate Hval |].
+    exists insts; split; [reflexivity |].
+    intros vs rf0 sp0 fl0 mstk0 Hty Hnu Hsp0 Hm.
+    exact (validate_mc_a64_call_arm_sound ir_cfg ir_pnames arg_dtys s_pattrs
+             (mc_args mcert) (mc_ret_width mcert) callees (mc_lrat_proof mcert)
+             seed_vars mc_init_ctx insts vs rf0 sp0 fl0 mstk0 eq_refl Hnd_raw Hnd_sp Hnd_mc
+             Hlen_sp_s Hlen_ad Hcomp Hcompat_args Hpu_ir Hnames_eq Hnb_ir Hhi_dis Ectx_b
+             Hval Hty Hnu Hsp0 Hm).
+Qed.
+
 Theorem validate_mc_tle_with_cert_str_sound :
   forall {Pa : Params}
          (ir_tle : toplevel_entities typ (block typ * list (block typ)))
@@ -988,7 +2039,8 @@ Theorem validate_mc_tle_with_cert_str_sound :
       match mc_calls mcert with
       | [] =>
           exists sl,
-            elf64_extract_func raw_elf (mc_arch mcert) (mc_elf_kind mcert) (strip_leading_at (mc_fn_name mcert)) = inr sl /\
+            elf64_extract_func raw_elf (mc_arch mcert) (mc_elf_kind mcert)
+              (strip_leading_at (mc_fn_name mcert)) = inr sl /\
             efs_rvc sl = mc_rvc mcert /\
             match mc_arch mcert with
             | EA_Riscv64 =>
@@ -999,27 +2051,31 @@ Theorem validate_mc_tle_with_cert_str_sound :
                       let rv_fuel := S (2 * List.length insts) in
                       forall (vs : list (@dvalue Pa)) rf0 mstk0,
                         Forall2 dvalue_has_dtyp vs arg_dtys ->
-                        Forall2 (fun attrs v => existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
-                                s_pattrs vs ->
+                        Forall2 (fun attrs v =>
+                          existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+                          s_pattrs vs ->
                         mc_valid_sp0 (rv_read_reg 2%N rf0) ->
                         rv_rf_matches_args (build_param_env ir_pnames vs) (mc_args mcert) rf0 ->
                         exists sigma_ir rf_end mstk_end,
                           wf_draw_strat sigma_ir /\
-                          rv_exec_mem rv_fuel insts 0%N (rv_read_reg 2%N rf0) rf0 mstk0 = Some (rf_end, mstk_end) /\
+                          rv_exec_mem rv_fuel insts 0%N (rv_read_reg 2%N rf0) rf0 mstk0 =
+                            Some (rf_end, mstk_end) /\
                           rv_callee_saved_preserved rf0 rf_end /\
                           rf_end 1%N = rf0 1%N /\
-                          (cfg_steps_to_ub sigma_ir (init_cfg_locals (args ir_cfg) vs) (denote_cfg ir_cfg None) \/
+                          (cfg_steps_to_ub sigma_ir (init_cfg_locals (args ir_cfg) vs)
+                             (denote_cfg ir_cfg None) \/
                            exists sigma_ir' env_out dv_ir,
-                             cfg_steps_to_ret sigma_ir (init_cfg_locals (args ir_cfg) vs) (denote_cfg ir_cfg None)
-                               sigma_ir' env_out dv_ir /\
+                             cfg_steps_to_ret sigma_ir (init_cfg_locals (args ir_cfg) vs)
+                               (denote_cfg ir_cfg None) sigma_ir' env_out dv_ir /\
                              dvalue_refines dv_ir
                                (DVALUE_Base (@DVALUE_I Pa (mc_ret_width mcert)
                                   (rv_trunc_ret_val (mc_ret_width mcert) (rv_read_reg 10%N rf_end)))))
                   | Some ls =>
                       forall (vs : list (@dvalue Pa)) rf0 mstk0,
                         Forall2 dvalue_has_dtyp vs arg_dtys ->
-                        Forall2 (fun attrs v => existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
-                                s_pattrs vs ->
+                        Forall2 (fun attrs v =>
+                          existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+                          s_pattrs vs ->
                         mc_valid_sp0 (rv_read_reg 2%N rf0) ->
                         rv_rf_matches_args (build_param_env ir_pnames vs) (mc_args mcert) rf0 ->
                         rv_loop_sound_spec ir_cfg insts (mc_ret_width mcert) ls vs rf0 mstk0
@@ -1033,26 +2089,30 @@ Theorem validate_mc_tle_with_cert_str_sound :
                       let a64_fuel := S (2 * List.length insts) in
                       forall (vs : list (@dvalue Pa)) rf0 sp0 fl0 mstk0,
                         Forall2 dvalue_has_dtyp vs arg_dtys ->
-                        Forall2 (fun attrs v => existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
-                                s_pattrs vs ->
+                        Forall2 (fun attrs v =>
+                          existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+                          s_pattrs vs ->
                         mc_valid_sp0 sp0 ->
                         a64_rf_matches_args (build_param_env ir_pnames vs) (mc_args mcert) rf0 ->
                         exists sigma_ir rf_end fl_end mstk_end,
                           wf_draw_strat sigma_ir /\
-                          a64_exec_mem a64_fuel insts 0%N sp0 rf0 sp0 fl0 mstk0 = Some (rf_end, sp0, fl_end, mstk_end) /\
+                          a64_exec_mem a64_fuel insts 0%N sp0 rf0 sp0 fl0 mstk0 =
+                            Some (rf_end, sp0, fl_end, mstk_end) /\
                           a64_callee_saved_preserved rf0 rf_end /\
-                          (cfg_steps_to_ub sigma_ir (init_cfg_locals (args ir_cfg) vs) (denote_cfg ir_cfg None) \/
+                          (cfg_steps_to_ub sigma_ir (init_cfg_locals (args ir_cfg) vs)
+                             (denote_cfg ir_cfg None) \/
                            exists sigma_ir' env_out dv_ir,
-                             cfg_steps_to_ret sigma_ir (init_cfg_locals (args ir_cfg) vs) (denote_cfg ir_cfg None)
-                               sigma_ir' env_out dv_ir /\
+                             cfg_steps_to_ret sigma_ir (init_cfg_locals (args ir_cfg) vs)
+                               (denote_cfg ir_cfg None) sigma_ir' env_out dv_ir /\
                              dvalue_refines dv_ir
                                (DVALUE_Base (@DVALUE_I Pa (mc_ret_width mcert)
                                   (rv_trunc_ret_val (mc_ret_width mcert) (a64_read_reg 0%N rf_end)))))
                   | Some ls =>
                       forall (vs : list (@dvalue Pa)) rf0 sp0 fl0 mstk0,
                         Forall2 dvalue_has_dtyp vs arg_dtys ->
-                        Forall2 (fun attrs v => existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
-                                s_pattrs vs ->
+                        Forall2 (fun attrs v =>
+                          existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+                          s_pattrs vs ->
                         mc_valid_sp0 sp0 ->
                         a64_rf_matches_args (build_param_env ir_pnames vs) (mc_args mcert) rf0 ->
                         a64_loop_sound_spec ir_cfg insts (mc_ret_width mcert) ls vs rf0 sp0 fl0 mstk0
@@ -1069,11 +2129,13 @@ Theorem validate_mc_tle_with_cert_str_sound :
             match mc_arch mcert with
             | EA_Riscv64 =>
                 exists insts,
-                  decode_rv64_bytes_with_calls (mc_rvc mcert) (mc_elf_kind mcert) (efs_range_lo sl) ci (efs_bytes sl) = inr insts /\
+                  decode_rv64_bytes_with_calls (mc_rvc mcert) (mc_elf_kind mcert)
+                    (efs_range_lo sl) ci (efs_bytes sl) = inr insts /\
                   forall (vs : list (@dvalue Pa)) rf0 mstk0,
                     Forall2 dvalue_has_dtyp vs arg_dtys ->
-                    Forall2 (fun attrs v => existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
-                            s_pattrs vs ->
+                    Forall2 (fun attrs v =>
+                      existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+                      s_pattrs vs ->
                     mc_valid_sp0_depth 2%nat (rv_read_reg 2%N rf0) ->
                     rv_rf_matches_args (build_param_env ir_pnames vs) (mc_args mcert) rf0 ->
                     rv_call_sound_spec ir_cfg insts (mc_ret_width mcert) callees vs rf0 mstk0
@@ -1083,8 +2145,9 @@ Theorem validate_mc_tle_with_cert_str_sound :
                   decode_a64_bytes_with_calls (mc_elf_kind mcert) (efs_range_lo sl) ci (efs_bytes sl) = inr insts /\
                   forall (vs : list (@dvalue Pa)) rf0 sp0 fl0 mstk0,
                     Forall2 dvalue_has_dtyp vs arg_dtys ->
-                    Forall2 (fun attrs v => existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
-                            s_pattrs vs ->
+                    Forall2 (fun attrs v =>
+                      existsb attr_is_noundef attrs = true -> dvalue_well_defined v = true)
+                      s_pattrs vs ->
                     mc_valid_sp0_depth 2%nat sp0 ->
                     a64_rf_matches_args (build_param_env ir_pnames vs) (mc_args mcert) rf0 ->
                     a64_call_sound_spec ir_cfg insts (mc_ret_width mcert) callees vs rf0 sp0 fl0 mstk0
@@ -1098,615 +2161,100 @@ Proof.
   unfold validate_mc_mcfg_with_cert in Hval.
   destruct (check_mc_cert_wf_diag mcert) as [| []]; [discriminate Hval |].
   destruct (mcfg_identified_typs_defined ir_m); cbn [negb] in Hval; [| discriminate Hval].
-  destruct (find_unique_mc_defn_diag (mc_fn_name mcert) (m_definitions ir_m)) as [| ir_defn] eqn:Efnd;
-    [discriminate Hval |].
+  destruct (find_unique_mc_defn_diag (mc_fn_name mcert) (m_definitions ir_m))
+    as [| ir_defn] eqn:Efnd; [discriminate Hval |].
   destruct (find_unique_mc_defn_diag_in _ _ _ Efnd) as [Hin_defn _].
-  destruct (check_mc_ir_proto_contract_diag (m_type_defs ir_m) ir_defn mcert) as [| []] eqn:Hproto_d;
-    [discriminate Hval |].
+  destruct (check_mc_ir_proto_contract_diag (m_type_defs ir_m) ir_defn mcert)
+    as [| []] eqn:Hproto_d; [discriminate Hval |].
   pose proof (check_mc_ir_proto_contract_diag_sound _ _ _ Hproto_d) as Hproto.
   set (tenv := m_type_defs ir_m) in *.
   set (ir_cfg := convert_typ tenv (df_instrs ir_defn)) in *.
   set (ir_pnames := List.map cert_reg_name (args ir_cfg)) in *.
   set (arg_dtys := defn_arg_dtys tenv ir_defn) in *.
   set (s_pattrs := snd (dc_param_attrs (df_prototype ir_defn))) in *.
-  assert (Hfn_m : cert_fn_matches_raw_id (mc_fn_name mcert) (dc_name (df_prototype ir_defn)) = true).
-  { unfold check_mc_ir_proto_contract in Hproto; cbn zeta in Hproto.
-    destruct (dc_param_attrs (df_prototype ir_defn)).
-    apply andb_true_iff in Hproto as [Hfn _]; exact Hfn. }
+  destruct (unpack_mc_proto_invariants tenv ir_defn mcert Hproto)
+    as (Hfn_m & Hnd_raw & Hnd_sp & Hlen_sp_s & Hlen_ad & Hcomp
+        & Hpu_ir & Hnames_eq & Hcompat_args & Hnd_mc & Hnb_ir & Hhi_dis).
+  fold ir_cfg ir_pnames arg_dtys in
+    Hnd_raw, Hnd_sp, Hlen_sp_s, Hlen_ad, Hcomp, Hpu_ir, Hnames_eq, Hcompat_args, Hnb_ir, Hhi_dis.
   exists mcert, ir_defn.
   repeat split; try assumption.
-  (* Unpack prototype invariants *)
-  unfold check_mc_ir_proto_contract in Hproto; cbn zeta in Hproto; fold tenv ir_cfg ir_pnames in Hproto.
-  destruct (dc_param_attrs (df_prototype ir_defn)) as [s_rattrs s_pattrs0] eqn:Edcpa.
-  apply andb_true_iff in Hproto as [_ Hbody].
-  destruct (dc_type (df_prototype ir_defn)) as [| | | | | | | | | | | ret_ty arg_tys [|] | | | | |] eqn:Edct;
-    try discriminate Hbody.
-  rewrite !andb_true_iff in Hbody.
-  destruct Hbody as (((((((((((((_ & _) & _) & _) & _) & _) & _) & _) & Hnd_raw) & Hnd_sp) & Hmc_args) & Hhi_dis) & Hcomp) & _).
-  apply no_dup_raw_ids_spec in Hnd_raw.
-  apply no_dup_strings_spec in Hnd_sp.
-  assert (Hlen_sp_s : List.length ir_pnames = List.length (args ir_cfg))
-    by (unfold ir_pnames; apply List.length_map).
-  assert (Hlen_ad : List.length arg_dtys = List.length (args ir_cfg)).
-  { unfold arg_dtys, defn_arg_dtys; rewrite Edct; cbn match.
-    destruct (check_mc_arg_specs_len _ _ _ _ _ Hmc_args) as [Hlp _].
-    rewrite <- Hlp, Hlen_sp_s; reflexivity. }
-  assert (Harg_dtys_eq : arg_dtys = List.map (typ_to_dtyp tenv) arg_tys)
-    by (unfold arg_dtys, defn_arg_dtys; rewrite Edct; reflexivity).
-  rewrite <- Harg_dtys_eq in Hcomp.
-  assert (Hpu_ir : forall idx w0 pnm,
-    In (idx, DTYPE_Base (DTYPE_I w0)) (param_idx_uses_cfg ir_cfg) ->
-    nth_error ir_pnames idx = Some pnm ->
-    In (pnm, w0) (used_src_param_vars ir_cfg)).
-  { intros idx w0 pnm Hin Hpnm; unfold used_src_param_vars; apply in_flat_map.
-    exists (idx, DTYPE_Base (DTYPE_I w0)); split; [exact Hin | fold ir_pnames; rewrite Hpnm; left; reflexivity]. }
-  assert (Hnames_eq : List.map ras_name (mc_args mcert) = ir_pnames)
-    by exact (check_mc_arg_specs_names _ _ _ _ _ Hmc_args).
-  assert (Hcompat_args : forall idx sp,
-    nth_error (mc_args mcert) idx = Some sp ->
-    nth_error arg_dtys idx = Some (DTYPE_Base (DTYPE_I (ras_width sp))) /\
-    nth_error ir_pnames idx = Some (ras_name sp)).
-  { intros idx sp Hnth; rewrite Harg_dtys_eq; exact (check_mc_arg_specs_compat _ _ _ _ _ idx sp Hmc_args Hnth). }
-  assert (Hnd_mc : NoDup (List.map ras_name (mc_args mcert)))
-    by (rewrite Hnames_eq; exact Hnd_sp).
-  assert (Hnb_ir : forall nm, In nm ir_pnames -> mc_starts_with_bang nm = false).
-  { intros nm Hin; unfold ir_pnames in Hin; apply in_map_iff in Hin as [id [<- _]].
-    exact (cert_reg_name_not_bang id). }
   destruct (mc_calls mcert) as [| c0 c_rest] eqn:Ecalls.
-  {
-  destruct (elf64_extract_func raw_elf (mc_arch mcert) (mc_elf_kind mcert) (strip_leading_at (mc_fn_name mcert)))
-    as [| sl] eqn:Eelf; [discriminate Hval |].
-  destruct (Bool.eqb (mc_rvc mcert) (efs_rvc sl)) eqn:Ervc; cbn [negb] in Hval; [| discriminate Hval].
-  apply Bool.eqb_prop in Ervc.
-  destruct (mc_build_init_ctx (mc_arch mcert) ir_pnames arg_dtys s_pattrs (mc_args mcert))
-    as [seed_vars mc_init_ctx] eqn:Ectx_b.
-  set (allowed := used_src_param_vars ir_cfg ++ seed_vars) in *.
-  exists sl; split; [solve [exact Eelf | reflexivity] | split; [symmetry; exact Ervc |]].
-  destruct (mc_loop mcert) as [ls |] eqn:Eloop.
-  - (* Some ls: verified structured loop *)
-    destruct (mc_arch mcert) eqn:Earch.
-    + (* EA_Riscv64 loop *)
-      destruct (decode_rv64_bytes (mc_rvc mcert) (efs_bytes sl)) as [| insts] eqn:Edec;
-        [discriminate Hval |].
-      exists insts; split; [reflexivity |].
-      intros vs rf0 mstk0 Hty Hnu Hsp0 Hm.
-      change (m_type_defs ir_m) with tenv in Hty, Hnu, Hm.
-      change (convert_typ tenv (df_instrs ir_defn)) with ir_cfg in Hty, Hnu, Hm.
-      change (List.map cert_reg_name (args ir_cfg)) with ir_pnames in Hty, Hnu, Hm.
-      change (defn_arg_dtys tenv ir_defn) with arg_dtys in Hty, Hnu, Hm.
-      change (snd (dc_param_attrs (df_prototype ir_defn))) with s_pattrs in Hty, Hnu, Hm.
-      set (penv := build_param_env ir_pnames vs) in *.
-      pose proof (used_src_param_vars_wf ir_cfg arg_dtys vs Hnd_sp Hlen_ad Hcomp Hty) as Hpenv_used.
-      fold ir_pnames penv in Hpenv_used.
-      assert (Hlen_sp_vs : List.length ir_pnames = List.length vs)
-        by (pose proof (Forall2_length Hty); lia).
-      unfold s_pattrs in *; cbn [snd] in *.
-      unfold mc_build_init_ctx in Ectx_b.
-      destruct (seed_proto_param_ctx ir_pnames arg_dtys s_pattrs0) as [proto_vars proto_ctx] eqn:Eseed.
-      inversion Ectx_b; subst seed_vars mc_init_ctx; clear Ectx_b.
-      pose proof (seed_proto_param_ctx_sound ir_pnames arg_dtys s_pattrs0 vs dummy_freeze_oracle
-                    Hnd_sp Hlen_sp_vs Hty Hnu) as [Hpenv_proto Hctx_proto].
-      rewrite Eseed in Hpenv_proto, Hctx_proto; cbn [fst snd] in Hpenv_proto, Hctx_proto.
-      assert (Hmc_vars_all : forall sp, In sp (mc_args mcert) -> In (ras_name sp, ras_width sp) allowed).
-      { intros sp Hsp; unfold allowed; apply in_app_iff; right; apply in_app_iff; right; apply in_app_iff; left.
-        apply in_map_iff; exists sp; split; [reflexivity | exact Hsp]. }
-      assert (Hmc_vars_wf :
-        wf_param_env_for (List.map (fun sp => (ras_name sp, ras_width sp)) (mc_args mcert) ++ []) penv).
-      { intros nm w Hin; rewrite app_nil_r in Hin; apply in_map_iff in Hin as [sp [Heq Hsp]]; inversion Heq; subst nm w.
-        destruct (In_nth_error (mc_args mcert) sp Hsp) as [k Hnth].
-        destruct (nth_error_Some (mc_args mcert) k) as [Hs1 _].
-        destruct (Hm k sp ltac:(apply Hs1; congruence) Hnth) as [v [Hp _]].
-        exists (DVALUE_Base (@DVALUE_I Pa (ras_width sp) v)); split; [exact Hp | right; exists v; reflexivity]. }
-      assert (Hpenv_all : wf_param_env_for allowed penv).
-      { intros nm w Hin; unfold allowed in Hin; apply in_app_iff in Hin as [Hu | Hs].
-        - exact (Hpenv_used nm w Hu).
-        - apply in_app_iff in Hs as [Hp | Hm_v]; [exact (Hpenv_proto nm w Hp) | exact (Hmc_vars_wf nm w Hm_v)]. }
-      assert (Hctx0 : forall penv' : param_env Pa,
-        (forall nm, mc_starts_with_bang nm = false -> penv' nm = penv nm) ->
-        ub_ctx_holds penv' dummy_freeze_oracle (proto_ctx ++ List.map (fun sp => UBA_ParamNoUndef (ras_name sp) (ras_width sp)) (mc_args mcert) ++ [])).
-      { intros penv' Hag; rewrite app_nil_r; apply Forall_app; split.
-        - assert (Hlk' : forall idx pnm v, nth_error ir_pnames idx = Some pnm -> nth_error vs idx = Some v -> penv' pnm = Some v).
-          { intros idx pnm v Hnp Hnv.
-            rewrite (Hag pnm (Hnb_ir pnm (nth_error_In _ _ Hnp))).
-            destruct (build_param_env_nth ir_pnames vs idx pnm Hnd_sp Hlen_sp_vs Hnp) as [dv [Hdv Hbp]].
-            rewrite Hnv in Hdv; inversion Hdv; subst dv; exact Hbp. }
-          destruct (seed_proto_param_ctx_sound_aux ir_pnames arg_dtys s_pattrs0 vs penv' dummy_freeze_oracle Hty Hnu Hlk') as [_ Hcp].
-          rewrite Eseed in Hcp; exact Hcp.
-        - apply mc_args_noundef_ctx_sound with (rf0 := rf0).
-          intros k sp Hlt Hnth; destruct (Hm k sp Hlt Hnth) as [v [Hp Hmt]].
-          assert (Hinnm : In (ras_name sp) ir_pnames)
-            by (rewrite <- Hnames_eq; apply in_map_iff; exists sp; split; [reflexivity | exact (nth_error_In _ _ Hnth)]).
-          exists v; split; [rewrite (Hag _ (Hnb_ir _ Hinnm)); exact Hp | exact Hmt]. }
-      exact (validate_mc_loop_rv64_sound ir_cfg allowed _ insts (mc_args mcert) (mc_ret_width mcert) ls (mc_lrat_proof mcert)
-               arg_dtys vs penv rf0 mstk0 Hval (decode_rv64_bytes_no_word_mulh _ _ _ Edec) Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad
-               Hcomp Hty (fun idx w pnm Hin Hpnm => in_or_app _ _ _ (or_introl (Hpu_ir idx w pnm Hin Hpnm)))
-               (fun _ _ => eq_refl) Hpenv_all Hctx0 Hmc_vars_all Hsp0 Hm).
-    + (* EA_AArch64 loop *)
-      destruct (mc_rvc mcert) eqn:Emrvc; [discriminate Hval |].
-      split; [reflexivity |].
-      destruct (decode_a64_bytes (efs_bytes sl)) as [| insts] eqn:Edec;
-        [discriminate Hval |].
-      exists insts; split; [reflexivity |].
-      intros vs rf0 sp0 fl0 mstk0 Hty Hnu Hsp0 Hm.
-      change (m_type_defs ir_m) with tenv in Hty, Hnu, Hm.
-      change (convert_typ tenv (df_instrs ir_defn)) with ir_cfg in Hty, Hnu, Hm.
-      change (List.map cert_reg_name (args ir_cfg)) with ir_pnames in Hty, Hnu, Hm.
-      change (defn_arg_dtys tenv ir_defn) with arg_dtys in Hty, Hnu, Hm.
-      change (snd (dc_param_attrs (df_prototype ir_defn))) with s_pattrs in Hty, Hnu, Hm.
-      set (penv := build_param_env ir_pnames vs) in *.
-      set (penv' := a64_extend_penv_with_hi penv (mc_args mcert) rf0) in *.
-      assert (Hdis_orig : forall nm, In nm ir_pnames -> penv' nm = penv nm).
-      { intros nm Hinnm; unfold penv', a64_extend_penv_with_hi; apply a64_extend_penv_at_orig.
-        intros sp Hsp Heq; rewrite forallb_forall in Hhi_dis.
-        pose proof (Hhi_dis sp Hsp) as Hneg; apply negb_true_iff in Hneg.
-        assert (Hex : existsb (String.eqb (a64_hi_var_name (ras_name sp))) ir_pnames = true)
-          by (apply existsb_exists; exists nm; split; [exact Hinnm | rewrite <- Heq; apply String.eqb_refl]).
-        rewrite Hex in Hneg; discriminate Hneg. }
-      assert (Hdis_args : forall sp, In sp (mc_args mcert) -> ~ In (a64_hi_var_name (ras_name sp)) (List.map ras_name (mc_args mcert))).
-      { intros sp Hsp Hin; rewrite Hnames_eq in Hin; rewrite forallb_forall in Hhi_dis.
-        pose proof (Hhi_dis sp Hsp) as Hneg; apply negb_true_iff in Hneg.
-        assert (Hex : existsb (String.eqb (a64_hi_var_name (ras_name sp))) ir_pnames = true)
-          by (apply existsb_exists; exists (a64_hi_var_name (ras_name sp)); split; [exact Hin | apply String.eqb_refl]).
-        rewrite Hex in Hneg; discriminate Hneg. }
-      pose proof (used_src_param_vars_wf ir_cfg arg_dtys vs Hnd_sp Hlen_ad Hcomp Hty) as Hpenv_used0.
-      fold ir_pnames penv in Hpenv_used0.
-      assert (Hpenv_used : wf_param_env_for (used_src_param_vars ir_cfg) penv').
-      { intros nm w Hin; destruct (Hpenv_used0 nm w Hin) as [dv [Hp Hwf_dv]].
-        assert (Hinnm : In nm ir_pnames).
-        { unfold used_src_param_vars in Hin; apply in_flat_map in Hin as [[idx dt] [_ Hhere]].
-          destruct dt as [[w0 | | | | | | | | | |] | |]; try contradiction Hhere.
-          destruct (nth_error (List.map cert_reg_name (args ir_cfg)) idx) as [nm0 |] eqn:Hnth; [| contradiction Hhere].
-          destruct Hhere as [Heq | []]; inversion Heq; subst nm0; fold ir_pnames in Hnth; exact (nth_error_In _ _ Hnth). }
-        rewrite (Hdis_orig nm Hinnm); exists dv; split; assumption. }
-      assert (Hlen_sp_vs : List.length ir_pnames = List.length vs)
-        by (pose proof (Forall2_length Hty); lia).
-      unfold s_pattrs in *; cbn [snd] in *.
-      unfold mc_build_init_ctx in Ectx_b.
-      destruct (seed_proto_param_ctx ir_pnames arg_dtys s_pattrs0) as [proto_vars proto_ctx] eqn:Eseed.
-      inversion Ectx_b; subst seed_vars mc_init_ctx; clear Ectx_b.
-      assert (Hlookup' : forall idx pnm v,
-        nth_error ir_pnames idx = Some pnm -> nth_error vs idx = Some v -> penv' pnm = Some v).
-      { intros idx pnm v Hnp Hnv.
-        rewrite (Hdis_orig pnm (nth_error_In _ _ Hnp)).
-        destruct (build_param_env_nth ir_pnames vs idx pnm Hnd_sp Hlen_sp_vs Hnp) as [dv [Hdv Hbp]].
-        rewrite Hnv in Hdv; inversion Hdv; subst dv; exact Hbp. }
-      pose proof (seed_proto_param_ctx_sound_aux ir_pnames arg_dtys s_pattrs0 vs penv' dummy_freeze_oracle Hty Hnu Hlookup')
-        as [Hpenv_proto Hctx_proto].
-      rewrite Eseed in Hpenv_proto, Hctx_proto; cbn [fst snd] in Hpenv_proto, Hctx_proto.
-      assert (Hm' : a64_rf_matches_args penv' (mc_args mcert) rf0).
-      { intros k sp Hlt Hnth; destruct (Hm k sp Hlt Hnth) as [v [Hp Hmt]].
-        assert (Hinnm : In (ras_name sp) ir_pnames)
-          by (rewrite <- Hnames_eq; apply in_map_iff; exists sp; split; [reflexivity | exact (nth_error_In _ _ Hnth)]).
-        exists v; split; [rewrite (Hdis_orig _ Hinnm); exact Hp | exact Hmt]. }
-      destruct (a64_hi_vars_wf_and_ctx penv dummy_freeze_oracle (mc_args mcert) rf0 Hnd_mc) as [Hpenv_hi Hctx_hi].
-      fold penv' in Hpenv_hi, Hctx_hi.
-      assert (Hmc_vars_all : forall sp, In sp (mc_args mcert) -> In (ras_name sp, ras_width sp) allowed).
-      { intros sp Hsp; unfold allowed; apply in_app_iff; right; apply in_app_iff; right; apply in_app_iff; left.
-        apply in_map_iff; exists sp; split; [reflexivity | exact Hsp]. }
-      assert (Hhi_vars_all : forall nv, In nv (a64_hi_vars (mc_args mcert)) -> In nv allowed).
-      { intros nv Hnv; unfold allowed; apply in_app_iff; right; apply in_app_iff; right; apply in_app_iff; right; exact Hnv. }
-      assert (Hmc_vars_wf : wf_param_env_for (List.map (fun sp => (ras_name sp, ras_width sp)) (mc_args mcert)) penv').
-      { intros nm w Hin; apply in_map_iff in Hin as [sp [Heq Hsp]]; inversion Heq; subst nm w.
-        destruct (In_nth_error (mc_args mcert) sp Hsp) as [k Hnth].
-        destruct (nth_error_Some (mc_args mcert) k) as [Hs1 _].
-        destruct (Hm' k sp ltac:(apply Hs1; congruence) Hnth) as [v [Hp _]].
-        exists (DVALUE_Base (@DVALUE_I Pa (ras_width sp) v)); split; [exact Hp | right; exists v; reflexivity]. }
-      assert (Hpenv_all : wf_param_env_for allowed penv').
-      { intros nm w Hin; unfold allowed in Hin; apply in_app_iff in Hin as [Hu | Hs].
-        - exact (Hpenv_used nm w Hu).
-        - apply in_app_iff in Hs as [Hp | Hrest]; [exact (Hpenv_proto nm w Hp) |].
-          apply in_app_iff in Hrest as [Hmv | Hhi]; [exact (Hmc_vars_wf nm w Hmv) | exact (Hpenv_hi nm w Hhi)]. }
-      assert (Hctx0 : forall penv'' : param_env Pa,
-        (forall nm, mc_starts_with_bang nm = false -> penv'' nm = penv' nm) ->
-        ub_ctx_holds penv'' dummy_freeze_oracle
-          (proto_ctx ++ List.map (fun sp => UBA_ParamNoUndef (ras_name sp) (ras_width sp)) (mc_args mcert)
-                     ++ List.map (fun nv => UBA_ParamNoUndef (fst nv) (snd nv)) (a64_hi_vars (mc_args mcert)))).
-      { intros penv'' Hag; apply Forall_app; split.
-        - assert (Hlk'' : forall idx pnm v, nth_error ir_pnames idx = Some pnm -> nth_error vs idx = Some v -> penv'' pnm = Some v).
-          { intros idx pnm v Hnp Hnv; rewrite (Hag pnm (Hnb_ir pnm (nth_error_In _ _ Hnp))); exact (Hlookup' idx pnm v Hnp Hnv). }
-          destruct (seed_proto_param_ctx_sound_aux ir_pnames arg_dtys s_pattrs0 vs penv'' dummy_freeze_oracle Hty Hnu Hlk'') as [_ Hcp].
-          rewrite Eseed in Hcp; exact Hcp.
-        - apply Forall_app; split.
-          + apply a64_args_noundef_ctx_sound with (rf0 := rf0).
-            intros k sp Hlt Hnth; destruct (Hm' k sp Hlt Hnth) as [v [Hp Hmt]].
-            assert (Hinnm : In (ras_name sp) ir_pnames)
-              by (rewrite <- Hnames_eq; apply in_map_iff; exists sp; split; [reflexivity | exact (nth_error_In _ _ Hnth)]).
-            exists v; split; [rewrite (Hag _ (Hnb_ir _ Hinnm)); exact Hp | exact Hmt].
-          + unfold ub_ctx_holds in Hctx_hi |- *; rewrite Forall_forall in Hctx_hi |- *; intros ua Hin; pose proof (Hctx_hi ua Hin) as Hha.
-            apply in_map_iff in Hin as [[nm w] [<- Hnv]]; unfold a64_hi_vars in Hnv; apply in_flat_map in Hnv as [sp [_ Hhere]].
-            destruct (Pos.eqb (ras_width sp) 64%positive); [contradiction Hhere |].
-            destruct Hhere as [Heq | []]; inversion Heq; subst nm w; cbn [fst snd] in *.
-            intros dv Hdv; rewrite (Hag _ (a64_hi_var_name_not_bang (ras_name sp))) in Hdv; exact (Hha dv Hdv). }
-      assert (Hnames_p : forall sp, In sp (mc_args mcert) -> penv' (ras_name sp) = penv (ras_name sp))
-        by (intros sp Hsp; apply Hdis_orig; rewrite <- Hnames_eq; apply in_map_iff; exists sp; split; [reflexivity | exact Hsp]).
-      exact (validate_mc_loop_a64_sound ir_cfg allowed _ insts (mc_args mcert) (mc_ret_width mcert) ls (mc_lrat_proof mcert)
-               arg_dtys vs penv' rf0 sp0 fl0 mstk0 Hval (decode_a64_bytes_valid _ _ Edec) Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad
-               Hcomp Hty (fun idx w pnm Hin Hpnm => in_or_app _ _ _ (or_introl (Hpu_ir idx w pnm Hin Hpnm)))
-               Hdis_orig (fun _ _ => eq_refl) Hpenv_all Hctx0 Hmc_vars_all Hhi_vars_all Hnd_mc Hdis_args Hnames_p Hsp0 Hm).
-  - (* None: existing DAG pipeline *)
-    destruct (mc_decode_and_summarize (mc_arch mcert) (mc_rvc mcert) (efs_bytes sl) (mc_args mcert) (mc_ret_width mcert))
-      as [| d_mc] eqn:Edec_s; [discriminate Hval |].
-    destruct (flatten_mc_dag_to_expr (mc_ret_width mcert) d_mc) as [| e_mc] eqn:Eflat;
+  - destruct (elf64_extract_func raw_elf (mc_arch mcert) (mc_elf_kind mcert)
+                (strip_leading_at (mc_fn_name mcert))) as [| sl] eqn:Eelf;
       [discriminate Hval |].
-    destruct (summarize_cfg_dag_with_uas (fun _ => []) false ir_cfg ir_pnames)
-      as [d_ir |] eqn:Esum_ir; [| discriminate Hval].
-    pose proof (summarize_cfg_dag_with_uas_wf (fun _ => []) false ir_cfg ir_pnames (used_src_param_vars ir_cfg) d_ir Hpu_ir Esum_ir)
-      as Hwfd_ir0.
-    assert (Hwfd_ir : wf_cfg_dag allowed d_ir = true)
-      by (eapply wf_cfg_dag_mono; [intros u Hu; unfold allowed; apply in_app_iff; left; exact Hu | exact Hwfd_ir0]).
-    assert (Hchk :
-      (match src_dag_to_expr (mc_ret_width mcert) d_ir with
-       | Some e_ir => check_mc_expr_refines mc_init_ctx allowed e_ir e_mc (mc_lrat_proof mcert)
-       | None =>
-           check_dag_refines_cert (S (dag_node_count d_ir + 1)) allowed mc_init_ctx
-             (RO_ScalarRefines (mc_ret_width mcert) (CE_BvConst (mc_ret_width mcert) 0%N) (CE_BvConst (mc_ret_width mcert) 0%N) false)
-             (mc_lrat_proof mcert) (spine_src_evals d_ir) (spine_branch_conds d_ir) d_ir (CD_RetScalar (mc_ret_width mcert) e_mc)
-       end) = true).
-    { destruct (src_dag_to_expr (mc_ret_width mcert) d_ir) as [e_ir |].
-      - destruct (check_mc_expr_refines_diag mc_init_ctx allowed e_ir e_mc (mc_lrat_proof mcert))
-          as [| []] eqn:Hchk_d; [discriminate Hval | exact (check_mc_expr_refines_diag_sound _ _ _ _ _ Hchk_d)].
-      - destruct (check_dag_refines_cert (S (dag_node_count d_ir + 1)) allowed mc_init_ctx
-                    (RO_ScalarRefines (mc_ret_width mcert) (CE_BvConst (mc_ret_width mcert) 0%N) (CE_BvConst (mc_ret_width mcert) 0%N) false)
-                    (mc_lrat_proof mcert) (spine_src_evals d_ir) (spine_branch_conds d_ir) d_ir (CD_RetScalar (mc_ret_width mcert) e_mc));
-          [reflexivity | destruct (mc_lrat_proof mcert); discriminate Hval]. }
-    cbn zeta.
-    destruct (mc_arch mcert) eqn:Earch; unfold mc_decode_and_summarize in Edec_s.
-    + (* EA_Riscv64 *)
-    destruct (decode_rv64_bytes (mc_rvc mcert) (efs_bytes sl)) as [| insts] eqn:Edec;
-      [discriminate Edec_s |].
-    rewrite length_tr_eq in Edec_s.
-    set (rv_fuel := S (2 * List.length insts)) in *.
-    destruct (summarize_rv64_dag rv_fuel insts (mc_args mcert) (mc_ret_width mcert))
-      as [| d_mc0] eqn:Esum_mc; [discriminate Edec_s |].
-    inversion Edec_s; subst d_mc0; clear Edec_s.
-    exists insts; split; [reflexivity |].
-    intros vs rf0 mstk0 Hty Hnu Hsp0 Hm.
-    change (m_type_defs ir_m) with tenv in Hty, Hnu, Hm.
-    change (convert_typ tenv (df_instrs ir_defn)) with ir_cfg in Hty, Hnu, Hm.
-    change (List.map cert_reg_name (args ir_cfg)) with ir_pnames in Hty, Hnu, Hm.
-    change (defn_arg_dtys tenv ir_defn) with arg_dtys in Hty, Hnu, Hm.
-    change (snd (dc_param_attrs (df_prototype ir_defn))) with s_pattrs in Hty, Hnu, Hm.
-    set (penv := build_param_env ir_pnames vs) in *.
-    pose proof (used_src_param_vars_wf ir_cfg arg_dtys vs Hnd_sp Hlen_ad Hcomp Hty) as Hpenv_used.
-    fold ir_pnames penv in Hpenv_used.
-    assert (Hlen_sp_vs : List.length ir_pnames = List.length vs)
-      by (pose proof (Forall2_length Hty); lia).
-    unfold s_pattrs in *; cbn [snd] in *.
-    unfold mc_build_init_ctx in Ectx_b.
-    destruct (seed_proto_param_ctx ir_pnames arg_dtys s_pattrs0) as [proto_vars proto_ctx] eqn:Eseed.
-    inversion Ectx_b; subst seed_vars mc_init_ctx; clear Ectx_b.
-    pose proof (seed_proto_param_ctx_sound ir_pnames arg_dtys s_pattrs0 vs dummy_freeze_oracle
-                  Hnd_sp Hlen_sp_vs Hty Hnu) as [Hpenv_proto Hctx_proto].
-    rewrite Eseed in Hpenv_proto, Hctx_proto; cbn [fst snd] in Hpenv_proto, Hctx_proto.
-    pose proof (mc_args_noundef_ctx_sound penv dummy_freeze_oracle (mc_args mcert) rf0 Hm) as Hctx_mc.
-    assert (Hctx_all : ub_ctx_holds penv dummy_freeze_oracle
-                         (proto_ctx ++ List.map (fun sp => UBA_ParamNoUndef (ras_name sp) (ras_width sp)) (mc_args mcert) ++ []))
-      by (rewrite app_nil_r; apply Forall_app; split; assumption).
-    assert (Hmc_vars_all :
-      forall sp, In sp (mc_args mcert) -> In (ras_name sp, ras_width sp) allowed).
-    { intros sp Hsp; unfold allowed; apply in_app_iff; right; apply in_app_iff; right; apply in_app_iff; left.
-      apply in_map_iff; exists sp; split; [reflexivity | exact Hsp]. }
-    assert (Hmc_vars_wf :
-      wf_param_env_for (List.map (fun sp => (ras_name sp, ras_width sp)) (mc_args mcert) ++ []) penv).
-    { intros nm w Hin; rewrite app_nil_r in Hin; apply in_map_iff in Hin as [sp [Heq Hsp]]; inversion Heq; subst nm w.
-      destruct (In_nth_error (mc_args mcert) sp Hsp) as [k Hnth].
-      destruct (nth_error_Some (mc_args mcert) k) as [Hs1 _].
-      destruct (Hm k sp ltac:(apply Hs1; congruence) Hnth) as [v [Hp _]].
-      exists (DVALUE_Base (@DVALUE_I Pa (ras_width sp) v)); split; [exact Hp | right; exists v; reflexivity]. }
-    assert (Hpenv_all : wf_param_env_for allowed penv).
-    { intros nm w Hin; unfold allowed in Hin; apply in_app_iff in Hin as [Hu | Hs].
-      - exact (Hpenv_used nm w Hu).
-      - apply in_app_iff in Hs as [Hp | Hm_v]; [exact (Hpenv_proto nm w Hp) | exact (Hmc_vars_wf nm w Hm_v)]. }
-    pose proof (decode_rv64_bytes_no_word_mulh (mc_rvc mcert) (efs_bytes sl) insts Edec) as Hnmul.
-    pose proof (summarize_rv64_dag_wf rv_fuel insts (mc_args mcert) (mc_ret_width mcert) d_mc Hnmul Esum_mc)
-      as Hwfd_mc0.
-    assert (Hwfd_mc : wf_cfg_dag allowed d_mc = true).
-    { eapply wf_cfg_dag_mono; [| exact Hwfd_mc0].
-      intros u Hu; apply in_map_iff in Hu as [sp [<- Hsp]]; exact (Hmc_vars_all sp Hsp). }
-    destruct (summarize_rv64_dag_sound rv_fuel (mc_rvc mcert) (efs_bytes sl) insts
-                (mc_args mcert) (mc_ret_width mcert) d_mc penv dummy_freeze_oracle rf0 mstk0
-                Edec Esum_mc Hsp0 Hm)
-      as (rf_end & mstk_end & Hexec & Hcs & Hra & Hevd_mc).
-    destruct (summarize_src_dag_with_uas_sound (fun _ => []) ir_cfg ir_pnames arg_dtys vs
-                dummy_freeze_oracle d_ir Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad Hcomp Hty Esum_ir)
-      as (sigma_ir & Hwfsig & Hsrc_out).
-    exists sigma_ir, rf_end, mstk_end;
-      split; [exact Hwfsig | split; [exact Hexec | split; [exact Hcs | split; [exact Hra |]]]].
-    destruct Hsrc_out as [[Hub_s _] | (sigma_ir' & env_out & dv_ir & Hevd_ir & Hst_ret)].
-    * left; exact Hub_s.
-    * right; exists sigma_ir', env_out, dv_ir; split; [exact Hst_ret |].
-      eapply validate_mc_core_refine_sound;
-        [exact Eflat | exact Hchk | exact Hwfd_ir | exact Hwfd_mc | exact Hpenv_all | exact Hctx_all | exact Hevd_mc | exact Hevd_ir].
-    + (* EA_AArch64 *)
-    destruct (mc_rvc mcert) eqn:Emrvc; [discriminate Edec_s |].
-    split; [reflexivity |].
-    destruct (decode_a64_bytes (efs_bytes sl)) as [| insts] eqn:Edec;
-      [discriminate Edec_s |].
-    rewrite length_tr_eq in Edec_s.
-    set (a64_fuel := S (2 * List.length insts)) in *.
-    destruct (summarize_a64_dag a64_fuel insts (mc_args mcert) (mc_ret_width mcert))
-      as [| d_mc0] eqn:Esum_mc; [discriminate Edec_s |].
-    inversion Edec_s; subst d_mc0; clear Edec_s.
-    exists insts; split; [reflexivity |].
-    intros vs rf0 sp0 fl0 mstk0 Hty Hnu Hsp0 Hm.
-    change (m_type_defs ir_m) with tenv in Hty, Hnu, Hm.
-    change (convert_typ tenv (df_instrs ir_defn)) with ir_cfg in Hty, Hnu, Hm.
-    change (List.map cert_reg_name (args ir_cfg)) with ir_pnames in Hty, Hnu, Hm.
-    change (defn_arg_dtys tenv ir_defn) with arg_dtys in Hty, Hnu, Hm.
-    change (snd (dc_param_attrs (df_prototype ir_defn))) with s_pattrs in Hty, Hnu, Hm.
-    set (penv := build_param_env ir_pnames vs) in *.
-    set (penv' := a64_extend_penv_with_hi penv (mc_args mcert) rf0) in *.
-    assert (Hdis_orig : forall nm, In nm ir_pnames -> penv' nm = penv nm).
-    { intros nm Hinnm; unfold penv', a64_extend_penv_with_hi; apply a64_extend_penv_at_orig.
-      intros sp Hsp Heq; rewrite forallb_forall in Hhi_dis.
-      pose proof (Hhi_dis sp Hsp) as Hneg; apply negb_true_iff in Hneg.
-      assert (Hex : existsb (String.eqb (a64_hi_var_name (ras_name sp))) ir_pnames = true)
-        by (apply existsb_exists; exists nm; split; [exact Hinnm | rewrite <- Heq; apply String.eqb_refl]).
-      rewrite Hex in Hneg; discriminate Hneg. }
-    assert (Hdis_args : forall sp, In sp (mc_args mcert) -> ~ In (a64_hi_var_name (ras_name sp)) (List.map ras_name (mc_args mcert))).
-    { intros sp Hsp Hin; rewrite Hnames_eq in Hin; rewrite forallb_forall in Hhi_dis.
-      pose proof (Hhi_dis sp Hsp) as Hneg; apply negb_true_iff in Hneg.
-      assert (Hex : existsb (String.eqb (a64_hi_var_name (ras_name sp))) ir_pnames = true)
-        by (apply existsb_exists; exists (a64_hi_var_name (ras_name sp)); split; [exact Hin | apply String.eqb_refl]).
-      rewrite Hex in Hneg; discriminate Hneg. }
-    pose proof (used_src_param_vars_wf ir_cfg arg_dtys vs Hnd_sp Hlen_ad Hcomp Hty) as Hpenv_used0.
-    fold ir_pnames penv in Hpenv_used0.
-    assert (Hpenv_used : wf_param_env_for (used_src_param_vars ir_cfg) penv').
-    { intros nm w Hin; destruct (Hpenv_used0 nm w Hin) as [dv [Hp Hwf_dv]].
-      assert (Hinnm : In nm ir_pnames).
-      { unfold used_src_param_vars in Hin; apply in_flat_map in Hin as [[idx dt] [_ Hhere]].
-        destruct dt as [[w0 | | | | | | | | | |] | |]; try contradiction Hhere.
-        destruct (nth_error (List.map cert_reg_name (args ir_cfg)) idx) as [nm0 |] eqn:Hnth; [| contradiction Hhere].
-        destruct Hhere as [Heq | []]; inversion Heq; subst nm0; fold ir_pnames in Hnth; exact (nth_error_In _ _ Hnth). }
-      rewrite (Hdis_orig nm Hinnm); exists dv; split; assumption. }
-    assert (Hlen_sp_vs : List.length ir_pnames = List.length vs)
-      by (pose proof (Forall2_length Hty); lia).
-    unfold s_pattrs in *; cbn [snd] in *.
-    unfold mc_build_init_ctx in Ectx_b.
-    destruct (seed_proto_param_ctx ir_pnames arg_dtys s_pattrs0) as [proto_vars proto_ctx] eqn:Eseed.
-    inversion Ectx_b; subst seed_vars mc_init_ctx; clear Ectx_b.
-    assert (Hlookup' : forall idx pnm v,
-      nth_error ir_pnames idx = Some pnm -> nth_error vs idx = Some v -> penv' pnm = Some v).
-    { intros idx pnm v Hnp Hnv.
-      rewrite (Hdis_orig pnm (nth_error_In _ _ Hnp)).
-      destruct (build_param_env_nth ir_pnames vs idx pnm Hnd_sp Hlen_sp_vs Hnp) as [dv [Hdv Hbp]].
-      rewrite Hnv in Hdv; inversion Hdv; subst dv; exact Hbp. }
-    pose proof (seed_proto_param_ctx_sound_aux ir_pnames arg_dtys s_pattrs0 vs penv' dummy_freeze_oracle Hty Hnu Hlookup')
-      as [Hpenv_proto Hctx_proto].
-    rewrite Eseed in Hpenv_proto, Hctx_proto; cbn [fst snd] in Hpenv_proto, Hctx_proto.
-    assert (Hm' : a64_rf_matches_args penv' (mc_args mcert) rf0).
-    { intros k sp Hlt Hnth; destruct (Hm k sp Hlt Hnth) as [v [Hp Hmt]].
-      assert (Hinnm : In (ras_name sp) ir_pnames)
-        by (rewrite <- Hnames_eq; apply in_map_iff; exists sp; split; [reflexivity | exact (nth_error_In _ _ Hnth)]).
-      exists v; split; [rewrite (Hdis_orig _ Hinnm); exact Hp | exact Hmt]. }
-    pose proof (a64_args_noundef_ctx_sound penv' dummy_freeze_oracle (mc_args mcert) rf0 Hm') as Hctx_mc.
-    destruct (a64_hi_vars_wf_and_ctx penv dummy_freeze_oracle (mc_args mcert) rf0 Hnd_mc) as [Hpenv_hi Hctx_hi].
-    fold penv' in Hpenv_hi, Hctx_hi.
-    assert (Hctx_all : ub_ctx_holds penv' dummy_freeze_oracle
-                         (proto_ctx ++ List.map (fun sp => UBA_ParamNoUndef (ras_name sp) (ras_width sp)) (mc_args mcert)
-                                    ++ List.map (fun nv => UBA_ParamNoUndef (fst nv) (snd nv)) (a64_hi_vars (mc_args mcert))))
-      by (apply Forall_app; split; [exact Hctx_proto | apply Forall_app; split; assumption]).
-    assert (Hmc_vars_wf :
-      wf_param_env_for (List.map (fun sp => (ras_name sp, ras_width sp)) (mc_args mcert)) penv').
-    { intros nm w Hin; apply in_map_iff in Hin as [sp [Heq Hsp]]; inversion Heq; subst nm w.
-      destruct (In_nth_error (mc_args mcert) sp Hsp) as [k Hnth].
-      destruct (nth_error_Some (mc_args mcert) k) as [Hs1 _].
-      destruct (Hm' k sp ltac:(apply Hs1; congruence) Hnth) as [v [Hp _]].
-      exists (DVALUE_Base (@DVALUE_I Pa (ras_width sp) v)); split; [exact Hp | right; exists v; reflexivity]. }
-    assert (Hpenv_all : wf_param_env_for allowed penv').
-    { intros nm w Hin; unfold allowed in Hin; apply in_app_iff in Hin as [Hu | Hs].
-      - exact (Hpenv_used nm w Hu).
-      - apply in_app_iff in Hs as [Hp | Hrest]; [exact (Hpenv_proto nm w Hp) |].
-        apply in_app_iff in Hrest as [Hmv | Hhi]; [exact (Hmc_vars_wf nm w Hmv) | exact (Hpenv_hi nm w Hhi)]. }
-    pose proof (decode_a64_bytes_valid (efs_bytes sl) insts Edec) as Hval_a64.
-    pose proof (summarize_a64_dag_wf a64_fuel insts (mc_args mcert) (mc_ret_width mcert) d_mc Hval_a64 Esum_mc)
-      as Hwfd_mc0.
-    assert (Hwfd_mc : wf_cfg_dag allowed d_mc = true).
-    { eapply wf_cfg_dag_mono; [| exact Hwfd_mc0].
-      intros u Hu; apply in_app_iff in Hu as [Hu1 | Hu2];
-        unfold allowed; apply in_app_iff; right; apply in_app_iff; right; apply in_app_iff;
-        [left; exact Hu1 | right; exact Hu2]. }
-    destruct (summarize_a64_dag_sound a64_fuel (efs_bytes sl) insts (mc_args mcert) (mc_ret_width mcert)
-                d_mc penv dummy_freeze_oracle rf0 sp0 fl0 mstk0 Edec Hnd_mc Hdis_args Esum_mc Hsp0 Hm)
-      as (rf_end & fl_end & mstk_end & Hexec & Hcs & Hevd_mc).
-    fold penv' in Hevd_mc.
-    destruct (summarize_src_dag_with_uas_sound (fun _ => []) ir_cfg ir_pnames arg_dtys vs
-                dummy_freeze_oracle d_ir Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad Hcomp Hty Esum_ir)
-      as (sigma_ir & Hwfsig & Hsrc_out).
-    exists sigma_ir, rf_end, fl_end, mstk_end;
-      split; [exact Hwfsig | split; [exact Hexec | split; [exact Hcs |]]].
-    destruct Hsrc_out as [[Hub_s _] | (sigma_ir' & env_out & dv_ir & Hevd_ir & Hst_ret)].
-    * left; exact Hub_s.
-    * right; exists sigma_ir', env_out, dv_ir; split; [exact Hst_ret |].
-      assert (Hevd_ir' : eval_cfg_dag penv' dummy_freeze_oracle d_ir = DO_Ret dv_ir).
-      { rewrite <- Hevd_ir; eapply eval_cfg_dag_penv_agree; [exact Hwfd_ir0 |].
-        intros nm w Hin; unfold used_src_param_vars in Hin; apply in_flat_map in Hin as [[idx dt] [_ Hhere]].
-        destruct dt as [[w0 | | | | | | | | | |] | |]; try contradiction Hhere.
-        destruct (nth_error (List.map cert_reg_name (args ir_cfg)) idx) as [nm0 |] eqn:Hnth; [| contradiction Hhere].
-        destruct Hhere as [Heq | []]; inversion Heq; subst nm0; fold ir_pnames in Hnth.
-        exact (Hdis_orig nm (nth_error_In _ _ Hnth)). }
-      eapply validate_mc_core_refine_sound;
-        [exact Eflat | exact Hchk | exact Hwfd_ir | exact Hwfd_mc | exact Hpenv_all | exact Hctx_all | exact Hevd_mc | exact Hevd_ir'].
-  }
-  {
-    cbn iota in Hval.
+    destruct (Bool.eqb (mc_rvc mcert) (efs_rvc sl)) eqn:Ervc;
+      cbn [negb] in Hval; [| discriminate Hval].
+    apply Bool.eqb_prop in Ervc.
+    destruct (mc_build_init_ctx (mc_arch mcert) ir_pnames arg_dtys s_pattrs (mc_args mcert))
+      as [seed_vars mc_init_ctx] eqn:Ectx_b.
+    set (allowed := used_src_param_vars ir_cfg ++ seed_vars) in *.
+    exists sl; split; [solve [exact Eelf | reflexivity] |].
+    split; [symmetry; exact Ervc |].
+    destruct (mc_loop mcert) as [ls |] eqn:Eloop.
+    + exact (validate_mc_loop_arch_sound tenv ir_defn mcert seed_vars mc_init_ctx sl ls
+               Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad Hcomp Hpu_ir Hnames_eq Hnd_mc Hnb_ir Hhi_dis
+               Ectx_b Hval).
+    + destruct (mc_decode_and_summarize (mc_arch mcert) (mc_rvc mcert) (efs_bytes sl)
+                  (mc_args mcert) (mc_ret_width mcert)) as [| d_mc] eqn:Edec_s;
+        [discriminate Hval |].
+      destruct (flatten_mc_dag_to_expr (mc_ret_width mcert) d_mc) as [| e_mc] eqn:Eflat;
+        [discriminate Hval |].
+      destruct (summarize_cfg_dag_with_uas (fun _ => []) false ir_cfg ir_pnames)
+        as [d_ir |] eqn:Esum_ir; [| discriminate Hval].
+      pose proof (summarize_cfg_dag_with_uas_wf (fun _ => []) false ir_cfg ir_pnames
+                    (used_src_param_vars ir_cfg) d_ir Hpu_ir Esum_ir) as Hwfd_ir0.
+      assert (Hwfd_ir : wf_cfg_dag allowed d_ir = true).
+      { eapply wf_cfg_dag_mono; [| exact Hwfd_ir0].
+        intros u Hu; unfold allowed; apply in_app_iff; left; exact Hu. }
+      assert (Hchk :
+        (match src_dag_to_expr (mc_ret_width mcert) d_ir with
+         | Some e_ir =>
+             check_mc_expr_refines mc_init_ctx allowed e_ir e_mc (mc_lrat_proof mcert)
+         | None =>
+             check_dag_refines_cert (S (dag_node_count d_ir + 1)) allowed mc_init_ctx
+               (RO_ScalarRefines (mc_ret_width mcert)
+                  (CE_BvConst (mc_ret_width mcert) 0%N)
+                  (CE_BvConst (mc_ret_width mcert) 0%N) false)
+               (mc_lrat_proof mcert) (spine_src_evals d_ir) (spine_branch_conds d_ir)
+               d_ir (CD_RetScalar (mc_ret_width mcert) e_mc)
+         end) = true).
+      { destruct (src_dag_to_expr (mc_ret_width mcert) d_ir) as [e_ir |].
+        - destruct (check_mc_expr_refines_diag mc_init_ctx allowed e_ir e_mc (mc_lrat_proof mcert))
+            as [| []] eqn:Hchk_d;
+            [discriminate Hval | exact (check_mc_expr_refines_diag_sound _ _ _ _ _ Hchk_d)].
+        - destruct (check_dag_refines_cert (S (dag_node_count d_ir + 1)) allowed mc_init_ctx
+                      (RO_ScalarRefines (mc_ret_width mcert)
+                         (CE_BvConst (mc_ret_width mcert) 0%N)
+                         (CE_BvConst (mc_ret_width mcert) 0%N) false)
+                      (mc_lrat_proof mcert) (spine_src_evals d_ir) (spine_branch_conds d_ir)
+                      d_ir (CD_RetScalar (mc_ret_width mcert) e_mc));
+            [reflexivity | destruct (mc_lrat_proof mcert); discriminate Hval]. }
+      exact (validate_mc_dag_arch_sound tenv ir_defn mcert seed_vars mc_init_ctx sl d_mc e_mc d_ir
+               Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad Hcomp Hpu_ir Hnames_eq Hnd_mc Hnb_ir Hhi_dis
+               Ectx_b Edec_s Eflat Esum_ir Hwfd_ir0 Hwfd_ir Hchk).
+  - cbn iota in Hval.
     destruct (mc_loop mcert) eqn:Eloop; [discriminate Hval |].
     cbn iota in Hval.
-    destruct (check_mc_callee_contracts_diag tenv ir_m (mc_arch mcert) (c0 :: c_rest)) as [| []] eqn:Hcal_d;
-      [discriminate Hval |].
+    destruct (check_mc_callee_contracts_diag tenv ir_m (mc_arch mcert) (c0 :: c_rest))
+      as [| []] eqn:Hcal_d; [discriminate Hval |].
     pose proof (check_mc_callee_contracts_diag_sound _ _ _ _ Hcal_d) as Hcal.
     destruct (elf64_extract_func_with_calls raw_elf (mc_arch mcert) (mc_elf_kind mcert)
                 (strip_leading_at (mc_fn_name mcert))
                 (List.map (fun c => mc_strip_leading_at (mcs_name c)) (c0 :: c_rest)))
       as [| [sl ci]] eqn:Eelf; [discriminate Hval |].
-    destruct (Bool.eqb (mc_rvc mcert) (efs_rvc sl)) eqn:Ervc; cbn [negb] in Hval; [| discriminate Hval].
+    destruct (Bool.eqb (mc_rvc mcert) (efs_rvc sl)) eqn:Ervc;
+      cbn [negb] in Hval; [| discriminate Hval].
     apply Bool.eqb_prop in Ervc.
     destruct (mc_build_init_ctx (mc_arch mcert) ir_pnames arg_dtys s_pattrs (mc_args mcert))
       as [seed_vars mc_init_ctx] eqn:Ectx_b.
-    set (allowed := used_src_param_vars ir_cfg ++ seed_vars) in *.
-    split; [reflexivity | split; [solve [exact Hcal | reflexivity] | exists sl, ci; split; [solve [exact Eelf | reflexivity] | split; [symmetry; exact Ervc |]]]].
-    destruct (mc_arch mcert) eqn:Earch.
-    - (* EA_Riscv64 calls *)
-      destruct (decode_rv64_bytes_with_calls (mc_rvc mcert) (mc_elf_kind mcert) (efs_range_lo sl) ci (efs_bytes sl))
-        as [| insts] eqn:Edec; [discriminate Hval |].
-      exists insts; split; [reflexivity |].
-      intros vs rf0 mstk0 Hty Hnu Hsp0 Hm.
-      change (m_type_defs ir_m) with tenv in Hty, Hnu, Hm.
-      change (convert_typ tenv (df_instrs ir_defn)) with ir_cfg in Hty, Hnu, Hm.
-      change (List.map cert_reg_name (args ir_cfg)) with ir_pnames in Hty, Hnu, Hm.
-      change (defn_arg_dtys tenv ir_defn) with arg_dtys in Hty, Hnu, Hm.
-      change (snd (dc_param_attrs (df_prototype ir_defn))) with s_pattrs in Hty, Hnu, Hm.
-      set (penv := build_param_env ir_pnames vs) in *.
-      pose proof (used_src_param_vars_wf ir_cfg arg_dtys vs Hnd_sp Hlen_ad Hcomp Hty) as Hpenv_used.
-      fold ir_pnames penv in Hpenv_used.
-      assert (Hlen_sp_vs : List.length ir_pnames = List.length vs)
-        by (pose proof (Forall2_length Hty); lia).
-      unfold s_pattrs in *; cbn [snd] in *.
-      unfold mc_build_init_ctx in Ectx_b.
-      destruct (seed_proto_param_ctx ir_pnames arg_dtys s_pattrs0) as [proto_vars proto_ctx] eqn:Eseed.
-      inversion Ectx_b; subst seed_vars mc_init_ctx; clear Ectx_b.
-      pose proof (seed_proto_param_ctx_sound ir_pnames arg_dtys s_pattrs0 vs dummy_freeze_oracle
-                    Hnd_sp Hlen_sp_vs Hty Hnu) as [Hpenv_proto Hctx_proto].
-      rewrite Eseed in Hpenv_proto, Hctx_proto; cbn [fst snd] in Hpenv_proto, Hctx_proto.
-      assert (Hmc_vars_all : forall sp, In sp (mc_args mcert) -> In (ras_name sp, ras_width sp) allowed).
-      { intros sp Hsp; unfold allowed; apply in_app_iff; right; apply in_app_iff; right; apply in_app_iff; left.
-        apply in_map_iff; exists sp; split; [reflexivity | exact Hsp]. }
-      assert (Hmc_vars_wf :
-        wf_param_env_for (List.map (fun sp => (ras_name sp, ras_width sp)) (mc_args mcert) ++ []) penv).
-      { intros nm w Hin; rewrite app_nil_r in Hin; apply in_map_iff in Hin as [sp [Heq Hsp]]; inversion Heq; subst nm w.
-        destruct (In_nth_error (mc_args mcert) sp Hsp) as [k Hnth].
-        destruct (nth_error_Some (mc_args mcert) k) as [Hs1 _].
-        destruct (Hm k sp ltac:(apply Hs1; congruence) Hnth) as [v [Hp _]].
-        exists (DVALUE_Base (@DVALUE_I Pa (ras_width sp) v)); split; [exact Hp | right; exists v; reflexivity]. }
-      assert (Hpenv_all : wf_param_env_for allowed penv).
-      { intros nm w Hin; unfold allowed in Hin; apply in_app_iff in Hin as [Hu | Hs].
-        - exact (Hpenv_used nm w Hu).
-        - apply in_app_iff in Hs as [Hp | Hm_v]; [exact (Hpenv_proto nm w Hp) | exact (Hmc_vars_wf nm w Hm_v)]. }
-      assert (Hctx0 : forall penv' : param_env Pa,
-        (forall nm, mc_starts_with_bang nm = false -> penv' nm = penv nm) ->
-        ub_ctx_holds penv' dummy_freeze_oracle (proto_ctx ++ List.map (fun sp => UBA_ParamNoUndef (ras_name sp) (ras_width sp)) (mc_args mcert) ++ [])).
-      { intros penv' Hag; rewrite app_nil_r; apply Forall_app; split.
-        - assert (Hlk' : forall idx pnm v, nth_error ir_pnames idx = Some pnm -> nth_error vs idx = Some v -> penv' pnm = Some v).
-          { intros idx pnm v Hnp Hnv.
-            rewrite (Hag pnm (Hnb_ir pnm (nth_error_In _ _ Hnp))).
-            destruct (build_param_env_nth ir_pnames vs idx pnm Hnd_sp Hlen_sp_vs Hnp) as [dv [Hdv Hbp]].
-            rewrite Hnv in Hdv; inversion Hdv; subst dv; exact Hbp. }
-          destruct (seed_proto_param_ctx_sound_aux ir_pnames arg_dtys s_pattrs0 vs penv' dummy_freeze_oracle Hty Hnu Hlk') as [_ Hcp].
-          rewrite Eseed in Hcp; exact Hcp.
-        - apply mc_args_noundef_ctx_sound with (rf0 := rf0).
-          intros k sp Hlt Hnth; destruct (Hm k sp Hlt Hnth) as [v [Hp Hmt]].
-          assert (Hinnm : In (ras_name sp) ir_pnames)
-            by (rewrite <- Hnames_eq; apply in_map_iff; exists sp; split; [reflexivity | exact (nth_error_In _ _ Hnth)]).
-          exists v; split; [rewrite (Hag _ (Hnb_ir _ Hinnm)); exact Hp | exact Hmt]. }
-      exact (validate_mc_call_rv64_sound ir_cfg allowed _ insts (mc_args mcert) (mc_ret_width mcert) (c0 :: c_rest) (mc_lrat_proof mcert)
-               arg_dtys vs penv rf0 mstk0 Hval Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad
-               Hcomp Hty Hcompat_args
-               (fun idx w pnm Hin Hpnm => in_or_app _ _ _ (or_introl (Hpu_ir idx w pnm Hin Hpnm)))
-               (fun _ _ => eq_refl) Hpenv_all Hctx0 Hmc_vars_all Hsp0 Hm).
-    - (* EA_AArch64 calls *)
-      destruct (mc_rvc mcert) eqn:Emrvc; [discriminate Hval |].
-      split; [reflexivity |].
-      destruct (decode_a64_bytes_with_calls (mc_elf_kind mcert) (efs_range_lo sl) ci (efs_bytes sl))
-        as [| insts] eqn:Edec; [discriminate Hval |].
-      exists insts; split; [reflexivity |].
-      intros vs rf0 sp0 fl0 mstk0 Hty Hnu Hsp0 Hm.
-      change (m_type_defs ir_m) with tenv in Hty, Hnu, Hm.
-      change (convert_typ tenv (df_instrs ir_defn)) with ir_cfg in Hty, Hnu, Hm.
-      change (List.map cert_reg_name (args ir_cfg)) with ir_pnames in Hty, Hnu, Hm.
-      change (defn_arg_dtys tenv ir_defn) with arg_dtys in Hty, Hnu, Hm.
-      change (snd (dc_param_attrs (df_prototype ir_defn))) with s_pattrs in Hty, Hnu, Hm.
-      set (penv := build_param_env ir_pnames vs) in *.
-      set (penv' := a64_extend_penv_with_hi penv (mc_args mcert) rf0) in *.
-      assert (Hdis_orig : forall nm, In nm ir_pnames -> penv' nm = penv nm).
-      { intros nm Hinnm; unfold penv', a64_extend_penv_with_hi; apply a64_extend_penv_at_orig.
-        intros sp Hsp Heq; rewrite forallb_forall in Hhi_dis.
-        pose proof (Hhi_dis sp Hsp) as Hneg; apply negb_true_iff in Hneg.
-        assert (Hex : existsb (String.eqb (a64_hi_var_name (ras_name sp))) ir_pnames = true)
-          by (apply existsb_exists; exists nm; split; [exact Hinnm | rewrite <- Heq; apply String.eqb_refl]).
-        rewrite Hex in Hneg; discriminate Hneg. }
-      assert (Hdis_args : forall sp, In sp (mc_args mcert) -> ~ In (a64_hi_var_name (ras_name sp)) (List.map ras_name (mc_args mcert))).
-      { intros sp Hsp Hin; rewrite Hnames_eq in Hin; rewrite forallb_forall in Hhi_dis.
-        pose proof (Hhi_dis sp Hsp) as Hneg; apply negb_true_iff in Hneg.
-        assert (Hex : existsb (String.eqb (a64_hi_var_name (ras_name sp))) ir_pnames = true)
-          by (apply existsb_exists; exists (a64_hi_var_name (ras_name sp)); split; [exact Hin | apply String.eqb_refl]).
-        rewrite Hex in Hneg; discriminate Hneg. }
-      pose proof (used_src_param_vars_wf ir_cfg arg_dtys vs Hnd_sp Hlen_ad Hcomp Hty) as Hpenv_used0.
-      fold ir_pnames penv in Hpenv_used0.
-      assert (Hpenv_used : wf_param_env_for (used_src_param_vars ir_cfg) penv').
-      { intros nm w Hin; destruct (Hpenv_used0 nm w Hin) as [dv [Hp Hwf_dv]].
-        assert (Hinnm : In nm ir_pnames).
-        { unfold used_src_param_vars in Hin; apply in_flat_map in Hin as [[idx dt] [_ Hhere]].
-          destruct dt as [[w0 | | | | | | | | | |] | |]; try contradiction Hhere.
-          destruct (nth_error (List.map cert_reg_name (args ir_cfg)) idx) as [nm0 |] eqn:Hnth; [| contradiction Hhere].
-          destruct Hhere as [Heq | []]; inversion Heq; subst nm0; fold ir_pnames in Hnth; exact (nth_error_In _ _ Hnth). }
-        rewrite (Hdis_orig nm Hinnm); exists dv; split; assumption. }
-      assert (Hlen_sp_vs : List.length ir_pnames = List.length vs)
-        by (pose proof (Forall2_length Hty); lia).
-      unfold s_pattrs in *; cbn [snd] in *.
-      unfold mc_build_init_ctx in Ectx_b.
-      destruct (seed_proto_param_ctx ir_pnames arg_dtys s_pattrs0) as [proto_vars proto_ctx] eqn:Eseed.
-      inversion Ectx_b; subst seed_vars mc_init_ctx; clear Ectx_b.
-      assert (Hlookup' : forall idx pnm v,
-        nth_error ir_pnames idx = Some pnm -> nth_error vs idx = Some v -> penv' pnm = Some v).
-      { intros idx pnm v Hnp Hnv.
-        rewrite (Hdis_orig pnm (nth_error_In _ _ Hnp)).
-        destruct (build_param_env_nth ir_pnames vs idx pnm Hnd_sp Hlen_sp_vs Hnp) as [dv [Hdv Hbp]].
-        rewrite Hnv in Hdv; inversion Hdv; subst dv; exact Hbp. }
-      pose proof (seed_proto_param_ctx_sound_aux ir_pnames arg_dtys s_pattrs0 vs penv' dummy_freeze_oracle Hty Hnu Hlookup')
-        as [Hpenv_proto Hctx_proto].
-      rewrite Eseed in Hpenv_proto, Hctx_proto; cbn [fst snd] in Hpenv_proto, Hctx_proto.
-      assert (Hm' : a64_rf_matches_args penv' (mc_args mcert) rf0).
-      { intros k sp Hlt Hnth; destruct (Hm k sp Hlt Hnth) as [v [Hp Hmt]].
-        assert (Hinnm : In (ras_name sp) ir_pnames)
-          by (rewrite <- Hnames_eq; apply in_map_iff; exists sp; split; [reflexivity | exact (nth_error_In _ _ Hnth)]).
-        exists v; split; [rewrite (Hdis_orig _ Hinnm); exact Hp | exact Hmt]. }
-      destruct (a64_hi_vars_wf_and_ctx penv dummy_freeze_oracle (mc_args mcert) rf0 Hnd_mc) as [Hpenv_hi Hctx_hi].
-      fold penv' in Hpenv_hi, Hctx_hi.
-      assert (Hmc_vars_all : forall sp, In sp (mc_args mcert) -> In (ras_name sp, ras_width sp) allowed).
-      { intros sp Hsp; unfold allowed; apply in_app_iff; right; apply in_app_iff; right; apply in_app_iff; left.
-        apply in_map_iff; exists sp; split; [reflexivity | exact Hsp]. }
-      assert (Hhi_vars_all : forall nv, In nv (a64_hi_vars (mc_args mcert)) -> In nv allowed).
-      { intros nv Hnv; unfold allowed; apply in_app_iff; right; apply in_app_iff; right; apply in_app_iff; right; exact Hnv. }
-      assert (Hmc_vars_wf : wf_param_env_for (List.map (fun sp => (ras_name sp, ras_width sp)) (mc_args mcert)) penv').
-      { intros nm w Hin; apply in_map_iff in Hin as [sp [Heq Hsp]]; inversion Heq; subst nm w.
-        destruct (In_nth_error (mc_args mcert) sp Hsp) as [k Hnth].
-        destruct (nth_error_Some (mc_args mcert) k) as [Hs1 _].
-        destruct (Hm' k sp ltac:(apply Hs1; congruence) Hnth) as [v [Hp _]].
-        exists (DVALUE_Base (@DVALUE_I Pa (ras_width sp) v)); split; [exact Hp | right; exists v; reflexivity]. }
-      assert (Hpenv_all : wf_param_env_for allowed penv').
-      { intros nm w Hin; unfold allowed in Hin; apply in_app_iff in Hin as [Hu | Hs].
-        - exact (Hpenv_used nm w Hu).
-        - apply in_app_iff in Hs as [Hp | Hrest]; [exact (Hpenv_proto nm w Hp) |].
-          apply in_app_iff in Hrest as [Hmv | Hhi]; [exact (Hmc_vars_wf nm w Hmv) | exact (Hpenv_hi nm w Hhi)]. }
-      assert (Hctx0 : forall penv'' : param_env Pa,
-        (forall nm, mc_starts_with_bang nm = false -> penv'' nm = penv' nm) ->
-        ub_ctx_holds penv'' dummy_freeze_oracle
-          (proto_ctx ++ List.map (fun sp => UBA_ParamNoUndef (ras_name sp) (ras_width sp)) (mc_args mcert)
-                     ++ List.map (fun nv => UBA_ParamNoUndef (fst nv) (snd nv)) (a64_hi_vars (mc_args mcert)))).
-      { intros penv'' Hag; apply Forall_app; split.
-        - assert (Hlk'' : forall idx pnm v, nth_error ir_pnames idx = Some pnm -> nth_error vs idx = Some v -> penv'' pnm = Some v).
-          { intros idx pnm v Hnp Hnv; rewrite (Hag pnm (Hnb_ir pnm (nth_error_In _ _ Hnp))); exact (Hlookup' idx pnm v Hnp Hnv). }
-          destruct (seed_proto_param_ctx_sound_aux ir_pnames arg_dtys s_pattrs0 vs penv'' dummy_freeze_oracle Hty Hnu Hlk'') as [_ Hcp].
-          rewrite Eseed in Hcp; exact Hcp.
-        - apply Forall_app; split.
-          + apply a64_args_noundef_ctx_sound with (rf0 := rf0).
-            intros k sp Hlt Hnth; destruct (Hm' k sp Hlt Hnth) as [v [Hp Hmt]].
-            assert (Hinnm : In (ras_name sp) ir_pnames)
-              by (rewrite <- Hnames_eq; apply in_map_iff; exists sp; split; [reflexivity | exact (nth_error_In _ _ Hnth)]).
-            exists v; split; [rewrite (Hag _ (Hnb_ir _ Hinnm)); exact Hp | exact Hmt].
-          + unfold ub_ctx_holds in Hctx_hi |- *; rewrite Forall_forall in Hctx_hi |- *; intros ua Hin; pose proof (Hctx_hi ua Hin) as Hha.
-            apply in_map_iff in Hin as [[nm w] [<- Hnv]]; unfold a64_hi_vars in Hnv; apply in_flat_map in Hnv as [sp [_ Hhere]].
-            destruct (Pos.eqb (ras_width sp) 64%positive); [contradiction Hhere |].
-            destruct Hhere as [Heq | []]; inversion Heq; subst nm w; cbn [fst snd] in *.
-            intros dv Hdv; rewrite (Hag _ (a64_hi_var_name_not_bang (ras_name sp))) in Hdv; exact (Hha dv Hdv). }
-      assert (Hnames_p : forall sp, In sp (mc_args mcert) -> penv' (ras_name sp) = penv (ras_name sp))
-        by (intros sp Hsp; apply Hdis_orig; rewrite <- Hnames_eq; apply in_map_iff; exists sp; split; [reflexivity | exact Hsp]).
-      exact (validate_mc_call_a64_sound ir_cfg allowed _ insts (mc_args mcert) (mc_ret_width mcert) (c0 :: c_rest) (mc_lrat_proof mcert)
-               arg_dtys vs penv' rf0 sp0 fl0 mstk0 Hval Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad
-               Hcomp Hty Hcompat_args
-               (fun idx w pnm Hin Hpnm => in_or_app _ _ _ (or_introl (Hpu_ir idx w pnm Hin Hpnm)))
-               Hdis_orig (fun _ _ => eq_refl) Hpenv_all Hctx0 Hmc_vars_all Hhi_vars_all Hnd_mc Hdis_args Hnames_p Hsp0 Hm).
-  }
+    split; [reflexivity |].
+    split; [solve [exact Hcal | reflexivity] |].
+    exists sl, ci; split; [solve [exact Eelf | reflexivity] |].
+    split; [symmetry; exact Ervc |].
+    exact (validate_mc_calls_arch_sound tenv ir_defn mcert seed_vars mc_init_ctx sl ci (c0 :: c_rest)
+             Hnd_raw Hnd_sp Hlen_sp_s Hlen_ad Hcomp Hcompat_args Hpu_ir Hnames_eq Hnd_mc Hnb_ir
+             Hhi_dis Ectx_b Hval).
 Qed.
 
 (** ** 6. Diagnostic Tail-Recursive DIMACS CNF Emitter *)
@@ -1735,7 +2283,9 @@ Fixpoint format_cnf_clauses_rev (acc : list ascii) (f : cnf) {struct f} : list a
 Definition format_dimacs_cnf (num_vars : positive) (f : cnf) : string :=
   let f_asc := List.rev_append f [] in
   let nclauses := length_tr f_asc in
-  let hdr := ("p cnf " ++ show_Z_dec (Z.pos num_vars) ++ " " ++ show_Z_dec (Z.of_nat nclauses) ++ String (ascii_of_nat 10) "")%string in
+  let hdr :=
+    ("p cnf " ++ show_Z_dec (Z.pos num_vars) ++ " " ++ show_Z_dec (Z.of_nat nclauses)
+     ++ String (ascii_of_nat 10) "")%string in
   let rev_all := format_cnf_clauses_rev (push_str_rev_chars [] hdr) f_asc in
   rev_chars_to_str_acc EmptyString rev_all.
 
@@ -1779,39 +2329,63 @@ Definition emit_mc_dimacs_cnf_str
                               let allowed := used_src_param_vars ir_cfg ++ seed_vars in
                               match mc_loop mcert with
                               | None =>
-                                  match mc_decode_and_summarize (mc_arch mcert) (mc_rvc mcert) (efs_bytes sl) (mc_args mcert) (mc_ret_width mcert) with
+                                  match mc_decode_and_summarize
+                                          (mc_arch mcert) (mc_rvc mcert) (efs_bytes sl)
+                                          (mc_args mcert) (mc_ret_width mcert) with
                                   | inl err => inl err
                                   | inr d_mc =>
                                       match flatten_mc_dag_to_expr (mc_ret_width mcert) d_mc with
                                       | inl err => inl err
                                       | inr e_mc =>
-                                          match summarize_cfg_dag_with_uas (fun _ => []) false ir_cfg ir_pnames with
+                                          match summarize_cfg_dag_with_uas
+                                                  (fun _ => []) false ir_cfg ir_pnames with
                                           | None =>
-                                              inl (diag "mc-ir-reify" ("IR CFG symbolic summarization failed for '" ++ fn_bare ++ "'"))
+                                              inl (diag "mc-ir-reify"
+                                                ("IR CFG symbolic summarization failed for '" ++ fn_bare ++ "'"))
                                           | Some d_ir =>
                                               match src_dag_to_expr (mc_ret_width mcert) d_ir with
                                               | None =>
-                                                  inl (diag "mc-ir-reify" ("IR DAG could not be flattened to scalar select tree for CNF emission ('" ++ fn_bare ++ "')"))
+                                                  inl (diag "mc-ir-reify"
+                                                    ("IR DAG could not be flattened to scalar select tree " ++
+                                                     "for CNF emission ('" ++ fn_bare ++ "')"))
                                               | Some e_ir =>
-                                                  let '(es', et') := prepare_mc_expr_pair mc_init_ctx allowed e_ir e_mc in
+                                                  let '(es', et') :=
+                                                    prepare_mc_expr_pair mc_init_ctx allowed e_ir e_mc in
                                                   if check_expr_refines mc_init_ctx es' et' then
                                                     inr ("c ALGEBRAIC_OK" ++ String (ascii_of_nat 10) "")%string
                                                   else
                                                     let sz := cert_expr_bit_width es' in
-                                                    let known_vars := collect_free_vars [] es' ++ collect_free_vars [] et' in
+                                                    let known_vars :=
+                                                      collect_free_vars [] es' ++ collect_free_vars [] et' in
                                                     let env0 := blast_ub_ctx mc_init_ctx known_vars mc_init_ctx
                                                                   (mk_blast_env (init_blast_state 2%positive) [] []) in
-                                                    let ms_s := if expr_has_freeze es' then Some ([], default_let_expand_budget) else None in
-                                                    let ms_t := if expr_has_freeze et' then Some ([], default_let_expand_budget) else None in
+                                                    let ms_s :=
+                                                      if expr_has_freeze es'
+                                                      then Some ([], default_let_expand_budget)
+                                                      else None in
+                                                    let ms_t :=
+                                                      if expr_has_freeze et'
+                                                      then Some ([], default_let_expand_budget)
+                                                      else None in
                                                     match blast_cert_expr mc_init_ctx [] ms_s es' env0 with
-                                                    | None => inl (diag "mc-refine" ("failed to bit-blast source IR expression for '" ++ fn_bare ++ "'"))
+                                                    | None =>
+                                                        inl (diag "mc-refine"
+                                                          ("failed to bit-blast source IR expression for '"
+                                                           ++ fn_bare ++ "'"))
                                                     | Some (src_r, env1) =>
                                                         match blast_cert_expr mc_init_ctx [] ms_t et' env1 with
-                                                        | None => inl (diag "mc-refine" ("failed to bit-blast target MC expression for '" ++ fn_bare ++ "'"))
+                                                        | None =>
+                                                            inl (diag "mc-refine"
+                                                              ("failed to bit-blast target MC expression for '"
+                                                               ++ fn_bare ++ "'"))
                                                         | Some (tgt_r, env2) =>
-                                                            let '(cex_lit, st5) := blast_refinement_cex_opt_gates sz lit_true src_r tgt_r (be_st env2) in
+                                                            let '(cex_lit, st5) :=
+                                                              blast_refinement_cex_opt_gates sz lit_true
+                                                                src_r tgt_r (be_st env2) in
                                                             let st_final := add_clauses [[cex_lit]] st5 in
-                                                            inr (format_dimacs_cnf (Pos.pred (bs_next_var st_final)) (bs_cnf st_final))
+                                                            inr (format_dimacs_cnf
+                                                                   (Pos.pred (bs_next_var st_final))
+                                                                   (bs_cnf st_final))
                                                         end
                                                     end
                                               end
@@ -1824,21 +2398,27 @@ Definition emit_mc_dimacs_cnf_str
                                       match decode_rv64_bytes (mc_rvc mcert) (efs_bytes sl) with
                                       | inl err => inl err
                                       | inr insts =>
-                                          match emit_mc_loop_cnf_rv64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) ls with
+                                          match emit_mc_loop_cnf_rv64 ir_cfg allowed mc_init_ctx insts
+                                                  (mc_args mcert) (mc_ret_width mcert) ls with
                                           | inl err => inl err
-                                          | inr None => inr ("c ALGEBRAIC_OK" ++ String (ascii_of_nat 10) "")%string
+                                          | inr None =>
+                                              inr ("c ALGEBRAIC_OK" ++ String (ascii_of_nat 10) "")%string
                                           | inr (Some (nv, f)) => inr (format_dimacs_cnf nv f)
                                           end
                                       end
                                   | EA_AArch64 =>
-                                      if mc_rvc mcert then inl (diag "mc-rvc" "compressed mode (rvc 1) is not supported for AArch64")
+                                      if mc_rvc mcert then
+                                        inl (diag "mc-rvc"
+                                          "compressed mode (rvc 1) is not supported for AArch64")
                                       else
                                         match decode_a64_bytes (efs_bytes sl) with
                                         | inl err => inl err
                                         | inr insts =>
-                                            match emit_mc_loop_cnf_a64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) ls with
+                                            match emit_mc_loop_cnf_a64 ir_cfg allowed mc_init_ctx insts
+                                                    (mc_args mcert) (mc_ret_width mcert) ls with
                                             | inl err => inl err
-                                            | inr None => inr ("c ALGEBRAIC_OK" ++ String (ascii_of_nat 10) "")%string
+                                            | inr None =>
+                                                inr ("c ALGEBRAIC_OK" ++ String (ascii_of_nat 10) "")%string
                                             | inr (Some (nv, f)) => inr (format_dimacs_cnf nv f)
                                             end
                                         end
@@ -1847,18 +2427,24 @@ Definition emit_mc_dimacs_cnf_str
                         end
                     | callees =>
                         match mc_loop mcert with
-                        | Some _ => inl (diag "mc-mode" "combining (calls ...) and (loop ...) in one certificate is not supported")
+                        | Some _ =>
+                            inl (diag "mc-mode"
+                              "combining (calls ...) and (loop ...) in one certificate is not supported")
                         | None =>
-                            match check_mc_callee_contracts_diag (m_type_defs ir_m) ir_m (mc_arch mcert) callees with
+                            match check_mc_callee_contracts_diag
+                                    (m_type_defs ir_m) ir_m (mc_arch mcert) callees with
                             | inl err => inl err
                             | inr tt =>
-                              let callee_names := List.map (fun c => mc_strip_leading_at (mcs_name c)) callees in
-                              match elf64_extract_func_with_calls raw_elf (mc_arch mcert) (mc_elf_kind mcert) fn_bare callee_names with
+                              let callee_names :=
+                                List.map (fun c => mc_strip_leading_at (mcs_name c)) callees in
+                              match elf64_extract_func_with_calls raw_elf (mc_arch mcert)
+                                      (mc_elf_kind mcert) fn_bare callee_names with
                               | inl err => inl err
                               | inr (sl, ci) =>
                                   if negb (Bool.eqb (mc_rvc mcert) (efs_rvc sl)) then
                                     inl (diag "mc-rvc"
-                                      ("ELF64 RVC flag disagrees with mc-cert-v1 rvc mode for '" ++ fn_bare ++ "'"))
+                                      ("ELF64 RVC flag disagrees with mc-cert-v1 rvc mode for '"
+                                       ++ fn_bare ++ "'"))
                                   else
                                     let tenv := m_type_defs ir_m in
                                     let ir_cfg := convert_typ tenv (df_instrs ir_defn) in
@@ -1866,28 +2452,37 @@ Definition emit_mc_dimacs_cnf_str
                                     let arg_dtys := defn_arg_dtys tenv ir_defn in
                                     let s_pattrs := snd (dc_param_attrs (df_prototype ir_defn)) in
                                     let '(seed_vars, mc_init_ctx) :=
-                                        mc_build_init_ctx (mc_arch mcert) ir_pnames arg_dtys s_pattrs (mc_args mcert) in
+                                        mc_build_init_ctx (mc_arch mcert) ir_pnames arg_dtys
+                                          s_pattrs (mc_args mcert) in
                                     let allowed := used_src_param_vars ir_cfg ++ seed_vars in
                                     match mc_arch mcert with
                                     | EA_Riscv64 =>
-                                        match decode_rv64_bytes_with_calls (mc_rvc mcert) (mc_elf_kind mcert) (efs_range_lo sl) ci (efs_bytes sl) with
+                                        match decode_rv64_bytes_with_calls (mc_rvc mcert)
+                                                (mc_elf_kind mcert) (efs_range_lo sl) ci (efs_bytes sl) with
                                         | inl err => inl err
                                         | inr insts =>
-                                            match emit_mc_call_cnf_rv64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) callees with
+                                            match emit_mc_call_cnf_rv64 ir_cfg allowed mc_init_ctx insts
+                                                    (mc_args mcert) (mc_ret_width mcert) callees with
                                             | inl err => inl err
-                                            | inr None => inr ("c ALGEBRAIC_OK" ++ String (ascii_of_nat 10) "")%string
+                                            | inr None =>
+                                                inr ("c ALGEBRAIC_OK" ++ String (ascii_of_nat 10) "")%string
                                             | inr (Some (nv, f)) => inr (format_dimacs_cnf nv f)
                                             end
                                         end
                                     | EA_AArch64 =>
-                                        if mc_rvc mcert then inl (diag "mc-rvc" "compressed mode (rvc 1) is not supported for AArch64")
+                                        if mc_rvc mcert then
+                                          inl (diag "mc-rvc"
+                                            "compressed mode (rvc 1) is not supported for AArch64")
                                         else
-                                          match decode_a64_bytes_with_calls (mc_elf_kind mcert) (efs_range_lo sl) ci (efs_bytes sl) with
+                                          match decode_a64_bytes_with_calls (mc_elf_kind mcert)
+                                                  (efs_range_lo sl) ci (efs_bytes sl) with
                                           | inl err => inl err
                                           | inr insts =>
-                                              match emit_mc_call_cnf_a64 ir_cfg allowed mc_init_ctx insts (mc_args mcert) (mc_ret_width mcert) callees with
+                                              match emit_mc_call_cnf_a64 ir_cfg allowed mc_init_ctx insts
+                                                      (mc_args mcert) (mc_ret_width mcert) callees with
                                               | inl err => inl err
-                                              | inr None => inr ("c ALGEBRAIC_OK" ++ String (ascii_of_nat 10) "")%string
+                                              | inr None =>
+                                                  inr ("c ALGEBRAIC_OK" ++ String (ascii_of_nat 10) "")%string
                                               | inr (Some (nv, f)) => inr (format_dimacs_cnf nv f)
                                               end
                                           end

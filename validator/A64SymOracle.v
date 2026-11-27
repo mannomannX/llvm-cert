@@ -319,11 +319,20 @@ Definition a64_step_sym_oracle (w : N) : option a64_sym_step_out :=
 
 Definition a64_penv_matches_state {Pa : Params} (penv : param_env Pa) (rf : a64_regfile) (fl : a64_flags) : Prop :=
   (forall r, (r < 31)%N ->
-     penv (a64_oracle_reg_name r) = Some (DVALUE_Base (@DVALUE_I Pa 64%positive (a64_read_reg r rf)))) /\
-  penv "NZCV_N" = Some (DVALUE_Base (@DVALUE_I Pa 1%positive (if af_n fl then @Integers.one 1%positive else @Integers.zero 1%positive))) /\
-  penv "NZCV_Z" = Some (DVALUE_Base (@DVALUE_I Pa 1%positive (if af_z fl then @Integers.one 1%positive else @Integers.zero 1%positive))) /\
-  penv "NZCV_C" = Some (DVALUE_Base (@DVALUE_I Pa 1%positive (if af_c fl then @Integers.one 1%positive else @Integers.zero 1%positive))) /\
-  penv "NZCV_V" = Some (DVALUE_Base (@DVALUE_I Pa 1%positive (if af_v fl then @Integers.one 1%positive else @Integers.zero 1%positive))).
+     penv (a64_oracle_reg_name r) =
+       Some (DVALUE_Base (@DVALUE_I Pa 64%positive (a64_read_reg r rf)))) /\
+  penv "NZCV_N" =
+    Some (DVALUE_Base (@DVALUE_I Pa 1%positive
+      (if af_n fl then @Integers.one 1%positive else @Integers.zero 1%positive))) /\
+  penv "NZCV_Z" =
+    Some (DVALUE_Base (@DVALUE_I Pa 1%positive
+      (if af_z fl then @Integers.one 1%positive else @Integers.zero 1%positive))) /\
+  penv "NZCV_C" =
+    Some (DVALUE_Base (@DVALUE_I Pa 1%positive
+      (if af_c fl then @Integers.one 1%positive else @Integers.zero 1%positive))) /\
+  penv "NZCV_V" =
+    Some (DVALUE_Base (@DVALUE_I Pa 1%positive
+      (if af_v fl then @Integers.one 1%positive else @Integers.zero 1%positive))).
 
 Lemma a64_oracle_srf_agrees :
   forall {Pa : Params} (penv : param_env Pa) foracle rf fl,
@@ -332,11 +341,17 @@ Lemma a64_oracle_srf_agrees :
 Proof.
   intros Pa penv foracle rf fl [Hreg _] r _.
   unfold a64_sym_read_reg, a64_oracle_srf, a64_read_reg.
-  destruct (N.leb 31%N r) eqn:Er31; [rewrite eval_ce_const, repr_zero_N; reflexivity |].
-  apply N.leb_gt in Er31.
-  unfold eval_closed_cert_expr; cbn [eval_cert_expr]; rewrite (Hreg r Er31).
-  cbn [lookup_let_val check_scalar_width Pos.eqb]; unfold a64_read_reg;
-    replace (N.leb 31%N r) with false by (symmetry; apply N.leb_gt; exact Er31); reflexivity.
+  destruct (N.leb 31%N r) eqn:Er31.
+  - rewrite eval_ce_const, repr_zero_N.
+    reflexivity.
+  - apply N.leb_gt in Er31.
+    unfold eval_closed_cert_expr.
+    cbn [eval_cert_expr].
+    rewrite (Hreg r Er31).
+    cbn [lookup_let_val check_scalar_width Pos.eqb].
+    unfold a64_read_reg.
+    replace (N.leb 31%N r) with false by (symmetry; apply N.leb_gt; exact Er31).
+    reflexivity.
 Qed.
 
 Lemma a64_oracle_sfl_agrees :
@@ -346,14 +361,24 @@ Lemma a64_oracle_sfl_agrees :
 Proof.
   intros Pa penv foracle rf fl [_ (Hn & Hz & Hc & Hv)].
   assert (Hlu : forall nm (b : bool),
-    penv nm = Some (DVALUE_Base (@DVALUE_I Pa 1%positive (if b then @Integers.one 1%positive else @Integers.zero 1%positive))) ->
+    penv nm =
+      Some (DVALUE_Base (@DVALUE_I Pa 1%positive
+        (if b then @Integers.one 1%positive else @Integers.zero 1%positive))) ->
     eval_closed_cert_expr penv foracle (CE_Var nm 1%positive) =
-    raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if b then @Integers.one 1%positive else @Integers.zero 1%positive)))).
-  { intros nm b Hp; unfold eval_closed_cert_expr; cbn [eval_cert_expr]; rewrite Hp;
-      cbn [lookup_let_val check_scalar_width Pos.eqb]; reflexivity. }
-  unfold sym_flags_agree, a64_oracle_sfl; cbn [asf_n asf_z asf_c asf_v asf_n_ne_v].
-  pose proof (Hlu _ _ Hn) as En; pose proof (Hlu _ _ Hz) as Ez;
-    pose proof (Hlu _ _ Hc) as Ec; pose proof (Hlu _ _ Hv) as Ev.
+      raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive
+        (if b then @Integers.one 1%positive else @Integers.zero 1%positive)))).
+  { intros nm b Hp.
+    unfold eval_closed_cert_expr.
+    cbn [eval_cert_expr].
+    rewrite Hp.
+    cbn [lookup_let_val check_scalar_width Pos.eqb].
+    reflexivity. }
+  unfold sym_flags_agree, a64_oracle_sfl.
+  cbn [asf_n asf_z asf_c asf_v asf_n_ne_v].
+  pose proof (Hlu _ _ Hn) as En.
+  pose proof (Hlu _ _ Hz) as Ez.
+  pose proof (Hlu _ _ Hc) as Ec.
+  pose proof (Hlu _ _ Hv) as Ev.
   repeat split; try assumption.
   exact (eval_a64_sym_bool_xor_sound _ _ _ _ _ _ En Ev).
 Qed.
@@ -365,13 +390,17 @@ Definition a64_step_flags_match {Pa : Params}
   | None => True
   | Some (en, ez, ec, ev) =>
       eval_closed_cert_expr penv foracle en =
-        raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if af_n fl_out then @Integers.one 1%positive else @Integers.zero 1%positive))) /\
+        raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive
+          (if af_n fl_out then @Integers.one 1%positive else @Integers.zero 1%positive))) /\
       eval_closed_cert_expr penv foracle ez =
-        raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if af_z fl_out then @Integers.one 1%positive else @Integers.zero 1%positive))) /\
+        raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive
+          (if af_z fl_out then @Integers.one 1%positive else @Integers.zero 1%positive))) /\
       eval_closed_cert_expr penv foracle ec =
-        raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if af_c fl_out then @Integers.one 1%positive else @Integers.zero 1%positive))) /\
+        raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive
+          (if af_c fl_out then @Integers.one 1%positive else @Integers.zero 1%positive))) /\
       eval_closed_cert_expr penv foracle ev =
-        raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if af_v fl_out then @Integers.one 1%positive else @Integers.zero 1%positive)))
+        raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive
+          (if af_v fl_out then @Integers.one 1%positive else @Integers.zero 1%positive)))
   end.
 
 Definition a64_step_concrete (inst : a64_inst) (rf : a64_regfile) (fl : a64_flags)
@@ -380,7 +409,9 @@ Definition a64_step_concrete (inst : a64_inst) (rf : a64_regfile) (fl : a64_flag
   | A64_Nop | A64_B _ | A64_Ret
   | A64_LdStImm _ _ _ _ _ _ _ _ | A64_LdStPair _ _ _ _ _ _ _ => (rf, fl, None)
   | A64_AddSubImm sf is_sub sfl rd rn imm =>
-      let '(res, fl') := a64_eval_add_sub (a64_w sf) is_sub (a64_read_w sf rn rf) (@Integers.repr (a64_w sf) (Z.of_N imm)) in
+      let '(res, fl') :=
+        a64_eval_add_sub (a64_w sf) is_sub (a64_read_w sf rn rf)
+          (@Integers.repr (a64_w sf) (Z.of_N imm)) in
       (a64_write_w sf rd res rf, (if sfl then fl' else fl), None)
   | A64_AddSubShift sf is_sub sfl rd rn rm sh amt =>
       let rhs := a64_eval_shift (a64_w sf) (a64_read_w sf rm rf) sh amt in
@@ -427,8 +458,12 @@ Definition a64_step_concrete (inst : a64_inst) (rf : a64_regfile) (fl : a64_flag
   | A64_MulWidening sgn is_sub rd rn rm ra =>
       let n32 := a64_read_w false rn rf in
       let m32 := a64_read_w false rm rf in
-      let n64 := @Integers.repr 64%positive (if sgn then @Integers.signed 32%positive n32 else @Integers.unsigned 32%positive n32) in
-      let m64 := @Integers.repr 64%positive (if sgn then @Integers.signed 32%positive m32 else @Integers.unsigned 32%positive m32) in
+      let n64 :=
+        @Integers.repr 64%positive
+          (if sgn then @Integers.signed 32%positive n32 else @Integers.unsigned 32%positive n32) in
+      let m64 :=
+        @Integers.repr 64%positive
+          (if sgn then @Integers.signed 32%positive m32 else @Integers.unsigned 32%positive m32) in
       let p := @Integers.mul 64%positive n64 m64 in
       let a := a64_read_reg ra rf in
       let res := if is_sub then @Integers.sub 64%positive a p else @Integers.add 64%positive a p in
@@ -443,7 +478,9 @@ Definition a64_step_concrete (inst : a64_inst) (rf : a64_regfile) (fl : a64_flag
       let '(_, cfl) := a64_eval_add_sub (a64_w sf) is_sub (a64_read_w sf rn rf) (a64_read_w sf rm rf) in
       (rf, (if a64_eval_cond cond fl then cfl else a64_flags_of_imm4 nzcv), None)
   | A64_CondCompareImm sf is_sub cond rn imm5 nzcv =>
-      let '(_, cfl) := a64_eval_add_sub (a64_w sf) is_sub (a64_read_w sf rn rf) (@Integers.repr (a64_w sf) (Z.of_N imm5)) in
+      let '(_, cfl) :=
+        a64_eval_add_sub (a64_w sf) is_sub (a64_read_w sf rn rf)
+          (@Integers.repr (a64_w sf) (Z.of_N imm5)) in
       (rf, (if a64_eval_cond cond fl then cfl else a64_flags_of_imm4 nzcv), None)
   | A64_BCond cond _ => (rf, fl, Some (a64_eval_cond cond fl))
   | A64_Cbz sf is_nz rt _ =>
@@ -478,6 +515,336 @@ Proof.
     + exact (eval_ce_zext penv foracle 32%positive 64%positive res v eq_refl Hres).
 Qed.
 
+Local Lemma a64_oracle_wr_step_ok :
+  forall {Pa : Params} (penv : param_env Pa) foracle sf rd se vr rf,
+    eval_closed_cert_expr penv foracle se =
+      raise_ret (DVALUE_Base (@DVALUE_I Pa (a64_w sf) vr)) ->
+    match a64_oracle_wr sf rd se with
+    | None => forall r, a64_read_reg r (a64_write_w sf rd vr rf) = a64_read_reg r rf
+    | Some (rd', e64) =>
+        (rd' < 31)%N /\
+        (forall r, r <> rd' ->
+           a64_read_reg r (a64_write_w sf rd vr rf) = a64_read_reg r rf) /\
+        eval_closed_cert_expr penv foracle e64 =
+          raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive
+            (a64_read_reg rd' (a64_write_w sf rd vr rf))))
+    end.
+Proof.
+  intros Pa penv foracle sf rd se vr rf Hres.
+  pose proof (a64_oracle_wr_eval penv foracle sf rd se vr rf Hres) as Hwr.
+  destruct (a64_oracle_wr sf rd se) as [[rd' e64] |].
+  - destruct Hwr as [-> [Hlt He]].
+    repeat split.
+    + exact Hlt.
+    + intros r Hne.
+      unfold a64_read_reg, a64_write_w, a64_write_reg.
+      destruct (N.leb 31%N rd); [reflexivity |].
+      destruct (N.leb 31%N r); [reflexivity |].
+      apply N.eqb_neq in Hne.
+      rewrite Hne.
+      reflexivity.
+    + exact He.
+  - exact Hwr.
+Qed.
+
+Local Lemma a64_oracle_fl_opt_ok :
+  forall {Pa : Params} (penv : param_env Pa) foracle set_fl sfl' fl_n fl,
+    (set_fl = true -> sym_flags_agree penv foracle sfl' fl_n) ->
+    (a64_oracle_fl_opt set_fl sfl' = None ->
+     (if set_fl then fl_n else fl) = fl) /\
+    a64_step_flags_match penv foracle
+      (a64_oracle_fl_opt set_fl sfl') (if set_fl then fl_n else fl).
+Proof.
+  intros Pa penv foracle set_fl sfl' fl_n fl Hfl'.
+  split.
+  - intro Hfn.
+    unfold a64_oracle_fl_opt in Hfn.
+    destruct set_fl; [discriminate Hfn | reflexivity].
+  - unfold a64_oracle_fl_opt, a64_step_flags_match.
+    destruct set_fl.
+    + destruct (Hfl' eq_refl) as (H1 & H2 & H3 & H4 & _).
+      repeat split; assumption.
+    + exact I.
+Qed.
+
+Local Lemma a64_oracle_step_alu_ok :
+  forall {Pa : Params} (penv : param_env Pa) foracle rf fl sf set_fl rd
+         se (vr : @Integers.bit_int (a64_w sf)) sfl' fl_n pc_kind rel_bytes,
+    eval_closed_cert_expr penv foracle se =
+      raise_ret (DVALUE_Base (@DVALUE_I Pa (a64_w sf) vr)) ->
+    (set_fl = true -> sym_flags_agree penv foracle sfl' fl_n) ->
+    let out :=
+      mk_a64_sym_step_out
+        (a64_oracle_wr sf rd se) (a64_oracle_fl_opt set_fl sfl')
+        pc_kind None rel_bytes in
+    let rf' := a64_write_w sf rd vr rf in
+    let fl' := if set_fl then fl_n else fl in
+    (match aso_rd_write out with
+     | None => forall r, a64_read_reg r rf' = a64_read_reg r rf
+     | Some (rd0, e64) =>
+         (rd0 < 31)%N /\
+         (forall r, r <> rd0 -> a64_read_reg r rf' = a64_read_reg r rf) /\
+         eval_closed_cert_expr penv foracle e64 =
+           raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive (a64_read_reg rd0 rf')))
+     end) /\
+    (aso_flags_write out = None -> fl' = fl) /\
+    a64_step_flags_match penv foracle (aso_flags_write out) fl' /\
+    aso_br_cond out = None.
+Proof.
+  intros Pa penv foracle rf fl sf set_fl rd se vr sfl' fl_n pc_kind rel_bytes Hres Hfl'.
+  cbn [aso_rd_write aso_flags_write aso_br_cond].
+  pose proof (a64_oracle_wr_step_ok penv foracle sf rd se vr rf Hres) as Hwr.
+  pose proof (a64_oracle_fl_opt_ok penv foracle set_fl sfl' fl_n fl Hfl') as [Hfn Hfm].
+  split; [exact Hwr |].
+  split; [exact Hfn |].
+  split; [exact Hfm | reflexivity].
+Qed.
+
+Local Lemma a64_oracle_logical_shift_eval :
+  forall {Pa : Params} (penv : param_env Pa) foracle rf sf op (inv_rm : bool) rn rm sh amt,
+    a64_env_agrees penv foracle a64_oracle_srf (fun _ => true) rf ->
+    (amt < N.pos (a64_w sf))%N ->
+    let shv_e := a64_sym_shift (a64_w sf) (a64_sym_read_w sf rm a64_oracle_srf) sh amt in
+    let rhs_e := if inv_rm then a64_sym_not (a64_w sf) shv_e else shv_e in
+    let shv_v := a64_eval_shift (a64_w sf) (a64_read_w sf rm rf) sh amt in
+    let rhs_v := if inv_rm then @Integers.not (a64_w sf) shv_v else shv_v in
+    eval_closed_cert_expr penv foracle
+      (a64_sym_logic_op (a64_w sf) op (a64_sym_read_w sf rn a64_oracle_srf) rhs_e) =
+    raise_ret (DVALUE_Base (@DVALUE_I Pa (a64_w sf)
+      (a64_eval_logic_op (a64_w sf) op (a64_read_w sf rn rf) rhs_v))).
+Proof.
+  intros Pa penv foracle rf sf op inv_rm rn rm sh amt Hag Hamt.
+  assert (Hdef : forall r, a64_def_read r (fun _ : N => true) = true)
+    by (intro r; unfold a64_def_read; destruct (N.leb 31%N r); reflexivity).
+  pose proof (eval_a64_sym_shift_sound _ _ (a64_w sf) _ _ sh amt
+    (a64_w_32_64 sf) Hamt (a64_env_agrees_read_w _ _ _ _ _ sf rm Hag (Hdef _))) as Hsh.
+  assert (Hrhs :
+    eval_closed_cert_expr penv foracle
+      (if inv_rm
+       then a64_sym_not (a64_w sf) (a64_sym_shift (a64_w sf) (a64_sym_read_w sf rm a64_oracle_srf) sh amt)
+       else a64_sym_shift (a64_w sf) (a64_sym_read_w sf rm a64_oracle_srf) sh amt) =
+    raise_ret (DVALUE_Base (@DVALUE_I Pa (a64_w sf)
+      (if inv_rm
+       then @Integers.not (a64_w sf) (a64_eval_shift (a64_w sf) (a64_read_w sf rm rf) sh amt)
+       else a64_eval_shift (a64_w sf) (a64_read_w sf rm rf) sh amt)))).
+  { destruct inv_rm; [exact (eval_ce_not _ _ _ _ _ Hsh) | exact Hsh]. }
+  unfold a64_sym_logic_op, a64_eval_logic_op.
+  rewrite eval_ce_binop, (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef _)), Hrhs.
+  cbn [eou_bind].
+  unfold eval_iop.
+  rewrite eval_iop_integer_base_same_width.
+  destruct op; reflexivity.
+Qed.
+
+Local Lemma a64_oracle_move_wide_eval :
+  forall {Pa : Params} (penv : param_env Pa) foracle rf sf kind rd imm16 shift,
+    a64_env_agrees penv foracle a64_oracle_srf (fun _ => true) rf ->
+    eval_closed_cert_expr penv foracle
+      (match kind with
+       | AMW_Movz => ce_bv_z (a64_w sf) (Z.of_N (N.shiftl imm16 shift))
+       | AMW_Movn => a64_sym_not (a64_w sf) (ce_bv_z (a64_w sf) (Z.of_N (N.shiftl imm16 shift)))
+       | AMW_Movk =>
+           CE_BinOp CB_Or (a64_w sf) no_binop_flags
+             (CE_BinOp CB_And (a64_w sf) no_binop_flags (a64_sym_read_w sf rd a64_oracle_srf)
+               (a64_sym_not (a64_w sf) (ce_bv_z (a64_w sf) (Z.of_N (N.shiftl 65535%N shift)))))
+             (ce_bv_z (a64_w sf) (Z.of_N (N.shiftl imm16 shift)))
+       end) =
+    raise_ret (DVALUE_Base (@DVALUE_I Pa (a64_w sf)
+      (match kind with
+       | AMW_Movz => @Integers.repr (a64_w sf) (Z.of_N (N.shiftl imm16 shift))
+       | AMW_Movn => @Integers.not (a64_w sf) (@Integers.repr (a64_w sf) (Z.of_N (N.shiftl imm16 shift)))
+       | AMW_Movk =>
+           @Integers.or (a64_w sf)
+             (@Integers.and (a64_w sf) (a64_read_w sf rd rf)
+               (@Integers.not (a64_w sf) (@Integers.repr (a64_w sf) (Z.of_N (N.shiftl 65535%N shift)))))
+             (@Integers.repr (a64_w sf) (Z.of_N (N.shiftl imm16 shift)))
+       end))).
+Proof.
+  intros Pa penv foracle rf sf kind rd imm16 shift Hag.
+  assert (Hdef : forall r, a64_def_read r (fun _ : N => true) = true)
+    by (intro r; unfold a64_def_read; destruct (N.leb 31%N r); reflexivity).
+  destruct kind.
+  - exact (eval_ce_not _ _ _ _ _ (eval_ce_bv_z _ _ _ _)).
+  - apply eval_ce_bv_z.
+  - assert (Hand :
+      eval_closed_cert_expr penv foracle
+        (CE_BinOp CB_And (a64_w sf) no_binop_flags (a64_sym_read_w sf rd a64_oracle_srf)
+          (a64_sym_not (a64_w sf) (ce_bv_z (a64_w sf) (Z.of_N (N.shiftl 65535%N shift))))) =
+      raise_ret (DVALUE_Base (@DVALUE_I Pa (a64_w sf)
+        (@Integers.and (a64_w sf) (a64_read_w sf rd rf)
+          (@Integers.not (a64_w sf) (@Integers.repr (a64_w sf) (Z.of_N (N.shiftl 65535%N shift)))))))).
+    { rewrite eval_ce_binop, (a64_env_agrees_read_w _ _ _ _ _ sf rd Hag (Hdef _)),
+              (eval_ce_not _ _ _ _ _ (eval_ce_bv_z _ _ _ _)).
+      cbn [eou_bind].
+      unfold eval_iop.
+      rewrite eval_iop_integer_base_same_width.
+      reflexivity. }
+    rewrite eval_ce_binop, Hand, eval_ce_bv_z.
+    cbn [eou_bind].
+    unfold eval_iop.
+    rewrite eval_iop_integer_base_same_width.
+    reflexivity.
+Qed.
+
+Local Lemma a64_oracle_mul_add_sub_eval :
+  forall {Pa : Params} (penv : param_env Pa) foracle rf sf (is_sub : bool) rn rm ra,
+    a64_env_agrees penv foracle a64_oracle_srf (fun _ => true) rf ->
+    eval_closed_cert_expr penv foracle
+      (CE_BinOp (if is_sub then CB_Sub else CB_Add) (a64_w sf) no_binop_flags
+        (a64_sym_read_w sf ra a64_oracle_srf)
+        (CE_BinOp CB_Mul (a64_w sf) no_binop_flags
+          (a64_sym_read_w sf rn a64_oracle_srf) (a64_sym_read_w sf rm a64_oracle_srf))) =
+    raise_ret (DVALUE_Base (@DVALUE_I Pa (a64_w sf)
+      (let p := @Integers.mul (a64_w sf) (a64_read_w sf rn rf) (a64_read_w sf rm rf) in
+       let a := a64_read_w sf ra rf in
+       if is_sub then @Integers.sub (a64_w sf) a p else @Integers.add (a64_w sf) a p))).
+Proof.
+  intros Pa penv foracle rf sf is_sub rn rm ra Hag.
+  assert (Hdef : forall r, a64_def_read r (fun _ : N => true) = true)
+    by (intro r; unfold a64_def_read; destruct (N.leb 31%N r); reflexivity).
+  assert (Hmul :
+    eval_closed_cert_expr penv foracle
+      (CE_BinOp CB_Mul (a64_w sf) no_binop_flags
+        (a64_sym_read_w sf rn a64_oracle_srf) (a64_sym_read_w sf rm a64_oracle_srf)) =
+    raise_ret (DVALUE_Base (@DVALUE_I Pa (a64_w sf)
+      (@Integers.mul (a64_w sf) (a64_read_w sf rn rf) (a64_read_w sf rm rf))))).
+  { rewrite eval_ce_binop,
+            (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef _)),
+            (a64_env_agrees_read_w _ _ _ _ _ sf rm Hag (Hdef _)).
+    cbn [eou_bind].
+    destruct sf; unfold eval_iop; rewrite eval_iop_integer_base_same_width;
+      cbn - [Integers.mul a64_read_w]; reflexivity. }
+  rewrite eval_ce_binop, (a64_env_agrees_read_w _ _ _ _ _ sf ra Hag (Hdef _)), Hmul.
+  cbn [eou_bind].
+  destruct sf, is_sub; unfold eval_iop; rewrite eval_iop_integer_base_same_width;
+    cbn - [Integers.mul Integers.add Integers.sub a64_read_w]; reflexivity.
+Qed.
+
+Local Lemma a64_oracle_mul_widening_eval :
+  forall {Pa : Params} (penv : param_env Pa) foracle rf (is_signed is_sub : bool) rn rm ra,
+    a64_env_agrees penv foracle a64_oracle_srf (fun _ => true) rf ->
+    let en64 :=
+      CE_Cast (if is_signed then CCK_SExt else CCK_ZExt) 32%positive 64%positive no_cast_flags
+        (a64_sym_read_w false rn a64_oracle_srf) in
+    let em64 :=
+      CE_Cast (if is_signed then CCK_SExt else CCK_ZExt) 32%positive 64%positive no_cast_flags
+        (a64_sym_read_w false rm a64_oracle_srf) in
+    let vn64 :=
+      @Integers.repr 64%positive
+        (if is_signed then @Integers.signed 32%positive (a64_read_w false rn rf)
+         else @Integers.unsigned 32%positive (a64_read_w false rn rf)) in
+    let vm64 :=
+      @Integers.repr 64%positive
+        (if is_signed then @Integers.signed 32%positive (a64_read_w false rm rf)
+         else @Integers.unsigned 32%positive (a64_read_w false rm rf)) in
+    eval_closed_cert_expr penv foracle
+      (CE_BinOp (if is_sub then CB_Sub else CB_Add) 64%positive no_binop_flags
+        (a64_sym_read_reg ra a64_oracle_srf)
+        (CE_BinOp CB_Mul 64%positive no_binop_flags en64 em64)) =
+    raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive
+      (if is_sub then @Integers.sub 64%positive (a64_read_reg ra rf) (@Integers.mul 64%positive vn64 vm64)
+       else @Integers.add 64%positive (a64_read_reg ra rf) (@Integers.mul 64%positive vn64 vm64)))).
+Proof.
+  intros Pa penv foracle rf is_signed is_sub rn rm ra Hag en64 em64 vn64 vm64.
+  assert (Hdef : forall r, a64_def_read r (fun _ : N => true) = true)
+    by (intro r; unfold a64_def_read; destruct (N.leb 31%N r); reflexivity).
+  assert (Hn64 : eval_closed_cert_expr penv foracle en64 = raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive vn64))).
+  { unfold en64, vn64.
+    destruct is_signed; [apply eval_ce_sext | apply eval_ce_zext]; try reflexivity;
+      exact (a64_env_agrees_read_w _ _ _ _ _ false rn Hag (Hdef _)). }
+  assert (Hm64 : eval_closed_cert_expr penv foracle em64 = raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive vm64))).
+  { unfold em64, vm64.
+    destruct is_signed; [apply eval_ce_sext | apply eval_ce_zext]; try reflexivity;
+      exact (a64_env_agrees_read_w _ _ _ _ _ false rm Hag (Hdef _)). }
+  assert (Hmul :
+    eval_closed_cert_expr penv foracle (CE_BinOp CB_Mul 64%positive no_binop_flags en64 em64) =
+    raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive (@Integers.mul 64%positive vn64 vm64)))).
+  { rewrite eval_ce_binop, Hn64, Hm64.
+    cbn [eou_bind]; unfold eval_iop; rewrite eval_iop_integer_base_same_width.
+    cbn - [Integers.mul vn64 vm64]; reflexivity. }
+  rewrite eval_ce_binop, (Hag ra (Hdef ra)), Hmul.
+  cbn [eou_bind]; unfold eval_iop; rewrite eval_iop_integer_base_same_width.
+  destruct is_sub; cbn - [Integers.mul Integers.add Integers.sub vn64 vm64 a64_read_reg]; reflexivity.
+Qed.
+
+Local Lemma a64_oracle_step_ccmp_ok :
+  forall {Pa : Params} (penv : param_env Pa) foracle rf fl cond sfl csfl cfl nzcv pc_kind rel_bytes,
+    sym_flags_agree penv foracle sfl fl ->
+    sym_flags_agree penv foracle csfl cfl ->
+    let sfl' := a64_sym_ite_flags (a64_sym_cond cond sfl) csfl (a64_sym_flags_of_imm4 nzcv) in
+    let fl' := if a64_eval_cond cond fl then cfl else a64_flags_of_imm4 nzcv in
+    let out := mk_a64_sym_step_out None (a64_oracle_fl_opt true sfl') pc_kind None rel_bytes in
+    (forall r, a64_read_reg r rf = a64_read_reg r rf) /\
+    (aso_flags_write out = None -> fl' = fl) /\
+    a64_step_flags_match penv foracle (aso_flags_write out) fl' /\
+    aso_br_cond out = None.
+Proof.
+  intros Pa penv foracle rf fl cond sfl csfl cfl nzcv pc_kind rel_bytes Hfl Hcsfl sfl' fl' out.
+  pose proof (eval_a64_sym_ite_flags_sound _ _ _ _ _ _ _ _
+    (eval_a64_sym_cond_sound _ _ cond _ _ Hfl) Hcsfl (eval_a64_sym_flags_imm4_sound _ _ nzcv)) as Hite.
+  cbn [aso_flags_write aso_br_cond a64_step_flags_match].
+  split; [intro; reflexivity |].
+  split; [intro C; discriminate C |].
+  split; [| reflexivity].
+  destruct Hite as (H1 & H2 & H3 & H4 & _).
+  repeat split; assumption.
+Qed.
+
+Local Lemma a64_oracle_tbz_bit_eq :
+  forall (v : @Integers.bit_int 64%positive) (bit : N),
+    (bit < 64)%N ->
+    negb (@Integers.eq 64%positive
+      (@Integers.and 64%positive v (@Integers.repr 64%positive (Z.of_N (N.shiftl 1%N bit))))
+      (@Integers.zero 64%positive)) =
+    Z.testbit (@Integers.unsigned 64%positive v) (Z.of_N bit).
+Proof.
+  intros v bit Hbit.
+  pose proof (integers_eq_zero_iff 64%positive
+    (@Integers.and 64%positive v (@Integers.repr 64%positive (Z.of_N (N.shiftl 1%N bit))))) as Hiz.
+  destruct (@Integers.eq 64%positive _ _) eqn:Ez,
+           (Z.testbit (@Integers.unsigned 64%positive v) (Z.of_N bit)) eqn:Etb;
+    try reflexivity.
+  - exfalso.
+    pose proof (proj1 Hiz eq_refl) as Hz.
+    assert (Hb :
+      Z.testbit (@Integers.unsigned 64%positive
+        (@Integers.and 64%positive v (@Integers.repr 64%positive (Z.of_N (N.shiftl 1%N bit)))))
+        (Z.of_N bit) = false)
+      by (rewrite Hz; apply Z.testbit_0_l).
+    change (Z.testbit (@Integers.unsigned 64%positive
+      (@Integers.and 64%positive v (@Integers.repr 64%positive (Z.of_N (N.shiftl 1%N bit)))))
+      (Z.of_N bit))
+      with (@Integers.testbit 64%positive
+        (@Integers.and 64%positive v (@Integers.repr 64%positive (Z.of_N (N.shiftl 1%N bit))))
+        (Z.of_N bit)) in Hb.
+    rewrite Integers.bits_and, (@Integers.testbit_repr 64%positive _ (Z.of_N bit)) in Hb
+      by (change (@Integers.zwordsize 64%positive) with 64%Z; lia).
+    rewrite N.shiftl_1_l, N2Z.inj_pow, Z.pow2_bits_true in Hb by lia.
+    unfold Integers.testbit in Hb.
+    rewrite Etb in Hb.
+    discriminate Hb.
+  - exfalso.
+    assert (Hnz :
+      @Integers.and 64%positive v (@Integers.repr 64%positive (Z.of_N (N.shiftl 1%N bit))) =
+      @Integers.zero 64%positive).
+    { apply Integers.same_bits_eq.
+      intros i Hi.
+      rewrite Integers.bits_zero, Integers.bits_and by exact Hi.
+      rewrite (@Integers.testbit_repr 64%positive _ i Hi).
+      change (@Integers.zwordsize 64%positive) with 64%Z in Hi.
+      rewrite N.shiftl_1_l, N2Z.inj_pow.
+      destruct (Z.eq_dec i (Z.of_N bit)) as [-> | Hne].
+      - unfold Integers.testbit.
+        rewrite Etb.
+        reflexivity.
+      - rewrite Z.pow2_bits_false by (try lia; exact Hne).
+        rewrite andb_false_r.
+        reflexivity. }
+    pose proof (proj2 Hiz ltac:(rewrite Hnz, (@Integers.unsigned_zero 64%positive); reflexivity))
+      as Htru.
+    discriminate Htru.
+Qed.
+
 Theorem a64_step_sym_oracle_sound :
   forall {Pa : Params} w inst out (penv : param_env Pa) foracle rf fl rf' fl' br_opt,
     decode_a64_word w = Some inst ->
@@ -499,7 +866,8 @@ Theorem a64_step_sym_oracle_sound :
      | Some b =>
          exists ce, aso_br_cond out = Some ce /\
          eval_closed_cert_expr penv foracle ce =
-           raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if b then @Integers.one 1%positive else @Integers.zero 1%positive)))
+           raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive
+             (if b then @Integers.one 1%positive else @Integers.zero 1%positive)))
      end).
 Proof.
   intros Pa w inst out penv foracle rf fl rf' fl' br_opt Hdec Hso Hm Hstep.
@@ -509,241 +877,132 @@ Proof.
   unfold a64_step_sym_oracle in Hso; rewrite Hdec in Hso.
   assert (Hdef_all : forall r, a64_def_read r (fun _ : N => true) = true)
     by (intro r; unfold a64_def_read; destruct (N.leb 31%N r); reflexivity).
-  assert (Hwr_other : forall sf rd (v : @Integers.bit_int (a64_w sf)) r,
-    r <> rd -> a64_read_reg r (a64_write_w sf rd v rf) = a64_read_reg r rf).
-  { intros sf0 rd0 v0 r0 Hne; unfold a64_read_reg, a64_write_w, a64_write_reg.
-    destruct (N.leb 31%N rd0); [reflexivity |].
-    destruct (N.leb 31%N r0); [reflexivity |].
-    apply N.eqb_neq in Hne; rewrite Hne; reflexivity. }
   destruct inst; cbn [a64_step_concrete] in Hstep; cbn [a64_inst_valid] in Hval.
   - (* A64_Nop *)
-    inversion Hso; inversion Hstep; subst; repeat split; try reflexivity; exact I.
+    inversion Hso; inversion Hstep; subst; clear Hso Hstep.
+    split; [intro; reflexivity |].
+    split; [intro; reflexivity |].
+    split; [exact I | reflexivity].
   - (* A64_AddSubImm *)
     destruct (N.eqb rn 31%N || (negb set_flags && N.eqb rd 31%N)); [discriminate Hso |].
     destruct (a64_sym_add_sub (a64_w sf) is_sub _ _) as [se sfl'] eqn:Esas.
     destruct (a64_eval_add_sub (a64_w sf) is_sub _ _) as [vr fl_n] eqn:Eeas.
     pose proof (eval_a64_sym_add_sub_sound penv foracle (a64_w sf) is_sub _ _ _ _
-                  (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _)) (eval_ce_bv_z _ _ (a64_w sf) (Z.of_N imm))) as [Hres Hfl'].
+      (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _))
+      (eval_ce_bv_z _ _ (a64_w sf) (Z.of_N imm))) as [Hres Hfl'].
     rewrite Esas, Eeas in Hres, Hfl'; cbn [fst snd] in Hres, Hfl'.
     inversion Hso; inversion Hstep; subst; clear Hso Hstep.
-    cbn [aso_rd_write aso_flags_write aso_br_cond].
-    pose proof (a64_oracle_wr_eval penv foracle sf rd se vr rf Hres) as Hwr.
-    repeat split.
-    + destruct (a64_oracle_wr sf rd se) as [[rd' e64] |]; [destruct Hwr as [-> [Hlt He]]; repeat split; [exact Hlt | apply Hwr_other | exact He] | exact Hwr].
-    + intro Hfn; unfold a64_oracle_fl_opt in Hfn; destruct set_flags; [discriminate Hfn | reflexivity].
-    + unfold a64_oracle_fl_opt, a64_step_flags_match; destruct set_flags; [destruct Hfl' as (H1 & H2 & H3 & H4 & _); repeat split; assumption | exact I].
+    exact (a64_oracle_step_alu_ok penv foracle rf fl sf set_flags rd se vr sfl' fl_n
+      0%N 0%Z Hres (fun _ => Hfl')).
   - (* A64_AddSubShift *)
     apply andb_true_iff in Hval as [_ Hamt]; apply N.ltb_lt in Hamt.
-    pose proof (eval_a64_sym_shift_sound _ _ (a64_w sf) _ _ sh amt (a64_w_32_64 sf) ltac:(destruct sf; exact Hamt) (a64_env_agrees_read_w _ _ _ _ _ sf rm Hag (Hdef_all _))) as Hsh.
+    pose proof (eval_a64_sym_shift_sound _ _ (a64_w sf) _ _ sh amt (a64_w_32_64 sf)
+      ltac:(destruct sf; exact Hamt) (a64_env_agrees_read_w _ _ _ _ _ sf rm Hag (Hdef_all _))) as Hsh.
     destruct (a64_sym_add_sub (a64_w sf) is_sub _ _) as [se sfl'] eqn:Esas.
     destruct (a64_eval_add_sub (a64_w sf) is_sub _ _) as [vr fl_n] eqn:Eeas.
     pose proof (eval_a64_sym_add_sub_sound penv foracle (a64_w sf) is_sub _ _ _ _
-                  (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _)) Hsh) as [Hres Hfl'].
+      (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _)) Hsh) as [Hres Hfl'].
     rewrite Esas, Eeas in Hres, Hfl'; cbn [fst snd] in Hres, Hfl'.
     inversion Hso; inversion Hstep; subst; clear Hso Hstep.
-    cbn [aso_rd_write aso_flags_write aso_br_cond].
-    pose proof (a64_oracle_wr_eval penv foracle sf rd se vr rf Hres) as Hwr.
-    repeat split.
-    + destruct (a64_oracle_wr sf rd se) as [[rd' e64] |]; [destruct Hwr as [-> [Hlt He]]; repeat split; [exact Hlt | apply Hwr_other | exact He] | exact Hwr].
-    + intro Hfn; unfold a64_oracle_fl_opt in Hfn; destruct set_flags; [discriminate Hfn | reflexivity].
-    + unfold a64_oracle_fl_opt, a64_step_flags_match; destruct set_flags; [destruct Hfl' as (H1 & H2 & H3 & H4 & _); repeat split; assumption | exact I].
+    exact (a64_oracle_step_alu_ok penv foracle rf fl sf set_flags rd se vr sfl' fl_n
+      0%N 0%Z Hres (fun _ => Hfl')).
   - (* A64_AddSubExt *)
     apply N.leb_le in Hval.
-    pose proof (eval_a64_sym_extend_sound _ _ (a64_w sf) _ _ ext amt (a64_w_32_64 sf) Hval (Hag rm (Hdef_all rm))) as Hext.
+    pose proof (eval_a64_sym_extend_sound _ _ (a64_w sf) _ _ ext amt (a64_w_32_64 sf)
+      Hval (Hag rm (Hdef_all rm))) as Hext.
     destruct (a64_sym_add_sub (a64_w sf) is_sub _ _) as [se sfl'] eqn:Esas.
     destruct (a64_eval_add_sub (a64_w sf) is_sub _ _) as [vr fl_n] eqn:Eeas.
     pose proof (eval_a64_sym_add_sub_sound penv foracle (a64_w sf) is_sub _ _ _ _
-                  (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _)) Hext) as [Hres Hfl'].
+      (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _)) Hext) as [Hres Hfl'].
     rewrite Esas, Eeas in Hres, Hfl'; cbn [fst snd] in Hres, Hfl'.
     inversion Hso; inversion Hstep; subst; clear Hso Hstep.
-    cbn [aso_rd_write aso_flags_write aso_br_cond].
-    pose proof (a64_oracle_wr_eval penv foracle sf rd se vr rf Hres) as Hwr.
-    repeat split.
-    + destruct (a64_oracle_wr sf rd se) as [[rd' e64] |]; [destruct Hwr as [-> [Hlt He]]; repeat split; [exact Hlt | apply Hwr_other | exact He] | exact Hwr].
-    + intro Hfn; unfold a64_oracle_fl_opt in Hfn; destruct set_flags; [discriminate Hfn | reflexivity].
-    + unfold a64_oracle_fl_opt, a64_step_flags_match; destruct set_flags; [destruct Hfl' as (H1 & H2 & H3 & H4 & _); repeat split; assumption | exact I].
+    exact (a64_oracle_step_alu_ok penv foracle rf fl sf set_flags rd se vr sfl' fl_n
+      0%N 0%Z Hres (fun _ => Hfl')).
   - (* A64_LogicalImm *)
-    assert (Hres : eval_closed_cert_expr penv foracle
-      (a64_sym_logic_op (a64_w sf) op (a64_sym_read_w sf rn a64_oracle_srf) (ce_bv_z (a64_w sf) (Z.of_N mask))) =
+    assert (Hres :
+      eval_closed_cert_expr penv foracle
+        (a64_sym_logic_op (a64_w sf) op (a64_sym_read_w sf rn a64_oracle_srf)
+          (ce_bv_z (a64_w sf) (Z.of_N mask))) =
       raise_ret (DVALUE_Base (@DVALUE_I Pa (a64_w sf)
         (a64_eval_logic_op (a64_w sf) op (a64_read_w sf rn rf) (@Integers.repr (a64_w sf) (Z.of_N mask)))))).
-    { unfold a64_sym_logic_op, a64_eval_logic_op; rewrite eval_ce_binop, (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _)), eval_ce_bv_z; cbn [eou_bind].
-      unfold eval_iop; rewrite eval_iop_integer_base_same_width; destruct op; reflexivity. }
+    { unfold a64_sym_logic_op, a64_eval_logic_op.
+      rewrite eval_ce_binop, (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _)), eval_ce_bv_z.
+      cbn [eou_bind]; unfold eval_iop; rewrite eval_iop_integer_base_same_width.
+      destruct op; reflexivity. }
     pose proof (eval_a64_sym_logic_flags_sound _ _ _ _ _ Hres) as Hfl'.
     inversion Hso; inversion Hstep; subst; clear Hso Hstep.
-    cbn [aso_rd_write aso_flags_write aso_br_cond].
-    pose proof (a64_oracle_wr_eval penv foracle sf rd _ _ rf Hres) as Hwr.
-    repeat split.
-    + destruct (a64_oracle_wr sf rd _) as [[rd' e64] |]; [destruct Hwr as [-> [Hlt He]]; repeat split; [exact Hlt | apply Hwr_other | exact He] | exact Hwr].
-    + intro Hfn; unfold a64_oracle_fl_opt in Hfn; destruct set_flags; [discriminate Hfn | reflexivity].
-    + unfold a64_oracle_fl_opt, a64_step_flags_match; destruct set_flags; [destruct Hfl' as (H1 & H2 & H3 & H4 & _); repeat split; assumption | exact I].
+    exact (a64_oracle_step_alu_ok penv foracle rf fl sf set_flags rd _ _ _ _
+      0%N 0%Z Hres (fun _ => Hfl')).
   - (* A64_LogicalShift *)
     apply N.ltb_lt in Hval.
-    pose proof (eval_a64_sym_shift_sound _ _ (a64_w sf) _ _ sh amt (a64_w_32_64 sf) ltac:(destruct sf; exact Hval) (a64_env_agrees_read_w _ _ _ _ _ sf rm Hag (Hdef_all _))) as Hsh.
-    assert (Hrhs : eval_closed_cert_expr penv foracle (if inv_rm then a64_sym_not (a64_w sf) _ else _) =
-      raise_ret (DVALUE_Base (@DVALUE_I Pa (a64_w sf)
-        (if inv_rm then @Integers.not (a64_w sf) (a64_eval_shift (a64_w sf) (a64_read_w sf rm rf) sh amt)
-         else a64_eval_shift (a64_w sf) (a64_read_w sf rm rf) sh amt))))
-      by (destruct inv_rm; [exact (eval_ce_not _ _ _ _ _ Hsh) | exact Hsh]).
-    set (vr_shift := a64_eval_shift (a64_w sf) (a64_read_w sf rm rf) sh amt) in *.
-    set (se_shift := a64_sym_shift (a64_w sf) (a64_sym_read_w sf rm a64_oracle_srf) sh amt) in *.
-    set (vr_rhs := if inv_rm then @Integers.not (a64_w sf) vr_shift else vr_shift) in *.
-    set (se_rhs := if inv_rm then a64_sym_not (a64_w sf) se_shift else se_shift) in *.
-    assert (Hres : eval_closed_cert_expr penv foracle
-      (a64_sym_logic_op (a64_w sf) op (a64_sym_read_w sf rn a64_oracle_srf) se_rhs) =
-      raise_ret (DVALUE_Base (@DVALUE_I Pa (a64_w sf)
-        (a64_eval_logic_op (a64_w sf) op (a64_read_w sf rn rf) vr_rhs)))).
-    { unfold a64_sym_logic_op, a64_eval_logic_op; rewrite eval_ce_binop, (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _)), Hrhs; cbn [eou_bind].
-      unfold eval_iop; rewrite eval_iop_integer_base_same_width; destruct op; reflexivity. }
+    pose proof (a64_oracle_logical_shift_eval penv foracle rf sf op inv_rm rn rm sh amt
+      Hag ltac:(destruct sf; exact Hval)) as Hres.
     pose proof (eval_a64_sym_logic_flags_sound _ _ _ _ _ Hres) as Hfl'.
     inversion Hso; inversion Hstep; subst; clear Hso Hstep.
-    cbn [aso_rd_write aso_flags_write aso_br_cond].
-    pose proof (a64_oracle_wr_eval penv foracle sf rd _ _ rf Hres) as Hwr.
-    repeat split.
-    + destruct (a64_oracle_wr sf rd _) as [[rd' e64] |]; [destruct Hwr as [-> [Hlt He]]; repeat split; [exact Hlt | apply Hwr_other | exact He] | exact Hwr].
-    + intro Hfn; unfold a64_oracle_fl_opt in Hfn; destruct set_flags; [discriminate Hfn | reflexivity].
-    + unfold a64_oracle_fl_opt, a64_step_flags_match; destruct set_flags; [destruct Hfl' as (H1 & H2 & H3 & H4 & _); repeat split; assumption | exact I].
+    exact (a64_oracle_step_alu_ok penv foracle rf fl sf set_flags rd _ _ _ _
+      0%N 0%Z Hres (fun _ => Hfl')).
   - (* A64_MoveWide *)
-    assert (Hres : eval_closed_cert_expr penv foracle
-      (match kind with
-       | AMW_Movz => ce_bv_z (a64_w sf) (Z.of_N (N.shiftl imm16 shift))
-       | AMW_Movn => a64_sym_not (a64_w sf) (ce_bv_z (a64_w sf) (Z.of_N (N.shiftl imm16 shift)))
-       | AMW_Movk =>
-           CE_BinOp CB_Or (a64_w sf) no_binop_flags
-             (CE_BinOp CB_And (a64_w sf) no_binop_flags (a64_sym_read_w sf rd a64_oracle_srf)
-               (a64_sym_not (a64_w sf) (ce_bv_z (a64_w sf) (Z.of_N (N.shiftl 65535%N shift)))))
-             (ce_bv_z (a64_w sf) (Z.of_N (N.shiftl imm16 shift)))
-       end) =
-      raise_ret (DVALUE_Base (@DVALUE_I Pa (a64_w sf)
-        (match kind with
-         | AMW_Movz => @Integers.repr (a64_w sf) (Z.of_N (N.shiftl imm16 shift))
-         | AMW_Movn => @Integers.not (a64_w sf) (@Integers.repr (a64_w sf) (Z.of_N (N.shiftl imm16 shift)))
-         | AMW_Movk =>
-             @Integers.or (a64_w sf)
-               (@Integers.and (a64_w sf) (a64_read_w sf rd rf)
-                 (@Integers.not (a64_w sf) (@Integers.repr (a64_w sf) (Z.of_N (N.shiftl 65535%N shift)))))
-               (@Integers.repr (a64_w sf) (Z.of_N (N.shiftl imm16 shift)))
-         end)))).
-    { destruct kind.
-      - exact (eval_ce_not _ _ _ _ _ (eval_ce_bv_z _ _ _ _)).
-      - apply eval_ce_bv_z.
-      - assert (Hand : eval_closed_cert_expr penv foracle
-          (CE_BinOp CB_And (a64_w sf) no_binop_flags (a64_sym_read_w sf rd a64_oracle_srf)
-            (a64_sym_not (a64_w sf) (ce_bv_z (a64_w sf) (Z.of_N (N.shiftl 65535%N shift))))) =
-          raise_ret (DVALUE_Base (@DVALUE_I Pa (a64_w sf)
-            (@Integers.and (a64_w sf) (a64_read_w sf rd rf)
-              (@Integers.not (a64_w sf) (@Integers.repr (a64_w sf) (Z.of_N (N.shiftl 65535%N shift)))))))).
-        { rewrite eval_ce_binop, (a64_env_agrees_read_w _ _ _ _ _ sf rd Hag (Hdef_all _)),
-                  (eval_ce_not _ _ _ _ _ (eval_ce_bv_z _ _ _ _)); cbn [eou_bind].
-          unfold eval_iop; rewrite eval_iop_integer_base_same_width; reflexivity. }
-        rewrite eval_ce_binop, Hand, eval_ce_bv_z; cbn [eou_bind].
-        unfold eval_iop; rewrite eval_iop_integer_base_same_width; reflexivity. }
+    pose proof (a64_oracle_move_wide_eval penv foracle rf sf kind rd imm16 shift Hag) as Hres.
     inversion Hso; inversion Hstep; subst; clear Hso Hstep.
-    cbn [aso_rd_write aso_flags_write aso_br_cond].
-    pose proof (a64_oracle_wr_eval penv foracle sf rd _ _ rf Hres) as Hwr.
-    split; [| split; [intro; reflexivity | split; [exact I | reflexivity]]].
-    destruct (a64_oracle_wr sf rd _) as [[rd' e64] |]; [destruct Hwr as [-> [Hlt He]]; repeat split; [exact Hlt | apply Hwr_other | exact He] | exact Hwr].
+    exact (a64_oracle_step_alu_ok penv foracle rf fl' sf false rd _ _ a64_oracle_sfl fl'
+      0%N 0%Z Hres (fun C => False_ind _ (Bool.diff_false_true C))).
   - (* A64_Bitfield *)
     apply andb_true_iff in Hval as [Hr1 Hs1]; apply N.ltb_lt in Hr1; apply N.ltb_lt in Hs1.
     pose proof (eval_a64_sym_bitfield_sound penv foracle sf kind _ _ _ _ _ _ Hr1 Hs1
-                  (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _))
-                  (a64_env_agrees_read_w _ _ _ _ _ sf rd Hag (Hdef_all _))) as Hres.
+      (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _))
+      (a64_env_agrees_read_w _ _ _ _ _ sf rd Hag (Hdef_all _))) as Hres.
     inversion Hso; inversion Hstep; subst; clear Hso Hstep.
-    cbn [aso_rd_write aso_flags_write aso_br_cond].
-    pose proof (a64_oracle_wr_eval penv foracle sf rd _ _ rf Hres) as Hwr.
-    split; [| split; [intro; reflexivity | split; [exact I | reflexivity]]].
-    destruct (a64_oracle_wr sf rd _) as [[rd' e64] |]; [destruct Hwr as [-> [Hlt He]]; repeat split; [exact Hlt | apply Hwr_other | exact He] | exact Hwr].
+    exact (a64_oracle_step_alu_ok penv foracle rf fl' sf false rd _ _ a64_oracle_sfl fl'
+      0%N 0%Z Hres (fun C => False_ind _ (Bool.diff_false_true C))).
   - (* A64_Extr *)
     pose proof (eval_a64_sym_extr_sound _ _ (a64_w sf) _ _ _ _ lsb (a64_w_32_64 sf)
-                  (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _))
-                  (a64_env_agrees_read_w _ _ _ _ _ sf rm Hag (Hdef_all _))) as Hres.
+      (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _))
+      (a64_env_agrees_read_w _ _ _ _ _ sf rm Hag (Hdef_all _))) as Hres.
     inversion Hso; inversion Hstep; subst; clear Hso Hstep.
-    cbn [aso_rd_write aso_flags_write aso_br_cond].
-    pose proof (a64_oracle_wr_eval penv foracle sf rd _ _ rf Hres) as Hwr.
-    split; [| split; [intro; reflexivity | split; [exact I | reflexivity]]].
-    destruct (a64_oracle_wr sf rd _) as [[rd' e64] |]; [destruct Hwr as [-> [Hlt He]]; repeat split; [exact Hlt | apply Hwr_other | exact He] | exact Hwr].
+    exact (a64_oracle_step_alu_ok penv foracle rf fl' sf false rd _ _ a64_oracle_sfl fl'
+      0%N 0%Z Hres (fun C => False_ind _ (Bool.diff_false_true C))).
   - (* A64_MulAddSub *)
-    assert (Hmul : eval_closed_cert_expr penv foracle
-      (CE_BinOp CB_Mul (a64_w sf) no_binop_flags (a64_sym_read_w sf rn a64_oracle_srf) (a64_sym_read_w sf rm a64_oracle_srf)) =
-      raise_ret (DVALUE_Base (@DVALUE_I Pa (a64_w sf) (@Integers.mul (a64_w sf) (a64_read_w sf rn rf) (a64_read_w sf rm rf))))).
-    { rewrite eval_ce_binop, (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _)),
-                (a64_env_agrees_read_w _ _ _ _ _ sf rm Hag (Hdef_all _)); cbn [eou_bind].
-      destruct sf; unfold eval_iop; rewrite eval_iop_integer_base_same_width; cbn - [Integers.mul a64_read_w]; reflexivity. }
-    assert (Hres : eval_closed_cert_expr penv foracle
-      (CE_BinOp (if is_sub then CB_Sub else CB_Add) (a64_w sf) no_binop_flags (a64_sym_read_w sf ra a64_oracle_srf)
-        (CE_BinOp CB_Mul (a64_w sf) no_binop_flags (a64_sym_read_w sf rn a64_oracle_srf) (a64_sym_read_w sf rm a64_oracle_srf))) =
-      raise_ret (DVALUE_Base (@DVALUE_I Pa (a64_w sf)
-        (let p := @Integers.mul (a64_w sf) (a64_read_w sf rn rf) (a64_read_w sf rm rf) in
-         let a := a64_read_w sf ra rf in
-         if is_sub then @Integers.sub (a64_w sf) a p else @Integers.add (a64_w sf) a p)))).
-    { rewrite eval_ce_binop, (a64_env_agrees_read_w _ _ _ _ _ sf ra Hag (Hdef_all _)), Hmul; cbn [eou_bind].
-      destruct sf, is_sub; unfold eval_iop; rewrite eval_iop_integer_base_same_width; cbn - [Integers.mul Integers.add Integers.sub a64_read_w]; reflexivity. }
+    pose proof (a64_oracle_mul_add_sub_eval penv foracle rf sf is_sub rn rm ra Hag) as Hres.
     inversion Hso; inversion Hstep; subst; clear Hso Hstep.
-    cbn [aso_rd_write aso_flags_write aso_br_cond].
-    pose proof (a64_oracle_wr_eval penv foracle sf rd _ _ rf Hres) as Hwr.
-    split; [| split; [intro; reflexivity | split; [exact I | reflexivity]]].
-    destruct (a64_oracle_wr sf rd _) as [[rd' e64] |]; [destruct Hwr as [-> [Hlt He]]; repeat split; [exact Hlt | apply Hwr_other | exact He] | exact Hwr].
+    exact (a64_oracle_step_alu_ok penv foracle rf fl' sf false rd _ _ a64_oracle_sfl fl'
+      0%N 0%Z Hres (fun C => False_ind _ (Bool.diff_false_true C))).
   - (* A64_MulWidening *)
-    set (en64 := CE_Cast (if is_signed then CCK_SExt else CCK_ZExt) 32%positive 64%positive no_cast_flags (a64_sym_read_w false rn a64_oracle_srf)).
-    set (em64 := CE_Cast (if is_signed then CCK_SExt else CCK_ZExt) 32%positive 64%positive no_cast_flags (a64_sym_read_w false rm a64_oracle_srf)).
-    set (vn64 := @Integers.repr 64%positive (if is_signed then @Integers.signed 32%positive (a64_read_w false rn rf) else @Integers.unsigned 32%positive (a64_read_w false rn rf))).
-    set (vm64 := @Integers.repr 64%positive (if is_signed then @Integers.signed 32%positive (a64_read_w false rm rf) else @Integers.unsigned 32%positive (a64_read_w false rm rf))).
-    assert (Hn64 : eval_closed_cert_expr penv foracle en64 = raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive vn64)))
-      by (unfold en64, vn64; destruct is_signed; [apply eval_ce_sext | apply eval_ce_zext]; try reflexivity; exact (a64_env_agrees_read_w _ _ _ _ _ false rn Hag (Hdef_all _))).
-    assert (Hm64 : eval_closed_cert_expr penv foracle em64 = raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive vm64)))
-      by (unfold em64, vm64; destruct is_signed; [apply eval_ce_sext | apply eval_ce_zext]; try reflexivity; exact (a64_env_agrees_read_w _ _ _ _ _ false rm Hag (Hdef_all _))).
-    assert (Hmul : eval_closed_cert_expr penv foracle (CE_BinOp CB_Mul 64%positive no_binop_flags en64 em64) =
-      raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive (@Integers.mul 64%positive vn64 vm64)))).
-    { rewrite eval_ce_binop, Hn64, Hm64; cbn [eou_bind]; unfold eval_iop; rewrite eval_iop_integer_base_same_width; cbn - [Integers.mul vn64 vm64]; reflexivity. }
-    assert (Hres : eval_closed_cert_expr penv foracle
-      (CE_BinOp (if is_sub then CB_Sub else CB_Add) 64%positive no_binop_flags (a64_sym_read_reg ra a64_oracle_srf)
-        (CE_BinOp CB_Mul 64%positive no_binop_flags en64 em64)) =
-      raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive
-        (if is_sub then @Integers.sub 64%positive (a64_read_reg ra rf) (@Integers.mul 64%positive vn64 vm64)
-         else @Integers.add 64%positive (a64_read_reg ra rf) (@Integers.mul 64%positive vn64 vm64))))).
-    { rewrite eval_ce_binop, (Hag ra (Hdef_all ra)), Hmul; cbn [eou_bind]; unfold eval_iop; rewrite eval_iop_integer_base_same_width;
-        destruct is_sub; cbn - [Integers.mul Integers.add Integers.sub vn64 vm64 a64_read_reg]; reflexivity. }
+    pose proof (a64_oracle_mul_widening_eval penv foracle rf is_signed is_sub rn rm ra Hag) as Hres.
     inversion Hso; inversion Hstep; subst; clear Hso Hstep.
-    cbn [aso_rd_write aso_flags_write aso_br_cond].
-    pose proof (a64_oracle_wr_eval penv foracle true rd _ _ rf Hres) as Hwr.
-    split; [| split; [intro; reflexivity | split; [exact I | reflexivity]]].
-    destruct (a64_oracle_wr true rd _) as [[rd' e64] |]; [destruct Hwr as [-> [Hlt He]]; repeat split; [exact Hlt | apply (Hwr_other true rd) | exact He] | exact Hwr].
+    exact (a64_oracle_step_alu_ok penv foracle rf fl' true false rd _ _ a64_oracle_sfl fl'
+      0%N 0%Z Hres (fun C => False_ind _ (Bool.diff_false_true C))).
   - (* A64_DataProc2 *)
     pose proof (eval_a64_sym_dp2_sound _ _ (a64_w sf) op _ _ _ _ (a64_w_32_64 sf)
-                  (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _)) (a64_env_agrees_read_w _ _ _ _ _ sf rm Hag (Hdef_all _))) as Hres.
+      (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _))
+      (a64_env_agrees_read_w _ _ _ _ _ sf rm Hag (Hdef_all _))) as Hres.
     inversion Hso; inversion Hstep; subst; clear Hso Hstep.
-    cbn [aso_rd_write aso_flags_write aso_br_cond].
-    pose proof (a64_oracle_wr_eval penv foracle sf rd _ _ rf Hres) as Hwr.
-    split; [| split; [intro; reflexivity | split; [exact I | reflexivity]]].
-    destruct (a64_oracle_wr sf rd _) as [[rd' e64] |]; [destruct Hwr as [-> [Hlt He]]; repeat split; [exact Hlt | apply Hwr_other | exact He] | exact Hwr].
+    exact (a64_oracle_step_alu_ok penv foracle rf fl' sf false rd _ _ a64_oracle_sfl fl'
+      0%N 0%Z Hres (fun C => False_ind _ (Bool.diff_false_true C))).
   - (* A64_CondSelect *)
     pose proof (eval_a64_sym_csel_sound _ _ (a64_w sf) kind cond a64_oracle_sfl fl _ _ _ _ Hfl
-                  (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _)) (a64_env_agrees_read_w _ _ _ _ _ sf rm Hag (Hdef_all _))) as Hres.
+      (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _))
+      (a64_env_agrees_read_w _ _ _ _ _ sf rm Hag (Hdef_all _))) as Hres.
     inversion Hso; inversion Hstep; subst; clear Hso Hstep.
-    cbn [aso_rd_write aso_flags_write aso_br_cond].
-    pose proof (a64_oracle_wr_eval penv foracle sf rd _ _ rf Hres) as Hwr.
-    split; [| split; [intro; reflexivity | split; [exact I | reflexivity]]].
-    destruct (a64_oracle_wr sf rd _) as [[rd' e64] |]; [destruct Hwr as [-> [Hlt He]]; repeat split; [exact Hlt | apply Hwr_other | exact He] | exact Hwr].
+    exact (a64_oracle_step_alu_ok penv foracle rf fl' sf false rd _ _ a64_oracle_sfl fl'
+      0%N 0%Z Hres (fun C => False_ind _ (Bool.diff_false_true C))).
   - (* A64_CondCompareReg *)
     destruct (a64_sym_add_sub (a64_w sf) is_sub _ _) as [se csfl] eqn:Esas.
     destruct (a64_eval_add_sub (a64_w sf) is_sub _ _) as [vr cfl] eqn:Eeas.
     pose proof (eval_a64_sym_add_sub_sound penv foracle (a64_w sf) is_sub _ _ _ _
-                  (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _)) (a64_env_agrees_read_w _ _ _ _ _ sf rm Hag (Hdef_all _))) as [_ Hcsfl].
+      (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _))
+      (a64_env_agrees_read_w _ _ _ _ _ sf rm Hag (Hdef_all _))) as [_ Hcsfl].
     rewrite Esas, Eeas in Hcsfl; cbn [snd] in Hcsfl.
-    pose proof (eval_a64_sym_ite_flags_sound _ _ _ _ _ _ _ _ (eval_a64_sym_cond_sound _ _ cond _ _ Hfl) Hcsfl (eval_a64_sym_flags_imm4_sound _ _ nzcv)) as Hite.
     inversion Hso; inversion Hstep; subst; clear Hso Hstep.
-    cbn [aso_rd_write aso_flags_write aso_br_cond a64_step_flags_match].
-    split; [intro; reflexivity | split; [intro C; discriminate C | split; [destruct Hite as (H1 & H2 & H3 & H4 & _); repeat split; assumption | reflexivity]]].
+    exact (a64_oracle_step_ccmp_ok penv foracle rf' fl cond a64_oracle_sfl csfl cfl nzcv 0%N 0%Z Hfl Hcsfl).
   - (* A64_CondCompareImm *)
     destruct (a64_sym_add_sub (a64_w sf) is_sub _ _) as [se csfl] eqn:Esas.
     destruct (a64_eval_add_sub (a64_w sf) is_sub _ _) as [vr cfl] eqn:Eeas.
     pose proof (eval_a64_sym_add_sub_sound penv foracle (a64_w sf) is_sub _ _ _ _
-                  (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _)) (eval_ce_bv_z _ _ (a64_w sf) (Z.of_N imm5))) as [_ Hcsfl].
+      (a64_env_agrees_read_w _ _ _ _ _ sf rn Hag (Hdef_all _))
+      (eval_ce_bv_z _ _ (a64_w sf) (Z.of_N imm5))) as [_ Hcsfl].
     rewrite Esas, Eeas in Hcsfl; cbn [snd] in Hcsfl.
-    pose proof (eval_a64_sym_ite_flags_sound _ _ _ _ _ _ _ _ (eval_a64_sym_cond_sound _ _ cond _ _ Hfl) Hcsfl (eval_a64_sym_flags_imm4_sound _ _ nzcv)) as Hite.
     inversion Hso; inversion Hstep; subst; clear Hso Hstep.
-    cbn [aso_rd_write aso_flags_write aso_br_cond a64_step_flags_match].
-    split; [intro; reflexivity | split; [intro C; discriminate C | split; [destruct Hite as (H1 & H2 & H3 & H4 & _); repeat split; assumption | reflexivity]]].
+    exact (a64_oracle_step_ccmp_ok penv foracle rf' fl cond a64_oracle_sfl csfl cfl nzcv 0%N 0%Z Hfl Hcsfl).
   - (* A64_LdStImm *)
     discriminate Hso.
   - (* A64_LdStPair *)
@@ -751,54 +1010,59 @@ Proof.
   - (* A64_B *)
     inversion Hso; inversion Hstep; subst; clear Hso Hstep.
     cbn [aso_rd_write aso_flags_write aso_br_cond a64_step_flags_match].
-    split; [intro; reflexivity | split; [intro; reflexivity | split; [exact I | reflexivity]]].
+    split; [intro; reflexivity |].
+    split; [intro; reflexivity |].
+    split; [exact I | reflexivity].
   - (* A64_BCond *)
     inversion Hso; inversion Hstep; subst; clear Hso Hstep.
     cbn [aso_rd_write aso_flags_write aso_br_cond a64_step_flags_match].
-    split; [intro; reflexivity | split; [intro; reflexivity | split; [exact I | eexists; split; [reflexivity | exact (eval_a64_sym_cond_sound _ _ cond _ _ Hfl)]]]].
+    split; [intro; reflexivity |].
+    split; [intro; reflexivity |].
+    split; [exact I |].
+    eexists; split; [reflexivity | exact (eval_a64_sym_cond_sound _ _ cond _ _ Hfl)].
   - (* A64_Cbz *)
     inversion Hso; inversion Hstep; subst; clear Hso Hstep.
     cbn [aso_rd_write aso_flags_write aso_br_cond a64_step_flags_match].
-    split; [intro; reflexivity | split; [intro; reflexivity | split; [exact I | eexists; split; [reflexivity |]]]].
-    destruct is_nz;
-      [exact (eval_ce_icmp_eq_bool _ _ CIP_Ne _ _ _ _ _ (a64_env_agrees_read_w _ _ _ _ _ sf rt Hag (Hdef_all _)) ltac:(rewrite eval_ce_const, repr_zero_N; reflexivity))
-      | exact (eval_ce_icmp_eq_bool _ _ CIP_Eq _ _ _ _ _ (a64_env_agrees_read_w _ _ _ _ _ sf rt Hag (Hdef_all _)) ltac:(rewrite eval_ce_const, repr_zero_N; reflexivity))].
+    split; [intro; reflexivity |].
+    split; [intro; reflexivity |].
+    split; [exact I |].
+    eexists; split; [reflexivity |].
+    destruct is_nz.
+    + exact (eval_ce_icmp_eq_bool _ _ CIP_Ne _ _ _ _ _
+        (a64_env_agrees_read_w _ _ _ _ _ sf rt Hag (Hdef_all _))
+        ltac:(rewrite eval_ce_const, repr_zero_N; reflexivity)).
+    + exact (eval_ce_icmp_eq_bool _ _ CIP_Eq _ _ _ _ _
+        (a64_env_agrees_read_w _ _ _ _ _ sf rt Hag (Hdef_all _))
+        ltac:(rewrite eval_ce_const, repr_zero_N; reflexivity)).
   - (* A64_Tbz *)
     apply N.ltb_lt in Hval.
-    assert (Hm_tb : eval_closed_cert_expr penv foracle
-      (CE_BinOp CB_And 64%positive no_binop_flags (a64_sym_read_reg rt a64_oracle_srf) (CE_BvConst 64%positive (N.shiftl 1%N bit))) =
+    assert (Hm_tb :
+      eval_closed_cert_expr penv foracle
+        (CE_BinOp CB_And 64%positive no_binop_flags (a64_sym_read_reg rt a64_oracle_srf)
+          (CE_BvConst 64%positive (N.shiftl 1%N bit))) =
       raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive
-        (@Integers.and 64%positive (a64_read_reg rt rf) (@Integers.repr 64%positive (Z.of_N (N.shiftl 1%N bit))))))).
-    { rewrite eval_ce_binop, (Hag rt (Hdef_all rt)), eval_ce_const; cbn [eou_bind]; unfold eval_iop; rewrite eval_iop_integer_base_same_width; reflexivity. }
-    assert (Heq_tb : negb (@Integers.eq 64%positive (@Integers.and 64%positive (a64_read_reg rt rf) (@Integers.repr 64%positive (Z.of_N (N.shiftl 1%N bit)))) (@Integers.zero 64%positive)) =
-                     Z.testbit (@Integers.unsigned 64%positive (a64_read_reg rt rf)) (Z.of_N bit)).
-    { pose proof (integers_eq_zero_iff 64%positive (@Integers.and 64%positive (a64_read_reg rt rf) (@Integers.repr 64%positive (Z.of_N (N.shiftl 1%N bit))))) as Hiz.
-      destruct (@Integers.eq 64%positive _ _) eqn:Ez,
-               (Z.testbit (@Integers.unsigned 64%positive (a64_read_reg rt rf)) (Z.of_N bit)) eqn:Etb; try reflexivity.
-      - exfalso; pose proof (proj1 Hiz eq_refl) as Hz.
-        assert (Hb : Z.testbit (@Integers.unsigned 64%positive (@Integers.and 64%positive (a64_read_reg rt rf) (@Integers.repr 64%positive (Z.of_N (N.shiftl 1%N bit))))) (Z.of_N bit) = false)
-          by (rewrite Hz; apply Z.testbit_0_l).
-        change (Z.testbit (@Integers.unsigned 64%positive (@Integers.and 64%positive (a64_read_reg rt rf) (@Integers.repr 64%positive (Z.of_N (N.shiftl 1%N bit))))) (Z.of_N bit))
-          with (@Integers.testbit 64%positive (@Integers.and 64%positive (a64_read_reg rt rf) (@Integers.repr 64%positive (Z.of_N (N.shiftl 1%N bit)))) (Z.of_N bit)) in Hb.
-        rewrite Integers.bits_and, (@Integers.testbit_repr 64%positive _ (Z.of_N bit)) in Hb by (change (@Integers.zwordsize 64%positive) with 64%Z; lia).
-        rewrite N.shiftl_1_l, N2Z.inj_pow, Z.pow2_bits_true in Hb by lia.
-        unfold Integers.testbit in Hb; rewrite Etb in Hb; discriminate Hb.
-      - exfalso; assert (Hnz : @Integers.and 64%positive (a64_read_reg rt rf) (@Integers.repr 64%positive (Z.of_N (N.shiftl 1%N bit))) = @Integers.zero 64%positive).
-        { apply Integers.same_bits_eq; intros i Hi; rewrite Integers.bits_zero, Integers.bits_and by exact Hi.
-          rewrite (@Integers.testbit_repr 64%positive _ i Hi); change (@Integers.zwordsize 64%positive) with 64%Z in Hi.
-          rewrite N.shiftl_1_l, N2Z.inj_pow; destruct (Z.eq_dec i (Z.of_N bit)) as [-> | Hne].
-          - unfold Integers.testbit; rewrite Etb; reflexivity.
-          - rewrite Z.pow2_bits_false by (try lia; exact Hne); rewrite andb_false_r; reflexivity. }
-        pose proof (proj2 Hiz ltac:(rewrite Hnz, (@Integers.unsigned_zero 64%positive); reflexivity)) as Htru; discriminate Htru. }
+        (@Integers.and 64%positive (a64_read_reg rt rf)
+          (@Integers.repr 64%positive (Z.of_N (N.shiftl 1%N bit))))))).
+    { rewrite eval_ce_binop, (Hag rt (Hdef_all rt)), eval_ce_const.
+      cbn [eou_bind]; unfold eval_iop; rewrite eval_iop_integer_base_same_width; reflexivity. }
+    pose proof (a64_oracle_tbz_bit_eq (a64_read_reg rt rf) bit Hval) as Heq_tb.
     inversion Hso; inversion Hstep; subst; clear Hso Hstep.
     cbn [aso_rd_write aso_flags_write aso_br_cond a64_step_flags_match].
-    split; [intro; reflexivity | split; [intro; reflexivity | split; [exact I | eexists; split; [reflexivity |]]]].
+    split; [intro; reflexivity |].
+    split; [intro; reflexivity |].
+    split; [exact I |].
+    eexists; split; [reflexivity |].
     rewrite <- Heq_tb; destruct is_nz.
-    + exact (eval_ce_icmp_eq_bool _ _ CIP_Ne _ _ _ _ _ Hm_tb ltac:(rewrite eval_ce_const, repr_zero_N; reflexivity)).
-    + rewrite negb_involutive; exact (eval_ce_icmp_eq_bool _ _ CIP_Eq _ _ _ _ _ Hm_tb ltac:(rewrite eval_ce_const, repr_zero_N; reflexivity)).
+    + exact (eval_ce_icmp_eq_bool _ _ CIP_Ne _ _ _ _ _ Hm_tb
+        ltac:(rewrite eval_ce_const, repr_zero_N; reflexivity)).
+    + rewrite negb_involutive.
+      exact (eval_ce_icmp_eq_bool _ _ CIP_Eq _ _ _ _ _ Hm_tb
+        ltac:(rewrite eval_ce_const, repr_zero_N; reflexivity)).
   - (* A64_Ret *)
     inversion Hso; inversion Hstep; subst; clear Hso Hstep.
     cbn [aso_rd_write aso_flags_write aso_br_cond a64_step_flags_match].
-    split; [intro; reflexivity | split; [intro; reflexivity | split; [exact I | reflexivity]]].
+    split; [intro; reflexivity |].
+    split; [intro; reflexivity |].
+    split; [exact I | reflexivity].
 Qed.
 

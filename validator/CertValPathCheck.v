@@ -288,7 +288,10 @@ Proof.
       destruct (ss && negb (msamesign il ir)); [discriminate Eint |].
       destruct (negb (@Integers.eq w il ir)) eqn:Ene;
         [| exfalso;
-           apply (f_equal (fun e => match e with raise_ret v => DVALUE_Base v | _ => DVALUE_Base DVALUE_Poison end)) in Eint;
+           apply (f_equal (fun e => match e with
+                                    | raise_ret v => DVALUE_Base v
+                                    | _ => DVALUE_Base DVALUE_Poison
+                                    end)) in Eint;
            cbn in Eint; apply dvalue_base_I_same_sz_inj in Eint; subst cbit;
            rewrite bit1_unsigned_zero in Hon; discriminate Hon].
       apply negb_true_iff in Ene; unfold Integers.eq in Ene.
@@ -316,7 +319,10 @@ Proof.
       destruct (ss && negb (msamesign il ir)); [discriminate Eint |].
       destruct (@Integers.ltu w il ir) eqn:Elt;
         [| exfalso;
-           apply (f_equal (fun e => match e with raise_ret v => DVALUE_Base v | _ => DVALUE_Base DVALUE_Poison end)) in Eint;
+           apply (f_equal (fun e => match e with
+                                    | raise_ret v => DVALUE_Base v
+                                    | _ => DVALUE_Base DVALUE_Poison
+                                    end)) in Eint;
            cbn in Eint; apply dvalue_base_I_same_sz_inj in Eint; subst cbit;
            rewrite bit1_unsigned_zero in Hon; discriminate Hon].
       unfold Integers.ltu in Elt.
@@ -335,7 +341,10 @@ Proof.
       destruct (ss && negb (msamesign il ir)); [discriminate Eint |].
       destruct (@Integers.ltu w ir il) eqn:Egt;
         [| exfalso;
-           apply (f_equal (fun e => match e with raise_ret v => DVALUE_Base v | _ => DVALUE_Base DVALUE_Poison end)) in Eint;
+           apply (f_equal (fun e => match e with
+                                    | raise_ret v => DVALUE_Base v
+                                    | _ => DVALUE_Base DVALUE_Poison
+                                    end)) in Eint;
            cbn in Eint; apply dvalue_base_I_same_sz_inj in Eint; subst cbit;
            rewrite bit1_unsigned_zero in Hon; discriminate Hon].
       unfold Integers.ltu in Egt.
@@ -354,7 +363,10 @@ Proof.
     destruct (ss && negb (msamesign il ir)); [discriminate Eint |].
     destruct (@Integers.eq w il ir) eqn:Eeq;
       [exfalso;
-       apply (f_equal (fun e => match e with raise_ret v => DVALUE_Base v | _ => DVALUE_Base DVALUE_Poison end)) in Eint;
+       apply (f_equal (fun e => match e with
+                                | raise_ret v => DVALUE_Base v
+                                | _ => DVALUE_Base DVALUE_Poison
+                                end)) in Eint;
        cbn in Eint; apply dvalue_base_I_same_sz_inj in Eint; subst cbit;
        rewrite bit1_unsigned_one in Hon; discriminate Hon |].
     unfold Integers.eq in Eeq.
@@ -478,7 +490,8 @@ Proof.
       cbn [liftM bind ret Functor_Monad EOU_monad] in Hev |- *.
     destruct b;
       (inversion Hev; subst; eexists; split;
-       [reflexivity | rewrite ?(@Integers.unsigned_one 1%positive), ?(@Integers.unsigned_zero 1%positive); reflexivity]).
+       [reflexivity
+       | rewrite ?(@Integers.unsigned_one 1%positive), ?(@Integers.unsigned_zero 1%positive); reflexivity]).
 Qed.
 
 Definition binop_always_non_poison_flags (op : cert_binop) (fl : cert_binop_flags) : bool :=
@@ -742,7 +755,8 @@ Proof.
   destruct pr, b; cbn in Hrel; try discriminate;
     inversion Hrel; subst;
     cbn [collect_free_vars];
-    split; intros z Hz; apply in_app_iff; first [left; exact Hz | right; exact Hz].
+    split; intros z Hz; apply in_app_iff;
+      first [left; exact Hz | right; exact Hz].
 Qed.
 
 Lemma path_implies_signed_ge_zero_sound {Pa : Params} :
@@ -900,7 +914,8 @@ Proof.
   intros allowed ctx path_ctx c penv foracle b_out Hpenv Hctx Hph Hfv Hlk.
   unfold lookup_path_bool in Hlk.
   destruct (lookup_path_bool_direct ctx path_ctx c) as [bd |] eqn:Ed.
-  - inversion Hlk; subst b_out; exact (lookup_path_bool_direct_sound allowed ctx path_ctx c penv foracle bd Hpenv Hctx Hph Hfv Ed).
+  - inversion Hlk; subst b_out.
+    exact (lookup_path_bool_direct_sound allowed ctx path_ctx c penv foracle bd Hpenv Hctx Hph Hfv Ed).
   - destruct c as [| | | | pr ss wc a b | | | |]; try discriminate Hlk.
     destruct ss; [discriminate Hlk |].
     destruct (ub_free_expr a && ub_free_expr b) eqn:Eub; [| discriminate Hlk].
@@ -1026,7 +1041,9 @@ Proof.
         rewrite ?(@Integers.unsigned_one 1%positive), ?(@Integers.unsigned_zero 1%positive); cbn
     end;
     try reflexivity;
-    (f_equal; f_equal; f_equal; rewrite <- (@Integers.repr_signed w ix), <- (@Integers.repr_signed w iy); f_equal; lia).
+    (f_equal; f_equal; f_equal;
+     rewrite <- (@Integers.repr_signed w ix), <- (@Integers.repr_signed w iy);
+     f_equal; lia).
   destruct pr; try discriminate Hsm.
   - destruct (cert_expr_eqb a t && cert_expr_eqb b f) eqn:Etf.
     + destruct (path_implies_signed_le path_ctx a b) eqn:Hcmp.
@@ -1233,13 +1250,15 @@ Proof.
         destruct (lookup_path_bool ctx (pc :: pcs) (simplify_expr_with_path_aux ctx (pc :: pcs) l)) as [[|] |],
                  (lookup_path_bool ctx (pc :: pcs) (simplify_expr_with_path_aux ctx (pc :: pcs) r)) as [[|] |];
           repeat match goal with |- context [if ?b then _ else _] => destruct b end;
-          first [exact (Hconst1 0%N Ew1) | exact (Hconst1 1%N Ew1) | exact (Hl'_ok Ew1) | exact (Hr'_ok Ew1) | exact Hdefault].
+          first [exact (Hconst1 0%N Ew1) | exact (Hconst1 1%N Ew1)
+                | exact (Hl'_ok Ew1) | exact (Hr'_ok Ew1) | exact Hdefault].
       * destruct (Pos.eqb w 1%positive && negb (cbf_disjoint fl)) eqn:Ew1;
           [apply andb_true_iff in Ew1 as [Ew1 _]; apply Pos.eqb_eq in Ew1 | exact Hdefault].
         destruct (lookup_path_bool ctx (pc :: pcs) (simplify_expr_with_path_aux ctx (pc :: pcs) l)) as [[|] |],
                  (lookup_path_bool ctx (pc :: pcs) (simplify_expr_with_path_aux ctx (pc :: pcs) r)) as [[|] |];
           repeat match goal with |- context [if ?b then _ else _] => destruct b end;
-          first [exact (Hconst1 0%N Ew1) | exact (Hconst1 1%N Ew1) | exact (Hl'_ok Ew1) | exact (Hr'_ok Ew1) | exact Hdefault].
+          first [exact (Hconst1 0%N Ew1) | exact (Hconst1 1%N Ew1)
+                | exact (Hl'_ok Ew1) | exact (Hr'_ok Ew1) | exact Hdefault].
     + cbn [wt_cert_expr is_let_free_expr cert_expr_bit_width collect_free_vars] in *.
       rewrite !andb_true_iff in Hwt; rewrite !andb_true_iff in Hlf.
       destruct Hwt as (((Hwtl & Hwtr) & Hwl) & Hwr);
@@ -1294,7 +1313,8 @@ Proof.
         incl (collect_free_vars [] (simplify_expr_with_path_aux ctx (pc :: pcs) t))
              (collect_free_vars [] c ++ collect_free_vars [] t ++ collect_free_vars [] f)).
       { repeat split; [exact Hwt' | rewrite Hbwt', Hwtb; reflexivity | exact Hlft' |].
-        intros x Hx; apply in_app_iff; right; apply in_app_iff; left; exact (Hfvt' x Hx). }
+        intros x Hx; apply in_app_iff; right; apply in_app_iff; left.
+        exact (Hfvt' x Hx). }
       assert (Hf'_ok :
         wt_cert_expr [] (simplify_expr_with_path_aux ctx (pc :: pcs) f) = true /\
         cert_expr_bit_width (simplify_expr_with_path_aux ctx (pc :: pcs) f) = w /\
@@ -1302,7 +1322,8 @@ Proof.
         incl (collect_free_vars [] (simplify_expr_with_path_aux ctx (pc :: pcs) f))
              (collect_free_vars [] c ++ collect_free_vars [] t ++ collect_free_vars [] f)).
       { repeat split; [exact Hwf' | rewrite Hbwf', Hwf; reflexivity | exact Hlff' |].
-        intros x Hx; apply in_app_iff; right; apply in_app_iff; right; exact (Hfvf' x Hx). }
+        intros x Hx; apply in_app_iff; right; apply in_app_iff; right.
+        exact (Hfvf' x Hx). }
       destruct (lookup_path_bool ctx (pc :: pcs) (simplify_expr_with_path_aux ctx (pc :: pcs) c)) as [[|] |].
       * destruct (ub_free_expr (simplify_expr_with_path_aux ctx (pc :: pcs) f)); [exact Ht'_ok | exact Hsel_def].
       * destruct (ub_free_expr (simplify_expr_with_path_aux ctx (pc :: pcs) t)); [exact Hf'_ok | exact Hsel_def].
@@ -1322,7 +1343,8 @@ Lemma cert_eou_bind_equiv {Pa : Params} :
     equiv_eou_dvalue (eou_bind m1 k1) (eou_bind m2 k2).
 Proof.
   intros m1 m2 k1 k2 Hm Hk.
-  destruct m1, m2; cbn in *; try contradiction; trivial; subst; try reflexivity; apply Hk.
+  destruct m1, m2; cbn in *; try contradiction;
+    trivial; subst; try reflexivity; apply Hk.
 Qed.
 
 Lemma path_safe_nonpoison_i1_sound {Pa : Params} :
@@ -1350,6 +1372,480 @@ Proof.
     pose proof (expr_non_poison_under_ctx_sound ctx x penv foracle vx Hnp Hwt Evx Hctx) as Hnpx.
     rewrite Hbw in Hwfx; destruct Hwfx as [Habs | [ix ->]];
       [contradiction Hnpx | exists ix; exact Evx].
+Qed.
+
+Local Lemma simplify_expr_with_path_eval_binop_sub {Pa : Params} :
+  forall allowed (ctx : ub_ctx) pc pcs w fl l r l' r' (penv : param_env Pa) foracle,
+    wt_cert_expr [] l' = true ->
+    wt_cert_expr [] r' = true ->
+    cert_expr_bit_width l' = cert_expr_bit_width l ->
+    cert_expr_bit_width r' = cert_expr_bit_width r ->
+    cert_expr_bit_width l = w ->
+    cert_expr_bit_width r = w ->
+    incl (collect_free_vars [] l') allowed ->
+    incl (collect_free_vars [] r') allowed ->
+    wf_param_env_for allowed penv ->
+    path_ctx_holds allowed penv foracle (pc :: pcs) ->
+    equiv_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_BinOp CB_Sub w fl l r))
+      (eval_closed_cert_expr penv foracle (CE_BinOp CB_Sub w fl l' r')) ->
+    equiv_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_BinOp CB_Sub w fl l r))
+      (eval_closed_cert_expr penv foracle
+         (if cbf_nsw fl && negb (cbf_nuw fl) && negb (cbf_exact fl) && negb (cbf_disjoint fl) &&
+             path_implies_signed_ge_zero (pc :: pcs) l' &&
+             path_implies_signed_ge_zero (pc :: pcs) r'
+          then CE_BinOp CB_Sub w no_binop_flags l' r'
+          else CE_BinOp CB_Sub w fl l' r')).
+Proof.
+  intros allowed ctx pc pcs w fl l r l' r' penv foracle
+    Hwt_l' Hwt_r' Hbw_l' Hbw_r' Hwl Hwr Hfvl' Hfvr' Hpenv Hph Hdefault.
+  destruct (cbf_nsw fl && negb (cbf_nuw fl) && negb (cbf_exact fl) && negb (cbf_disjoint fl) &&
+              path_implies_signed_ge_zero (pc :: pcs) l' &&
+              path_implies_signed_ge_zero (pc :: pcs) r') eqn:Estrip; [| exact Hdefault].
+  rewrite !andb_true_iff in Estrip.
+  destruct Estrip as (((((Hnsw & Hnuw) & Hex) & Hdj) & Hgel) & Hger).
+  eapply equiv_eou_dvalue_trans; [exact Hdefault |].
+  unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+  destruct (eval_cert_expr penv [] foracle l') as [| | | vl'] eqn:El'; cbn [eou_bind];
+    try apply equiv_eou_dvalue_refl.
+  destruct (eval_cert_expr penv [] foracle r') as [| | | vr'] eqn:Er'; cbn [eou_bind];
+    try apply equiv_eou_dvalue_refl.
+  pose proof (eval_cert_expr_ret_wf_scalar l' [] penv [] foracle vl' Hwt_l' El') as Hwfl'.
+  pose proof (eval_cert_expr_ret_wf_scalar r' [] penv [] foracle vr' Hwt_r' Er') as Hwfr'.
+  rewrite Hbw_l', Hwl in Hwfl'; rewrite Hbw_r', Hwr in Hwfr'.
+  destruct Hwfl' as [-> | [il ->]].
+  - assert (Hl_p : @eval_iop Pa (cert_to_ibinop CB_Sub fl) (DVALUE_Base DVALUE_Poison) vr' =
+                   raise_ret (DVALUE_Base DVALUE_Poison))
+      by (destruct Hwfr' as [-> | [ir ->]]; reflexivity).
+    assert (Hr_p : @eval_iop Pa (cert_to_ibinop CB_Sub no_binop_flags) (DVALUE_Base DVALUE_Poison) vr' =
+                   raise_ret (DVALUE_Base DVALUE_Poison))
+      by (destruct Hwfr' as [-> | [ir ->]]; reflexivity).
+    rewrite Hl_p, Hr_p; apply equiv_eou_dvalue_refl.
+  - destruct Hwfr' as [-> | [ir ->]].
+    + assert (Hl_p : @eval_iop Pa (cert_to_ibinop CB_Sub fl)
+                       (DVALUE_Base (@DVALUE_I Pa w il)) (DVALUE_Base DVALUE_Poison) =
+                     raise_ret (DVALUE_Base DVALUE_Poison))
+        by reflexivity.
+      assert (Hr_p : @eval_iop Pa (cert_to_ibinop CB_Sub no_binop_flags)
+                       (DVALUE_Base (@DVALUE_I Pa w il)) (DVALUE_Base DVALUE_Poison) =
+                     raise_ret (DVALUE_Base DVALUE_Poison))
+        by reflexivity.
+      rewrite Hl_p, Hr_p; apply equiv_eou_dvalue_refl.
+    + assert (Hpl' : wf_param_env_for (collect_free_vars [] l') penv)
+        by (intros z wz Hz; exact (Hpenv z wz (Hfvl' (z, wz) Hz))).
+      assert (Hpr' : wf_param_env_for (collect_free_vars [] r') penv)
+        by (intros z wz Hz; exact (Hpenv z wz (Hfvr' (z, wz) Hz))).
+      pose proof (path_implies_signed_ge_zero_sound allowed (pc :: pcs) l' penv foracle w il
+                    Hwt_l' (eq_trans Hbw_l' Hwl) Hpenv Hpl' Hph Hgel El') as Hnonneg_l.
+      pose proof (path_implies_signed_ge_zero_sound allowed (pc :: pcs) r' penv foracle w ir
+                    Hwt_r' (eq_trans Hbw_r' Hwr) Hpenv Hpr' Hph Hger Er') as Hnonneg_r.
+      pose proof (@Integers.signed_range w il) as Hsrl.
+      pose proof (@Integers.signed_range w ir) as Hsrr.
+      unfold eval_iop; rewrite !eval_iop_integer_base_same_width.
+      unfold cert_to_ibinop, eval_int_op, dvp, tdb; cbn - [andb orb].
+      apply negb_true_iff in Hnuw; rewrite Hnsw, Hnuw; cbn [andb orb].
+      unfold Integers.sub_overflow; rewrite (@Integers.signed_zero w), Z.sub_0_r.
+      destruct (Numeric.Rocqlib.zle (@Integers.min_signed w) (@Integers.signed w il - @Integers.signed w ir)%Z);
+        [| unfold Integers.min_signed, Integers.max_signed in *; lia].
+      destruct (Numeric.Rocqlib.zle (@Integers.signed w il - @Integers.signed w ir)%Z (@Integers.max_signed w));
+        [| unfold Integers.min_signed, Integers.max_signed in *; lia].
+      cbn [proj_sumbool andb];
+        rewrite (@Integers.eq_false w (@Integers.zero w) (@Integers.one w)
+                   (fun H => @Integers.one_not_zero w (eq_sym H)));
+        cbn; reflexivity.
+Qed.
+
+Local Lemma simplify_expr_with_path_eval_binop_and {Pa : Params} :
+  forall allowed ctx pc pcs w fl l r l' r' (penv : param_env Pa) foracle,
+    wt_cert_expr [] l' = true ->
+    wt_cert_expr [] r' = true ->
+    cert_expr_bit_width l' = cert_expr_bit_width l ->
+    cert_expr_bit_width r' = cert_expr_bit_width r ->
+    cert_expr_bit_width l = w ->
+    cert_expr_bit_width r = w ->
+    incl (collect_free_vars [] l') allowed ->
+    incl (collect_free_vars [] r') allowed ->
+    wf_param_env_for allowed penv ->
+    ub_ctx_holds penv foracle ctx ->
+    path_ctx_holds allowed penv foracle (pc :: pcs) ->
+    equiv_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_BinOp CB_And w fl l r))
+      (eval_closed_cert_expr penv foracle (CE_BinOp CB_And w fl l' r')) ->
+    equiv_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_BinOp CB_And w fl l r))
+      (eval_closed_cert_expr penv foracle
+         (if Pos.eqb w 1%positive then
+            match lookup_path_bool ctx (pc :: pcs) l', lookup_path_bool ctx (pc :: pcs) r' with
+            | Some false, _ =>
+                if path_safe_nonpoison_i1 ctx (pc :: pcs) r' then CE_BvConst 1%positive 0%N
+                else CE_BinOp CB_And w fl l' r'
+            | _, Some false =>
+                if path_safe_nonpoison_i1 ctx (pc :: pcs) l' then CE_BvConst 1%positive 0%N
+                else CE_BinOp CB_And w fl l' r'
+            | Some true, Some true => CE_BvConst 1%positive 1%N
+            | Some true, None => if ub_free_expr r' then r' else CE_BinOp CB_And w fl l' r'
+            | None, Some true => if ub_free_expr l' then l' else CE_BinOp CB_And w fl l' r'
+            | _, _ => CE_BinOp CB_And w fl l' r'
+            end
+          else CE_BinOp CB_And w fl l' r')).
+Proof.
+  intros allowed ctx pc pcs w fl l r l' r' penv foracle
+    Hwt_l' Hwt_r' Hbw_l' Hbw_r' Hwl Hwr Hfvl' Hfvr' Hpenv Hctx Hph Hdefault.
+  destruct (Pos.eqb w 1%positive) eqn:Ew1;
+    [apply Pos.eqb_eq in Ew1; rewrite Ew1 in *; clear Ew1 | exact Hdefault].
+  rewrite Hwl in Hbw_l'; rewrite Hwr in Hbw_r'.
+  destruct (lookup_path_bool ctx (pc :: pcs) l') as [[|] |] eqn:El_k,
+           (lookup_path_bool ctx (pc :: pcs) r') as [[|] |] eqn:Er_k.
+  - destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle true Hpenv Hctx Hph Hfvl' El_k)
+      as [il [El' Eil]].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle true Hpenv Hctx Hph Hfvr' Er_k)
+      as [ir [Er' Eir]].
+    eapply equiv_eou_dvalue_trans; [exact Hdefault |].
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
+    unfold eval_iop; rewrite eval_iop_integer_base_same_width;
+      unfold cert_to_ibinop, eval_int_op; cbn [mand VIntVMemInt VInt_Bounded];
+      pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil;
+      pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir;
+      subst il ir; vm_compute; reflexivity.
+  - destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle true Hpenv Hctx Hph Hfvl' El_k)
+      as [il [El' Eil]].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle false Hpenv Hctx Hph Hfvr' Er_k)
+      as [ir [Er' Eir]].
+    eapply equiv_eou_dvalue_trans; [exact Hdefault |].
+    destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) l') eqn:Esn; [| exact (equiv_eou_dvalue_refl _)].
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
+    unfold eval_iop; rewrite eval_iop_integer_base_same_width;
+      unfold cert_to_ibinop, eval_int_op; cbn [mand VIntVMemInt VInt_Bounded];
+      pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil;
+      pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir;
+      subst il ir; vm_compute; reflexivity.
+  - destruct (ub_free_expr r') eqn:Eubr;
+      [| eapply equiv_eou_dvalue_trans; [exact Hdefault | apply equiv_eou_dvalue_refl]].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle true Hpenv Hctx Hph Hfvl' El_k)
+      as [il [El' Eil]].
+    eapply equiv_eou_dvalue_trans; [exact Hdefault |].
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El'; cbn [eou_bind].
+    assert (Hpr' : wf_param_env_for (collect_free_vars [] r') penv)
+      by (intros z wz Hz; exact (Hpenv z wz (Hfvr' (z, wz) Hz))).
+    destruct (ub_free_expr_eval_ret r' [] penv [] foracle Eubr Hwt_r' wf_let_val_env_nil Hpr')
+      as [vr' [Er' Hwfr']].
+    rewrite Er'; cbn [eou_bind]; rewrite Hbw_r' in Hwfr'.
+    pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil; subst il.
+    destruct Hwfr' as [-> | [ir ->]].
+    + assert (Hp_iop : @eval_iop Pa (cert_to_ibinop CB_And fl)
+                         (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.one 1%positive)))
+                         (DVALUE_Base DVALUE_Poison) =
+                       raise_ret (DVALUE_Base DVALUE_Poison)) by reflexivity.
+      rewrite Hp_iop; apply equiv_eou_dvalue_refl.
+    + unfold eval_iop; rewrite eval_iop_integer_base_same_width;
+        unfold cert_to_ibinop, eval_int_op; cbn [mand VIntVMemInt VInt_Bounded].
+      destruct ((@Integers.unsigned 1%positive ir =? 1)%Z) eqn:Eir;
+        pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir; subst ir; vm_compute; reflexivity.
+  - destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle false Hpenv Hctx Hph Hfvl' El_k)
+      as [il [El' Eil]].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle true Hpenv Hctx Hph Hfvr' Er_k)
+      as [ir [Er' Eir]].
+    destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) r'); [| exact Hdefault].
+    eapply equiv_eou_dvalue_trans; [exact Hdefault |].
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
+    unfold eval_iop; rewrite eval_iop_integer_base_same_width;
+      unfold cert_to_ibinop, eval_int_op; cbn [mand VIntVMemInt VInt_Bounded];
+      pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil;
+      pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir;
+      subst il ir; vm_compute; reflexivity.
+  - destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle false Hpenv Hctx Hph Hfvl' El_k)
+      as [il [El' Eil]].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle false Hpenv Hctx Hph Hfvr' Er_k)
+      as [ir [Er' Eir]].
+    destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) r'); [| exact Hdefault].
+    eapply equiv_eou_dvalue_trans; [exact Hdefault |].
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
+    unfold eval_iop; rewrite eval_iop_integer_base_same_width;
+      unfold cert_to_ibinop, eval_int_op; cbn [mand VIntVMemInt VInt_Bounded];
+      pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil;
+      pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir;
+      subst il ir; vm_compute; reflexivity.
+  - destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) r') eqn:Esn; [| exact Hdefault].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle false Hpenv Hctx Hph Hfvl' El_k)
+      as [il [El' Eil]].
+    destruct (path_safe_nonpoison_i1_sound allowed ctx (pc :: pcs) r' penv foracle
+                Hwt_r' Hbw_r' Hfvr' Hpenv Hctx Hph Esn) as [ir Er'].
+    eapply equiv_eou_dvalue_trans; [exact Hdefault |].
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
+    unfold eval_iop; rewrite eval_iop_integer_base_same_width;
+      unfold cert_to_ibinop, eval_int_op; cbn [mand VIntVMemInt VInt_Bounded].
+    pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil; subst il.
+    destruct ((@Integers.unsigned 1%positive ir =? 1)%Z) eqn:Eir;
+      pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir; subst ir; vm_compute; reflexivity.
+  - destruct (ub_free_expr l') eqn:Eubl; [| exact Hdefault].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle true Hpenv Hctx Hph Hfvr' Er_k)
+      as [ir [Er' Eir]].
+    eapply equiv_eou_dvalue_trans; [exact Hdefault |].
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Er'.
+    assert (Hpl' : wf_param_env_for (collect_free_vars [] l') penv)
+      by (intros z wz Hz; exact (Hpenv z wz (Hfvl' (z, wz) Hz))).
+    destruct (ub_free_expr_eval_ret l' [] penv [] foracle Eubl Hwt_l' wf_let_val_env_nil Hpl')
+      as [vl' [El' Hwfl']].
+    rewrite El'; cbn [eou_bind]; rewrite Hbw_l' in Hwfl'.
+    pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir; subst ir.
+    destruct Hwfl' as [-> | [il ->]].
+    + assert (Hp_iop : @eval_iop Pa (cert_to_ibinop CB_And fl)
+                         (DVALUE_Base DVALUE_Poison)
+                         (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.one 1%positive))) =
+                       raise_ret (DVALUE_Base DVALUE_Poison)) by reflexivity.
+      rewrite Hp_iop; apply equiv_eou_dvalue_refl.
+    + unfold eval_iop; rewrite eval_iop_integer_base_same_width;
+        unfold cert_to_ibinop, eval_int_op; cbn [mand VIntVMemInt VInt_Bounded].
+      destruct ((@Integers.unsigned 1%positive il =? 1)%Z) eqn:Eil;
+        pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil; subst il; vm_compute; reflexivity.
+  - destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) l') eqn:Esn; [| exact Hdefault].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle false Hpenv Hctx Hph Hfvr' Er_k)
+      as [ir [Er' Eir]].
+    destruct (path_safe_nonpoison_i1_sound allowed ctx (pc :: pcs) l' penv foracle
+                Hwt_l' Hbw_l' Hfvl' Hpenv Hctx Hph Esn) as [il El'].
+    eapply equiv_eou_dvalue_trans; [exact Hdefault |].
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
+    unfold eval_iop; rewrite eval_iop_integer_base_same_width;
+      unfold cert_to_ibinop, eval_int_op; cbn [mand VIntVMemInt VInt_Bounded].
+    pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir; subst ir.
+    destruct ((@Integers.unsigned 1%positive il =? 1)%Z) eqn:Eil;
+      pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil; subst il; vm_compute; reflexivity.
+  - exact Hdefault.
+Qed.
+
+Local Lemma simplify_expr_with_path_eval_binop_or {Pa : Params} :
+  forall allowed ctx pc pcs w fl l r l' r' (penv : param_env Pa) foracle,
+    wt_cert_expr [] l' = true ->
+    wt_cert_expr [] r' = true ->
+    cert_expr_bit_width l' = cert_expr_bit_width l ->
+    cert_expr_bit_width r' = cert_expr_bit_width r ->
+    cert_expr_bit_width l = w ->
+    cert_expr_bit_width r = w ->
+    incl (collect_free_vars [] l') allowed ->
+    incl (collect_free_vars [] r') allowed ->
+    wf_param_env_for allowed penv ->
+    ub_ctx_holds penv foracle ctx ->
+    path_ctx_holds allowed penv foracle (pc :: pcs) ->
+    equiv_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_BinOp CB_Or w fl l r))
+      (eval_closed_cert_expr penv foracle (CE_BinOp CB_Or w fl l' r')) ->
+    equiv_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_BinOp CB_Or w fl l r))
+      (eval_closed_cert_expr penv foracle
+         (if Pos.eqb w 1%positive && negb (cbf_disjoint fl) then
+            match lookup_path_bool ctx (pc :: pcs) l', lookup_path_bool ctx (pc :: pcs) r' with
+            | Some true, _ =>
+                if path_safe_nonpoison_i1 ctx (pc :: pcs) r' then CE_BvConst 1%positive 1%N
+                else CE_BinOp CB_Or w fl l' r'
+            | _, Some true =>
+                if path_safe_nonpoison_i1 ctx (pc :: pcs) l' then CE_BvConst 1%positive 1%N
+                else CE_BinOp CB_Or w fl l' r'
+            | Some false, Some false => CE_BvConst 1%positive 0%N
+            | Some false, None => if ub_free_expr r' then r' else CE_BinOp CB_Or w fl l' r'
+            | None, Some false => if ub_free_expr l' then l' else CE_BinOp CB_Or w fl l' r'
+            | _, _ => CE_BinOp CB_Or w fl l' r'
+            end
+          else CE_BinOp CB_Or w fl l' r')).
+Proof.
+  intros allowed ctx pc pcs w fl l r l' r' penv foracle
+    Hwt_l' Hwt_r' Hbw_l' Hbw_r' Hwl Hwr Hfvl' Hfvr' Hpenv Hctx Hph Hdefault.
+  destruct (Pos.eqb w 1%positive && negb (cbf_disjoint fl)) eqn:Ew1;
+    [apply andb_true_iff in Ew1 as [Ew1 Hdj];
+     apply Pos.eqb_eq in Ew1; apply negb_true_iff in Hdj; rewrite Ew1 in *; clear Ew1
+    | exact Hdefault].
+  rewrite Hwl in Hbw_l'; rewrite Hwr in Hbw_r'.
+  destruct (lookup_path_bool ctx (pc :: pcs) l') as [[|] |] eqn:El_k,
+           (lookup_path_bool ctx (pc :: pcs) r') as [[|] |] eqn:Er_k.
+  - destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) r') eqn:Esn; [| exact Hdefault].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle true Hpenv Hctx Hph Hfvl' El_k)
+      as [il [El' Eil]].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle true Hpenv Hctx Hph Hfvr' Er_k)
+      as [ir [Er' Eir]].
+    eapply equiv_eou_dvalue_trans; [exact Hdefault |].
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
+    unfold eval_iop; rewrite eval_iop_integer_base_same_width;
+      unfold cert_to_ibinop, eval_int_op, tdb, dvp; rewrite Hdj; cbn - [andb];
+      pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil;
+      pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir;
+      subst il ir; vm_compute; reflexivity.
+  - destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) r') eqn:Esn; [| exact Hdefault].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle true Hpenv Hctx Hph Hfvl' El_k)
+      as [il [El' Eil]].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle false Hpenv Hctx Hph Hfvr' Er_k)
+      as [ir [Er' Eir]].
+    eapply equiv_eou_dvalue_trans; [exact Hdefault |].
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
+    unfold eval_iop; rewrite eval_iop_integer_base_same_width;
+      unfold cert_to_ibinop, eval_int_op, tdb, dvp; rewrite Hdj; cbn - [andb];
+      pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil;
+      pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir;
+      subst il ir; vm_compute; reflexivity.
+  - destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) r') eqn:Esn; [| exact Hdefault].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle true Hpenv Hctx Hph Hfvl' El_k)
+      as [il [El' Eil]].
+    destruct (path_safe_nonpoison_i1_sound allowed ctx (pc :: pcs) r' penv foracle
+                Hwt_r' Hbw_r' Hfvr' Hpenv Hctx Hph Esn) as [ir Er'].
+    eapply equiv_eou_dvalue_trans; [exact Hdefault |].
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
+    unfold eval_iop; rewrite eval_iop_integer_base_same_width;
+      unfold cert_to_ibinop, eval_int_op, tdb, dvp; rewrite Hdj; cbn - [andb].
+    pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil; subst il.
+    destruct ((@Integers.unsigned 1%positive ir =? 1)%Z) eqn:Eir;
+      pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir; subst ir; vm_compute; reflexivity.
+  - destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) l') eqn:Esn; [| exact Hdefault].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle false Hpenv Hctx Hph Hfvl' El_k)
+      as [il [El' Eil]].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle true Hpenv Hctx Hph Hfvr' Er_k)
+      as [ir [Er' Eir]].
+    eapply equiv_eou_dvalue_trans; [exact Hdefault |].
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
+    unfold eval_iop; rewrite eval_iop_integer_base_same_width;
+      unfold cert_to_ibinop, eval_int_op, tdb, dvp; rewrite Hdj; cbn - [andb];
+      pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil;
+      pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir;
+      subst il ir; vm_compute; reflexivity.
+  - destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle false Hpenv Hctx Hph Hfvl' El_k)
+      as [il [El' Eil]].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle false Hpenv Hctx Hph Hfvr' Er_k)
+      as [ir [Er' Eir]].
+    eapply equiv_eou_dvalue_trans; [exact Hdefault |].
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
+    unfold eval_iop; rewrite eval_iop_integer_base_same_width;
+      unfold cert_to_ibinop, eval_int_op, tdb, dvp; rewrite Hdj; cbn - [andb];
+      pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil;
+      pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir;
+      subst il ir; vm_compute; reflexivity.
+  - destruct (ub_free_expr r') eqn:Eubr; [| exact Hdefault].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle false Hpenv Hctx Hph Hfvl' El_k)
+      as [il [El' Eil]].
+    eapply equiv_eou_dvalue_trans; [exact Hdefault |].
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El'; cbn [eou_bind].
+    assert (Hpr' : wf_param_env_for (collect_free_vars [] r') penv)
+      by (intros z wz Hz; exact (Hpenv z wz (Hfvr' (z, wz) Hz))).
+    destruct (ub_free_expr_eval_ret r' [] penv [] foracle Eubr Hwt_r' wf_let_val_env_nil Hpr')
+      as [vr' [Er' Hwfr']].
+    rewrite Er'; cbn [eou_bind]; rewrite Hbw_r' in Hwfr'.
+    pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil; subst il.
+    destruct Hwfr' as [-> | [ir ->]].
+    + assert (Hp_iop : @eval_iop Pa (cert_to_ibinop CB_Or fl)
+                         (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.zero 1%positive)))
+                         (DVALUE_Base DVALUE_Poison) =
+                       raise_ret (DVALUE_Base DVALUE_Poison)) by reflexivity.
+      rewrite Hp_iop; apply equiv_eou_dvalue_refl.
+    + unfold eval_iop; rewrite eval_iop_integer_base_same_width;
+        unfold cert_to_ibinop, eval_int_op, tdb, dvp; rewrite Hdj; cbn - [andb].
+      destruct ((@Integers.unsigned 1%positive ir =? 1)%Z) eqn:Eir;
+        pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir; subst ir; vm_compute; reflexivity.
+  - destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) l') eqn:Esn; [| exact Hdefault].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle true Hpenv Hctx Hph Hfvr' Er_k)
+      as [ir [Er' Eir]].
+    destruct (path_safe_nonpoison_i1_sound allowed ctx (pc :: pcs) l' penv foracle
+                Hwt_l' Hbw_l' Hfvl' Hpenv Hctx Hph Esn) as [il El'].
+    eapply equiv_eou_dvalue_trans; [exact Hdefault |].
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
+    unfold eval_iop; rewrite eval_iop_integer_base_same_width;
+      unfold cert_to_ibinop, eval_int_op, tdb, dvp; rewrite Hdj; cbn - [andb].
+    pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir; subst ir.
+    destruct ((@Integers.unsigned 1%positive il =? 1)%Z) eqn:Eil;
+      pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil; subst il; vm_compute; reflexivity.
+  - destruct (ub_free_expr l') eqn:Eubl; [| exact Hdefault].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle false Hpenv Hctx Hph Hfvr' Er_k)
+      as [ir [Er' Eir]].
+    eapply equiv_eou_dvalue_trans; [exact Hdefault |].
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Er'.
+    assert (Hpl' : wf_param_env_for (collect_free_vars [] l') penv)
+      by (intros z wz Hz; exact (Hpenv z wz (Hfvl' (z, wz) Hz))).
+    destruct (ub_free_expr_eval_ret l' [] penv [] foracle Eubl Hwt_l' wf_let_val_env_nil Hpl')
+      as [vl' [El' Hwfl']].
+    rewrite El'; cbn [eou_bind]; rewrite Hbw_l' in Hwfl'.
+    pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir; subst ir.
+    destruct Hwfl' as [-> | [il ->]].
+    + assert (Hp_iop : @eval_iop Pa (cert_to_ibinop CB_Or fl)
+                         (DVALUE_Base DVALUE_Poison)
+                         (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.zero 1%positive))) =
+                       raise_ret (DVALUE_Base DVALUE_Poison)) by reflexivity.
+      rewrite Hp_iop; apply equiv_eou_dvalue_refl.
+    + unfold eval_iop; rewrite eval_iop_integer_base_same_width;
+        unfold cert_to_ibinop, eval_int_op, tdb, dvp; rewrite Hdj; cbn - [andb].
+      destruct ((@Integers.unsigned 1%positive il =? 1)%Z) eqn:Eil;
+        pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil; subst il; vm_compute; reflexivity.
+  - exact Hdefault.
+Qed.
+
+Local Lemma simplify_expr_with_path_eval_select {Pa : Params} :
+  forall allowed ctx pc pcs w c t f c' t' f' (penv : param_env Pa) foracle,
+    wt_cert_expr [] c' = true ->
+    wt_cert_expr [] t' = true ->
+    wt_cert_expr [] f' = true ->
+    cert_expr_bit_width t' = cert_expr_bit_width t ->
+    cert_expr_bit_width f' = cert_expr_bit_width f ->
+    cert_expr_bit_width t = w ->
+    cert_expr_bit_width f = w ->
+    incl (collect_free_vars [] c') allowed ->
+    incl (collect_free_vars [] t') allowed ->
+    incl (collect_free_vars [] f') allowed ->
+    wf_param_env_for allowed penv ->
+    ub_ctx_holds penv foracle ctx ->
+    path_ctx_holds allowed penv foracle (pc :: pcs) ->
+    equiv_eou_dvalue (eval_closed_cert_expr penv foracle c) (eval_closed_cert_expr penv foracle c') ->
+    equiv_eou_dvalue (eval_closed_cert_expr penv foracle t) (eval_closed_cert_expr penv foracle t') ->
+    equiv_eou_dvalue (eval_closed_cert_expr penv foracle f) (eval_closed_cert_expr penv foracle f') ->
+    equiv_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_Select w c t f))
+      (eval_closed_cert_expr penv foracle (CE_Select w c' t' f')) ->
+    equiv_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_Select w c t f))
+      (eval_closed_cert_expr penv foracle
+         (match lookup_path_bool ctx (pc :: pcs) c' with
+          | Some true => if ub_free_expr f' then t' else CE_Select w c' t' f'
+          | Some false => if ub_free_expr t' then f' else CE_Select w c' t' f'
+          | None =>
+              match simplify_select_signed_minmax (pc :: pcs) w c' t' f' with
+              | Some res => res
+              | None => CE_Select w c' t' f'
+              end
+          end)).
+Proof.
+  intros allowed ctx pc pcs w c t f c' t' f' penv foracle
+    Hwt_c' Hwt_t' Hwt_f' Hbw_t' Hbw_f' Hwtb Hwf Hfvc' Hfvt' Hfvf' Hpenv Hctx Hph EHc EHt EHf Hsel_def.
+  destruct (lookup_path_bool ctx (pc :: pcs) c') as [[|] |] eqn:Elk.
+  - destruct (ub_free_expr f') eqn:Eubf; [| exact Hsel_def].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) c' penv foracle true Hpenv Hctx Hph Hfvc' Elk)
+      as [cbit [Ec' Ecbit]].
+    assert (Hpf' : wf_param_env_for (collect_free_vars [] f') penv)
+      by (intros x wx Hx; exact (Hpenv x wx (Hfvf' (x, wx) Hx))).
+    destruct (ub_free_expr_eval_ret f' [] penv [] foracle Eubf Hwt_f' wf_let_val_env_nil Hpf')
+      as [vf' [Ef' _]].
+    unfold eval_closed_cert_expr in *; rewrite Ec' in EHc; rewrite Ef' in EHf; cbn [eval_cert_expr].
+    destruct (eval_cert_expr penv [] foracle c) as [| | | vc] eqn:Ec; cbn in EHc; try contradiction EHc; subst vc.
+    destruct (eval_cert_expr penv [] foracle f) as [| | | vf] eqn:Ef; cbn in EHf; try contradiction EHf; subst vf.
+    cbn [eou_bind].
+    destruct (eval_cert_expr penv [] foracle t) as [| | | vt] eqn:Et;
+      destruct (eval_cert_expr penv [] foracle t') as [| | | vt'] eqn:Et';
+      cbn in EHt |- *; try contradiction EHt; trivial; try exact EHt.
+    subst vt'; cbn [eval_select eval_select_base_dvalue]; rewrite Ecbit; reflexivity.
+  - destruct (ub_free_expr t') eqn:Eubt; [| exact Hsel_def].
+    destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) c' penv foracle false Hpenv Hctx Hph Hfvc' Elk)
+      as [cbit [Ec' Ecbit]].
+    assert (Hpt' : wf_param_env_for (collect_free_vars [] t') penv)
+      by (intros x wx Hx; exact (Hpenv x wx (Hfvt' (x, wx) Hx))).
+    destruct (ub_free_expr_eval_ret t' [] penv [] foracle Eubt Hwt_t' wf_let_val_env_nil Hpt')
+      as [vt' [Et' _]].
+    unfold eval_closed_cert_expr in *; rewrite Ec' in EHc; rewrite Et' in EHt; cbn [eval_cert_expr].
+    destruct (eval_cert_expr penv [] foracle c) as [| | | vc] eqn:Ec; cbn in EHc; try contradiction EHc; subst vc.
+    destruct (eval_cert_expr penv [] foracle t) as [| | | vt] eqn:Et; cbn in EHt; try contradiction EHt; subst vt.
+    cbn [eou_bind].
+    destruct (eval_cert_expr penv [] foracle f) as [| | | vf] eqn:Ef;
+      destruct (eval_cert_expr penv [] foracle f') as [| | | vf'] eqn:Ef';
+      cbn in EHf |- *; try contradiction EHf; trivial; try exact EHf.
+    subst vf'; cbn [eval_select eval_select_base_dvalue]; rewrite Ecbit; reflexivity.
+  - destruct (simplify_select_signed_minmax (pc :: pcs) w c' t' f') as [res |] eqn:Hsm;
+      [| exact Hsel_def].
+    eapply equiv_eou_dvalue_trans; [exact Hsel_def |].
+    rewrite (simplify_select_signed_minmax_eval allowed (pc :: pcs) w c' t' f' res penv foracle
+               Hwt_c' Hwt_t' Hwt_f' (eq_trans Hbw_t' Hwtb) (eq_trans Hbw_f' Hwf) Hph Hsm).
+    apply equiv_eou_dvalue_refl.
 Qed.
 
 Lemma simplify_expr_with_path_eval {Pa : Params} :
@@ -1405,295 +1901,12 @@ Proof.
         apply cert_eou_bind_equiv; [exact EHr | intros vr].
         apply equiv_eou_dvalue_refl. }
       destruct op; try exact Hdefault.
-      * destruct (cbf_nsw fl && negb (cbf_nuw fl) && negb (cbf_exact fl) && negb (cbf_disjoint fl) &&
-                  path_implies_signed_ge_zero (pc :: pcs) l' &&
-                  path_implies_signed_ge_zero (pc :: pcs) r') eqn:Estrip; [| exact Hdefault].
-        rewrite !andb_true_iff in Estrip.
-        destruct Estrip as (((((Hnsw & Hnuw) & Hex) & Hdj) & Hgel) & Hger).
-        eapply equiv_eou_dvalue_trans; [exact Hdefault |].
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-        destruct (eval_cert_expr penv [] foracle l') as [| | | vl'] eqn:El'; cbn [eou_bind];
-          try apply equiv_eou_dvalue_refl.
-        destruct (eval_cert_expr penv [] foracle r') as [| | | vr'] eqn:Er'; cbn [eou_bind];
-          try apply equiv_eou_dvalue_refl.
-        pose proof (eval_cert_expr_ret_wf_scalar l' [] penv [] foracle vl' Hwt_l' El') as Hwfl'.
-        pose proof (eval_cert_expr_ret_wf_scalar r' [] penv [] foracle vr' Hwt_r' Er') as Hwfr'.
-        rewrite Hbw_l', Hwl in Hwfl'; rewrite Hbw_r', Hwr in Hwfr'.
-        destruct Hwfl' as [-> | [il ->]];
-          [ assert (Hl_p : @eval_iop Pa (cert_to_ibinop CB_Sub fl) (DVALUE_Base DVALUE_Poison) vr' = raise_ret (DVALUE_Base DVALUE_Poison))
-              by (destruct Hwfr' as [-> | [ir ->]]; reflexivity);
-            assert (Hr_p : @eval_iop Pa (cert_to_ibinop CB_Sub no_binop_flags) (DVALUE_Base DVALUE_Poison) vr' = raise_ret (DVALUE_Base DVALUE_Poison))
-              by (destruct Hwfr' as [-> | [ir ->]]; reflexivity);
-            rewrite Hl_p, Hr_p; apply equiv_eou_dvalue_refl
-          |].
-        destruct Hwfr' as [-> | [ir ->]];
-          [ assert (Hl_p : @eval_iop Pa (cert_to_ibinop CB_Sub fl) (DVALUE_Base (@DVALUE_I Pa w il)) (DVALUE_Base DVALUE_Poison) = raise_ret (DVALUE_Base DVALUE_Poison))
-              by reflexivity;
-            assert (Hr_p : @eval_iop Pa (cert_to_ibinop CB_Sub no_binop_flags) (DVALUE_Base (@DVALUE_I Pa w il)) (DVALUE_Base DVALUE_Poison) = raise_ret (DVALUE_Base DVALUE_Poison))
-              by reflexivity;
-            rewrite Hl_p, Hr_p; apply equiv_eou_dvalue_refl
-          |].
-        assert (Hpl' : wf_param_env_for (collect_free_vars [] l') penv)
-          by (intros z wz Hz; exact (Hpenv z wz (Hfvl' (z, wz) Hz))).
-        assert (Hpr' : wf_param_env_for (collect_free_vars [] r') penv)
-          by (intros z wz Hz; exact (Hpenv z wz (Hfvr' (z, wz) Hz))).
-        pose proof (path_implies_signed_ge_zero_sound allowed (pc :: pcs) l' penv foracle w il
-                      Hwt_l' (eq_trans Hbw_l' Hwl) Hpenv Hpl' Hph Hgel El') as Hnonneg_l.
-        pose proof (path_implies_signed_ge_zero_sound allowed (pc :: pcs) r' penv foracle w ir
-                      Hwt_r' (eq_trans Hbw_r' Hwr) Hpenv Hpr' Hph Hger Er') as Hnonneg_r.
-        pose proof (@Integers.signed_range w il) as Hsrl.
-        pose proof (@Integers.signed_range w ir) as Hsrr.
-        unfold eval_iop; rewrite !eval_iop_integer_base_same_width.
-        unfold cert_to_ibinop, eval_int_op, dvp, tdb; cbn - [andb orb].
-        apply negb_true_iff in Hnuw; rewrite Hnsw, Hnuw; cbn [andb orb].
-        unfold Integers.sub_overflow; rewrite (@Integers.signed_zero w), Z.sub_0_r.
-        destruct (Numeric.Rocqlib.zle (@Integers.min_signed w) (@Integers.signed w il - @Integers.signed w ir)%Z);
-          [| unfold Integers.min_signed, Integers.max_signed in *; lia].
-        destruct (Numeric.Rocqlib.zle (@Integers.signed w il - @Integers.signed w ir)%Z (@Integers.max_signed w));
-          [| unfold Integers.min_signed, Integers.max_signed in *; lia].
-        cbn [proj_sumbool andb];
-          rewrite (@Integers.eq_false w (@Integers.zero w) (@Integers.one w)
-                     (fun H => @Integers.one_not_zero w (eq_sym H)));
-          cbn; reflexivity.
-      * destruct (Pos.eqb w 1%positive) eqn:Ew1;
-          [apply Pos.eqb_eq in Ew1; rewrite Ew1 in *; clear Ew1 | exact Hdefault].
-        rewrite Hwl in Hbw_l'; rewrite Hwr in Hbw_r'.
-        destruct (lookup_path_bool ctx (pc :: pcs) l') as [[|] |] eqn:El_k,
-                 (lookup_path_bool ctx (pc :: pcs) r') as [[|] |] eqn:Er_k.
-        -- destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle true Hpenv Hctx Hph Hfvl' El_k)
-             as [il [El' Eil]].
-           destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle true Hpenv Hctx Hph Hfvr' Er_k)
-             as [ir [Er' Eir]].
-           eapply equiv_eou_dvalue_trans; [exact Hdefault |].
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
-           unfold eval_iop; rewrite eval_iop_integer_base_same_width;
-             unfold cert_to_ibinop, eval_int_op; cbn [mand VIntVMemInt VInt_Bounded];
-             pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil;
-             pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir;
-             subst il ir; vm_compute; reflexivity.
-        -- destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle true Hpenv Hctx Hph Hfvl' El_k)
-             as [il [El' Eil]].
-           destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle false Hpenv Hctx Hph Hfvr' Er_k)
-             as [ir [Er' Eir]].
-           eapply equiv_eou_dvalue_trans; [exact Hdefault |].
-           destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) l') eqn:Esn; [| exact (equiv_eou_dvalue_refl _)].
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
-           unfold eval_iop; rewrite eval_iop_integer_base_same_width;
-             unfold cert_to_ibinop, eval_int_op; cbn [mand VIntVMemInt VInt_Bounded];
-             pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil;
-             pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir;
-             subst il ir; vm_compute; reflexivity.
-        -- destruct (ub_free_expr r') eqn:Eubr; [| eapply equiv_eou_dvalue_trans; [exact Hdefault | apply equiv_eou_dvalue_refl]].
-           destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle true Hpenv Hctx Hph Hfvl' El_k)
-             as [il [El' Eil]].
-           eapply equiv_eou_dvalue_trans; [exact Hdefault |].
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El'; cbn [eou_bind].
-           assert (Hpr' : wf_param_env_for (collect_free_vars [] r') penv)
-             by (intros z wz Hz; exact (Hpenv z wz (Hfvr' (z, wz) Hz))).
-           destruct (ub_free_expr_eval_ret r' [] penv [] foracle Eubr Hwt_r' wf_let_val_env_nil Hpr')
-             as [vr' [Er' Hwfr']].
-           rewrite Er'; cbn [eou_bind]; rewrite Hbw_r' in Hwfr'.
-           pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil; subst il.
-           destruct Hwfr' as [-> | [ir ->]].
-           ++ assert (Hp_iop : @eval_iop Pa (cert_to_ibinop CB_And fl)
-                                 (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.one 1%positive)))
-                                 (DVALUE_Base DVALUE_Poison) =
-                               raise_ret (DVALUE_Base DVALUE_Poison)) by reflexivity.
-              rewrite Hp_iop; apply equiv_eou_dvalue_refl.
-           ++ unfold eval_iop; rewrite eval_iop_integer_base_same_width;
-                unfold cert_to_ibinop, eval_int_op; cbn [mand VIntVMemInt VInt_Bounded].
-              destruct ((@Integers.unsigned 1%positive ir =? 1)%Z) eqn:Eir;
-                pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir; subst ir; vm_compute; reflexivity.
-        -- destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle false Hpenv Hctx Hph Hfvl' El_k)
-             as [il [El' Eil]].
-           destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle true Hpenv Hctx Hph Hfvr' Er_k)
-             as [ir [Er' Eir]].
-           destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) r'); [| exact Hdefault].
-           eapply equiv_eou_dvalue_trans; [exact Hdefault |].
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
-           unfold eval_iop; rewrite eval_iop_integer_base_same_width;
-             unfold cert_to_ibinop, eval_int_op; cbn [mand VIntVMemInt VInt_Bounded];
-             pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil;
-             pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir;
-             subst il ir; vm_compute; reflexivity.
-        -- destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle false Hpenv Hctx Hph Hfvl' El_k)
-             as [il [El' Eil]].
-           destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle false Hpenv Hctx Hph Hfvr' Er_k)
-             as [ir [Er' Eir]].
-           destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) r'); [| exact Hdefault].
-           eapply equiv_eou_dvalue_trans; [exact Hdefault |].
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
-           unfold eval_iop; rewrite eval_iop_integer_base_same_width;
-             unfold cert_to_ibinop, eval_int_op; cbn [mand VIntVMemInt VInt_Bounded];
-             pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil;
-             pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir;
-             subst il ir; vm_compute; reflexivity.
-        -- destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) r') eqn:Esn; [| exact Hdefault].
-           destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle false Hpenv Hctx Hph Hfvl' El_k)
-             as [il [El' Eil]].
-           destruct (path_safe_nonpoison_i1_sound allowed ctx (pc :: pcs) r' penv foracle
-                       Hwt_r' Hbw_r' Hfvr' Hpenv Hctx Hph Esn) as [ir Er'].
-           eapply equiv_eou_dvalue_trans; [exact Hdefault |].
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
-           unfold eval_iop; rewrite eval_iop_integer_base_same_width;
-             unfold cert_to_ibinop, eval_int_op; cbn [mand VIntVMemInt VInt_Bounded].
-           pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil; subst il.
-           destruct ((@Integers.unsigned 1%positive ir =? 1)%Z) eqn:Eir;
-             pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir; subst ir; vm_compute; reflexivity.
-        -- destruct (ub_free_expr l') eqn:Eubl; [| exact Hdefault].
-           destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle true Hpenv Hctx Hph Hfvr' Er_k)
-             as [ir [Er' Eir]].
-           eapply equiv_eou_dvalue_trans; [exact Hdefault |].
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Er'.
-           assert (Hpl' : wf_param_env_for (collect_free_vars [] l') penv)
-             by (intros z wz Hz; exact (Hpenv z wz (Hfvl' (z, wz) Hz))).
-           destruct (ub_free_expr_eval_ret l' [] penv [] foracle Eubl Hwt_l' wf_let_val_env_nil Hpl')
-             as [vl' [El' Hwfl']].
-           rewrite El'; cbn [eou_bind]; rewrite Hbw_l' in Hwfl'.
-           pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir; subst ir.
-           destruct Hwfl' as [-> | [il ->]].
-           ++ assert (Hp_iop : @eval_iop Pa (cert_to_ibinop CB_And fl)
-                                 (DVALUE_Base DVALUE_Poison)
-                                 (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.one 1%positive))) =
-                               raise_ret (DVALUE_Base DVALUE_Poison)) by reflexivity.
-              rewrite Hp_iop; apply equiv_eou_dvalue_refl.
-           ++ unfold eval_iop; rewrite eval_iop_integer_base_same_width;
-                unfold cert_to_ibinop, eval_int_op; cbn [mand VIntVMemInt VInt_Bounded].
-              destruct ((@Integers.unsigned 1%positive il =? 1)%Z) eqn:Eil;
-                pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil; subst il; vm_compute; reflexivity.
-        -- destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) l') eqn:Esn; [| exact Hdefault].
-           destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle false Hpenv Hctx Hph Hfvr' Er_k)
-             as [ir [Er' Eir]].
-           destruct (path_safe_nonpoison_i1_sound allowed ctx (pc :: pcs) l' penv foracle
-                       Hwt_l' Hbw_l' Hfvl' Hpenv Hctx Hph Esn) as [il El'].
-           eapply equiv_eou_dvalue_trans; [exact Hdefault |].
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
-           unfold eval_iop; rewrite eval_iop_integer_base_same_width;
-             unfold cert_to_ibinop, eval_int_op; cbn [mand VIntVMemInt VInt_Bounded].
-           pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir; subst ir.
-           destruct ((@Integers.unsigned 1%positive il =? 1)%Z) eqn:Eil;
-             pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil; subst il; vm_compute; reflexivity.
-        -- exact Hdefault.
-      * destruct (Pos.eqb w 1%positive && negb (cbf_disjoint fl)) eqn:Ew1;
-          [apply andb_true_iff in Ew1 as [Ew1 Hdj]; apply Pos.eqb_eq in Ew1; apply negb_true_iff in Hdj; rewrite Ew1 in *; clear Ew1
-          | exact Hdefault].
-        rewrite Hwl in Hbw_l'; rewrite Hwr in Hbw_r'.
-        destruct (lookup_path_bool ctx (pc :: pcs) l') as [[|] |] eqn:El_k,
-                 (lookup_path_bool ctx (pc :: pcs) r') as [[|] |] eqn:Er_k.
-        -- destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) r') eqn:Esn; [| exact Hdefault].
-           destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle true Hpenv Hctx Hph Hfvl' El_k)
-             as [il [El' Eil]].
-           destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle true Hpenv Hctx Hph Hfvr' Er_k)
-             as [ir [Er' Eir]].
-           eapply equiv_eou_dvalue_trans; [exact Hdefault |].
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
-           unfold eval_iop; rewrite eval_iop_integer_base_same_width;
-             unfold cert_to_ibinop, eval_int_op, tdb, dvp; rewrite Hdj; cbn - [andb];
-             pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil;
-             pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir;
-             subst il ir; vm_compute; reflexivity.
-        -- destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) r') eqn:Esn; [| exact Hdefault].
-           destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle true Hpenv Hctx Hph Hfvl' El_k)
-             as [il [El' Eil]].
-           destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle false Hpenv Hctx Hph Hfvr' Er_k)
-             as [ir [Er' Eir]].
-           eapply equiv_eou_dvalue_trans; [exact Hdefault |].
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
-           unfold eval_iop; rewrite eval_iop_integer_base_same_width;
-             unfold cert_to_ibinop, eval_int_op, tdb, dvp; rewrite Hdj; cbn - [andb];
-             pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil;
-             pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir;
-             subst il ir; vm_compute; reflexivity.
-        -- destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) r') eqn:Esn; [| exact Hdefault].
-           destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle true Hpenv Hctx Hph Hfvl' El_k)
-             as [il [El' Eil]].
-           destruct (path_safe_nonpoison_i1_sound allowed ctx (pc :: pcs) r' penv foracle
-                       Hwt_r' Hbw_r' Hfvr' Hpenv Hctx Hph Esn) as [ir Er'].
-           eapply equiv_eou_dvalue_trans; [exact Hdefault |].
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
-           unfold eval_iop; rewrite eval_iop_integer_base_same_width;
-             unfold cert_to_ibinop, eval_int_op, tdb, dvp; rewrite Hdj; cbn - [andb].
-           pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil; subst il.
-           destruct ((@Integers.unsigned 1%positive ir =? 1)%Z) eqn:Eir;
-             pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir; subst ir; vm_compute; reflexivity.
-        -- destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) l') eqn:Esn; [| exact Hdefault].
-           destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle false Hpenv Hctx Hph Hfvl' El_k)
-             as [il [El' Eil]].
-           destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle true Hpenv Hctx Hph Hfvr' Er_k)
-             as [ir [Er' Eir]].
-           eapply equiv_eou_dvalue_trans; [exact Hdefault |].
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
-           unfold eval_iop; rewrite eval_iop_integer_base_same_width;
-             unfold cert_to_ibinop, eval_int_op, tdb, dvp; rewrite Hdj; cbn - [andb];
-             pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil;
-             pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir;
-             subst il ir; vm_compute; reflexivity.
-        -- destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle false Hpenv Hctx Hph Hfvl' El_k)
-             as [il [El' Eil]].
-           destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle false Hpenv Hctx Hph Hfvr' Er_k)
-             as [ir [Er' Eir]].
-           eapply equiv_eou_dvalue_trans; [exact Hdefault |].
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
-           unfold eval_iop; rewrite eval_iop_integer_base_same_width;
-             unfold cert_to_ibinop, eval_int_op, tdb, dvp; rewrite Hdj; cbn - [andb];
-             pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil;
-             pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir;
-             subst il ir; vm_compute; reflexivity.
-        -- destruct (ub_free_expr r') eqn:Eubr; [| exact Hdefault].
-           destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) l' penv foracle false Hpenv Hctx Hph Hfvl' El_k)
-             as [il [El' Eil]].
-           eapply equiv_eou_dvalue_trans; [exact Hdefault |].
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El'; cbn [eou_bind].
-           assert (Hpr' : wf_param_env_for (collect_free_vars [] r') penv)
-             by (intros z wz Hz; exact (Hpenv z wz (Hfvr' (z, wz) Hz))).
-           destruct (ub_free_expr_eval_ret r' [] penv [] foracle Eubr Hwt_r' wf_let_val_env_nil Hpr')
-             as [vr' [Er' Hwfr']].
-           rewrite Er'; cbn [eou_bind]; rewrite Hbw_r' in Hwfr'.
-           pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil; subst il.
-           destruct Hwfr' as [-> | [ir ->]].
-           ++ assert (Hp_iop : @eval_iop Pa (cert_to_ibinop CB_Or fl)
-                                 (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.zero 1%positive)))
-                                 (DVALUE_Base DVALUE_Poison) =
-                               raise_ret (DVALUE_Base DVALUE_Poison)) by reflexivity.
-              rewrite Hp_iop; apply equiv_eou_dvalue_refl.
-           ++ unfold eval_iop; rewrite eval_iop_integer_base_same_width;
-                unfold cert_to_ibinop, eval_int_op, tdb, dvp; rewrite Hdj; cbn - [andb].
-              destruct ((@Integers.unsigned 1%positive ir =? 1)%Z) eqn:Eir;
-                pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir; subst ir; vm_compute; reflexivity.
-        -- destruct (path_safe_nonpoison_i1 ctx (pc :: pcs) l') eqn:Esn; [| exact Hdefault].
-           destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle true Hpenv Hctx Hph Hfvr' Er_k)
-             as [ir [Er' Eir]].
-           destruct (path_safe_nonpoison_i1_sound allowed ctx (pc :: pcs) l' penv foracle
-                       Hwt_l' Hbw_l' Hfvl' Hpenv Hctx Hph Esn) as [il El'].
-           eapply equiv_eou_dvalue_trans; [exact Hdefault |].
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite El', Er'; cbn [eou_bind].
-           unfold eval_iop; rewrite eval_iop_integer_base_same_width;
-             unfold cert_to_ibinop, eval_int_op, tdb, dvp; rewrite Hdj; cbn - [andb].
-           pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir; subst ir.
-           destruct ((@Integers.unsigned 1%positive il =? 1)%Z) eqn:Eil;
-             pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil; subst il; vm_compute; reflexivity.
-        -- destruct (ub_free_expr l') eqn:Eubl; [| exact Hdefault].
-           destruct (lookup_path_bool_sound allowed ctx (pc :: pcs) r' penv foracle false Hpenv Hctx Hph Hfvr' Er_k)
-             as [ir [Er' Eir]].
-           eapply equiv_eou_dvalue_trans; [exact Hdefault |].
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Er'.
-           assert (Hpl' : wf_param_env_for (collect_free_vars [] l') penv)
-             by (intros z wz Hz; exact (Hpenv z wz (Hfvl' (z, wz) Hz))).
-           destruct (ub_free_expr_eval_ret l' [] penv [] foracle Eubl Hwt_l' wf_let_val_env_nil Hpl')
-             as [vl' [El' Hwfl']].
-           rewrite El'; cbn [eou_bind]; rewrite Hbw_l' in Hwfl'.
-           pose proof (alg_bit_int_1_cases ir) as Hir; rewrite Eir in Hir; subst ir.
-           destruct Hwfl' as [-> | [il ->]].
-           ++ assert (Hp_iop : @eval_iop Pa (cert_to_ibinop CB_Or fl)
-                                 (DVALUE_Base DVALUE_Poison)
-                                 (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.zero 1%positive))) =
-                               raise_ret (DVALUE_Base DVALUE_Poison)) by reflexivity.
-              rewrite Hp_iop; apply equiv_eou_dvalue_refl.
-           ++ unfold eval_iop; rewrite eval_iop_integer_base_same_width;
-                unfold cert_to_ibinop, eval_int_op, tdb, dvp; rewrite Hdj; cbn - [andb].
-              destruct ((@Integers.unsigned 1%positive il =? 1)%Z) eqn:Eil;
-                pose proof (alg_bit_int_1_cases il) as Hil; rewrite Eil in Hil; subst il; vm_compute; reflexivity.
-        -- exact Hdefault.
+      * exact (simplify_expr_with_path_eval_binop_sub allowed ctx pc pcs w fl l r l' r' penv foracle
+                 Hwt_l' Hwt_r' Hbw_l' Hbw_r' Hwl Hwr Hfvl' Hfvr' Hpenv Hph Hdefault).
+      * exact (simplify_expr_with_path_eval_binop_and allowed ctx pc pcs w fl l r l' r' penv foracle
+                 Hwt_l' Hwt_r' Hbw_l' Hbw_r' Hwl Hwr Hfvl' Hfvr' Hpenv Hctx Hph Hdefault).
+      * exact (simplify_expr_with_path_eval_binop_or allowed ctx pc pcs w fl l r l' r' penv foracle
+                 Hwt_l' Hwt_r' Hbw_l' Hbw_r' Hwl Hwr Hfvl' Hfvr' Hpenv Hctx Hph Hdefault).
     + cbn [wt_cert_expr is_let_free_expr collect_free_vars] in Hwt, Hlf, Hfv.
       rewrite !andb_true_iff in Hwt; rewrite !andb_true_iff in Hlf;
         destruct Hwt as (((Hwtl & Hwtr) & _) & _);
@@ -1718,10 +1931,12 @@ Proof.
       apply Pos.eqb_eq in Hwtb; apply Pos.eqb_eq in Hwf.
       assert (Hfvc : incl (collect_free_vars [] c) allowed)
         by (intros x Hx; apply Hfv, in_app_iff; left; exact Hx).
-      assert (Hfvt : incl (collect_free_vars [] t) allowed)
-        by (intros x Hx; apply Hfv, in_app_iff; right; apply in_app_iff; left; exact Hx).
-      assert (Hfvf : incl (collect_free_vars [] f) allowed)
-        by (intros x Hx; apply Hfv, in_app_iff; right; apply in_app_iff; right; exact Hx).
+      assert (Hfvt : incl (collect_free_vars [] t) allowed).
+      { intros x Hx; apply Hfv, in_app_iff; right.
+        apply in_app_iff; left; exact Hx. }
+      assert (Hfvf : incl (collect_free_vars [] f) allowed).
+      { intros x Hx; apply Hfv, in_app_iff; right.
+        apply in_app_iff; right; exact Hx. }
       pose proof (IHc Hwtc Hlfc Hfvc Hpenv Hctx Hph) as EHc.
       pose proof (IHt Hwtt Hlft Hfvt Hpenv Hctx Hph) as EHt.
       pose proof (IHf Hwtf Hlff Hfvf Hpenv Hctx Hph) as EHf.
@@ -1729,66 +1944,24 @@ Proof.
       destruct (simplify_expr_with_path_typing ctx (pc :: pcs) t Hwtt Hlft) as (Hwt_t' & Hbw_t' & _ & Hfv_t').
       destruct (simplify_expr_with_path_typing ctx (pc :: pcs) f Hwtf Hlff) as (Hwt_f' & Hbw_f' & _ & Hfv_f').
       cbn [simplify_expr_with_path] in Hwt_c', Hfv_c', Hwt_t', Hbw_t', Hfv_t', Hwt_f', Hbw_f', Hfv_f'.
-      assert (Hfvc' : incl (collect_free_vars [] (simplify_expr_with_path_aux ctx (pc :: pcs) c)) allowed)
-        by (intros x Hx; exact (Hfvc x (Hfv_c' x Hx))).
+      set (c' := simplify_expr_with_path_aux ctx (pc :: pcs) c) in *.
+      set (t' := simplify_expr_with_path_aux ctx (pc :: pcs) t) in *.
+      set (f' := simplify_expr_with_path_aux ctx (pc :: pcs) f) in *.
+      assert (Hfvc' : incl (collect_free_vars [] c') allowed) by (intros x Hx; exact (Hfvc x (Hfv_c' x Hx))).
+      assert (Hfvt' : incl (collect_free_vars [] t') allowed) by (intros x Hx; exact (Hfvt x (Hfv_t' x Hx))).
+      assert (Hfvf' : incl (collect_free_vars [] f') allowed) by (intros x Hx; exact (Hfvf x (Hfv_f' x Hx))).
       assert (Hsel_def :
         equiv_eou_dvalue
           (eval_closed_cert_expr penv foracle (CE_Select w c t f))
-          (eval_closed_cert_expr penv foracle
-             (CE_Select w
-                (simplify_expr_with_path_aux ctx (pc :: pcs) c)
-                (simplify_expr_with_path_aux ctx (pc :: pcs) t)
-                (simplify_expr_with_path_aux ctx (pc :: pcs) f)))).
+          (eval_closed_cert_expr penv foracle (CE_Select w c' t' f'))).
       { unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
         apply cert_eou_bind_equiv; [exact EHc | intros vc].
         apply cert_eou_bind_equiv; [exact EHt | intros vt].
         apply cert_eou_bind_equiv; [exact EHf | intros vf].
         apply equiv_eou_dvalue_refl. }
-      destruct (lookup_path_bool ctx (pc :: pcs) (simplify_expr_with_path_aux ctx (pc :: pcs) c))
-        as [[|] |] eqn:Elk.
-      * destruct (ub_free_expr (simplify_expr_with_path_aux ctx (pc :: pcs) f)) eqn:Eubf; [| exact Hsel_def].
-        destruct (lookup_path_bool_sound allowed ctx (pc :: pcs)
-                    (simplify_expr_with_path_aux ctx (pc :: pcs) c) penv foracle true Hpenv Hctx Hph Hfvc' Elk)
-          as [cbit [Ec' Ecbit]].
-        assert (Hpf' : wf_param_env_for (collect_free_vars [] (simplify_expr_with_path_aux ctx (pc :: pcs) f)) penv)
-          by (intros x wx Hx; exact (Hpenv x wx (Hfvf (x, wx) (Hfv_f' (x, wx) Hx)))).
-        destruct (ub_free_expr_eval_ret (simplify_expr_with_path_aux ctx (pc :: pcs) f) [] penv [] foracle
-                    Eubf Hwt_f' wf_let_val_env_nil Hpf') as [vf' [Ef' _]].
-        unfold eval_closed_cert_expr in *; rewrite Ec' in EHc; rewrite Ef' in EHf; cbn [eval_cert_expr].
-        destruct (eval_cert_expr penv [] foracle c) as [| | | vc] eqn:Ec; cbn in EHc; try contradiction EHc; subst vc.
-        destruct (eval_cert_expr penv [] foracle f) as [| | | vf] eqn:Ef; cbn in EHf; try contradiction EHf; subst vf.
-        cbn [eou_bind].
-        destruct (eval_cert_expr penv [] foracle t) as [| | | vt] eqn:Et;
-          destruct (eval_cert_expr penv [] foracle (simplify_expr_with_path_aux ctx (pc :: pcs) t))
-            as [| | | vt'] eqn:Et';
-          cbn in EHt |- *; try contradiction EHt; trivial; try exact EHt.
-        subst vt'; cbn [eval_select eval_select_base_dvalue]; rewrite Ecbit; reflexivity.
-      * destruct (ub_free_expr (simplify_expr_with_path_aux ctx (pc :: pcs) t)) eqn:Eubt; [| exact Hsel_def].
-        destruct (lookup_path_bool_sound allowed ctx (pc :: pcs)
-                    (simplify_expr_with_path_aux ctx (pc :: pcs) c) penv foracle false Hpenv Hctx Hph Hfvc' Elk)
-          as [cbit [Ec' Ecbit]].
-        assert (Hpt' : wf_param_env_for (collect_free_vars [] (simplify_expr_with_path_aux ctx (pc :: pcs) t)) penv)
-          by (intros x wx Hx; exact (Hpenv x wx (Hfvt (x, wx) (Hfv_t' (x, wx) Hx)))).
-        destruct (ub_free_expr_eval_ret (simplify_expr_with_path_aux ctx (pc :: pcs) t) [] penv [] foracle
-                    Eubt Hwt_t' wf_let_val_env_nil Hpt') as [vt' [Et' _]].
-        unfold eval_closed_cert_expr in *; rewrite Ec' in EHc; rewrite Et' in EHt; cbn [eval_cert_expr].
-        destruct (eval_cert_expr penv [] foracle c) as [| | | vc] eqn:Ec; cbn in EHc; try contradiction EHc; subst vc.
-        destruct (eval_cert_expr penv [] foracle t) as [| | | vt] eqn:Et; cbn in EHt; try contradiction EHt; subst vt.
-        cbn [eou_bind].
-        destruct (eval_cert_expr penv [] foracle f) as [| | | vf] eqn:Ef;
-          destruct (eval_cert_expr penv [] foracle (simplify_expr_with_path_aux ctx (pc :: pcs) f))
-            as [| | | vf'] eqn:Ef';
-          cbn in EHf |- *; try contradiction EHf; trivial; try exact EHf.
-        subst vf'; cbn [eval_select eval_select_base_dvalue]; rewrite Ecbit; reflexivity.
-      * destruct (simplify_select_signed_minmax (pc :: pcs) w
-                    (simplify_expr_with_path_aux ctx (pc :: pcs) c)
-                    (simplify_expr_with_path_aux ctx (pc :: pcs) t)
-                    (simplify_expr_with_path_aux ctx (pc :: pcs) f)) as [res |] eqn:Hsm;
-          [| exact Hsel_def].
-        eapply equiv_eou_dvalue_trans; [exact Hsel_def |].
-        rewrite (simplify_select_signed_minmax_eval allowed (pc :: pcs) w _ _ _ res penv foracle
-                   Hwt_c' Hwt_t' Hwt_f' (eq_trans Hbw_t' Hwtb) (eq_trans Hbw_f' Hwf) Hph Hsm).
-        apply equiv_eou_dvalue_refl.
+      exact (simplify_expr_with_path_eval_select allowed ctx pc pcs w c t f c' t' f' penv foracle
+               Hwt_c' Hwt_t' Hwt_f' Hbw_t' Hbw_f' Hwtb Hwf Hfvc' Hfvt' Hfvf' Hpenv Hctx Hph
+               EHc EHt EHf Hsel_def).
 Qed.
 
 Fixpoint check_dag_refines_cert_path
@@ -1906,6 +2079,221 @@ Fixpoint check_dag_refines_cert_path
             end
         end
   end.
+
+Local Lemma check_dag_refines_cert_path_branch {Pa : Params} :
+  forall fuel' allowed ctx path_ctx ro opt_pf src_evals src_br_conds cs ts fs d_tgt
+         (penv : param_env Pa) foracle dv_src,
+    (forall allowed0 ctx0 path_ctx0 ro0 opt_pf0 src_evals0 src_br_conds0 d_src0 d_tgt0
+            (penv0 : param_env Pa) foracle0 dv_src0,
+       wf_cfg_dag allowed0 d_src0 = true ->
+       wf_cfg_dag allowed0 d_tgt0 = true ->
+       wf_param_env_for allowed0 penv0 ->
+       ub_ctx_holds penv0 foracle0 ctx0 ->
+       path_ctx_holds allowed0 penv0 foracle0 path_ctx0 ->
+       (forall big, In big src_evals0 ->
+          wt_cert_expr [] big = true /\ is_let_free_expr big = true /\ incl (collect_free_vars [] big) allowed0) ->
+       (forall big, In big src_evals0 ->
+          exists dv, eval_closed_cert_expr penv0 foracle0 big = raise_ret dv) ->
+       (forall c, In c src_br_conds0 ->
+          exists cbit : @Integers.bit_int 1,
+            eval_closed_cert_expr penv0 foracle0 c = raise_ret (DVALUE_Base (@DVALUE_I Pa 1 cbit))) ->
+       check_dag_refines_cert_path fuel' allowed0 ctx0 path_ctx0 ro0 opt_pf0
+         src_evals0 src_br_conds0 d_src0 d_tgt0 = true ->
+       eval_cfg_dag penv0 foracle0 d_src0 = DO_Ret dv_src0 ->
+       exists dv_tgt,
+         eval_cfg_dag penv0 foracle0 d_tgt0 = DO_Ret dv_tgt /\
+         dvalue_refines dv_src0 dv_tgt) ->
+    wf_cfg_dag allowed (CD_Branch cs ts fs) = true ->
+    wf_cfg_dag allowed d_tgt = true ->
+    wf_param_env_for allowed penv ->
+    ub_ctx_holds penv foracle ctx ->
+    path_ctx_holds allowed penv foracle path_ctx ->
+    (forall big, In big src_evals ->
+      wt_cert_expr [] big = true /\ is_let_free_expr big = true /\ incl (collect_free_vars [] big) allowed) ->
+    (forall big, In big src_evals ->
+      exists dv, eval_closed_cert_expr penv foracle big = raise_ret dv) ->
+    (forall c, In c src_br_conds ->
+      exists cbit : @Integers.bit_int 1,
+        eval_closed_cert_expr penv foracle c = raise_ret (DVALUE_Base (@DVALUE_I Pa 1 cbit))) ->
+    (let ctx_t := extract_branch_cond_assumptions true cs ++ ctx in
+     let ctx_f := extract_branch_cond_assumptions false cs ++ ctx in
+     if spine_is_unreachable fs then
+       check_dag_refines_cert_path fuel' allowed ctx_t ((cs, true) :: path_ctx) ro opt_pf
+         (cs :: src_evals) (cs :: src_br_conds) ts d_tgt
+     else if spine_is_unreachable ts then
+       check_dag_refines_cert_path fuel' allowed ctx_f ((cs, false) :: path_ctx) ro opt_pf
+         (cs :: src_evals) (cs :: src_br_conds) fs d_tgt
+     else
+       match d_tgt with
+       | CD_Eval _ te next_t =>
+           expr_safe_under_src ctx src_evals te &&
+           check_dag_refines_cert_path fuel' allowed ctx path_ctx ro opt_pf
+             src_evals src_br_conds (CD_Branch cs ts fs) next_t
+       | CD_Branch ct tb ft =>
+           let ct_s := simplify_expr_with_path ctx path_ctx ct in
+           if check_expr_refines ctx cs ct_s &&
+              check_dag_refines_cert_path fuel' allowed ctx_t ((cs, true) :: path_ctx) ro opt_pf
+                (cs :: src_evals) (cs :: src_br_conds) ts tb &&
+              check_dag_refines_cert_path fuel' allowed ctx_f ((cs, false) :: path_ctx) ro opt_pf
+                (cs :: src_evals) (cs :: src_br_conds) fs ft
+           then true
+           else
+             check_dag_refines_cert_path fuel' allowed ctx_t ((cs, true) :: path_ctx) ro opt_pf
+               (cs :: src_evals) (cs :: src_br_conds) ts d_tgt &&
+             check_dag_refines_cert_path fuel' allowed ctx_f ((cs, false) :: path_ctx) ro opt_pf
+               (cs :: src_evals) (cs :: src_br_conds) fs d_tgt
+       | CD_RetScalar _ _ | CD_RetVoid =>
+           check_dag_refines_cert_path fuel' allowed ctx_t ((cs, true) :: path_ctx) ro opt_pf
+             (cs :: src_evals) (cs :: src_br_conds) ts d_tgt &&
+           check_dag_refines_cert_path fuel' allowed ctx_f ((cs, false) :: path_ctx) ro opt_pf
+             (cs :: src_evals) (cs :: src_br_conds) fs d_tgt
+       | _ => false
+       end) = true ->
+    eval_cfg_dag penv foracle (CD_Branch cs ts fs) = DO_Ret dv_src ->
+    exists dv_tgt,
+      eval_cfg_dag penv foracle d_tgt = DO_Ret dv_tgt /\
+      dvalue_refines dv_src dv_tgt.
+Proof.
+  intros fuel' allowed ctx path_ctx ro opt_pf src_evals src_br_conds cs ts fs d_tgt
+    penv foracle dv_src IH Hwfs Hwft Hpenv Hctx Hph Hsrc_wf Hsrc_ret Hbr_ret Hchk Hevs.
+  cbn zeta in Hchk.
+  pose proof Hwfs as Hwfs_all; pose proof Hevs as Hevs_all.
+  cbn [wf_cfg_dag eval_cfg_dag] in Hwfs, Hevs; rewrite !andb_true_iff in Hwfs.
+  destruct Hwfs as (((((Hwtcs & Hbwcs) & Hlfcs) & Hfvcs) & Hwfts) & Hwffs).
+  apply Pos.eqb_eq in Hbwcs.
+  destruct (eval_closed_cert_expr penv foracle cs) as [| | | dvcs] eqn:Ecs; try discriminate Hevs.
+  destruct dvcs as [dbcs | |]; try discriminate Hevs.
+  destruct dbcs as [| wcs cbit | | | | | |]; try discriminate Hevs.
+  destruct wcs as [| |]; try discriminate Hevs.
+  assert (Hsrc_wf' : forall big, In big (cs :: src_evals) ->
+    wt_cert_expr [] big = true /\ is_let_free_expr big = true /\ incl (collect_free_vars [] big) allowed).
+  { intros big [<- | Hin];
+      [exact (conj Hwtcs (conj Hlfcs (vars_subset_b_incl _ _ Hfvcs))) | exact (Hsrc_wf big Hin)]. }
+  assert (Hsrc_ret' : forall big, In big (cs :: src_evals) ->
+    exists dv, eval_closed_cert_expr penv foracle big = raise_ret dv).
+  { intros big [<- | Hin]; [eexists; exact Ecs | exact (Hsrc_ret big Hin)]. }
+  assert (Hbr_ret' : forall c, In c (cs :: src_br_conds) ->
+    exists cb0 : @Integers.bit_int 1,
+      eval_closed_cert_expr penv foracle c = raise_ret (DVALUE_Base (@DVALUE_I Pa 1 cb0))).
+  { intros c [<- | Hin]; [exists cbit; exact Ecs | exact (Hbr_ret c Hin)]. }
+  assert (Hph_step : forall b_br, (@Integers.unsigned 1 cbit =? 1)%Z = b_br ->
+    path_ctx_holds allowed penv foracle ((cs, b_br) :: path_ctx)).
+  { intros b_br Hb_br; constructor; [| exact Hph].
+    repeat split; try assumption; [exact (vars_subset_b_incl _ _ Hfvcs) |].
+    exists cbit; split; [exact Ecs | exact Hb_br]. }
+  destruct (spine_is_unreachable fs) eqn:Eufs.
+  - destruct (@Integers.unsigned 1 cbit =? 1)%Z eqn:Ecbit.
+    + pose proof (extract_branch_cond_assumptions_sound
+                    penv foracle true cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_t.
+      exact (IH allowed (extract_branch_cond_assumptions true cs ++ ctx) ((cs, true) :: path_ctx) ro opt_pf
+               (cs :: src_evals) (cs :: src_br_conds) ts d_tgt
+               penv foracle dv_src Hwfts Hwft Hpenv Hctx_t
+               (Hph_step true eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk Hevs).
+    + rewrite (spine_is_unreachable_sound penv foracle fs Eufs) in Hevs; discriminate Hevs.
+  - destruct (spine_is_unreachable ts) eqn:Euts.
+    + destruct (@Integers.unsigned 1 cbit =? 1)%Z eqn:Ecbit.
+      * rewrite (spine_is_unreachable_sound penv foracle ts Euts) in Hevs; discriminate Hevs.
+      * pose proof (extract_branch_cond_assumptions_sound
+                      penv foracle false cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_f.
+        exact (IH allowed (extract_branch_cond_assumptions false cs ++ ctx) ((cs, false) :: path_ctx) ro opt_pf
+                 (cs :: src_evals) (cs :: src_br_conds) fs d_tgt
+                 penv foracle dv_src Hwffs Hwft Hpenv Hctx_f
+                 (Hph_step false eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk Hevs).
+    + destruct d_tgt as [| | wt et | wt te next_t | uas_t next_t | ct tt ft]; try discriminate Hchk.
+      * (* d_tgt = CD_RetVoid *)
+        apply andb_true_iff in Hchk as [Hchk_t Hchk_f].
+        destruct (@Integers.unsigned 1 cbit =? 1)%Z eqn:Ecbit.
+        -- pose proof (extract_branch_cond_assumptions_sound
+                         penv foracle true cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_t.
+           exact (IH allowed (extract_branch_cond_assumptions true cs ++ ctx) ((cs, true) :: path_ctx) ro opt_pf
+                    (cs :: src_evals) (cs :: src_br_conds) ts CD_RetVoid
+                    penv foracle dv_src Hwfts Hwft Hpenv Hctx_t
+                    (Hph_step true eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk_t Hevs).
+        -- pose proof (extract_branch_cond_assumptions_sound
+                         penv foracle false cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_f.
+           exact (IH allowed (extract_branch_cond_assumptions false cs ++ ctx) ((cs, false) :: path_ctx) ro opt_pf
+                    (cs :: src_evals) (cs :: src_br_conds) fs CD_RetVoid
+                    penv foracle dv_src Hwffs Hwft Hpenv Hctx_f
+                    (Hph_step false eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk_f Hevs).
+      * (* d_tgt = CD_RetScalar wt et *)
+        apply andb_true_iff in Hchk as [Hchk_t Hchk_f].
+        destruct (@Integers.unsigned 1 cbit =? 1)%Z eqn:Ecbit.
+        -- pose proof (extract_branch_cond_assumptions_sound
+                         penv foracle true cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_t.
+           exact (IH allowed (extract_branch_cond_assumptions true cs ++ ctx) ((cs, true) :: path_ctx) ro opt_pf
+                    (cs :: src_evals) (cs :: src_br_conds) ts (CD_RetScalar wt et)
+                    penv foracle dv_src Hwfts Hwft Hpenv Hctx_t
+                    (Hph_step true eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk_t Hevs).
+        -- pose proof (extract_branch_cond_assumptions_sound
+                         penv foracle false cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_f.
+           exact (IH allowed (extract_branch_cond_assumptions false cs ++ ctx) ((cs, false) :: path_ctx) ro opt_pf
+                    (cs :: src_evals) (cs :: src_br_conds) fs (CD_RetScalar wt et)
+                    penv foracle dv_src Hwffs Hwft Hpenv Hctx_f
+                    (Hph_step false eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk_f Hevs).
+      * (* d_tgt = CD_Eval wt te next_t *)
+        apply andb_true_iff in Hchk as [Hsafe Hchk'].
+        cbn [wf_cfg_dag] in Hwft; rewrite !andb_true_iff in Hwft.
+        destruct Hwft as ((((Hwte & _) & _) & Hfve) & Hwfnt).
+        pose proof (vars_subset_b_wf_param _ allowed penv Hfve Hpenv) as Hpte.
+        destruct (expr_safe_under_src_sound te ctx src_evals penv foracle Hsafe Hwte Hpte Hctx Hsrc_ret)
+          as [dve [Ete _]].
+        cbn [eval_cfg_dag]; rewrite Ete.
+        exact (IH allowed ctx path_ctx ro opt_pf src_evals src_br_conds (CD_Branch cs ts fs) next_t
+                 penv foracle dv_src Hwfs_all Hwfnt Hpenv Hctx Hph Hsrc_wf Hsrc_ret Hbr_ret Hchk' Hevs_all).
+      * (* d_tgt = CD_Branch ct tt ft *)
+        cbn zeta in Hchk.
+        destruct (check_expr_refines ctx cs (simplify_expr_with_path ctx path_ctx ct) &&
+                  check_dag_refines_cert_path fuel' allowed (extract_branch_cond_assumptions true cs ++ ctx)
+                    ((cs, true) :: path_ctx) ro opt_pf (cs :: src_evals) (cs :: src_br_conds) ts tt &&
+                  check_dag_refines_cert_path fuel' allowed (extract_branch_cond_assumptions false cs ++ ctx)
+                    ((cs, false) :: path_ctx) ro opt_pf (cs :: src_evals) (cs :: src_br_conds) fs ft) eqn:Hlock.
+        -- rewrite !andb_true_iff in Hlock; destruct Hlock as ([Hc_ref Hchk_t] & Hchk_f).
+           cbn [wf_cfg_dag] in Hwft; rewrite !andb_true_iff in Hwft.
+           destruct Hwft as (((((Hwtct & _) & Hlfct) & Hfvct) & Hwftt) & Hwfft).
+           pose proof (vars_subset_b_wf_param _ allowed penv Hfvcs Hpenv) as Hpcs.
+           pose proof (vars_subset_b_incl _ _ Hfvct) as Hincl_ct.
+           destruct (simplify_expr_with_path_typing ctx path_ctx ct Hwtct Hlfct) as (_ & _ & _ & Hfv_cts).
+           pose proof (fun x wx Hx => Hpenv x wx (Hincl_ct (x, wx) (Hfv_cts (x, wx) Hx))) as Hpcts.
+           pose proof (check_expr_refines_sound ctx cs (simplify_expr_with_path ctx path_ctx ct)
+                         penv foracle Hc_ref Hpcs Hpcts Hctx) as Hcref.
+           rewrite Ecs in Hcref; cbn [refine_eou_dvalue] in Hcref.
+           destruct (eval_closed_cert_expr penv foracle (simplify_expr_with_path ctx path_ctx ct))
+             as [| | | dvct] eqn:Ects; try contradiction Hcref.
+           destruct Hcref as [Hps | ->]; [discriminate Hps |].
+           pose proof (simplify_expr_with_path_eval allowed ctx path_ctx ct penv foracle
+                         Hwtct Hlfct Hincl_ct Hpenv Hctx Hph) as Heq_ct.
+           rewrite Ects in Heq_ct.
+           destruct (eval_closed_cert_expr penv foracle ct) as [| | | dvct0] eqn:Ect;
+             cbn in Heq_ct; try contradiction Heq_ct; subst dvct0.
+           cbn [eval_cfg_dag]; rewrite Ect.
+           destruct (@Integers.unsigned 1 cbit =? 1)%Z eqn:Ecbit.
+           ++ pose proof (extract_branch_cond_assumptions_sound
+                            penv foracle true cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_t.
+              exact (IH allowed (extract_branch_cond_assumptions true cs ++ ctx) ((cs, true) :: path_ctx) ro opt_pf
+                       (cs :: src_evals) (cs :: src_br_conds) ts tt
+                       penv foracle dv_src Hwfts Hwftt Hpenv Hctx_t
+                       (Hph_step true eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk_t Hevs).
+           ++ pose proof (extract_branch_cond_assumptions_sound
+                            penv foracle false cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_f.
+              exact (IH allowed (extract_branch_cond_assumptions false cs ++ ctx) ((cs, false) :: path_ctx) ro opt_pf
+                       (cs :: src_evals) (cs :: src_br_conds) fs ft
+                       penv foracle dv_src Hwffs Hwfft Hpenv Hctx_f
+                       (Hph_step false eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk_f Hevs).
+        -- apply andb_true_iff in Hchk as [Hchk_t Hchk_f].
+           destruct (@Integers.unsigned 1 cbit =? 1)%Z eqn:Ecbit.
+           ++ pose proof (extract_branch_cond_assumptions_sound
+                            penv foracle true cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_t.
+              exact (IH allowed (extract_branch_cond_assumptions true cs ++ ctx) ((cs, true) :: path_ctx) ro opt_pf
+                       (cs :: src_evals) (cs :: src_br_conds) ts (CD_Branch ct tt ft)
+                       penv foracle dv_src Hwfts Hwft Hpenv Hctx_t
+                       (Hph_step true eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk_t Hevs).
+           ++ pose proof (extract_branch_cond_assumptions_sound
+                            penv foracle false cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_f.
+              exact (IH allowed (extract_branch_cond_assumptions false cs ++ ctx) ((cs, false) :: path_ctx) ro opt_pf
+                       (cs :: src_evals) (cs :: src_br_conds) fs (CD_Branch ct tt ft)
+                       penv foracle dv_src Hwffs Hwft Hpenv Hctx_f
+                       (Hph_step false eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk_f Hevs).
+Qed.
 
 Lemma check_dag_refines_cert_path_sound {Pa : Params} :
   forall fuel allowed ctx path_ctx ro opt_pf src_evals src_br_conds d_src d_tgt
@@ -2041,123 +2429,9 @@ Proof.
   - (* CD_BlockAssume impossible since as_block_assume d_src = None *)
     discriminate Eba_s.
   - (* CD_Branch on d_src *)
-    cbn zeta in Hchk.
-    pose proof Hwfs as Hwfs_all; pose proof Hevs as Hevs_all.
-    cbn [wf_cfg_dag eval_cfg_dag] in Hwfs, Hevs; rewrite !andb_true_iff in Hwfs.
-    destruct Hwfs as (((((Hwtcs & Hbwcs) & Hlfcs) & Hfvcs) & Hwfts) & Hwffs).
-    apply Pos.eqb_eq in Hbwcs.
-    destruct (eval_closed_cert_expr penv foracle cs) as [| | | dvcs] eqn:Ecs; try discriminate Hevs.
-    destruct dvcs as [dbcs | |]; try discriminate Hevs.
-    destruct dbcs as [| wcs cbit | | | | | |]; try discriminate Hevs.
-    destruct wcs as [| |]; try discriminate Hevs.
-    assert (Hsrc_wf' : forall big, In big (cs :: src_evals) ->
-      wt_cert_expr [] big = true /\ is_let_free_expr big = true /\ incl (collect_free_vars [] big) allowed).
-    { intros big [<- | Hin];
-        [exact (conj Hwtcs (conj Hlfcs (vars_subset_b_incl _ _ Hfvcs))) | exact (Hsrc_wf big Hin)]. }
-    assert (Hsrc_ret' : forall big, In big (cs :: src_evals) ->
-      exists dv, eval_closed_cert_expr penv foracle big = raise_ret dv).
-    { intros big [<- | Hin]; [eexists; exact Ecs | exact (Hsrc_ret big Hin)]. }
-    assert (Hbr_ret' : forall c, In c (cs :: src_br_conds) ->
-      exists cb0 : @Integers.bit_int 1,
-        eval_closed_cert_expr penv foracle c = raise_ret (DVALUE_Base (@DVALUE_I Pa 1 cb0))).
-    { intros c [<- | Hin]; [exists cbit; exact Ecs | exact (Hbr_ret c Hin)]. }
-    assert (Hph_step : forall b_br, (@Integers.unsigned 1 cbit =? 1)%Z = b_br ->
-      path_ctx_holds allowed penv foracle ((cs, b_br) :: path_ctx)).
-    { intros b_br Hb_br; constructor; [| exact Hph].
-      repeat split; try assumption; [exact (vars_subset_b_incl _ _ Hfvcs) |].
-      exists cbit; split; [exact Ecs | exact Hb_br]. }
-    destruct (spine_is_unreachable fs) eqn:Eufs.
-    + destruct (@Integers.unsigned 1 cbit =? 1)%Z eqn:Ecbit.
-      * pose proof (extract_branch_cond_assumptions_sound penv foracle true cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_t.
-        exact (IH allowed (extract_branch_cond_assumptions true cs ++ ctx) ((cs, true) :: path_ctx) ro opt_pf
-                 (cs :: src_evals) (cs :: src_br_conds) ts d_tgt
-                 penv foracle dv_src Hwfts Hwft Hpenv Hctx_t (Hph_step true eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk Hevs).
-      * rewrite (spine_is_unreachable_sound penv foracle fs Eufs) in Hevs; discriminate Hevs.
-    + destruct (spine_is_unreachable ts) eqn:Euts.
-      * destruct (@Integers.unsigned 1 cbit =? 1)%Z eqn:Ecbit.
-        -- rewrite (spine_is_unreachable_sound penv foracle ts Euts) in Hevs; discriminate Hevs.
-        -- pose proof (extract_branch_cond_assumptions_sound penv foracle false cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_f.
-           exact (IH allowed (extract_branch_cond_assumptions false cs ++ ctx) ((cs, false) :: path_ctx) ro opt_pf
-                    (cs :: src_evals) (cs :: src_br_conds) fs d_tgt
-                    penv foracle dv_src Hwffs Hwft Hpenv Hctx_f (Hph_step false eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk Hevs).
-      * destruct d_tgt as [| | wt et | wt te next_t | uas_t next_t | ct tt ft]; try discriminate Hchk.
-        -- (* d_tgt = CD_RetVoid *)
-           apply andb_true_iff in Hchk as [Hchk_t Hchk_f].
-           destruct (@Integers.unsigned 1 cbit =? 1)%Z eqn:Ecbit.
-           ++ pose proof (extract_branch_cond_assumptions_sound penv foracle true cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_t.
-              exact (IH allowed (extract_branch_cond_assumptions true cs ++ ctx) ((cs, true) :: path_ctx) ro opt_pf
-                       (cs :: src_evals) (cs :: src_br_conds) ts CD_RetVoid
-                       penv foracle dv_src Hwfts Hwft Hpenv Hctx_t (Hph_step true eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk_t Hevs).
-           ++ pose proof (extract_branch_cond_assumptions_sound penv foracle false cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_f.
-              exact (IH allowed (extract_branch_cond_assumptions false cs ++ ctx) ((cs, false) :: path_ctx) ro opt_pf
-                       (cs :: src_evals) (cs :: src_br_conds) fs CD_RetVoid
-                       penv foracle dv_src Hwffs Hwft Hpenv Hctx_f (Hph_step false eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk_f Hevs).
-        -- (* d_tgt = CD_RetScalar wt et *)
-           apply andb_true_iff in Hchk as [Hchk_t Hchk_f].
-           destruct (@Integers.unsigned 1 cbit =? 1)%Z eqn:Ecbit.
-           ++ pose proof (extract_branch_cond_assumptions_sound penv foracle true cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_t.
-              exact (IH allowed (extract_branch_cond_assumptions true cs ++ ctx) ((cs, true) :: path_ctx) ro opt_pf
-                       (cs :: src_evals) (cs :: src_br_conds) ts (CD_RetScalar wt et)
-                       penv foracle dv_src Hwfts Hwft Hpenv Hctx_t (Hph_step true eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk_t Hevs).
-           ++ pose proof (extract_branch_cond_assumptions_sound penv foracle false cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_f.
-              exact (IH allowed (extract_branch_cond_assumptions false cs ++ ctx) ((cs, false) :: path_ctx) ro opt_pf
-                       (cs :: src_evals) (cs :: src_br_conds) fs (CD_RetScalar wt et)
-                       penv foracle dv_src Hwffs Hwft Hpenv Hctx_f (Hph_step false eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk_f Hevs).
-        -- (* d_tgt = CD_Eval wt te next_t *)
-           apply andb_true_iff in Hchk as [Hsafe Hchk'].
-           cbn [wf_cfg_dag] in Hwft; rewrite !andb_true_iff in Hwft.
-           destruct Hwft as ((((Hwte & _) & _) & Hfve) & Hwfnt).
-           pose proof (vars_subset_b_wf_param _ allowed penv Hfve Hpenv) as Hpte.
-           destruct (expr_safe_under_src_sound te ctx src_evals penv foracle Hsafe Hwte Hpte Hctx Hsrc_ret)
-             as [dve [Ete _]].
-           cbn [eval_cfg_dag]; rewrite Ete.
-           exact (IH allowed ctx path_ctx ro opt_pf src_evals src_br_conds (CD_Branch cs ts fs) next_t
-                    penv foracle dv_src Hwfs_all Hwfnt Hpenv Hctx Hph Hsrc_wf Hsrc_ret Hbr_ret Hchk' Hevs_all).
-        -- (* d_tgt = CD_Branch ct tt ft *)
-           cbn zeta in Hchk.
-           destruct (check_expr_refines ctx cs (simplify_expr_with_path ctx path_ctx ct) &&
-                     check_dag_refines_cert_path fuel' allowed (extract_branch_cond_assumptions true cs ++ ctx)
-                       ((cs, true) :: path_ctx) ro opt_pf (cs :: src_evals) (cs :: src_br_conds) ts tt &&
-                     check_dag_refines_cert_path fuel' allowed (extract_branch_cond_assumptions false cs ++ ctx)
-                       ((cs, false) :: path_ctx) ro opt_pf (cs :: src_evals) (cs :: src_br_conds) fs ft) eqn:Hlock.
-           ++ rewrite !andb_true_iff in Hlock; destruct Hlock as ([Hc_ref Hchk_t] & Hchk_f).
-              cbn [wf_cfg_dag] in Hwft; rewrite !andb_true_iff in Hwft.
-              destruct Hwft as (((((Hwtct & _) & Hlfct) & Hfvct) & Hwftt) & Hwfft).
-              pose proof (vars_subset_b_wf_param _ allowed penv Hfvcs Hpenv) as Hpcs.
-              pose proof (vars_subset_b_incl _ _ Hfvct) as Hincl_ct.
-              destruct (simplify_expr_with_path_typing ctx path_ctx ct Hwtct Hlfct) as (_ & _ & _ & Hfv_cts).
-              pose proof (fun x wx Hx => Hpenv x wx (Hincl_ct (x, wx) (Hfv_cts (x, wx) Hx))) as Hpcts.
-              pose proof (check_expr_refines_sound ctx cs (simplify_expr_with_path ctx path_ctx ct)
-                            penv foracle Hc_ref Hpcs Hpcts Hctx) as Hcref.
-              rewrite Ecs in Hcref; cbn [refine_eou_dvalue] in Hcref.
-              destruct (eval_closed_cert_expr penv foracle (simplify_expr_with_path ctx path_ctx ct))
-                as [| | | dvct] eqn:Ects; try contradiction Hcref.
-              destruct Hcref as [Hps | ->]; [discriminate Hps |].
-              pose proof (simplify_expr_with_path_eval allowed ctx path_ctx ct penv foracle
-                            Hwtct Hlfct Hincl_ct Hpenv Hctx Hph) as Heq_ct.
-              rewrite Ects in Heq_ct.
-              destruct (eval_closed_cert_expr penv foracle ct) as [| | | dvct0] eqn:Ect;
-                cbn in Heq_ct; try contradiction Heq_ct; subst dvct0.
-              cbn [eval_cfg_dag]; rewrite Ect.
-              destruct (@Integers.unsigned 1 cbit =? 1)%Z eqn:Ecbit.
-              ** pose proof (extract_branch_cond_assumptions_sound penv foracle true cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_t.
-                 exact (IH allowed (extract_branch_cond_assumptions true cs ++ ctx) ((cs, true) :: path_ctx) ro opt_pf
-                          (cs :: src_evals) (cs :: src_br_conds) ts tt
-                          penv foracle dv_src Hwfts Hwftt Hpenv Hctx_t (Hph_step true eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk_t Hevs).
-              ** pose proof (extract_branch_cond_assumptions_sound penv foracle false cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_f.
-                 exact (IH allowed (extract_branch_cond_assumptions false cs ++ ctx) ((cs, false) :: path_ctx) ro opt_pf
-                          (cs :: src_evals) (cs :: src_br_conds) fs ft
-                          penv foracle dv_src Hwffs Hwfft Hpenv Hctx_f (Hph_step false eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk_f Hevs).
-           ++ apply andb_true_iff in Hchk as [Hchk_t Hchk_f].
-              destruct (@Integers.unsigned 1 cbit =? 1)%Z eqn:Ecbit.
-              ** pose proof (extract_branch_cond_assumptions_sound penv foracle true cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_t.
-                 exact (IH allowed (extract_branch_cond_assumptions true cs ++ ctx) ((cs, true) :: path_ctx) ro opt_pf
-                          (cs :: src_evals) (cs :: src_br_conds) ts (CD_Branch ct tt ft)
-                          penv foracle dv_src Hwfts Hwft Hpenv Hctx_t (Hph_step true eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk_t Hevs).
-              ** pose proof (extract_branch_cond_assumptions_sound penv foracle false cs cbit ctx Hwtcs Hlfcs Ecs Ecbit Hctx) as Hctx_f.
-                 exact (IH allowed (extract_branch_cond_assumptions false cs ++ ctx) ((cs, false) :: path_ctx) ro opt_pf
-                          (cs :: src_evals) (cs :: src_br_conds) fs (CD_Branch ct tt ft)
-                          penv foracle dv_src Hwffs Hwft Hpenv Hctx_f (Hph_step false eq_refl) Hsrc_wf' Hsrc_ret' Hbr_ret' Hchk_f Hevs).
+    exact (check_dag_refines_cert_path_branch fuel' allowed ctx path_ctx ro opt_pf
+             src_evals src_br_conds cs ts fs d_tgt penv foracle dv_src
+             IH Hwfs Hwft Hpenv Hctx Hph Hsrc_wf Hsrc_ret Hbr_ret Hchk Hevs).
 Qed.
 
 Definition check_dag_refines_cert

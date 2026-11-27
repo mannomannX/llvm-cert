@@ -584,7 +584,8 @@ Proof.
       as [[msgi Emsgi] | [vi [Evi Hwfvi]]];
       [rewrite ?Emsgi; destruct k, k_in; try discriminate Ech;
        repeat match type of Ech with (if ?b then _ else _) = _ => destruct b; try discriminate Ech end;
-       inversion Ech; subst out0; cbn [eval_cert_expr eou_bind]; rewrite ?Emsgi; cbn [eou_bind];
+       inversion Ech; subst out0; cbn [eval_cert_expr eou_bind];
+       rewrite ?Emsgi; cbn [eou_bind];
        first [exact I | reflexivity] |].
     rewrite Hwi in Hwfvi.
     destruct k, k_in; try discriminate Ech.
@@ -842,7 +843,8 @@ Proof.
   assert (Htw_le : (tw <= fw)%positive) by (apply Pos.lt_le_incl, Pos.ltb_lt; exact Htf).
   destruct Hwvx as [-> | [ix ->]], Hwvy as [-> | [iy ->]];
     cbn - [Pos.eqb Pos.ltb] in Hbx, Hby |- *.
-  - subst vx' vy'; destruct op; try discriminate Hop; unfold eval_iop; cbn; reflexivity.
+  - subst vx' vy'; destruct op; try discriminate Hop;
+      now (unfold eval_iop; cbn).
   - rewrite Pos.eqb_refl, Htf in Hby; cbn in Hby; subst vx' vy';
       destruct op; try discriminate Hop; unfold eval_iop; cbn; reflexivity.
   - rewrite Pos.eqb_refl, Htf in Hbx; cbn in Hbx; subst vx' vy';
@@ -923,13 +925,16 @@ Proof.
   unfold norm_select_step.
   destruct (is_one_const_expr 1 nc && ub_free_expr nf).
   - repeat split; [exact Hwt0 | exact Htt | exact Hlt |].
-    intros x Hx; apply in_app_iff; right; apply in_app_iff; left; exact Hx.
+    intros x Hx; apply in_app_iff; right.
+    apply in_app_iff; left; exact Hx.
   - destruct (is_zero_const_expr 1 nc && ub_free_expr nt).
     + repeat split; [exact Hwf0 | exact Htf | exact Hlf |].
-      intros x Hx; apply in_app_iff; right; apply in_app_iff; right; exact Hx.
+      intros x Hx; apply in_app_iff; right.
+      apply in_app_iff; right; exact Hx.
     + destruct (cert_expr_eqb nt nf && expr_guaranteed_defined ctx nc).
       * repeat split; [exact Hwt0 | exact Htt | exact Hlt |].
-        intros x Hx; apply in_app_iff; right; apply in_app_iff; left; exact Hx.
+        intros x Hx; apply in_app_iff; right.
+        apply in_app_iff; left; exact Hx.
       * destruct (Pos.eqb w 1 && is_one_const_expr 1 nt && is_zero_const_expr 1 nf) eqn:Es10.
         -- rewrite !andb_true_iff in Es10; destruct Es10 as ([Ew1 _] & _);
              apply Pos.eqb_eq in Ew1; rewrite Ew1.
@@ -941,7 +946,8 @@ Proof.
            ++ destruct (extract_not_expr 1 nc) as [c0 |] eqn:Enc; [| exact Hdef_out].
               destruct (ub_free_expr nt && ub_free_expr nf); [| exact Hdef_out].
               pose proof (extract_not_expr_inv 1 nc c0 Enc) as Heqc; subst nc.
-              cbn [wt_cert_expr cert_expr_bit_width] in Htc; cbn in Hlc; rewrite !andb_true_iff in Htc; rewrite !andb_true_iff in Hlc.
+              cbn [wt_cert_expr cert_expr_bit_width] in Htc; cbn in Hlc;
+                rewrite !andb_true_iff in Htc; rewrite !andb_true_iff in Hlc.
               destruct Htc as ((((_ & Htc0) & _) & Hwc0) & _); destruct Hlc as [Hlc0 _].
               apply Pos.eqb_eq in Hwc0.
               cbn - [Pos.eqb]; rewrite Htc0, Htf, Htt, Hwc0, Hwf0, Hwt0, !Pos.eqb_refl, Hlc0, Hlf, Hlt, app_nil_r.
@@ -969,10 +975,12 @@ Proof.
   intros Pa ctx w nc nt nf penv foracle Hwc Hwt0 Hwf0 Htc Htt Htf Hpenv Hctx.
   assert (Hpc : wf_param_env_for (collect_free_vars [] nc) penv)
     by (intros x wx Hx; apply Hpenv, in_app_iff; left; exact Hx).
-  assert (Hpt : wf_param_env_for (collect_free_vars [] nt) penv)
-    by (intros x wx Hx; apply Hpenv, in_app_iff; right; apply in_app_iff; left; exact Hx).
-  assert (Hpf : wf_param_env_for (collect_free_vars [] nf) penv)
-    by (intros x wx Hx; apply Hpenv, in_app_iff; right; apply in_app_iff; right; exact Hx).
+  assert (Hpt : wf_param_env_for (collect_free_vars [] nt) penv).
+  { intros x wx Hx.
+    apply Hpenv, in_app_iff; right; apply in_app_iff; left; exact Hx. }
+  assert (Hpf : wf_param_env_for (collect_free_vars [] nf) penv).
+  { intros x wx Hx.
+    apply Hpenv, in_app_iff; right; apply in_app_iff; right; exact Hx. }
   unfold norm_select_step.
   destruct (is_one_const_expr 1 nc && ub_free_expr nf) eqn:Ec1.
   - apply andb_true_iff in Ec1 as [Eo1 Eubf]; rewrite (is_one_const_expr_inv 1 nc Eo1).
@@ -1263,10 +1271,12 @@ Proof.
     apply Pos.eqb_eq in Hwc; apply Pos.eqb_eq in Hwt0; apply Pos.eqb_eq in Hwf0.
     assert (Hpc : wf_param_env_for (collect_free_vars [] c) penv)
       by (intros x wx Hx; apply Hpenv, in_app_iff; left; exact Hx).
-    assert (Hpt : wf_param_env_for (collect_free_vars [] t) penv)
-      by (intros x wx Hx; apply Hpenv, in_app_iff; right; apply in_app_iff; left; exact Hx).
-    assert (Hpf : wf_param_env_for (collect_free_vars [] f) penv)
-      by (intros x wx Hx; apply Hpenv, in_app_iff; right; apply in_app_iff; right; exact Hx).
+    assert (Hpt : wf_param_env_for (collect_free_vars [] t) penv).
+    { intros x wx Hx.
+      apply Hpenv, in_app_iff; right; apply in_app_iff; left; exact Hx. }
+    assert (Hpf : wf_param_env_for (collect_free_vars [] f) penv).
+    { intros x wx Hx.
+      apply Hpenv, in_app_iff; right; apply in_app_iff; right; exact Hx. }
     destruct (normalize_cert_expr_typing ctx c Hwtc Hlfc) as (Hbc & Htc & _ & Hinc_c).
     destruct (normalize_cert_expr_typing ctx t Hwtt Hlft) as (Hbt & Htt & _ & Hinc_t).
     destruct (normalize_cert_expr_typing ctx f Hwtf Hlff) as (Hbf & Htf & _ & Hinc_f).
@@ -1475,9 +1485,11 @@ Lemma eval_iop_div_rem_same_lhs :
       (@eval_iop Pa (cert_to_ibinop op fl2) vl vr2).
 Proof.
   intros Pa op fl1 fl2 w vl vr1 vr2 Hop Hfl Hwfl Hwfr1 _ [-> | ->].
-  - destruct Hwfl as [-> | [il ->]]; destruct op; cbn in Hop; try discriminate; cbn; exact I.
+  - destruct Hwfl as [-> | [il ->]]; destruct op; cbn in Hop; try discriminate;
+      cbn; exact I.
   - destruct Hwfr1 as [-> | [ir ->]].
-    + destruct Hwfl as [-> | [il ->]]; destruct op; cbn in Hop; try discriminate; cbn; exact I.
+    + destruct Hwfl as [-> | [il ->]]; destruct op; cbn in Hop; try discriminate;
+        cbn; exact I.
     + destruct Hwfl as [-> | [il ->]].
       * destruct op; cbn in Hop; try discriminate; cbn;
           try apply dvalue_refines_refl;
@@ -1873,8 +1885,11 @@ Proof.
   intros Pa ss1 ss2 pr w il ir Hss.
   set (ms := @msamesign (@Integers.bit_int w) (@VIntVMemInt (@Integers.bit_int w) (@VInt_Bounded w)) il ir).
   destruct ss1, ss2; cbn in Hss; try discriminate Hss; destruct ms eqn:Ems;
-    [| left; destruct pr; unfold cert_to_icmp, eval_int_icmp, dvp; cbn [andb orb negb]; fold ms; rewrite ?Ems; reflexivity
-     | | left; destruct pr; unfold cert_to_icmp, eval_int_icmp, dvp; cbn [andb orb negb]; fold ms; rewrite ?Ems; reflexivity | |];
+    [| left; destruct pr; unfold cert_to_icmp, eval_int_icmp, dvp;
+         cbn [andb orb negb]; fold ms; rewrite ?Ems; reflexivity
+     | | left; destruct pr; unfold cert_to_icmp, eval_int_icmp, dvp;
+           cbn [andb orb negb]; fold ms; rewrite ?Ems; reflexivity
+     | |];
     right; destruct pr; unfold cert_to_icmp, neg_cert_icmp, eval_int_icmp;
     cbn [andb orb negb bind ret EOU_monad mcmp mcmpu cmp cmpu mdtyp_of_int VIntVMemInt VInt_Bounded];
     fold ms; rewrite ?Ems;
@@ -1888,7 +1903,9 @@ Proof.
            | |- context [if @Integers.ltu ?sz ?a ?b then _ else _] => destruct (@Integers.ltu sz a b)
            | |- context [if @Integers.lt ?sz ?a ?b then _ else _] => destruct (@Integers.lt sz a b)
            end;
-    cbn [negb]; ((exists true; split; reflexivity) || (exists false; split; reflexivity)).
+    cbn [negb];
+    ((exists true; split; reflexivity)
+     || (exists false; split; reflexivity)).
 Qed.
 
 Lemma eval_icmp_neg_select :
@@ -2232,6 +2249,879 @@ Proof.
   rewrite <- (@Integers.repr_unsigned w x), <- (@Integers.repr_unsigned w y), H; reflexivity.
 Qed.
 
+Local Lemma check_src_elim_binop_id_r :
+  forall {Pa : Params} (rec : cert_expr -> cert_expr -> bool)
+         op w fl l r tgt (penv : param_env Pa) (foracle : freeze_oracle) cval,
+    (forall s t,
+       rec s t = true ->
+       cert_expr_bit_width s = cert_expr_bit_width t ->
+       wt_cert_expr [] s = true ->
+       wt_cert_expr [] t = true ->
+       wf_param_env_for (collect_free_vars [] s) penv ->
+       wf_param_env_for (collect_free_vars [] t) penv ->
+       refine_eou_dvalue
+         (eval_closed_cert_expr penv foracle s)
+         (eval_closed_cert_expr penv foracle t)) ->
+    w = cert_expr_bit_width tgt ->
+    cert_expr_bit_width l = w ->
+    wt_cert_expr [] l = true ->
+    wt_cert_expr [] tgt = true ->
+    wf_param_env_for (collect_free_vars [] l) penv ->
+    wf_param_env_for (collect_free_vars [] tgt) penv ->
+    is_div_or_rem_op op = false ->
+    r = CE_BvConst w cval ->
+    rec l tgt = true ->
+    (forall il : @Integers.bit_int w,
+       @eval_iop Pa (cert_to_ibinop op no_binop_flags)
+         (DVALUE_Base (@DVALUE_I Pa w il))
+         (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N cval)))) =
+       raise_ret (DVALUE_Base (@DVALUE_I Pa w il))) ->
+    refine_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_BinOp op w fl l r))
+      (eval_closed_cert_expr penv foracle tgt).
+Proof.
+  intros Pa rec op w fl l r tgt penv foracle cval IH Hbw Hwl Hwtl Hwtt Hpl Hpt Hndiv -> Hrec Hiop.
+  pose proof (IH l tgt Hrec (eq_trans Hwl Hbw) Hwtl Hwtt Hpl Hpt) as Hlt.
+  unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+  destruct (eval_cert_expr_totality l [] penv [] foracle Hwtl wf_let_val_env_nil Hpl)
+    as [[msgl Evl] | [vl [Evl Hwfvl]]];
+    [rewrite Evl; cbn; exact I | rewrite Evl; cbn [eou_bind] in *].
+  rewrite Hwl in Hwfvl.
+  apply (refine_eou_dvalue_trans _
+           (@eval_iop Pa (cert_to_ibinop op no_binop_flags) vl
+              (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N cval))))) _).
+  - exact (eval_iop_non_div_rem_monotone op fl no_binop_flags w vl vl _ _
+             Hndiv (binop_flags_weaken_no_flags fl) Hwfvl Hwfvl
+             (or_intror (ex_intro _ _ eq_refl)) (or_intror (ex_intro _ _ eq_refl))
+             (dvalue_refines_refl _) (dvalue_refines_refl _)).
+  - destruct Hwfvl as [-> | [il ->]].
+    + assert (Hp : @eval_iop Pa (cert_to_ibinop op no_binop_flags)
+                     (DVALUE_Base DVALUE_Poison)
+                     (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N cval)))) =
+                   raise_ret (DVALUE_Base DVALUE_Poison))
+        by (destruct op; cbn in Hndiv; try discriminate; reflexivity).
+      rewrite Hp, <- Evl; exact Hlt.
+    + rewrite Hiop, <- Evl; exact Hlt.
+Qed.
+
+Local Lemma check_src_elim_binop_id_l :
+  forall {Pa : Params} (rec : cert_expr -> cert_expr -> bool)
+         op w fl l r tgt (penv : param_env Pa) (foracle : freeze_oracle) cval,
+    (forall s t,
+       rec s t = true ->
+       cert_expr_bit_width s = cert_expr_bit_width t ->
+       wt_cert_expr [] s = true ->
+       wt_cert_expr [] t = true ->
+       wf_param_env_for (collect_free_vars [] s) penv ->
+       wf_param_env_for (collect_free_vars [] t) penv ->
+       refine_eou_dvalue
+         (eval_closed_cert_expr penv foracle s)
+         (eval_closed_cert_expr penv foracle t)) ->
+    w = cert_expr_bit_width tgt ->
+    cert_expr_bit_width r = w ->
+    wt_cert_expr [] r = true ->
+    wt_cert_expr [] tgt = true ->
+    wf_param_env_for (collect_free_vars [] r) penv ->
+    wf_param_env_for (collect_free_vars [] tgt) penv ->
+    is_div_or_rem_op op = false ->
+    l = CE_BvConst w cval ->
+    rec r tgt = true ->
+    (forall ir : @Integers.bit_int w,
+       @eval_iop Pa (cert_to_ibinop op no_binop_flags)
+         (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N cval))))
+         (DVALUE_Base (@DVALUE_I Pa w ir)) =
+       raise_ret (DVALUE_Base (@DVALUE_I Pa w ir))) ->
+    refine_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_BinOp op w fl l r))
+      (eval_closed_cert_expr penv foracle tgt).
+Proof.
+  intros Pa rec op w fl l r tgt penv foracle cval IH Hbw Hwr Hwtr Hwtt Hpr Hpt Hndiv -> Hrec Hiop.
+  pose proof (IH r tgt Hrec (eq_trans Hwr Hbw) Hwtr Hwtt Hpr Hpt) as Hrt.
+  unfold eval_closed_cert_expr in *; cbn [eval_cert_expr eou_bind].
+  destruct (eval_cert_expr_totality r [] penv [] foracle Hwtr wf_let_val_env_nil Hpr)
+    as [[msgr Evr] | [vr [Evr Hwfvr]]];
+    [rewrite Evr; cbn; exact I | rewrite Evr; cbn [eou_bind] in *].
+  rewrite Hwr in Hwfvr.
+  apply (refine_eou_dvalue_trans _
+           (@eval_iop Pa (cert_to_ibinop op no_binop_flags)
+              (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N cval)))) vr) _).
+  - exact (eval_iop_non_div_rem_monotone op fl no_binop_flags w _ _ vr vr
+             Hndiv (binop_flags_weaken_no_flags fl)
+             (or_intror (ex_intro _ _ eq_refl)) (or_intror (ex_intro _ _ eq_refl))
+             Hwfvr Hwfvr (dvalue_refines_refl _) (dvalue_refines_refl _)).
+  - destruct Hwfvr as [-> | [ir ->]].
+    + assert (Hp : @eval_iop Pa (cert_to_ibinop op no_binop_flags)
+                     (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N cval))))
+                     (DVALUE_Base DVALUE_Poison) =
+                   raise_ret (DVALUE_Base DVALUE_Poison))
+        by (destruct op; cbn in Hndiv; try discriminate; reflexivity).
+      rewrite Hp, <- Evr; exact Hrt.
+    + rewrite Hiop, <- Evr; exact Hrt.
+Qed.
+
+Local Lemma check_src_elim_binop_cancel_lhs :
+  forall {Pa : Params} (rec : cert_expr -> cert_expr -> bool)
+         op w fl l r tgt (penv : param_env Pa) (foracle : freeze_oracle)
+         op_in comm_in
+         (iop_in iop_out : @Integers.bit_int w -> @Integers.bit_int w -> @Integers.bit_int w),
+    (forall s t,
+       rec s t = true ->
+       cert_expr_bit_width s = cert_expr_bit_width t ->
+       wt_cert_expr [] s = true ->
+       wt_cert_expr [] t = true ->
+       wf_param_env_for (collect_free_vars [] s) penv ->
+       wf_param_env_for (collect_free_vars [] t) penv ->
+       refine_eou_dvalue
+         (eval_closed_cert_expr penv foracle s)
+         (eval_closed_cert_expr penv foracle t)) ->
+    w = cert_expr_bit_width tgt ->
+    cert_expr_bit_width l = w ->
+    cert_expr_bit_width r = w ->
+    wt_cert_expr [] l = true ->
+    wt_cert_expr [] r = true ->
+    wt_cert_expr [] tgt = true ->
+    wf_param_env_for (collect_free_vars [] l) penv ->
+    wf_param_env_for (collect_free_vars [] r) penv ->
+    wf_param_env_for (collect_free_vars [] tgt) penv ->
+    is_div_or_rem_op op = false ->
+    is_div_or_rem_op op_in = false ->
+    check_cancel_binop_lhs op_in comm_in rec l r tgt = true ->
+    (forall x y, eval_int_op (cert_to_ibinop op_in no_binop_flags) x y =
+                 raise_ret (@DVALUE_I Pa w (iop_in x y))) ->
+    (forall x y, eval_int_op (cert_to_ibinop op no_binop_flags) x y =
+                 raise_ret (@DVALUE_I Pa w (iop_out x y))) ->
+    (forall x y, iop_out (iop_in x y) y = x) ->
+    (comm_in = true -> forall x y, iop_in x y = iop_in y x) ->
+    refine_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_BinOp op w fl l r))
+      (eval_closed_cert_expr penv foracle tgt).
+Proof.
+  intros Pa rec op w fl l r tgt penv foracle op_in comm_in iop_in iop_out
+         IH Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt
+         Hndiv_out Hndiv_in Hchk0 Hiop_in Hiop_out Hcan Hcomm_in.
+  unfold check_cancel_binop_lhs in Hchk0.
+  destruct (match_inner_binop op_in l) as [[[fl_in a] b] |] eqn:Em; [| discriminate Hchk0].
+  destruct (match_inner_binop_inv op_in l fl_in a b Em) as [wl Heql]; subst l.
+  cbn [cert_expr_bit_width] in Hwl; subst wl.
+  cbn [wt_cert_expr collect_free_vars] in Hwtl, Hpl; rewrite !andb_true_iff in Hwtl.
+  destruct Hwtl as ((((_ & Hta) & Htb) & Hwa) & Hwb).
+  apply Pos.eqb_eq in Hwa; apply Pos.eqb_eq in Hwb.
+  assert (Hpa : wf_param_env_for (collect_free_vars [] a) penv)
+    by (intros x wx Hx; apply Hpl, in_app_iff; left; exact Hx).
+  assert (Hpb : wf_param_env_for (collect_free_vars [] b) penv)
+    by (intros x wx Hx; apply Hpl, in_app_iff; right; exact Hx).
+  apply orb_true_iff in Hchk0 as [Hbr | Har].
+  - rewrite !andb_true_iff in Hbr; destruct Hbr as ([Heqbr Hubr] & Hrec).
+    apply cert_expr_eqb_eq in Heqbr; subst b.
+    pose proof (IH a tgt Hrec (eq_trans Hwa Hbw) Hta Hwtt Hpa Hpt) as Hat.
+    destruct (ub_free_expr_eval_ret r [] penv [] foracle Hubr Hwtr wf_let_val_env_nil Hpr)
+      as [vr [Evr Hwfvr]]; rewrite Hwr in Hwfvr.
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+    destruct (eval_cert_expr_totality a [] penv [] foracle Hta wf_let_val_env_nil Hpa)
+      as [[msga ->] | [va [Eva Hwfva]]]; [cbn; exact I | rewrite Eva in Hat |- *; cbn [eou_bind]].
+    rewrite Hwa in Hwfva; rewrite Evr; cbn [eou_bind].
+    destruct (eval_cert_expr penv [] foracle tgt) as [| | | vtgt];
+      cbn in Hat; try contradiction.
+    exact (eval_iop_nested_weaken_l op_in op fl_in fl w va vr vr vtgt iop_in iop_out
+             Hndiv_in Hndiv_out Hwfva Hwfvr Hwfvr Hiop_in Hiop_out
+             (fun ia ib ic Hia Hib Hic =>
+                ltac:(rewrite Hib in Hic; apply dvalue_i_inj in Hic; subst ic;
+                      rewrite Hcan, <- Hia; exact Hat))).
+  - rewrite !andb_true_iff in Har; destruct Har as (((Hc_in & Heqar) & Hubr) & Hrec).
+    apply cert_expr_eqb_eq in Heqar; subst a.
+    pose proof (IH b tgt Hrec (eq_trans Hwb Hbw) Htb Hwtt Hpb Hpt) as Hbt.
+    destruct (ub_free_expr_eval_ret r [] penv [] foracle Hubr Hwtr wf_let_val_env_nil Hpr)
+      as [vr [Evr Hwfvr]]; rewrite Hwr in Hwfvr.
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Evr; cbn [eou_bind].
+    destruct (eval_cert_expr_totality b [] penv [] foracle Htb wf_let_val_env_nil Hpb)
+      as [[msgb ->] | [vb [Evb Hwfvb]]]; [cbn; exact I | rewrite Evb in Hbt |- *; cbn [eou_bind]].
+    rewrite Hwb in Hwfvb; rewrite ?Evr; cbn [eou_bind].
+    destruct (eval_cert_expr penv [] foracle tgt) as [| | | vtgt];
+      cbn in Hbt; try contradiction.
+    exact (eval_iop_nested_weaken_l op_in op fl_in fl w vr vb vr vtgt iop_in iop_out
+             Hndiv_in Hndiv_out Hwfvr Hwfvb Hwfvr Hiop_in Hiop_out
+             (fun ia ib ic Hia Hib Hic =>
+                ltac:(rewrite Hia in Hic; apply dvalue_i_inj in Hic; subst ic;
+                      rewrite (Hcomm_in Hc_in ia ib), Hcan, <- Hib; exact Hbt))).
+Qed.
+
+Local Lemma check_src_elim_binop_cancel_rhs :
+  forall {Pa : Params} (rec : cert_expr -> cert_expr -> bool)
+         op w fl l r tgt (penv : param_env Pa) (foracle : freeze_oracle)
+         op_in comm_in
+         (iop_in iop_out : @Integers.bit_int w -> @Integers.bit_int w -> @Integers.bit_int w),
+    (forall s t,
+       rec s t = true ->
+       cert_expr_bit_width s = cert_expr_bit_width t ->
+       wt_cert_expr [] s = true ->
+       wt_cert_expr [] t = true ->
+       wf_param_env_for (collect_free_vars [] s) penv ->
+       wf_param_env_for (collect_free_vars [] t) penv ->
+       refine_eou_dvalue
+         (eval_closed_cert_expr penv foracle s)
+         (eval_closed_cert_expr penv foracle t)) ->
+    w = cert_expr_bit_width tgt ->
+    cert_expr_bit_width l = w ->
+    cert_expr_bit_width r = w ->
+    wt_cert_expr [] l = true ->
+    wt_cert_expr [] r = true ->
+    wt_cert_expr [] tgt = true ->
+    wf_param_env_for (collect_free_vars [] l) penv ->
+    wf_param_env_for (collect_free_vars [] r) penv ->
+    wf_param_env_for (collect_free_vars [] tgt) penv ->
+    is_div_or_rem_op op = false ->
+    is_div_or_rem_op op_in = false ->
+    check_cancel_binop_rhs op_in comm_in rec l r tgt = true ->
+    (forall x y, eval_int_op (cert_to_ibinop op_in no_binop_flags) x y =
+                 raise_ret (@DVALUE_I Pa w (iop_in x y))) ->
+    (forall x y, eval_int_op (cert_to_ibinop op no_binop_flags) x y =
+                 raise_ret (@DVALUE_I Pa w (iop_out x y))) ->
+    (forall x y, iop_out y (iop_in x y) = x) ->
+    (comm_in = true -> forall x y, iop_in x y = iop_in y x) ->
+    refine_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_BinOp op w fl l r))
+      (eval_closed_cert_expr penv foracle tgt).
+Proof.
+  intros Pa rec op w fl l r tgt penv foracle op_in comm_in iop_in iop_out
+         IH Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt
+         Hndiv_out Hndiv_in Hchk0 Hiop_in Hiop_out Hcan Hcomm_in.
+  unfold check_cancel_binop_rhs in Hchk0.
+  destruct (match_inner_binop op_in r) as [[[fl_in a] b] |] eqn:Em; [| discriminate Hchk0].
+  destruct (match_inner_binop_inv op_in r fl_in a b Em) as [wr Heqr]; subst r.
+  cbn [cert_expr_bit_width] in Hwr; subst wr.
+  cbn [wt_cert_expr collect_free_vars] in Hwtr, Hpr; rewrite !andb_true_iff in Hwtr.
+  destruct Hwtr as ((((_ & Hta) & Htb) & Hwa) & Hwb).
+  apply Pos.eqb_eq in Hwa; apply Pos.eqb_eq in Hwb.
+  assert (Hpa : wf_param_env_for (collect_free_vars [] a) penv)
+    by (intros x wx Hx; apply Hpr, in_app_iff; left; exact Hx).
+  assert (Hpb : wf_param_env_for (collect_free_vars [] b) penv)
+    by (intros x wx Hx; apply Hpr, in_app_iff; right; exact Hx).
+  apply orb_true_iff in Hchk0 as [Hbl | Hal].
+  - rewrite !andb_true_iff in Hbl; destruct Hbl as ([Heqbl Hubl] & Hrec).
+    apply cert_expr_eqb_eq in Heqbl; subst b.
+    pose proof (IH a tgt Hrec (eq_trans Hwa Hbw) Hta Hwtt Hpa Hpt) as Hat.
+    destruct (ub_free_expr_eval_ret l [] penv [] foracle Hubl Hwtl wf_let_val_env_nil Hpl)
+      as [vl [Evl Hwfvl]]; rewrite Hwl in Hwfvl.
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Evl; cbn [eou_bind].
+    destruct (eval_cert_expr_totality a [] penv [] foracle Hta wf_let_val_env_nil Hpa)
+      as [[msga ->] | [va [Eva Hwfva]]]; [cbn; exact I | rewrite Eva in Hat |- *; cbn [eou_bind]].
+    rewrite Hwa in Hwfva; rewrite ?Evl; cbn [eou_bind].
+    destruct (eval_cert_expr penv [] foracle tgt) as [| | | vtgt];
+      cbn in Hat; try contradiction.
+    exact (eval_iop_nested_weaken_r op_in op fl_in fl w vl va vl vtgt iop_in iop_out
+             Hndiv_in Hndiv_out Hwfvl Hwfva Hwfvl Hiop_in Hiop_out
+             (fun ia ib ic Hia Hib Hic =>
+                ltac:(rewrite Hia in Hic; apply dvalue_i_inj in Hic; subst ic;
+                      rewrite Hcan, <- Hib; exact Hat))).
+  - rewrite !andb_true_iff in Hal; destruct Hal as (((Hc_in & Heqal) & Hubl) & Hrec).
+    apply cert_expr_eqb_eq in Heqal; subst a.
+    pose proof (IH b tgt Hrec (eq_trans Hwb Hbw) Htb Hwtt Hpb Hpt) as Hbt.
+    destruct (ub_free_expr_eval_ret l [] penv [] foracle Hubl Hwtl wf_let_val_env_nil Hpl)
+      as [vl [Evl Hwfvl]]; rewrite Hwl in Hwfvl.
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite !Evl; cbn [eou_bind].
+    destruct (eval_cert_expr_totality b [] penv [] foracle Htb wf_let_val_env_nil Hpb)
+      as [[msgb ->] | [vb [Evb Hwfvb]]]; [cbn; exact I | rewrite Evb in Hbt |- *; cbn [eou_bind]].
+    rewrite Hwb in Hwfvb.
+    destruct (eval_cert_expr penv [] foracle tgt) as [| | | vtgt];
+      cbn in Hbt; try contradiction.
+    exact (eval_iop_nested_weaken_r op_in op fl_in fl w vl vl vb vtgt iop_in iop_out
+             Hndiv_in Hndiv_out Hwfvl Hwfvl Hwfvb Hiop_in Hiop_out
+             (fun ia ib ic Hia Hib Hic =>
+                ltac:(rewrite Hia in Hib; apply dvalue_i_inj in Hib; subst ib;
+                      rewrite (Hcomm_in Hc_in ia ic), Hcan, <- Hic; exact Hbt))).
+Qed.
+
+Local Lemma check_src_elim_binop_absorb_rhs :
+  forall {Pa : Params} (rec : cert_expr -> cert_expr -> bool)
+         op w fl l r tgt (penv : param_env Pa) (foracle : freeze_oracle) op_in
+         (iop_in iop_out : @Integers.bit_int w -> @Integers.bit_int w -> @Integers.bit_int w),
+    (forall s t,
+       rec s t = true ->
+       cert_expr_bit_width s = cert_expr_bit_width t ->
+       wt_cert_expr [] s = true ->
+       wt_cert_expr [] t = true ->
+       wf_param_env_for (collect_free_vars [] s) penv ->
+       wf_param_env_for (collect_free_vars [] t) penv ->
+       refine_eou_dvalue
+         (eval_closed_cert_expr penv foracle s)
+         (eval_closed_cert_expr penv foracle t)) ->
+    w = cert_expr_bit_width tgt ->
+    cert_expr_bit_width l = w ->
+    cert_expr_bit_width r = w ->
+    wt_cert_expr [] l = true ->
+    wt_cert_expr [] r = true ->
+    wt_cert_expr [] tgt = true ->
+    wf_param_env_for (collect_free_vars [] l) penv ->
+    wf_param_env_for (collect_free_vars [] r) penv ->
+    wf_param_env_for (collect_free_vars [] tgt) penv ->
+    is_div_or_rem_op op = false ->
+    is_div_or_rem_op op_in = false ->
+    check_absorb_binop_rhs op_in rec l r tgt = true ->
+    (forall x y, eval_int_op (cert_to_ibinop op_in no_binop_flags) x y =
+                 raise_ret (@DVALUE_I Pa w (iop_in x y))) ->
+    (forall x y, eval_int_op (cert_to_ibinop op no_binop_flags) x y =
+                 raise_ret (@DVALUE_I Pa w (iop_out x y))) ->
+    (forall x y, iop_out x (iop_in x y) = x) ->
+    (forall x y, iop_in x y = iop_in y x) ->
+    refine_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_BinOp op w fl l r))
+      (eval_closed_cert_expr penv foracle tgt).
+Proof.
+  intros Pa rec op w fl l r tgt penv foracle op_in iop_in iop_out
+         IH Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt
+         Hndiv_out Hndiv_in Hchk0 Hiop_in Hiop_out Habs Hcomm_in.
+  unfold check_absorb_binop_rhs in Hchk0.
+  destruct (match_inner_binop op_in r) as [[[fl_in a] b] |] eqn:Em; [| discriminate Hchk0].
+  destruct (match_inner_binop_inv op_in r fl_in a b Em) as [wr Heqr]; subst r.
+  cbn [cert_expr_bit_width] in Hwr; subst wr.
+  cbn [wt_cert_expr collect_free_vars] in Hwtr, Hpr; rewrite !andb_true_iff in Hwtr.
+  destruct Hwtr as ((((_ & Hta) & Htb) & Hwa) & Hwb).
+  apply Pos.eqb_eq in Hwa; apply Pos.eqb_eq in Hwb.
+  assert (Hpa : wf_param_env_for (collect_free_vars [] a) penv)
+    by (intros x wx Hx; apply Hpr, in_app_iff; left; exact Hx).
+  assert (Hpb : wf_param_env_for (collect_free_vars [] b) penv)
+    by (intros x wx Hx; apply Hpr, in_app_iff; right; exact Hx).
+  apply orb_true_iff in Hchk0 as [Hal | Hbl];
+    [rewrite !andb_true_iff in Hal | rewrite !andb_true_iff in Hbl].
+  - destruct Hal as ([Heqal Hubb] & Hrec); apply cert_expr_eqb_eq in Heqal; subst a.
+    pose proof (IH l tgt Hrec (eq_trans Hwl Hbw) Hwtl Hwtt Hpl Hpt) as Hlt.
+    destruct (ub_free_expr_eval_ret b [] penv [] foracle Hubb Htb wf_let_val_env_nil Hpb)
+      as [vb [Evb Hwfvb]]; rewrite Hwb in Hwfvb.
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+    destruct (eval_cert_expr_totality l [] penv [] foracle Hwtl wf_let_val_env_nil Hpl)
+      as [[msgl ->] | [vl [Evl Hwfvl]]];
+      [cbn; exact I | rewrite ?Evl in Hlt; rewrite !Evl; cbn [eou_bind]].
+    rewrite Hwl in Hwfvl; rewrite Evb; cbn [eou_bind].
+    destruct (eval_cert_expr penv [] foracle tgt) as [| | | vtgt];
+      cbn in Hlt; try contradiction.
+    exact (eval_iop_nested_weaken_r op_in op fl_in fl w vl vl vb vtgt iop_in iop_out
+             Hndiv_in Hndiv_out Hwfvl Hwfvl Hwfvb Hiop_in Hiop_out
+             (fun ia ib ic Hia Hib _ =>
+                ltac:(rewrite Hia in Hib; apply dvalue_i_inj in Hib; subst ib;
+                      rewrite Habs, <- Hia; exact Hlt))).
+  - destruct Hbl as ([Heqbl Huba] & Hrec); apply cert_expr_eqb_eq in Heqbl; subst b.
+    pose proof (IH l tgt Hrec (eq_trans Hwl Hbw) Hwtl Hwtt Hpl Hpt) as Hlt.
+    destruct (ub_free_expr_eval_ret a [] penv [] foracle Huba Hta wf_let_val_env_nil Hpa)
+      as [va [Eva Hwfva]]; rewrite Hwa in Hwfva.
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+    destruct (eval_cert_expr_totality l [] penv [] foracle Hwtl wf_let_val_env_nil Hpl)
+      as [[msgl ->] | [vl [Evl Hwfvl]]];
+      [cbn; exact I | rewrite Evl in Hlt |- *; cbn [eou_bind]].
+    rewrite Hwl in Hwfvl; rewrite Eva, ?Evl; cbn [eou_bind].
+    destruct (eval_cert_expr penv [] foracle tgt) as [| | | vtgt];
+      cbn in Hlt; try contradiction.
+    exact (eval_iop_nested_weaken_r op_in op fl_in fl w vl va vl vtgt iop_in iop_out
+             Hndiv_in Hndiv_out Hwfvl Hwfva Hwfvl Hiop_in Hiop_out
+             (fun ia ib ic Hia _ Hic =>
+                ltac:(rewrite Hia in Hic; apply dvalue_i_inj in Hic; subst ic;
+                      rewrite (Hcomm_in ib ia), Habs, <- Hia; exact Hlt))).
+Qed.
+
+Local Lemma check_src_elim_binop_absorb_lhs :
+  forall {Pa : Params} (rec : cert_expr -> cert_expr -> bool)
+         op w fl l r tgt (penv : param_env Pa) (foracle : freeze_oracle) op_in
+         (iop_in iop_out : @Integers.bit_int w -> @Integers.bit_int w -> @Integers.bit_int w),
+    (forall s t,
+       rec s t = true ->
+       cert_expr_bit_width s = cert_expr_bit_width t ->
+       wt_cert_expr [] s = true ->
+       wt_cert_expr [] t = true ->
+       wf_param_env_for (collect_free_vars [] s) penv ->
+       wf_param_env_for (collect_free_vars [] t) penv ->
+       refine_eou_dvalue
+         (eval_closed_cert_expr penv foracle s)
+         (eval_closed_cert_expr penv foracle t)) ->
+    w = cert_expr_bit_width tgt ->
+    cert_expr_bit_width l = w ->
+    cert_expr_bit_width r = w ->
+    wt_cert_expr [] l = true ->
+    wt_cert_expr [] r = true ->
+    wt_cert_expr [] tgt = true ->
+    wf_param_env_for (collect_free_vars [] l) penv ->
+    wf_param_env_for (collect_free_vars [] r) penv ->
+    wf_param_env_for (collect_free_vars [] tgt) penv ->
+    is_div_or_rem_op op = false ->
+    is_div_or_rem_op op_in = false ->
+    check_absorb_binop_lhs op_in rec l r tgt = true ->
+    (forall x y, eval_int_op (cert_to_ibinop op_in no_binop_flags) x y =
+                 raise_ret (@DVALUE_I Pa w (iop_in x y))) ->
+    (forall x y, eval_int_op (cert_to_ibinop op no_binop_flags) x y =
+                 raise_ret (@DVALUE_I Pa w (iop_out x y))) ->
+    (forall x y, iop_out (iop_in x y) x = x) ->
+    (forall x y, iop_in x y = iop_in y x) ->
+    refine_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_BinOp op w fl l r))
+      (eval_closed_cert_expr penv foracle tgt).
+Proof.
+  intros Pa rec op w fl l r tgt penv foracle op_in iop_in iop_out
+         IH Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt
+         Hndiv_out Hndiv_in Hchk0 Hiop_in Hiop_out Habs Hcomm_in.
+  unfold check_absorb_binop_lhs in Hchk0.
+  destruct (match_inner_binop op_in l) as [[[fl_in a] b] |] eqn:Em; [| discriminate Hchk0].
+  destruct (match_inner_binop_inv op_in l fl_in a b Em) as [wl Heql]; subst l.
+  cbn [cert_expr_bit_width] in Hwl; subst wl.
+  cbn [wt_cert_expr collect_free_vars] in Hwtl, Hpl; rewrite !andb_true_iff in Hwtl.
+  destruct Hwtl as ((((_ & Hta) & Htb) & Hwa) & Hwb).
+  apply Pos.eqb_eq in Hwa; apply Pos.eqb_eq in Hwb.
+  assert (Hpa : wf_param_env_for (collect_free_vars [] a) penv)
+    by (intros x wx Hx; apply Hpl, in_app_iff; left; exact Hx).
+  assert (Hpb : wf_param_env_for (collect_free_vars [] b) penv)
+    by (intros x wx Hx; apply Hpl, in_app_iff; right; exact Hx).
+  apply orb_true_iff in Hchk0 as [Har | Hbr];
+    [rewrite !andb_true_iff in Har | rewrite !andb_true_iff in Hbr].
+  - destruct Har as ([Heqar Hubb] & Hrec); apply cert_expr_eqb_eq in Heqar; subst a.
+    pose proof (IH r tgt Hrec (eq_trans Hwr Hbw) Hwtr Hwtt Hpr Hpt) as Hrt.
+    destruct (ub_free_expr_eval_ret b [] penv [] foracle Hubb Htb wf_let_val_env_nil Hpb)
+      as [vb [Evb Hwfvb]]; rewrite Hwb in Hwfvb.
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+    destruct (eval_cert_expr_totality r [] penv [] foracle Hwtr wf_let_val_env_nil Hpr)
+      as [[msgr ->] | [vr [Evr Hwfvr]]];
+      [cbn; exact I | rewrite Evr in Hrt |- *; cbn [eou_bind]].
+    rewrite Hwr in Hwfvr; rewrite Evb, ?Evr; cbn [eou_bind].
+    destruct (eval_cert_expr penv [] foracle tgt) as [| | | vtgt];
+      cbn in Hrt; try contradiction.
+    exact (eval_iop_nested_weaken_l op_in op fl_in fl w vr vb vr vtgt iop_in iop_out
+             Hndiv_in Hndiv_out Hwfvr Hwfvb Hwfvr Hiop_in Hiop_out
+             (fun ia ib ic Hia _ Hic =>
+                ltac:(rewrite Hia in Hic; apply dvalue_i_inj in Hic; subst ic;
+                      rewrite Habs, <- Hia; exact Hrt))).
+  - destruct Hbr as ([Heqbr Huba] & Hrec); apply cert_expr_eqb_eq in Heqbr; subst b.
+    pose proof (IH r tgt Hrec (eq_trans Hwr Hbw) Hwtr Hwtt Hpr Hpt) as Hrt.
+    destruct (ub_free_expr_eval_ret a [] penv [] foracle Huba Hta wf_let_val_env_nil Hpa)
+      as [va [Eva Hwfva]]; rewrite Hwa in Hwfva.
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Eva; cbn [eou_bind].
+    destruct (eval_cert_expr_totality r [] penv [] foracle Hwtr wf_let_val_env_nil Hpr)
+      as [[msgr ->] | [vr [Evr Hwfvr]]];
+      [cbn; exact I | rewrite ?Evr in Hrt; rewrite !Evr; cbn [eou_bind]].
+    rewrite Hwr in Hwfvr.
+    destruct (eval_cert_expr penv [] foracle tgt) as [| | | vtgt];
+      cbn in Hrt; try contradiction.
+    exact (eval_iop_nested_weaken_l op_in op fl_in fl w va vr vr vtgt iop_in iop_out
+             Hndiv_in Hndiv_out Hwfva Hwfvr Hwfvr Hiop_in Hiop_out
+             (fun ia ib ic _ Hib Hic =>
+                ltac:(rewrite Hib in Hic; apply dvalue_i_inj in Hic; subst ic;
+                      rewrite (Hcomm_in ia ib), Habs, <- Hib; exact Hrt))).
+Qed.
+
+Local Lemma check_src_elim_binop_arith :
+  forall {Pa : Params} (rec : cert_expr -> cert_expr -> bool) (ctx : ub_ctx)
+         op w fl l r tgt (penv : param_env Pa) (foracle : freeze_oracle),
+    (op = CB_Add \/ op = CB_Sub \/ op = CB_Mul) ->
+    (forall s t,
+       rec s t = true ->
+       cert_expr_bit_width s = cert_expr_bit_width t ->
+       wt_cert_expr [] s = true ->
+       wt_cert_expr [] t = true ->
+       wf_param_env_for (collect_free_vars [] s) penv ->
+       wf_param_env_for (collect_free_vars [] t) penv ->
+       refine_eou_dvalue
+         (eval_closed_cert_expr penv foracle s)
+         (eval_closed_cert_expr penv foracle t)) ->
+    check_src_elim_step rec ctx (CE_BinOp op w fl l r) tgt = true ->
+    w = cert_expr_bit_width tgt ->
+    cert_expr_bit_width l = w ->
+    cert_expr_bit_width r = w ->
+    wt_cert_expr [] l = true ->
+    wt_cert_expr [] r = true ->
+    wt_cert_expr [] tgt = true ->
+    wf_param_env_for (collect_free_vars [] l) penv ->
+    wf_param_env_for (collect_free_vars [] r) penv ->
+    wf_param_env_for (collect_free_vars [] tgt) penv ->
+    refine_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_BinOp op w fl l r))
+      (eval_closed_cert_expr penv foracle tgt).
+Proof.
+  intros Pa rec ctx op w fl l r tgt penv foracle Hop IH Hstep Hbw Hwl Hwr
+         Hwtl Hwtr Hwtt Hpl Hpr Hpt.
+  destruct Hop as [-> | [-> | ->]]; cbn [check_src_elim_step] in Hstep.
+  - (* CB_Add *)
+    rewrite !orb_true_iff in Hstep; destruct Hstep as [[[Hc | Hc] | Hc] | Hc].
+    + apply andb_true_iff in Hc as [Hz Hrec].
+      apply (check_src_elim_binop_id_r rec CB_Add w fl l r tgt penv foracle 0%N
+               IH Hbw Hwl Hwtl Hwtt Hpl Hpt eq_refl (is_zero_const_expr_inv w r Hz) Hrec).
+      intros il; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
+      rewrite Integers.add_zero; reflexivity.
+    + apply andb_true_iff in Hc as [Hz Hrec].
+      apply (check_src_elim_binop_id_l rec CB_Add w fl l r tgt penv foracle 0%N
+               IH Hbw Hwr Hwtr Hwtt Hpr Hpt eq_refl (is_zero_const_expr_inv w l Hz) Hrec).
+      intros ir; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
+      rewrite Integers.add_zero_l; reflexivity.
+    + exact (check_src_elim_binop_cancel_lhs rec CB_Add w fl l r tgt penv foracle
+               CB_Sub false (@Integers.sub w) (@Integers.add w)
+               IH Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt eq_refl eq_refl Hc
+               (fun _ _ => eq_refl) (fun _ _ => eq_refl) (alg_sub_add_cancel w)
+               (fun H => False_ind _ (Bool.diff_false_true H))).
+    + exact (check_src_elim_binop_cancel_rhs rec CB_Add w fl l r tgt penv foracle
+               CB_Sub false (@Integers.sub w) (@Integers.add w)
+               IH Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt eq_refl eq_refl Hc
+               (fun _ _ => eq_refl) (fun _ _ => eq_refl) (fun x y => alg_sub_add_cancel_l w y x)
+               (fun H => False_ind _ (Bool.diff_false_true H))).
+  - (* CB_Sub *)
+    rewrite !orb_true_iff in Hstep; destruct Hstep as [[Hc | Hc] | Hc].
+    + apply andb_true_iff in Hc as [H1 H2].
+      apply (check_src_elim_binop_id_r rec CB_Sub w fl l r tgt penv foracle 0%N
+               IH Hbw Hwl Hwtl Hwtt Hpl Hpt eq_refl (is_zero_const_expr_inv w r H1) H2).
+      intros il; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
+      rewrite Integers.sub_zero_l; reflexivity.
+    + apply andb_true_iff in Hc as [H1 H2].
+      apply cert_expr_eqb_eq in H1; subst r.
+      rewrite (is_zero_const_expr_inv w tgt H2).
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+      destruct (eval_cert_expr_totality l [] penv [] foracle Hwtl wf_let_val_env_nil Hpl)
+        as [[msgl ->] | [vl [-> Hwfvl]]]; [cbn; exact I | cbn [eou_bind]].
+      rewrite Hwl in Hwfvl.
+      apply (refine_eou_dvalue_trans _
+               (@eval_iop Pa (cert_to_ibinop CB_Sub no_binop_flags) vl vl) _).
+      * exact (eval_iop_non_div_rem_monotone CB_Sub fl no_binop_flags w vl vl vl vl
+                 eq_refl (binop_flags_weaken_no_flags fl) Hwfvl Hwfvl Hwfvl Hwfvl
+                 (dvalue_refines_refl _) (dvalue_refines_refl _)).
+      * destruct Hwfvl as [-> | [il ->]]; [cbn; apply dvalue_refines_poison_l |].
+        unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
+        rewrite Integers.sub_idem; apply dvalue_refines_refl.
+    + exact (check_src_elim_binop_cancel_lhs rec CB_Sub w fl l r tgt penv foracle
+               CB_Add true (@Integers.add w) (@Integers.sub w)
+               IH Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt eq_refl eq_refl Hc
+               (fun _ _ => eq_refl) (fun _ _ => eq_refl) (alg_add_sub_cancel w)
+               (fun _ => @Integers.add_commut w)).
+  - (* CB_Mul *)
+    rewrite !orb_true_iff in Hstep; destruct Hstep as [[[Hc | Hc] | Hc] | Hc];
+      apply andb_true_iff in Hc as [H1 H2].
+    + apply (check_src_elim_binop_id_r rec CB_Mul w fl l r tgt penv foracle 1%N
+               IH Hbw Hwl Hwtl Hwtt Hpl Hpt eq_refl (is_one_const_expr_inv w r H1) H2).
+      intros il; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_one_N; cbn.
+      destruct (Pos.eqb w 1); cbn; rewrite Integers.mul_one; reflexivity.
+    + apply (check_src_elim_binop_id_l rec CB_Mul w fl l r tgt penv foracle 1%N
+               IH Hbw Hwr Hwtr Hwtt Hpr Hpt eq_refl (is_one_const_expr_inv w l H1) H2).
+      intros ir; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_one_N; cbn.
+      destruct (Pos.eqb w 1); cbn; rewrite Integers.mul_commut, Integers.mul_one; reflexivity.
+    + rewrite (is_zero_const_expr_inv w r H1), (is_zero_const_expr_inv w tgt H2).
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+      destruct (eval_cert_expr_totality l [] penv [] foracle Hwtl wf_let_val_env_nil Hpl)
+        as [[msgl ->] | [vl [-> Hwfvl]]]; [cbn; exact I | cbn [eou_bind]].
+      rewrite Hwl in Hwfvl.
+      apply (refine_eou_dvalue_trans _
+               (@eval_iop Pa (cert_to_ibinop CB_Mul no_binop_flags) vl
+                  (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N 0))))) _).
+      * exact (eval_iop_non_div_rem_monotone CB_Mul fl no_binop_flags w vl vl _ _
+                 eq_refl (binop_flags_weaken_no_flags fl) Hwfvl Hwfvl
+                 (or_intror (ex_intro _ _ eq_refl)) (or_intror (ex_intro _ _ eq_refl))
+                 (dvalue_refines_refl _) (dvalue_refines_refl _)).
+      * destruct Hwfvl as [-> | [il ->]]; [cbn; apply dvalue_refines_poison_l |].
+        unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
+        destruct (Pos.eqb w 1); cbn; rewrite Integers.mul_zero; apply dvalue_refines_refl.
+    + rewrite (is_zero_const_expr_inv w l H1), (is_zero_const_expr_inv w tgt H2).
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr eou_bind].
+      destruct (eval_cert_expr_totality r [] penv [] foracle Hwtr wf_let_val_env_nil Hpr)
+        as [[msgr ->] | [vr [-> Hwfvr]]]; [cbn; exact I | cbn [eou_bind]].
+      rewrite Hwr in Hwfvr.
+      apply (refine_eou_dvalue_trans _
+               (@eval_iop Pa (cert_to_ibinop CB_Mul no_binop_flags)
+                  (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N 0)))) vr) _).
+      * exact (eval_iop_non_div_rem_monotone CB_Mul fl no_binop_flags w _ _ vr vr
+                 eq_refl (binop_flags_weaken_no_flags fl)
+                 (or_intror (ex_intro _ _ eq_refl)) (or_intror (ex_intro _ _ eq_refl))
+                 Hwfvr Hwfvr (dvalue_refines_refl _) (dvalue_refines_refl _)).
+      * destruct Hwfvr as [-> | [ir ->]]; [cbn; apply dvalue_refines_poison_l |].
+        unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
+        destruct (Pos.eqb w 1); cbn; rewrite Integers.mul_commut, Integers.mul_zero;
+          apply dvalue_refines_refl.
+Qed.
+
+Local Lemma check_src_elim_binop_div_rem :
+  forall {Pa : Params} (rec : cert_expr -> cert_expr -> bool) (ctx : ub_ctx)
+         op w fl l r tgt (penv : param_env Pa) (foracle : freeze_oracle),
+    (op = CB_UDiv \/ op = CB_SDiv \/ op = CB_URem \/ op = CB_SRem) ->
+    (forall s t,
+       rec s t = true ->
+       cert_expr_bit_width s = cert_expr_bit_width t ->
+       wt_cert_expr [] s = true ->
+       wt_cert_expr [] t = true ->
+       wf_param_env_for (collect_free_vars [] s) penv ->
+       wf_param_env_for (collect_free_vars [] t) penv ->
+       refine_eou_dvalue
+         (eval_closed_cert_expr penv foracle s)
+         (eval_closed_cert_expr penv foracle t)) ->
+    check_src_elim_step rec ctx (CE_BinOp op w fl l r) tgt = true ->
+    w = cert_expr_bit_width tgt ->
+    cert_expr_bit_width l = w ->
+    cert_expr_bit_width r = w ->
+    wt_cert_expr [] l = true ->
+    wt_cert_expr [] r = true ->
+    wt_cert_expr [] tgt = true ->
+    wf_param_env_for (collect_free_vars [] l) penv ->
+    wf_param_env_for (collect_free_vars [] r) penv ->
+    wf_param_env_for (collect_free_vars [] tgt) penv ->
+    refine_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_BinOp op w fl l r))
+      (eval_closed_cert_expr penv foracle tgt).
+Proof.
+  intros Pa rec ctx op w fl l r tgt penv foracle Hop IH Hstep Hbw Hwl Hwr
+         Hwtl Hwtr Hwtt Hpl Hpr Hpt.
+  destruct Hop as [-> | [-> | [-> | ->]]]; cbn [check_src_elim_step] in Hstep.
+  - (* CB_UDiv *)
+    apply orb_true_iff in Hstep as [Hc | Hc]; apply andb_true_iff in Hc as [H1 H2].
+    + rewrite (is_one_const_expr_inv w r H1).
+      pose proof (IH l tgt H2 (eq_trans Hwl Hbw) Hwtl Hwtt Hpl Hpt) as Hlt.
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+      destruct (eval_cert_expr_totality l [] penv [] foracle Hwtl wf_let_val_env_nil Hpl)
+        as [[msgl ->] | [vl [Evl Hwfvl]]];
+        [cbn; exact I | rewrite Evl in Hlt |- *; cbn [eou_bind]].
+      rewrite Hwl in Hwfvl.
+      apply (refine_eou_dvalue_trans _
+               (@eval_iop Pa (cert_to_ibinop CB_UDiv no_binop_flags) vl
+                  (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N 1))))) _).
+      * exact (eval_iop_div_rem_same_lhs CB_UDiv fl no_binop_flags w vl _ _
+                 eq_refl (binop_flags_weaken_no_flags fl) Hwfvl
+                 (or_intror (ex_intro _ _ eq_refl)) (or_intror (ex_intro _ _ eq_refl))
+                 (dvalue_refines_refl _)).
+      * destruct Hwfvl as [-> | [il ->]]; [exact Hlt |].
+        unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_one_N; cbn.
+        rewrite (@Integers.unsigned_one w); cbn; rewrite (@Integers.divu_one w il); exact Hlt.
+    + rewrite (is_zero_const_expr_inv w l H1), (is_zero_const_expr_inv w tgt H2).
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr eou_bind].
+      destruct (eval_cert_expr_totality r [] penv [] foracle Hwtr wf_let_val_env_nil Hpr)
+        as [[msgr ->] | [vr [-> Hwfvr]]]; [cbn; exact I |].
+      rewrite Hwr in Hwfvr; destruct Hwfvr as [-> | [ir ->]]; [cbn; exact I |].
+      cbn [eou_bind]; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N.
+      unfold cert_to_ibinop, eval_int_op; cbn.
+      destruct (@Integers.unsigned w ir =? 0)%Z; cbn; [exact I |].
+      destruct (cbf_exact fl && _); cbn;
+        [apply dvalue_refines_poison_l | rewrite alg_divu_zero_l; apply dvalue_refines_refl].
+  - (* CB_SDiv *)
+    apply andb_true_iff in Hstep as [H1 H2].
+    rewrite (is_zero_const_expr_inv w l H1), (is_zero_const_expr_inv w tgt H2).
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr eou_bind].
+    destruct (eval_cert_expr_totality r [] penv [] foracle Hwtr wf_let_val_env_nil Hpr)
+      as [[msgr ->] | [vr [-> Hwfvr]]]; [cbn; exact I |].
+    rewrite Hwr in Hwfvr; destruct Hwfvr as [-> | [ir ->]]; [cbn; exact I |].
+    cbn [eou_bind]; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N.
+    unfold cert_to_ibinop, eval_int_op; cbn.
+    destruct (@Integers.signed w ir =? 0)%Z; cbn; [exact I |].
+    destruct ((@Integers.min_signed w =? @Integers.signed w (@Integers.zero w))%Z && _);
+      cbn; [exact I |].
+    destruct (cbf_exact fl && _); cbn;
+      [apply dvalue_refines_poison_l | rewrite alg_divs_zero_l; apply dvalue_refines_refl].
+  - (* CB_URem *)
+    apply orb_true_iff in Hstep as [Hc | Hc]; apply andb_true_iff in Hc as [H1 H2].
+    + rewrite (is_one_const_expr_inv w r H1), (is_zero_const_expr_inv w tgt H2).
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+      destruct (eval_cert_expr_totality l [] penv [] foracle Hwtl wf_let_val_env_nil Hpl)
+        as [[msgl ->] | [vl [-> Hwfvl]]]; [cbn; exact I |].
+      rewrite Hwl in Hwfvl; destruct Hwfvl as [-> | [il ->]]; [cbn; apply dvalue_refines_poison_l |].
+      cbn [eou_bind]; unfold eval_iop;
+        rewrite eval_iop_integer_base_same_width, repr_one_N, repr_zero_N; cbn.
+      rewrite (@Integers.unsigned_one w); cbn; rewrite (@Integers.modu_one w il).
+      apply dvalue_refines_refl.
+    + rewrite (is_zero_const_expr_inv w l H1), (is_zero_const_expr_inv w tgt H2).
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr eou_bind].
+      destruct (eval_cert_expr_totality r [] penv [] foracle Hwtr wf_let_val_env_nil Hpr)
+        as [[msgr ->] | [vr [-> Hwfvr]]]; [cbn; exact I |].
+      rewrite Hwr in Hwfvr; destruct Hwfvr as [-> | [ir ->]]; [cbn; exact I |].
+      cbn [eou_bind]; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
+      destruct (@Integers.unsigned w ir =? 0)%Z; cbn; [exact I |].
+      rewrite alg_modu_zero_l; apply dvalue_refines_refl.
+  - (* CB_SRem *)
+    apply andb_true_iff in Hstep as [H1 H2].
+    rewrite (is_zero_const_expr_inv w l H1), (is_zero_const_expr_inv w tgt H2).
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr eou_bind].
+    destruct (eval_cert_expr_totality r [] penv [] foracle Hwtr wf_let_val_env_nil Hpr)
+      as [[msgr ->] | [vr [-> Hwfvr]]]; [cbn; exact I |].
+    rewrite Hwr in Hwfvr; destruct Hwfvr as [-> | [ir ->]]; [cbn; exact I |].
+    cbn [eou_bind]; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N.
+    unfold cert_to_ibinop, eval_int_op; cbn.
+    destruct (@Integers.signed w ir =? 0)%Z; cbn; [exact I |].
+    destruct ((@Integers.min_signed w =? @Integers.signed w (@Integers.zero w))%Z && _);
+      cbn; [exact I |].
+    rewrite alg_mods_zero_l; cbn; apply dvalue_refines_refl.
+Qed.
+
+Local Lemma check_src_elim_binop_bitwise :
+  forall {Pa : Params} (rec : cert_expr -> cert_expr -> bool) (ctx : ub_ctx)
+         op w fl l r tgt (penv : param_env Pa) (foracle : freeze_oracle),
+    (op = CB_And \/ op = CB_Or \/ op = CB_Xor) ->
+    (forall s t,
+       rec s t = true ->
+       cert_expr_bit_width s = cert_expr_bit_width t ->
+       wt_cert_expr [] s = true ->
+       wt_cert_expr [] t = true ->
+       wf_param_env_for (collect_free_vars [] s) penv ->
+       wf_param_env_for (collect_free_vars [] t) penv ->
+       refine_eou_dvalue
+         (eval_closed_cert_expr penv foracle s)
+         (eval_closed_cert_expr penv foracle t)) ->
+    check_src_elim_step rec ctx (CE_BinOp op w fl l r) tgt = true ->
+    w = cert_expr_bit_width tgt ->
+    cert_expr_bit_width l = w ->
+    cert_expr_bit_width r = w ->
+    wt_cert_expr [] l = true ->
+    wt_cert_expr [] r = true ->
+    wt_cert_expr [] tgt = true ->
+    wf_param_env_for (collect_free_vars [] l) penv ->
+    wf_param_env_for (collect_free_vars [] r) penv ->
+    wf_param_env_for (collect_free_vars [] tgt) penv ->
+    refine_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_BinOp op w fl l r))
+      (eval_closed_cert_expr penv foracle tgt).
+Proof.
+  intros Pa rec ctx op w fl l r tgt penv foracle Hop IH Hstep Hbw Hwl Hwr
+         Hwtl Hwtr Hwtt Hpl Hpr Hpt.
+  destruct Hop as [-> | [-> | ->]]; cbn [check_src_elim_step] in Hstep.
+  - (* CB_And *)
+    rewrite !orb_true_iff in Hstep.
+    destruct Hstep as [[[[[[Hc | Hc] | Hc] | Hc] | Hc] | Habs_r] | Habs_l].
+    + apply andb_true_iff in Hc as [H1 H2].
+      apply (check_src_elim_binop_id_r rec CB_And w fl l r tgt penv foracle (all_ones_N w)
+               IH Hbw Hwl Hwtl Hwtt Hpl Hpt eq_refl (is_all_ones_const_expr_inv w r H1) H2).
+      intros il; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_all_ones_N; cbn.
+      rewrite Integers.and_mone; reflexivity.
+    + apply andb_true_iff in Hc as [H1 H2].
+      apply (check_src_elim_binop_id_l rec CB_And w fl l r tgt penv foracle (all_ones_N w)
+               IH Hbw Hwr Hwtr Hwtt Hpr Hpt eq_refl (is_all_ones_const_expr_inv w l H1) H2).
+      intros ir; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_all_ones_N; cbn.
+      rewrite Integers.and_mone_l; reflexivity.
+    + apply andb_true_iff in Hc as [H1 H2]; apply cert_expr_eqb_eq in H1; subst r.
+      pose proof (IH l tgt H2 (eq_trans Hwl Hbw) Hwtl Hwtt Hpl Hpt) as Hlt.
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+      destruct (eval_cert_expr_totality l [] penv [] foracle Hwtl wf_let_val_env_nil Hpl)
+        as [[msgl ->] | [vl [Evl Hwfvl]]];
+        [cbn; exact I | rewrite !Evl; rewrite Evl in Hlt; cbn [eou_bind]].
+      rewrite Hwl in Hwfvl; destruct Hwfvl as [-> | [il ->]]; [exact Hlt |].
+      unfold eval_iop; rewrite eval_iop_integer_base_same_width; cbn.
+      rewrite Integers.and_idem; exact Hlt.
+    + apply andb_true_iff in Hc as [H1 H2].
+      rewrite (is_zero_const_expr_inv w r H1), (is_zero_const_expr_inv w tgt H2).
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+      destruct (eval_cert_expr_totality l [] penv [] foracle Hwtl wf_let_val_env_nil Hpl)
+        as [[msgl ->] | [vl [-> Hwfvl]]]; [cbn; exact I |].
+      rewrite Hwl in Hwfvl; destruct Hwfvl as [-> | [il ->]];
+        [cbn; apply dvalue_refines_poison_l | cbn [eou_bind]].
+      unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
+      rewrite Integers.and_zero; apply dvalue_refines_refl.
+    + apply andb_true_iff in Hc as [H1 H2].
+      rewrite (is_zero_const_expr_inv w l H1), (is_zero_const_expr_inv w tgt H2).
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr eou_bind].
+      destruct (eval_cert_expr_totality r [] penv [] foracle Hwtr wf_let_val_env_nil Hpr)
+        as [[msgr ->] | [vr [-> Hwfvr]]]; [cbn; exact I |].
+      rewrite Hwr in Hwfvr; destruct Hwfvr as [-> | [ir ->]];
+        [cbn; apply dvalue_refines_poison_l | cbn [eou_bind]].
+      unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
+      rewrite Integers.and_zero_l; apply dvalue_refines_refl.
+    + exact (check_src_elim_binop_absorb_rhs rec CB_And w fl l r tgt penv foracle
+               CB_Or (@Integers.or w) (@Integers.and w)
+               IH Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt eq_refl eq_refl Habs_r
+               (fun _ _ => eq_refl) (fun _ _ => eq_refl)
+               (alg_and_or_absorb w) (@Integers.or_commut w)).
+    + exact (check_src_elim_binop_absorb_lhs rec CB_And w fl l r tgt penv foracle
+               CB_Or (@Integers.or w) (@Integers.and w)
+               IH Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt eq_refl eq_refl Habs_l
+               (fun _ _ => eq_refl) (fun _ _ => eq_refl)
+               (fun x y => eq_trans (@Integers.and_commut w _ x) (alg_and_or_absorb w x y))
+               (@Integers.or_commut w)).
+  - (* CB_Or *)
+    rewrite !orb_true_iff in Hstep.
+    destruct Hstep as [[[[[[Hc | Hc] | Hc] | Hc] | Hc] | Habs_r] | Habs_l].
+    + apply andb_true_iff in Hc as [H1 H2].
+      apply (check_src_elim_binop_id_r rec CB_Or w fl l r tgt penv foracle 0%N
+               IH Hbw Hwl Hwtl Hwtt Hpl Hpt eq_refl (is_zero_const_expr_inv w r H1) H2).
+      intros il; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
+      rewrite Integers.or_zero; reflexivity.
+    + apply andb_true_iff in Hc as [H1 H2].
+      apply (check_src_elim_binop_id_l rec CB_Or w fl l r tgt penv foracle 0%N
+               IH Hbw Hwr Hwtr Hwtt Hpr Hpt eq_refl (is_zero_const_expr_inv w l H1) H2).
+      intros ir; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
+      rewrite Integers.or_zero_l; reflexivity.
+    + apply andb_true_iff in Hc as [H1 H2]; apply cert_expr_eqb_eq in H1; subst r.
+      pose proof (IH l tgt H2 (eq_trans Hwl Hbw) Hwtl Hwtt Hpl Hpt) as Hlt.
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+      destruct (eval_cert_expr_totality l [] penv [] foracle Hwtl wf_let_val_env_nil Hpl)
+        as [[msgl ->] | [vl [Evl Hwfvl]]];
+        [cbn; exact I | rewrite !Evl; rewrite Evl in Hlt; cbn [eou_bind]].
+      rewrite Hwl in Hwfvl.
+      apply (refine_eou_dvalue_trans _
+               (@eval_iop Pa (cert_to_ibinop CB_Or no_binop_flags) vl vl) _).
+      * exact (eval_iop_non_div_rem_monotone CB_Or fl no_binop_flags w vl vl vl vl
+                 eq_refl (binop_flags_weaken_no_flags fl) Hwfvl Hwfvl Hwfvl Hwfvl
+                 (dvalue_refines_refl _) (dvalue_refines_refl _)).
+      * destruct Hwfvl as [-> | [il ->]]; [exact Hlt |].
+        unfold eval_iop; rewrite eval_iop_integer_base_same_width; cbn.
+        rewrite Integers.or_idem; exact Hlt.
+    + apply andb_true_iff in Hc as [H1 H2].
+      rewrite (is_all_ones_const_expr_inv w r H1), (is_all_ones_const_expr_inv w tgt H2).
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+      destruct (eval_cert_expr_totality l [] penv [] foracle Hwtl wf_let_val_env_nil Hpl)
+        as [[msgl ->] | [vl [-> Hwfvl]]]; [cbn; exact I | cbn [eou_bind]].
+      rewrite Hwl in Hwfvl.
+      apply (refine_eou_dvalue_trans _
+               (@eval_iop Pa (cert_to_ibinop CB_Or no_binop_flags) vl
+                  (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N (all_ones_N w)))))) _).
+      * exact (eval_iop_non_div_rem_monotone CB_Or fl no_binop_flags w vl vl _ _
+                 eq_refl (binop_flags_weaken_no_flags fl) Hwfvl Hwfvl
+                 (or_intror (ex_intro _ _ eq_refl)) (or_intror (ex_intro _ _ eq_refl))
+                 (dvalue_refines_refl _) (dvalue_refines_refl _)).
+      * destruct Hwfvl as [-> | [il ->]]; [cbn; apply dvalue_refines_poison_l |].
+        unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_all_ones_N; cbn.
+        rewrite Integers.or_mone; apply dvalue_refines_refl.
+    + apply andb_true_iff in Hc as [H1 H2].
+      rewrite (is_all_ones_const_expr_inv w l H1), (is_all_ones_const_expr_inv w tgt H2).
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr eou_bind].
+      destruct (eval_cert_expr_totality r [] penv [] foracle Hwtr wf_let_val_env_nil Hpr)
+        as [[msgr ->] | [vr [-> Hwfvr]]]; [cbn; exact I | cbn [eou_bind]].
+      rewrite Hwr in Hwfvr.
+      apply (refine_eou_dvalue_trans _
+               (@eval_iop Pa (cert_to_ibinop CB_Or no_binop_flags)
+                  (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N (all_ones_N w))))) vr) _).
+      * exact (eval_iop_non_div_rem_monotone CB_Or fl no_binop_flags w _ _ vr vr
+                 eq_refl (binop_flags_weaken_no_flags fl)
+                 (or_intror (ex_intro _ _ eq_refl)) (or_intror (ex_intro _ _ eq_refl))
+                 Hwfvr Hwfvr (dvalue_refines_refl _) (dvalue_refines_refl _)).
+      * destruct Hwfvr as [-> | [ir ->]]; [cbn; apply dvalue_refines_poison_l |].
+        unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_all_ones_N; cbn.
+        rewrite Integers.or_commut, Integers.or_mone; apply dvalue_refines_refl.
+    + exact (check_src_elim_binop_absorb_rhs rec CB_Or w fl l r tgt penv foracle
+               CB_And (@Integers.and w) (@Integers.or w)
+               IH Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt eq_refl eq_refl Habs_r
+               (fun _ _ => eq_refl) (fun _ _ => eq_refl)
+               (alg_or_and_absorb w) (@Integers.and_commut w)).
+    + exact (check_src_elim_binop_absorb_lhs rec CB_Or w fl l r tgt penv foracle
+               CB_And (@Integers.and w) (@Integers.or w)
+               IH Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt eq_refl eq_refl Habs_l
+               (fun _ _ => eq_refl) (fun _ _ => eq_refl)
+               (fun x y => eq_trans (@Integers.or_commut w _ x) (alg_or_and_absorb w x y))
+               (@Integers.and_commut w)).
+  - (* CB_Xor *)
+    rewrite !orb_true_iff in Hstep.
+    destruct Hstep as [[[[Hc | Hc] | Hc] | Hcl] | Hcr].
+    + apply andb_true_iff in Hc as [H1 H2].
+      apply (check_src_elim_binop_id_r rec CB_Xor w fl l r tgt penv foracle 0%N
+               IH Hbw Hwl Hwtl Hwtt Hpl Hpt eq_refl (is_zero_const_expr_inv w r H1) H2).
+      intros il; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
+      rewrite Integers.xor_zero; reflexivity.
+    + apply andb_true_iff in Hc as [H1 H2].
+      apply (check_src_elim_binop_id_l rec CB_Xor w fl l r tgt penv foracle 0%N
+               IH Hbw Hwr Hwtr Hwtt Hpr Hpt eq_refl (is_zero_const_expr_inv w l H1) H2).
+      intros ir; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
+      rewrite Integers.xor_zero_l; reflexivity.
+    + apply andb_true_iff in Hc as [H1 H2].
+      apply cert_expr_eqb_eq in H1; subst r; rewrite (is_zero_const_expr_inv w tgt H2).
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+      destruct (eval_cert_expr_totality l [] penv [] foracle Hwtl wf_let_val_env_nil Hpl)
+        as [[msgl ->] | [vl [-> Hwfvl]]]; [cbn; exact I |].
+      rewrite Hwl in Hwfvl; destruct Hwfvl as [-> | [il ->]];
+        [cbn; apply dvalue_refines_poison_l | cbn [eou_bind]].
+      unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
+      rewrite Integers.xor_idem; apply dvalue_refines_refl.
+    + exact (check_src_elim_binop_cancel_lhs rec CB_Xor w fl l r tgt penv foracle
+               CB_Xor true (@Integers.xor w) (@Integers.xor w)
+               IH Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt eq_refl eq_refl Hcl
+               (fun _ _ => eq_refl) (fun _ _ => eq_refl) (alg_xor_cancel w)
+               (fun _ => @Integers.xor_commut w)).
+    + exact (check_src_elim_binop_cancel_rhs rec CB_Xor w fl l r tgt penv foracle
+               CB_Xor true (@Integers.xor w) (@Integers.xor w)
+               IH Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt eq_refl eq_refl Hcr
+               (fun _ _ => eq_refl) (fun _ _ => eq_refl) (fun x y => alg_xor_cancel_l w y x)
+               (fun _ => @Integers.xor_commut w)).
+Qed.
+
 Lemma check_src_elim_step_sound :
   forall {Pa : Params} (rec : cert_expr -> cert_expr -> bool)
          (ctx : ub_ctx) (src tgt : cert_expr)
@@ -2280,588 +3170,42 @@ Proof.
       by (intros x wx Hx; apply Hps, in_app_iff; left; exact Hx).
     assert (Hpr : wf_param_env_for (collect_free_vars [] r) penv)
       by (intros x wx Hx; apply Hps, in_app_iff; right; exact Hx).
-    assert (Htot_l :
-      (exists msg, eval_closed_cert_expr penv foracle l = raise_ub msg) \/
-      (exists vl, eval_closed_cert_expr penv foracle l = raise_ret vl /\ wf_scalar_dvalue w vl)).
-    { destruct (eval_cert_expr_totality l [] penv [] foracle Hwtl wf_let_val_env_nil Hpl)
-        as [[msg H] | [v [H Hwf]]];
-        [left; exists msg; exact H | right; rewrite Hwl in Hwf; exists v; exact (conj H Hwf)]. }
-    assert (Htot_r :
-      (exists msg, eval_closed_cert_expr penv foracle r = raise_ub msg) \/
-      (exists vr, eval_closed_cert_expr penv foracle r = raise_ret vr /\ wf_scalar_dvalue w vr)).
-    { destruct (eval_cert_expr_totality r [] penv [] foracle Hwtr wf_let_val_env_nil Hpr)
-        as [[msg H] | [v [H Hwf]]];
-        [left; exists msg; exact H | right; rewrite Hwr in Hwf; exists v; exact (conj H Hwf)]. }
-    assert (Hid_r : forall cval,
-      is_div_or_rem_op op = false ->
-      r = CE_BvConst w cval ->
-      rec l tgt = true ->
-      (forall il : @Integers.bit_int w,
-         @eval_iop Pa (cert_to_ibinop op no_binop_flags)
-           (DVALUE_Base (@DVALUE_I Pa w il))
-           (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N cval)))) =
-         raise_ret (DVALUE_Base (@DVALUE_I Pa w il))) ->
-      refine_eou_dvalue
-        (eval_closed_cert_expr penv foracle (CE_BinOp op w fl l r))
-        (eval_closed_cert_expr penv foracle tgt)).
-    { intros cval Hndiv -> Hrec Hiop.
-      pose proof (IH l tgt Hrec (eq_trans Hwl Hbw) Hwtl Hwtt Hpl Hpt) as Hlt.
-      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-      destruct Htot_l as [[msgl Evl] | [vl [Evl Hwfvl]]];
-        [rewrite Evl; cbn; exact I | rewrite Evl; cbn [eou_bind] in *].
-      apply (refine_eou_dvalue_trans _
-               (@eval_iop Pa (cert_to_ibinop op no_binop_flags) vl
-                  (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N cval))))) _).
-      - exact (eval_iop_non_div_rem_monotone op fl no_binop_flags w vl vl _ _
-                 Hndiv (binop_flags_weaken_no_flags fl) Hwfvl Hwfvl
-                 (or_intror (ex_intro _ _ eq_refl)) (or_intror (ex_intro _ _ eq_refl))
-                 (dvalue_refines_refl _) (dvalue_refines_refl _)).
-      - destruct Hwfvl as [-> | [il ->]].
-        + assert (Hp : @eval_iop Pa (cert_to_ibinop op no_binop_flags)
-                         (DVALUE_Base DVALUE_Poison)
-                         (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N cval)))) =
-                       raise_ret (DVALUE_Base DVALUE_Poison))
-            by (destruct op; cbn in Hndiv; try discriminate; reflexivity).
-          rewrite Hp, <- Evl; exact Hlt.
-        + rewrite Hiop, <- Evl; exact Hlt. }
-    assert (Hid_l : forall cval,
-      is_div_or_rem_op op = false ->
-      l = CE_BvConst w cval ->
-      rec r tgt = true ->
-      (forall ir : @Integers.bit_int w,
-         @eval_iop Pa (cert_to_ibinop op no_binop_flags)
-           (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N cval))))
-           (DVALUE_Base (@DVALUE_I Pa w ir)) =
-         raise_ret (DVALUE_Base (@DVALUE_I Pa w ir))) ->
-      refine_eou_dvalue
-        (eval_closed_cert_expr penv foracle (CE_BinOp op w fl l r))
-        (eval_closed_cert_expr penv foracle tgt)).
-    { intros cval Hndiv -> Hrec Hiop.
-      pose proof (IH r tgt Hrec (eq_trans Hwr Hbw) Hwtr Hwtt Hpr Hpt) as Hrt.
-      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr eou_bind].
-      destruct Htot_r as [[msgr Evr] | [vr [Evr Hwfvr]]];
-        [rewrite Evr; cbn; exact I | rewrite Evr; cbn [eou_bind] in *].
-      apply (refine_eou_dvalue_trans _
-               (@eval_iop Pa (cert_to_ibinop op no_binop_flags)
-                  (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N cval)))) vr) _).
-      - exact (eval_iop_non_div_rem_monotone op fl no_binop_flags w _ _ vr vr
-                 Hndiv (binop_flags_weaken_no_flags fl)
-                 (or_intror (ex_intro _ _ eq_refl)) (or_intror (ex_intro _ _ eq_refl))
-                 Hwfvr Hwfvr (dvalue_refines_refl _) (dvalue_refines_refl _)).
-      - destruct Hwfvr as [-> | [ir ->]].
-        + assert (Hp : @eval_iop Pa (cert_to_ibinop op no_binop_flags)
-                         (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N cval))))
-                         (DVALUE_Base DVALUE_Poison) =
-                       raise_ret (DVALUE_Base DVALUE_Poison))
-            by (destruct op; cbn in Hndiv; try discriminate; reflexivity).
-          rewrite Hp, <- Evr; exact Hrt.
-        + rewrite Hiop, <- Evr; exact Hrt. }
-    assert (Hcan_lhs : forall op_in comm_in
-              (iop_in iop_out : @Integers.bit_int w -> @Integers.bit_int w -> @Integers.bit_int w),
-      is_div_or_rem_op op = false ->
-      is_div_or_rem_op op_in = false ->
-      check_cancel_binop_lhs op_in comm_in rec l r tgt = true ->
-      (forall x y, eval_int_op (cert_to_ibinop op_in no_binop_flags) x y =
-                   raise_ret (@DVALUE_I Pa w (iop_in x y))) ->
-      (forall x y, eval_int_op (cert_to_ibinop op no_binop_flags) x y =
-                   raise_ret (@DVALUE_I Pa w (iop_out x y))) ->
-      (forall x y, iop_out (iop_in x y) y = x) ->
-      (comm_in = true -> forall x y, iop_in x y = iop_in y x) ->
-      refine_eou_dvalue
-        (eval_closed_cert_expr penv foracle (CE_BinOp op w fl l r))
-        (eval_closed_cert_expr penv foracle tgt)).
-    { intros op_in comm_in iop_in iop_out Hndiv_out Hndiv_in Hchk0 Hiop_in Hiop_out Hcan Hcomm_in.
-      unfold check_cancel_binop_lhs in Hchk0.
-      destruct (match_inner_binop op_in l) as [[[fl_in a] b] |] eqn:Em; [| discriminate Hchk0].
-      destruct (match_inner_binop_inv op_in l fl_in a b Em) as [wl Heql]; subst l.
-      cbn [cert_expr_bit_width] in Hwl; subst wl.
-      cbn [wt_cert_expr collect_free_vars] in Hwtl, Hpl; rewrite !andb_true_iff in Hwtl.
-      destruct Hwtl as ((((_ & Hta) & Htb) & Hwa) & Hwb).
-      apply Pos.eqb_eq in Hwa; apply Pos.eqb_eq in Hwb.
-      assert (Hpa : wf_param_env_for (collect_free_vars [] a) penv)
-        by (intros x wx Hx; apply Hpl, in_app_iff; left; exact Hx).
-      assert (Hpb : wf_param_env_for (collect_free_vars [] b) penv)
-        by (intros x wx Hx; apply Hpl, in_app_iff; right; exact Hx).
-      apply orb_true_iff in Hchk0 as [Hbr | Har].
-      - rewrite !andb_true_iff in Hbr; destruct Hbr as ([Heqbr Hubr] & Hrec).
-        apply cert_expr_eqb_eq in Heqbr; subst b.
-        pose proof (IH a tgt Hrec (eq_trans Hwa Hbw) Hta Hwtt Hpa Hpt) as Hat.
-        destruct (ub_free_expr_eval_ret r [] penv [] foracle Hubr Hwtr wf_let_val_env_nil Hpr)
-          as [vr [Evr Hwfvr]]; rewrite Hwr in Hwfvr.
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-        destruct (eval_cert_expr_totality a [] penv [] foracle Hta wf_let_val_env_nil Hpa)
-          as [[msga ->] | [va [Eva Hwfva]]]; [cbn; exact I | rewrite Eva in Hat |- *; cbn [eou_bind]].
-        rewrite Hwa in Hwfva; rewrite Evr; cbn [eou_bind].
-        destruct (eval_cert_expr penv [] foracle tgt) as [| | | vtgt];
-          cbn in Hat; try contradiction.
-        exact (eval_iop_nested_weaken_l op_in op fl_in fl w va vr vr vtgt iop_in iop_out
-                 Hndiv_in Hndiv_out Hwfva Hwfvr Hwfvr Hiop_in Hiop_out
-                 (fun ia ib ic Hia Hib Hic =>
-                    ltac:(rewrite Hib in Hic; apply dvalue_i_inj in Hic; subst ic;
-                          rewrite Hcan, <- Hia; exact Hat))).
-      - rewrite !andb_true_iff in Har; destruct Har as (((Hc_in & Heqar) & Hubr) & Hrec).
-        apply cert_expr_eqb_eq in Heqar; subst a.
-        pose proof (IH b tgt Hrec (eq_trans Hwb Hbw) Htb Hwtt Hpb Hpt) as Hbt.
-        destruct (ub_free_expr_eval_ret r [] penv [] foracle Hubr Hwtr wf_let_val_env_nil Hpr)
-          as [vr [Evr Hwfvr]]; rewrite Hwr in Hwfvr.
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Evr; cbn [eou_bind].
-        destruct (eval_cert_expr_totality b [] penv [] foracle Htb wf_let_val_env_nil Hpb)
-          as [[msgb ->] | [vb [Evb Hwfvb]]]; [cbn; exact I | rewrite Evb in Hbt |- *; cbn [eou_bind]].
-        rewrite Hwb in Hwfvb; rewrite ?Evr; cbn [eou_bind].
-        destruct (eval_cert_expr penv [] foracle tgt) as [| | | vtgt];
-          cbn in Hbt; try contradiction.
-        exact (eval_iop_nested_weaken_l op_in op fl_in fl w vr vb vr vtgt iop_in iop_out
-                 Hndiv_in Hndiv_out Hwfvr Hwfvb Hwfvr Hiop_in Hiop_out
-                 (fun ia ib ic Hia Hib Hic =>
-                    ltac:(rewrite Hia in Hic; apply dvalue_i_inj in Hic; subst ic;
-                          rewrite (Hcomm_in Hc_in ia ib), Hcan, <- Hib; exact Hbt))). }
-    assert (Hcan_rhs : forall op_in comm_in
-              (iop_in iop_out : @Integers.bit_int w -> @Integers.bit_int w -> @Integers.bit_int w),
-      is_div_or_rem_op op = false ->
-      is_div_or_rem_op op_in = false ->
-      check_cancel_binop_rhs op_in comm_in rec l r tgt = true ->
-      (forall x y, eval_int_op (cert_to_ibinop op_in no_binop_flags) x y =
-                   raise_ret (@DVALUE_I Pa w (iop_in x y))) ->
-      (forall x y, eval_int_op (cert_to_ibinop op no_binop_flags) x y =
-                   raise_ret (@DVALUE_I Pa w (iop_out x y))) ->
-      (forall x y, iop_out y (iop_in x y) = x) ->
-      (comm_in = true -> forall x y, iop_in x y = iop_in y x) ->
-      refine_eou_dvalue
-        (eval_closed_cert_expr penv foracle (CE_BinOp op w fl l r))
-        (eval_closed_cert_expr penv foracle tgt)).
-    { intros op_in comm_in iop_in iop_out Hndiv_out Hndiv_in Hchk0 Hiop_in Hiop_out Hcan Hcomm_in.
-      unfold check_cancel_binop_rhs in Hchk0.
-      destruct (match_inner_binop op_in r) as [[[fl_in a] b] |] eqn:Em; [| discriminate Hchk0].
-      destruct (match_inner_binop_inv op_in r fl_in a b Em) as [wr Heqr]; subst r.
-      cbn [cert_expr_bit_width] in Hwr; subst wr.
-      cbn [wt_cert_expr collect_free_vars] in Hwtr, Hpr; rewrite !andb_true_iff in Hwtr.
-      destruct Hwtr as ((((_ & Hta) & Htb) & Hwa) & Hwb).
-      apply Pos.eqb_eq in Hwa; apply Pos.eqb_eq in Hwb.
-      assert (Hpa : wf_param_env_for (collect_free_vars [] a) penv)
-        by (intros x wx Hx; apply Hpr, in_app_iff; left; exact Hx).
-      assert (Hpb : wf_param_env_for (collect_free_vars [] b) penv)
-        by (intros x wx Hx; apply Hpr, in_app_iff; right; exact Hx).
-      apply orb_true_iff in Hchk0 as [Hbl | Hal].
-      - rewrite !andb_true_iff in Hbl; destruct Hbl as ([Heqbl Hubl] & Hrec).
-        apply cert_expr_eqb_eq in Heqbl; subst b.
-        pose proof (IH a tgt Hrec (eq_trans Hwa Hbw) Hta Hwtt Hpa Hpt) as Hat.
-        destruct (ub_free_expr_eval_ret l [] penv [] foracle Hubl Hwtl wf_let_val_env_nil Hpl)
-          as [vl [Evl Hwfvl]]; rewrite Hwl in Hwfvl.
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Evl; cbn [eou_bind].
-        destruct (eval_cert_expr_totality a [] penv [] foracle Hta wf_let_val_env_nil Hpa)
-          as [[msga ->] | [va [Eva Hwfva]]]; [cbn; exact I | rewrite Eva in Hat |- *; cbn [eou_bind]].
-        rewrite Hwa in Hwfva; rewrite ?Evl; cbn [eou_bind].
-        destruct (eval_cert_expr penv [] foracle tgt) as [| | | vtgt];
-          cbn in Hat; try contradiction.
-        exact (eval_iop_nested_weaken_r op_in op fl_in fl w vl va vl vtgt iop_in iop_out
-                 Hndiv_in Hndiv_out Hwfvl Hwfva Hwfvl Hiop_in Hiop_out
-                 (fun ia ib ic Hia Hib Hic =>
-                    ltac:(rewrite Hia in Hic; apply dvalue_i_inj in Hic; subst ic;
-                          rewrite Hcan, <- Hib; exact Hat))).
-      - rewrite !andb_true_iff in Hal; destruct Hal as (((Hc_in & Heqal) & Hubl) & Hrec).
-        apply cert_expr_eqb_eq in Heqal; subst a.
-        pose proof (IH b tgt Hrec (eq_trans Hwb Hbw) Htb Hwtt Hpb Hpt) as Hbt.
-        destruct (ub_free_expr_eval_ret l [] penv [] foracle Hubl Hwtl wf_let_val_env_nil Hpl)
-          as [vl [Evl Hwfvl]]; rewrite Hwl in Hwfvl.
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite !Evl; cbn [eou_bind].
-        destruct (eval_cert_expr_totality b [] penv [] foracle Htb wf_let_val_env_nil Hpb)
-          as [[msgb ->] | [vb [Evb Hwfvb]]]; [cbn; exact I | rewrite Evb in Hbt |- *; cbn [eou_bind]].
-        rewrite Hwb in Hwfvb.
-        destruct (eval_cert_expr penv [] foracle tgt) as [| | | vtgt];
-          cbn in Hbt; try contradiction.
-        exact (eval_iop_nested_weaken_r op_in op fl_in fl w vl vl vb vtgt iop_in iop_out
-                 Hndiv_in Hndiv_out Hwfvl Hwfvl Hwfvb Hiop_in Hiop_out
-                 (fun ia ib ic Hia Hib Hic =>
-                    ltac:(rewrite Hia in Hib; apply dvalue_i_inj in Hib; subst ib;
-                          rewrite (Hcomm_in Hc_in ia ic), Hcan, <- Hic; exact Hbt))). }
-    assert (Habs_rhs : forall op_in
-              (iop_in iop_out : @Integers.bit_int w -> @Integers.bit_int w -> @Integers.bit_int w),
-      is_div_or_rem_op op = false ->
-      is_div_or_rem_op op_in = false ->
-      check_absorb_binop_rhs op_in rec l r tgt = true ->
-      (forall x y, eval_int_op (cert_to_ibinop op_in no_binop_flags) x y =
-                   raise_ret (@DVALUE_I Pa w (iop_in x y))) ->
-      (forall x y, eval_int_op (cert_to_ibinop op no_binop_flags) x y =
-                   raise_ret (@DVALUE_I Pa w (iop_out x y))) ->
-      (forall x y, iop_out x (iop_in x y) = x) ->
-      (forall x y, iop_in x y = iop_in y x) ->
-      refine_eou_dvalue
-        (eval_closed_cert_expr penv foracle (CE_BinOp op w fl l r))
-        (eval_closed_cert_expr penv foracle tgt)).
-    { intros op_in iop_in iop_out Hndiv_out Hndiv_in Hchk0 Hiop_in Hiop_out Habs Hcomm_in.
-      unfold check_absorb_binop_rhs in Hchk0.
-      destruct (match_inner_binop op_in r) as [[[fl_in a] b] |] eqn:Em; [| discriminate Hchk0].
-      destruct (match_inner_binop_inv op_in r fl_in a b Em) as [wr Heqr]; subst r.
-      cbn [cert_expr_bit_width] in Hwr; subst wr.
-      cbn [wt_cert_expr collect_free_vars] in Hwtr, Hpr; rewrite !andb_true_iff in Hwtr.
-      destruct Hwtr as ((((_ & Hta) & Htb) & Hwa) & Hwb).
-      apply Pos.eqb_eq in Hwa; apply Pos.eqb_eq in Hwb.
-      assert (Hpa : wf_param_env_for (collect_free_vars [] a) penv)
-        by (intros x wx Hx; apply Hpr, in_app_iff; left; exact Hx).
-      assert (Hpb : wf_param_env_for (collect_free_vars [] b) penv)
-        by (intros x wx Hx; apply Hpr, in_app_iff; right; exact Hx).
-      apply orb_true_iff in Hchk0 as [Hal | Hbl];
-        [rewrite !andb_true_iff in Hal | rewrite !andb_true_iff in Hbl].
-      - destruct Hal as ([Heqal Hubb] & Hrec); apply cert_expr_eqb_eq in Heqal; subst a.
-        pose proof (IH l tgt Hrec (eq_trans Hwl Hbw) Hwtl Hwtt Hpl Hpt) as Hlt.
-        destruct (ub_free_expr_eval_ret b [] penv [] foracle Hubb Htb wf_let_val_env_nil Hpb)
-          as [vb [Evb Hwfvb]]; rewrite Hwb in Hwfvb.
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-        destruct Htot_l as [[msgl ->] | [vl [Evl Hwfvl]]]; [cbn; exact I | rewrite ?Evl in Hlt; rewrite !Evl; cbn [eou_bind]].
-        rewrite Evb; cbn [eou_bind].
-        destruct (eval_cert_expr penv [] foracle tgt) as [| | | vtgt];
-          cbn in Hlt; try contradiction.
-        exact (eval_iop_nested_weaken_r op_in op fl_in fl w vl vl vb vtgt iop_in iop_out
-                 Hndiv_in Hndiv_out Hwfvl Hwfvl Hwfvb Hiop_in Hiop_out
-                 (fun ia ib ic Hia Hib _ =>
-                    ltac:(rewrite Hia in Hib; apply dvalue_i_inj in Hib; subst ib;
-                          rewrite Habs, <- Hia; exact Hlt))).
-      - destruct Hbl as ([Heqbl Huba] & Hrec); apply cert_expr_eqb_eq in Heqbl; subst b.
-        pose proof (IH l tgt Hrec (eq_trans Hwl Hbw) Hwtl Hwtt Hpl Hpt) as Hlt.
-        destruct (ub_free_expr_eval_ret a [] penv [] foracle Huba Hta wf_let_val_env_nil Hpa)
-          as [va [Eva Hwfva]]; rewrite Hwa in Hwfva.
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-        destruct Htot_l as [[msgl ->] | [vl [Evl Hwfvl]]]; [cbn; exact I | rewrite Evl in Hlt |- *; cbn [eou_bind]].
-        rewrite Eva, ?Evl; cbn [eou_bind].
-        destruct (eval_cert_expr penv [] foracle tgt) as [| | | vtgt];
-          cbn in Hlt; try contradiction.
-        exact (eval_iop_nested_weaken_r op_in op fl_in fl w vl va vl vtgt iop_in iop_out
-                 Hndiv_in Hndiv_out Hwfvl Hwfva Hwfvl Hiop_in Hiop_out
-                 (fun ia ib ic Hia _ Hic =>
-                    ltac:(rewrite Hia in Hic; apply dvalue_i_inj in Hic; subst ic;
-                          rewrite (Hcomm_in ib ia), Habs, <- Hia; exact Hlt))). }
-    assert (Habs_lhs : forall op_in
-              (iop_in iop_out : @Integers.bit_int w -> @Integers.bit_int w -> @Integers.bit_int w),
-      is_div_or_rem_op op = false ->
-      is_div_or_rem_op op_in = false ->
-      check_absorb_binop_lhs op_in rec l r tgt = true ->
-      (forall x y, eval_int_op (cert_to_ibinop op_in no_binop_flags) x y =
-                   raise_ret (@DVALUE_I Pa w (iop_in x y))) ->
-      (forall x y, eval_int_op (cert_to_ibinop op no_binop_flags) x y =
-                   raise_ret (@DVALUE_I Pa w (iop_out x y))) ->
-      (forall x y, iop_out (iop_in x y) x = x) ->
-      (forall x y, iop_in x y = iop_in y x) ->
-      refine_eou_dvalue
-        (eval_closed_cert_expr penv foracle (CE_BinOp op w fl l r))
-        (eval_closed_cert_expr penv foracle tgt)).
-    { intros op_in iop_in iop_out Hndiv_out Hndiv_in Hchk0 Hiop_in Hiop_out Habs Hcomm_in.
-      unfold check_absorb_binop_lhs in Hchk0.
-      destruct (match_inner_binop op_in l) as [[[fl_in a] b] |] eqn:Em; [| discriminate Hchk0].
-      destruct (match_inner_binop_inv op_in l fl_in a b Em) as [wl Heql]; subst l.
-      cbn [cert_expr_bit_width] in Hwl; subst wl.
-      cbn [wt_cert_expr collect_free_vars] in Hwtl, Hpl; rewrite !andb_true_iff in Hwtl.
-      destruct Hwtl as ((((_ & Hta) & Htb) & Hwa) & Hwb).
-      apply Pos.eqb_eq in Hwa; apply Pos.eqb_eq in Hwb.
-      assert (Hpa : wf_param_env_for (collect_free_vars [] a) penv)
-        by (intros x wx Hx; apply Hpl, in_app_iff; left; exact Hx).
-      assert (Hpb : wf_param_env_for (collect_free_vars [] b) penv)
-        by (intros x wx Hx; apply Hpl, in_app_iff; right; exact Hx).
-      apply orb_true_iff in Hchk0 as [Har | Hbr];
-        [rewrite !andb_true_iff in Har | rewrite !andb_true_iff in Hbr].
-      - destruct Har as ([Heqar Hubb] & Hrec); apply cert_expr_eqb_eq in Heqar; subst a.
-        pose proof (IH r tgt Hrec (eq_trans Hwr Hbw) Hwtr Hwtt Hpr Hpt) as Hrt.
-        destruct (ub_free_expr_eval_ret b [] penv [] foracle Hubb Htb wf_let_val_env_nil Hpb)
-          as [vb [Evb Hwfvb]]; rewrite Hwb in Hwfvb.
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-        destruct Htot_r as [[msgr ->] | [vr [Evr Hwfvr]]]; [cbn; exact I | rewrite Evr in Hrt |- *; cbn [eou_bind]].
-        rewrite Evb, ?Evr; cbn [eou_bind].
-        destruct (eval_cert_expr penv [] foracle tgt) as [| | | vtgt];
-          cbn in Hrt; try contradiction.
-        exact (eval_iop_nested_weaken_l op_in op fl_in fl w vr vb vr vtgt iop_in iop_out
-                 Hndiv_in Hndiv_out Hwfvr Hwfvb Hwfvr Hiop_in Hiop_out
-                 (fun ia ib ic Hia _ Hic =>
-                    ltac:(rewrite Hia in Hic; apply dvalue_i_inj in Hic; subst ic;
-                          rewrite Habs, <- Hia; exact Hrt))).
-      - destruct Hbr as ([Heqbr Huba] & Hrec); apply cert_expr_eqb_eq in Heqbr; subst b.
-        pose proof (IH r tgt Hrec (eq_trans Hwr Hbw) Hwtr Hwtt Hpr Hpt) as Hrt.
-        destruct (ub_free_expr_eval_ret a [] penv [] foracle Huba Hta wf_let_val_env_nil Hpa)
-          as [va [Eva Hwfva]]; rewrite Hwa in Hwfva.
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Eva; cbn [eou_bind].
-        destruct Htot_r as [[msgr ->] | [vr [Evr Hwfvr]]]; [cbn; exact I | rewrite ?Evr in Hrt; rewrite !Evr; cbn [eou_bind]].
-        destruct (eval_cert_expr penv [] foracle tgt) as [| | | vtgt];
-          cbn in Hrt; try contradiction.
-        exact (eval_iop_nested_weaken_l op_in op fl_in fl w va vr vr vtgt iop_in iop_out
-                 Hndiv_in Hndiv_out Hwfva Hwfvr Hwfvr Hiop_in Hiop_out
-                 (fun ia ib ic _ Hib Hic =>
-                    ltac:(rewrite Hib in Hic; apply dvalue_i_inj in Hic; subst ic;
-                          rewrite (Hcomm_in ia ib), Habs, <- Hib; exact Hrt))). }
     destruct op.
-    + (* CB_Add *)
-      rewrite !orb_true_iff in Hstep; destruct Hstep as [[[Hc | Hc] | Hc] | Hc].
-      * apply andb_true_iff in Hc as [Hz Hrec].
-        apply (Hid_r 0%N eq_refl (is_zero_const_expr_inv w r Hz) Hrec).
-        intros il; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
-        rewrite Integers.add_zero; reflexivity.
-      * apply andb_true_iff in Hc as [Hz Hrec].
-        apply (Hid_l 0%N eq_refl (is_zero_const_expr_inv w l Hz) Hrec).
-        intros ir; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
-        rewrite Integers.add_zero_l; reflexivity.
-      * exact (Hcan_lhs CB_Sub false (@Integers.sub w) (@Integers.add w) eq_refl eq_refl Hc
-                 (fun _ _ => eq_refl) (fun _ _ => eq_refl) (alg_sub_add_cancel w)
-                 (fun H => False_ind _ (Bool.diff_false_true H))).
-      * exact (Hcan_rhs CB_Sub false (@Integers.sub w) (@Integers.add w) eq_refl eq_refl Hc
-                 (fun _ _ => eq_refl) (fun _ _ => eq_refl) (fun x y => alg_sub_add_cancel_l w y x)
-                 (fun H => False_ind _ (Bool.diff_false_true H))).
-    + (* CB_Sub *)
-      rewrite !orb_true_iff in Hstep; destruct Hstep as [[Hc | Hc] | Hc].
-      * apply andb_true_iff in Hc as [H1 H2].
-        apply (Hid_r 0%N eq_refl (is_zero_const_expr_inv w r H1) H2).
-        intros il; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
-        rewrite Integers.sub_zero_l; reflexivity.
-      * apply andb_true_iff in Hc as [H1 H2].
-        apply cert_expr_eqb_eq in H1; subst r.
-        rewrite (is_zero_const_expr_inv w tgt H2).
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-        destruct Htot_l as [[msgl ->] | [vl [-> Hwfvl]]]; [cbn; exact I | cbn [eou_bind]].
-        apply (refine_eou_dvalue_trans _
-                 (@eval_iop Pa (cert_to_ibinop CB_Sub no_binop_flags) vl vl) _).
-        -- exact (eval_iop_non_div_rem_monotone CB_Sub fl no_binop_flags w vl vl vl vl
-                    eq_refl (binop_flags_weaken_no_flags fl) Hwfvl Hwfvl Hwfvl Hwfvl
-                    (dvalue_refines_refl _) (dvalue_refines_refl _)).
-        -- destruct Hwfvl as [-> | [il ->]]; [cbn; apply dvalue_refines_poison_l |].
-           unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
-           rewrite Integers.sub_idem; apply dvalue_refines_refl.
-      * exact (Hcan_lhs CB_Add true (@Integers.add w) (@Integers.sub w) eq_refl eq_refl Hc
-                 (fun _ _ => eq_refl) (fun _ _ => eq_refl) (alg_add_sub_cancel w)
-                 (fun _ => @Integers.add_commut w)).
-    + (* CB_Mul *)
-      rewrite !orb_true_iff in Hstep; destruct Hstep as [[[Hc | Hc] | Hc] | Hc];
-        apply andb_true_iff in Hc as [H1 H2].
-      * apply (Hid_r 1%N eq_refl (is_one_const_expr_inv w r H1) H2).
-        intros il; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_one_N; cbn.
-        destruct (Pos.eqb w 1); cbn; rewrite Integers.mul_one; reflexivity.
-      * apply (Hid_l 1%N eq_refl (is_one_const_expr_inv w l H1) H2).
-        intros ir; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_one_N; cbn.
-        destruct (Pos.eqb w 1); cbn; rewrite Integers.mul_commut, Integers.mul_one; reflexivity.
-      * rewrite (is_zero_const_expr_inv w r H1), (is_zero_const_expr_inv w tgt H2).
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-        destruct Htot_l as [[msgl ->] | [vl [-> Hwfvl]]]; [cbn; exact I | cbn [eou_bind]].
-        apply (refine_eou_dvalue_trans _
-                 (@eval_iop Pa (cert_to_ibinop CB_Mul no_binop_flags) vl
-                    (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N 0))))) _).
-        -- exact (eval_iop_non_div_rem_monotone CB_Mul fl no_binop_flags w vl vl _ _
-                    eq_refl (binop_flags_weaken_no_flags fl) Hwfvl Hwfvl
-                    (or_intror (ex_intro _ _ eq_refl)) (or_intror (ex_intro _ _ eq_refl))
-                    (dvalue_refines_refl _) (dvalue_refines_refl _)).
-        -- destruct Hwfvl as [-> | [il ->]]; [cbn; apply dvalue_refines_poison_l |].
-           unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
-           destruct (Pos.eqb w 1); cbn; rewrite Integers.mul_zero; apply dvalue_refines_refl.
-      * rewrite (is_zero_const_expr_inv w l H1), (is_zero_const_expr_inv w tgt H2).
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr eou_bind].
-        destruct Htot_r as [[msgr ->] | [vr [-> Hwfvr]]]; [cbn; exact I | cbn [eou_bind]].
-        apply (refine_eou_dvalue_trans _
-                 (@eval_iop Pa (cert_to_ibinop CB_Mul no_binop_flags)
-                    (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N 0)))) vr) _).
-        -- exact (eval_iop_non_div_rem_monotone CB_Mul fl no_binop_flags w _ _ vr vr
-                    eq_refl (binop_flags_weaken_no_flags fl)
-                    (or_intror (ex_intro _ _ eq_refl)) (or_intror (ex_intro _ _ eq_refl))
-                    Hwfvr Hwfvr (dvalue_refines_refl _) (dvalue_refines_refl _)).
-        -- destruct Hwfvr as [-> | [ir ->]]; [cbn; apply dvalue_refines_poison_l |].
-           unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
-           destruct (Pos.eqb w 1); cbn; rewrite Integers.mul_commut, Integers.mul_zero;
-             apply dvalue_refines_refl.
-    + (* CB_UDiv *)
-      apply orb_true_iff in Hstep as [Hc | Hc]; apply andb_true_iff in Hc as [H1 H2].
-      * rewrite (is_one_const_expr_inv w r H1).
-        pose proof (IH l tgt H2 (eq_trans Hwl Hbw) Hwtl Hwtt Hpl Hpt) as Hlt.
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-        destruct Htot_l as [[msgl ->] | [vl [Evl Hwfvl]]];
-          [cbn; exact I | rewrite Evl in Hlt |- *; cbn [eou_bind]].
-        apply (refine_eou_dvalue_trans _
-                 (@eval_iop Pa (cert_to_ibinop CB_UDiv no_binop_flags) vl
-                    (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N 1))))) _).
-        -- exact (eval_iop_div_rem_same_lhs CB_UDiv fl no_binop_flags w vl _ _
-                    eq_refl (binop_flags_weaken_no_flags fl) Hwfvl
-                    (or_intror (ex_intro _ _ eq_refl)) (or_intror (ex_intro _ _ eq_refl))
-                    (dvalue_refines_refl _)).
-        -- destruct Hwfvl as [-> | [il ->]]; [exact Hlt |].
-           unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_one_N; cbn.
-           rewrite (@Integers.unsigned_one w); cbn; rewrite (@Integers.divu_one w il); exact Hlt.
-      * rewrite (is_zero_const_expr_inv w l H1), (is_zero_const_expr_inv w tgt H2).
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr eou_bind].
-        destruct Htot_r as [[msgr ->] | [vr [-> [-> | [ir ->]]]]]; [cbn; exact I | cbn; exact I |].
-        cbn [eou_bind]; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N.
-        unfold cert_to_ibinop, eval_int_op; cbn.
-        destruct (@Integers.unsigned w ir =? 0)%Z; cbn; [exact I |].
-        destruct (cbf_exact fl && _); cbn;
-          [apply dvalue_refines_poison_l | rewrite alg_divu_zero_l; apply dvalue_refines_refl].
-    + (* CB_SDiv *)
-      apply andb_true_iff in Hstep as [H1 H2].
-      rewrite (is_zero_const_expr_inv w l H1), (is_zero_const_expr_inv w tgt H2).
-      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr eou_bind].
-      destruct Htot_r as [[msgr ->] | [vr [-> [-> | [ir ->]]]]]; [cbn; exact I | cbn; exact I |].
-      cbn [eou_bind]; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N.
-      unfold cert_to_ibinop, eval_int_op; cbn.
-      destruct (@Integers.signed w ir =? 0)%Z; cbn; [exact I |].
-      destruct ((@Integers.min_signed w =? @Integers.signed w (@Integers.zero w))%Z && _);
-        cbn; [exact I |].
-      destruct (cbf_exact fl && _); cbn;
-        [apply dvalue_refines_poison_l | rewrite alg_divs_zero_l; apply dvalue_refines_refl].
-    + (* CB_URem *)
-      apply orb_true_iff in Hstep as [Hc | Hc]; apply andb_true_iff in Hc as [H1 H2].
-      * rewrite (is_one_const_expr_inv w r H1), (is_zero_const_expr_inv w tgt H2).
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-        destruct Htot_l as [[msgl ->] | [vl [-> [-> | [il ->]]]]];
-          [cbn; exact I | cbn; apply dvalue_refines_poison_l |].
-        cbn [eou_bind]; unfold eval_iop;
-          rewrite eval_iop_integer_base_same_width, repr_one_N, repr_zero_N; cbn.
-        rewrite (@Integers.unsigned_one w); cbn; rewrite (@Integers.modu_one w il).
-        apply dvalue_refines_refl.
-      * rewrite (is_zero_const_expr_inv w l H1), (is_zero_const_expr_inv w tgt H2).
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr eou_bind].
-        destruct Htot_r as [[msgr ->] | [vr [-> [-> | [ir ->]]]]]; [cbn; exact I | cbn; exact I |].
-        cbn [eou_bind]; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
-        destruct (@Integers.unsigned w ir =? 0)%Z; cbn; [exact I |].
-        rewrite alg_modu_zero_l; apply dvalue_refines_refl.
-    + (* CB_SRem *)
-      apply andb_true_iff in Hstep as [H1 H2].
-      rewrite (is_zero_const_expr_inv w l H1), (is_zero_const_expr_inv w tgt H2).
-      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr eou_bind].
-      destruct Htot_r as [[msgr ->] | [vr [-> [-> | [ir ->]]]]]; [cbn; exact I | cbn; exact I |].
-      cbn [eou_bind]; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N.
-      unfold cert_to_ibinop, eval_int_op; cbn.
-      destruct (@Integers.signed w ir =? 0)%Z; cbn; [exact I |].
-      destruct ((@Integers.min_signed w =? @Integers.signed w (@Integers.zero w))%Z && _);
-        cbn; [exact I |].
-      rewrite alg_mods_zero_l; cbn; apply dvalue_refines_refl.
-    + (* CB_Shl *)
-      apply andb_true_iff in Hstep as [H1 H2].
-      apply (Hid_r 0%N eq_refl (is_zero_const_expr_inv w r H1) H2).
+    + exact (check_src_elim_binop_arith rec ctx CB_Add w fl l r tgt penv foracle
+               (or_introl eq_refl) IH Hstep Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt).
+    + exact (check_src_elim_binop_arith rec ctx CB_Sub w fl l r tgt penv foracle
+               (or_intror (or_introl eq_refl)) IH Hstep Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt).
+    + exact (check_src_elim_binop_arith rec ctx CB_Mul w fl l r tgt penv foracle
+               (or_intror (or_intror eq_refl)) IH Hstep Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt).
+    + exact (check_src_elim_binop_div_rem rec ctx CB_UDiv w fl l r tgt penv foracle
+               (or_introl eq_refl) IH Hstep Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt).
+    + exact (check_src_elim_binop_div_rem rec ctx CB_SDiv w fl l r tgt penv foracle
+               (or_intror (or_introl eq_refl)) IH Hstep Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt).
+    + exact (check_src_elim_binop_div_rem rec ctx CB_URem w fl l r tgt penv foracle
+               (or_intror (or_intror (or_introl eq_refl))) IH Hstep Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt).
+    + exact (check_src_elim_binop_div_rem rec ctx CB_SRem w fl l r tgt penv foracle
+               (or_intror (or_intror (or_intror eq_refl))) IH Hstep Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt).
+    + apply andb_true_iff in Hstep as [H1 H2].
+      apply (check_src_elim_binop_id_r rec CB_Shl w fl l r tgt penv foracle 0%N
+               IH Hbw Hwl Hwtl Hwtt Hpl Hpt eq_refl (is_zero_const_expr_inv w r H1) H2).
       intros il; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
       rewrite (@Integers.unsigned_zero w); cbn; rewrite alg_shl_zero; reflexivity.
-    + (* CB_LShr *)
-      apply andb_true_iff in Hstep as [H1 H2].
-      apply (Hid_r 0%N eq_refl (is_zero_const_expr_inv w r H1) H2).
+    + apply andb_true_iff in Hstep as [H1 H2].
+      apply (check_src_elim_binop_id_r rec CB_LShr w fl l r tgt penv foracle 0%N
+               IH Hbw Hwl Hwtl Hwtt Hpl Hpt eq_refl (is_zero_const_expr_inv w r H1) H2).
       intros il; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
       rewrite (@Integers.unsigned_zero w); cbn; rewrite alg_shru_zero; reflexivity.
-    + (* CB_AShr *)
-      apply andb_true_iff in Hstep as [H1 H2].
-      apply (Hid_r 0%N eq_refl (is_zero_const_expr_inv w r H1) H2).
+    + apply andb_true_iff in Hstep as [H1 H2].
+      apply (check_src_elim_binop_id_r rec CB_AShr w fl l r tgt penv foracle 0%N
+               IH Hbw Hwl Hwtl Hwtt Hpl Hpt eq_refl (is_zero_const_expr_inv w r H1) H2).
       intros il; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
       rewrite (@Integers.unsigned_zero w); cbn; rewrite alg_shr_zero; reflexivity.
-    + (* CB_And *)
-      rewrite !orb_true_iff in Hstep.
-      destruct Hstep as [[[[[[Hc | Hc] | Hc] | Hc] | Hc] | Habs_r] | Habs_l].
-      * apply andb_true_iff in Hc as [H1 H2].
-        apply (Hid_r (all_ones_N w) eq_refl (is_all_ones_const_expr_inv w r H1) H2).
-        intros il; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_all_ones_N; cbn.
-        rewrite Integers.and_mone; reflexivity.
-      * apply andb_true_iff in Hc as [H1 H2].
-        apply (Hid_l (all_ones_N w) eq_refl (is_all_ones_const_expr_inv w l H1) H2).
-        intros ir; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_all_ones_N; cbn.
-        rewrite Integers.and_mone_l; reflexivity.
-      * apply andb_true_iff in Hc as [H1 H2]; apply cert_expr_eqb_eq in H1; subst r.
-        pose proof (IH l tgt H2 (eq_trans Hwl Hbw) Hwtl Hwtt Hpl Hpt) as Hlt.
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-        destruct Htot_l as [[msgl ->] | [vl [Evl Hwfvl]]];
-          [cbn; exact I | rewrite !Evl; rewrite Evl in Hlt; cbn [eou_bind]].
-        destruct Hwfvl as [-> | [il ->]]; [exact Hlt |].
-        unfold eval_iop; rewrite eval_iop_integer_base_same_width; cbn.
-        rewrite Integers.and_idem; exact Hlt.
-      * apply andb_true_iff in Hc as [H1 H2].
-        rewrite (is_zero_const_expr_inv w r H1), (is_zero_const_expr_inv w tgt H2).
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-        destruct Htot_l as [[msgl ->] | [vl [-> [-> | [il ->]]]]];
-          [cbn; exact I | cbn; apply dvalue_refines_poison_l | cbn [eou_bind]].
-        unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
-        rewrite Integers.and_zero; apply dvalue_refines_refl.
-      * apply andb_true_iff in Hc as [H1 H2].
-        rewrite (is_zero_const_expr_inv w l H1), (is_zero_const_expr_inv w tgt H2).
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr eou_bind].
-        destruct Htot_r as [[msgr ->] | [vr [-> [-> | [ir ->]]]]];
-          [cbn; exact I | cbn; apply dvalue_refines_poison_l | cbn [eou_bind]].
-        unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
-        rewrite Integers.and_zero_l; apply dvalue_refines_refl.
-      * exact (Habs_rhs CB_Or (@Integers.or w) (@Integers.and w) eq_refl eq_refl Habs_r
-                 (fun _ _ => eq_refl) (fun _ _ => eq_refl)
-                 (alg_and_or_absorb w) (@Integers.or_commut w)).
-      * exact (Habs_lhs CB_Or (@Integers.or w) (@Integers.and w) eq_refl eq_refl Habs_l
-                 (fun _ _ => eq_refl) (fun _ _ => eq_refl)
-                 (fun x y => eq_trans (@Integers.and_commut w _ x) (alg_and_or_absorb w x y))
-                 (@Integers.or_commut w)).
-    + (* CB_Or *)
-      rewrite !orb_true_iff in Hstep.
-      destruct Hstep as [[[[[[Hc | Hc] | Hc] | Hc] | Hc] | Habs_r] | Habs_l].
-      * apply andb_true_iff in Hc as [H1 H2].
-        apply (Hid_r 0%N eq_refl (is_zero_const_expr_inv w r H1) H2).
-        intros il; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
-        rewrite Integers.or_zero; reflexivity.
-      * apply andb_true_iff in Hc as [H1 H2].
-        apply (Hid_l 0%N eq_refl (is_zero_const_expr_inv w l H1) H2).
-        intros ir; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
-        rewrite Integers.or_zero_l; reflexivity.
-      * apply andb_true_iff in Hc as [H1 H2]; apply cert_expr_eqb_eq in H1; subst r.
-        pose proof (IH l tgt H2 (eq_trans Hwl Hbw) Hwtl Hwtt Hpl Hpt) as Hlt.
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-        destruct Htot_l as [[msgl ->] | [vl [Evl Hwfvl]]];
-          [cbn; exact I | rewrite !Evl; rewrite Evl in Hlt; cbn [eou_bind]].
-        apply (refine_eou_dvalue_trans _
-                 (@eval_iop Pa (cert_to_ibinop CB_Or no_binop_flags) vl vl) _).
-        -- exact (eval_iop_non_div_rem_monotone CB_Or fl no_binop_flags w vl vl vl vl
-                    eq_refl (binop_flags_weaken_no_flags fl) Hwfvl Hwfvl Hwfvl Hwfvl
-                    (dvalue_refines_refl _) (dvalue_refines_refl _)).
-        -- destruct Hwfvl as [-> | [il ->]]; [exact Hlt |].
-           unfold eval_iop; rewrite eval_iop_integer_base_same_width; cbn.
-           rewrite Integers.or_idem; exact Hlt.
-      * apply andb_true_iff in Hc as [H1 H2].
-        rewrite (is_all_ones_const_expr_inv w r H1), (is_all_ones_const_expr_inv w tgt H2).
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-        destruct Htot_l as [[msgl ->] | [vl [-> Hwfvl]]]; [cbn; exact I | cbn [eou_bind]].
-        apply (refine_eou_dvalue_trans _
-                 (@eval_iop Pa (cert_to_ibinop CB_Or no_binop_flags) vl
-                    (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N (all_ones_N w)))))) _).
-        -- exact (eval_iop_non_div_rem_monotone CB_Or fl no_binop_flags w vl vl _ _
-                    eq_refl (binop_flags_weaken_no_flags fl) Hwfvl Hwfvl
-                    (or_intror (ex_intro _ _ eq_refl)) (or_intror (ex_intro _ _ eq_refl))
-                    (dvalue_refines_refl _) (dvalue_refines_refl _)).
-        -- destruct Hwfvl as [-> | [il ->]]; [cbn; apply dvalue_refines_poison_l |].
-           unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_all_ones_N; cbn.
-           rewrite Integers.or_mone; apply dvalue_refines_refl.
-      * apply andb_true_iff in Hc as [H1 H2].
-        rewrite (is_all_ones_const_expr_inv w l H1), (is_all_ones_const_expr_inv w tgt H2).
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr eou_bind].
-        destruct Htot_r as [[msgr ->] | [vr [-> Hwfvr]]]; [cbn; exact I | cbn [eou_bind]].
-        apply (refine_eou_dvalue_trans _
-                 (@eval_iop Pa (cert_to_ibinop CB_Or no_binop_flags)
-                    (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N (all_ones_N w))))) vr) _).
-        -- exact (eval_iop_non_div_rem_monotone CB_Or fl no_binop_flags w _ _ vr vr
-                    eq_refl (binop_flags_weaken_no_flags fl)
-                    (or_intror (ex_intro _ _ eq_refl)) (or_intror (ex_intro _ _ eq_refl))
-                    Hwfvr Hwfvr (dvalue_refines_refl _) (dvalue_refines_refl _)).
-        -- destruct Hwfvr as [-> | [ir ->]]; [cbn; apply dvalue_refines_poison_l |].
-           unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_all_ones_N; cbn.
-           rewrite Integers.or_commut, Integers.or_mone; apply dvalue_refines_refl.
-      * exact (Habs_rhs CB_And (@Integers.and w) (@Integers.or w) eq_refl eq_refl Habs_r
-                 (fun _ _ => eq_refl) (fun _ _ => eq_refl)
-                 (alg_or_and_absorb w) (@Integers.and_commut w)).
-      * exact (Habs_lhs CB_And (@Integers.and w) (@Integers.or w) eq_refl eq_refl Habs_l
-                 (fun _ _ => eq_refl) (fun _ _ => eq_refl)
-                 (fun x y => eq_trans (@Integers.or_commut w _ x) (alg_or_and_absorb w x y))
-                 (@Integers.and_commut w)).
-    + (* CB_Xor *)
-      rewrite !orb_true_iff in Hstep.
-      destruct Hstep as [[[[Hc | Hc] | Hc] | Hcl] | Hcr].
-      * apply andb_true_iff in Hc as [H1 H2].
-        apply (Hid_r 0%N eq_refl (is_zero_const_expr_inv w r H1) H2).
-        intros il; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
-        rewrite Integers.xor_zero; reflexivity.
-      * apply andb_true_iff in Hc as [H1 H2].
-        apply (Hid_l 0%N eq_refl (is_zero_const_expr_inv w l H1) H2).
-        intros ir; unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
-        rewrite Integers.xor_zero_l; reflexivity.
-      * apply andb_true_iff in Hc as [H1 H2].
-        apply cert_expr_eqb_eq in H1; subst r; rewrite (is_zero_const_expr_inv w tgt H2).
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-        destruct Htot_l as [[msgl ->] | [vl [-> [-> | [il ->]]]]];
-          [cbn; exact I | cbn; apply dvalue_refines_poison_l | cbn [eou_bind]].
-        unfold eval_iop; rewrite eval_iop_integer_base_same_width, repr_zero_N; cbn.
-        rewrite Integers.xor_idem; apply dvalue_refines_refl.
-      * exact (Hcan_lhs CB_Xor true (@Integers.xor w) (@Integers.xor w) eq_refl eq_refl Hcl
-                 (fun _ _ => eq_refl) (fun _ _ => eq_refl) (alg_xor_cancel w)
-                 (fun _ => @Integers.xor_commut w)).
-      * exact (Hcan_rhs CB_Xor true (@Integers.xor w) (@Integers.xor w) eq_refl eq_refl Hcr
-                 (fun _ _ => eq_refl) (fun _ _ => eq_refl) (fun x y => alg_xor_cancel_l w y x)
-                 (fun _ => @Integers.xor_commut w)).
+    + exact (check_src_elim_binop_bitwise rec ctx CB_And w fl l r tgt penv foracle
+               (or_introl eq_refl) IH Hstep Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt).
+    + exact (check_src_elim_binop_bitwise rec ctx CB_Or w fl l r tgt penv foracle
+               (or_intror (or_introl eq_refl)) IH Hstep Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt).
+    + exact (check_src_elim_binop_bitwise rec ctx CB_Xor w fl l r tgt penv foracle
+               (or_intror (or_intror eq_refl)) IH Hstep Hbw Hwl Hwr Hwtl Hwtr Hwtt Hpl Hpr Hpt).
   - (* CE_ICmp *)
     cbn [wt_cert_expr collect_free_vars] in Hwts, Hps.
     rewrite !andb_true_iff in Hwts; rewrite !andb_true_iff in Hstep.
@@ -2892,10 +3236,12 @@ Proof.
     apply Pos.eqb_eq in Hwc; apply Pos.eqb_eq in Hwt0; apply Pos.eqb_eq in Hwf0.
     assert (Hpc : wf_param_env_for (collect_free_vars [] c) penv)
       by (intros x wx Hx; apply Hps, in_app_iff; left; exact Hx).
-    assert (Hpt1 : wf_param_env_for (collect_free_vars [] t) penv)
-      by (intros x wx Hx; apply Hps, in_app_iff; right; apply in_app_iff; left; exact Hx).
-    assert (Hpf1 : wf_param_env_for (collect_free_vars [] f) penv)
-      by (intros x wx Hx; apply Hps, in_app_iff; right; apply in_app_iff; right; exact Hx).
+    assert (Hpt1 : wf_param_env_for (collect_free_vars [] t) penv).
+    { intros x wx Hx.
+      apply Hps, in_app_iff; right; apply in_app_iff; left; exact Hx. }
+    assert (Hpf1 : wf_param_env_for (collect_free_vars [] f) penv).
+    { intros x wx Hx.
+      apply Hps, in_app_iff; right; apply in_app_iff; right; exact Hx. }
     pose proof (IH t tgt Hrt (eq_trans Hwt0 Hbw) Hwtt1 Hwtt Hpt1 Hpt) as IHt.
     pose proof (IH f tgt Hrf (eq_trans Hwf0 Hbw) Hwtf1 Hwtt Hpf1 Hpt) as IHf.
     unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
@@ -2919,6 +3265,403 @@ Proof.
     pose proof (IH o tgt Hrec (eq_trans Hwo Hbw) Hwto Hwtt Hps Hpt) as IHo.
     unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hio in IHo |- *.
     exact IHo.
+Qed.
+
+Local Lemma check_cong_binop_sound :
+  forall {Pa : Params} (rec : cert_expr -> cert_expr -> bool) (ctx : ub_ctx)
+         op1 w1 fl1 l1 r1 op2 w2 fl2 l2 r2 (penv : param_env Pa) (foracle : freeze_oracle),
+    (forall s t,
+       rec s t = true ->
+       cert_expr_bit_width s = cert_expr_bit_width t ->
+       wt_cert_expr [] s = true ->
+       wt_cert_expr [] t = true ->
+       wf_param_env_for (collect_free_vars [] s) penv ->
+       wf_param_env_for (collect_free_vars [] t) penv ->
+       refine_eou_dvalue
+         (eval_closed_cert_expr penv foracle s)
+         (eval_closed_cert_expr penv foracle t)) ->
+    check_struct_cong_step rec ctx (CE_BinOp op1 w1 fl1 l1 r1) (CE_BinOp op2 w2 fl2 l2 r2) = true ->
+    wt_cert_expr [] (CE_BinOp op1 w1 fl1 l1 r1) = true ->
+    wt_cert_expr [] (CE_BinOp op2 w2 fl2 l2 r2) = true ->
+    wf_param_env_for (collect_free_vars [] (CE_BinOp op1 w1 fl1 l1 r1)) penv ->
+    wf_param_env_for (collect_free_vars [] (CE_BinOp op2 w2 fl2 l2 r2)) penv ->
+    ub_ctx_holds penv foracle ctx ->
+    refine_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_BinOp op1 w1 fl1 l1 r1))
+      (eval_closed_cert_expr penv foracle (CE_BinOp op2 w2 fl2 l2 r2)).
+Proof.
+  intros Pa rec ctx op1 w1 fl1 l1 r1 op2 w2 fl2 l2 r2 penv foracle
+         IH Hcong Hwts Hwtt Hps Hpt Hctx.
+  cbn [check_struct_cong_step] in Hcong.
+  rewrite !andb_true_iff in Hcong.
+  destruct Hcong as (((Hop & Hww) & Hfl) & Hargs).
+  apply cert_binop_eqb_eq in Hop; apply Pos.eqb_eq in Hww; subst op2 w2.
+  cbn [wt_cert_expr collect_free_vars] in Hwts, Hwtt, Hps, Hpt.
+  rewrite !andb_true_iff in Hwts; rewrite !andb_true_iff in Hwtt.
+  destruct Hwts as ((((_ & Htl1) & Htr1) & Hwl1) & Hwr1).
+  destruct Hwtt as ((((_ & Htl2) & Htr2) & Hwl2) & Hwr2).
+  apply Pos.eqb_eq in Hwl1; apply Pos.eqb_eq in Hwr1.
+  apply Pos.eqb_eq in Hwl2; apply Pos.eqb_eq in Hwr2.
+  assert (Hpl1 : wf_param_env_for (collect_free_vars [] l1) penv)
+    by (intros x wx Hx; apply Hps, in_app_iff; left; exact Hx).
+  assert (Hpr1 : wf_param_env_for (collect_free_vars [] r1) penv)
+    by (intros x wx Hx; apply Hps, in_app_iff; right; exact Hx).
+  assert (Hpl2 : wf_param_env_for (collect_free_vars [] l2) penv)
+    by (intros x wx Hx; apply Hpt, in_app_iff; left; exact Hx).
+  assert (Hpr2 : wf_param_env_for (collect_free_vars [] r2) penv)
+    by (intros x wx Hx; apply Hpt, in_app_iff; right; exact Hx).
+  destruct (is_div_or_rem_op op1) eqn:Ediv.
+  - apply orb_true_iff in Hargs as [Hsame | Hnzdiv].
+    + apply andb_true_iff in Hsame as [Heql Hrr].
+      apply cert_expr_eqb_eq in Heql; subst l2.
+      pose proof (IH r1 r2 Hrr (eq_trans Hwr1 (eq_sym Hwr2))
+                     Htr1 Htr2 Hpr1 Hpr2) as IHr.
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+      destruct (eval_cert_expr_totality l1 [] penv [] foracle Htl1 wf_let_val_env_nil Hpl1)
+        as [[msgl ->] | [vl [-> Hwfvl]]]; [cbn; exact I | cbn [eou_bind]].
+      rewrite Hwl1 in Hwfvl.
+      apply (eou_bind_refine_typed w1 _ _ _ _
+               (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
+                              (eval_cert_expr_ret_wf_scalar r1 [] penv [] foracle v Htr1 Hv) _ Hwr1)
+               (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
+                              (eval_cert_expr_ret_wf_scalar r2 [] penv [] foracle v Htr2 Hv) _ Hwr2)
+               IHr).
+      intros vr1 vr2 Hwfr1 Hwfr2 Hrr_val.
+      exact (eval_iop_div_rem_same_lhs op1 fl1 fl2 w1 vl vr1 vr2
+               Ediv Hfl Hwfvl Hwfr1 Hwfr2 Hrr_val).
+    + rewrite !andb_true_iff in Hnzdiv; destruct Hnzdiv as ([Hnz Hll] & Hrr).
+      destruct (expr_divisor_nonzero_sound ctx r1 penv foracle Htr1 Hnz Hctx)
+        as [ir1 [Hir1 Hnz1]].
+      revert ir1 Hir1 Hnz1; rewrite Hwr1; intros ir1 Hir1 Hnz1.
+      pose proof (IH l1 l2 Hll (eq_trans Hwl1 (eq_sym Hwl2))
+                     Htl1 Htl2 Hpl1 Hpl2) as IHl.
+      pose proof (IH r1 r2 Hrr (eq_trans Hwr1 (eq_sym Hwr2))
+                     Htr1 Htr2 Hpr1 Hpr2) as IHr.
+      rewrite Hir1 in IHr.
+      destruct (eval_closed_cert_expr penv foracle r2) as [| | | vr2] eqn:Evr2;
+        cbn in IHr; try contradiction.
+      destruct IHr as [Hpsn | ->]; [discriminate Hpsn |].
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+      rewrite Hir1, Evr2.
+      apply (eou_bind_refine_typed w1 _ _ _ _
+               (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
+                              (eval_cert_expr_ret_wf_scalar l1 [] penv [] foracle v Htl1 Hv) _ Hwl1)
+               (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
+                              (eval_cert_expr_ret_wf_scalar l2 [] penv [] foracle v Htl2 Hv) _ Hwl2)
+               IHl).
+      intros vl1 vl2 Hwfl1 Hwfl2 Hll_val; cbn [eou_bind].
+      exact (eval_iop_div_rem_nonzero_div op1 fl1 fl2 w1 ir1 vl1 vl2
+               Ediv Hfl Hnz1 Hwfl1 Hwfl2 Hll_val).
+  - apply orb_true_iff in Hargs as [Hdir | Hswp].
+    + apply andb_true_iff in Hdir as [Hll Hrr].
+      pose proof (IH l1 l2 Hll (eq_trans Hwl1 (eq_sym Hwl2))
+                     Htl1 Htl2 Hpl1 Hpl2) as IHl.
+      pose proof (IH r1 r2 Hrr (eq_trans Hwr1 (eq_sym Hwr2))
+                     Htr1 Htr2 Hpr1 Hpr2) as IHr.
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+      apply (eou_bind_refine_typed w1 _ _ _ _
+               (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
+                              (eval_cert_expr_ret_wf_scalar l1 [] penv [] foracle v Htl1 Hv) _ Hwl1)
+               (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
+                              (eval_cert_expr_ret_wf_scalar l2 [] penv [] foracle v Htl2 Hv) _ Hwl2)
+               IHl).
+      intros vl1 vl2 Hwfl1 Hwfl2 Hll_val.
+      apply (eou_bind_refine_typed w1 _ _ _ _
+               (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
+                              (eval_cert_expr_ret_wf_scalar r1 [] penv [] foracle v Htr1 Hv) _ Hwr1)
+               (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
+                              (eval_cert_expr_ret_wf_scalar r2 [] penv [] foracle v Htr2 Hv) _ Hwr2)
+               IHr).
+      intros vr1 vr2 Hwfr1 Hwfr2 Hrr_val.
+      exact (eval_iop_non_div_rem_monotone op1 fl1 fl2 w1 vl1 vl2 vr1 vr2
+               Ediv Hfl Hwfl1 Hwfl2 Hwfr1 Hwfr2 Hll_val Hrr_val).
+    + rewrite !andb_true_iff in Hswp; destruct Hswp as ([Hcomm Hlr] & Hrl).
+      pose proof (IH l1 r2 Hlr (eq_trans Hwl1 (eq_sym Hwr2))
+                     Htl1 Htr2 Hpl1 Hpr2) as IHlr.
+      pose proof (IH r1 l2 Hrl (eq_trans Hwr1 (eq_sym Hwl2))
+                     Htr1 Htl2 Hpr1 Hpl2) as IHrl.
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+      destruct (eval_cert_expr_totality l1 [] penv [] foracle Htl1 wf_let_val_env_nil Hpl1)
+        as [[msgl ->] | [vl1 [Evl1 Hwfl1]]]; [cbn; exact I | rewrite Evl1 in IHlr |- *; cbn [eou_bind]].
+      destruct (eval_cert_expr_totality r1 [] penv [] foracle Htr1 wf_let_val_env_nil Hpr1)
+        as [[msgr ->] | [vr1 [Evr1 Hwfr1]]]; [cbn; exact I | rewrite Evr1 in IHrl |- *; cbn [eou_bind]].
+      destruct (eval_cert_expr penv [] foracle r2) as [| | | vr2] eqn:Evr2;
+        cbn in IHlr; try contradiction.
+      destruct (eval_cert_expr penv [] foracle l2) as [| | | vl2] eqn:Evl2;
+        cbn in IHrl; try contradiction.
+      cbn [eou_bind].
+      pose proof (eval_cert_expr_ret_wf_scalar l2 [] penv [] foracle vl2 Htl2 Evl2) as Hwfl2.
+      pose proof (eval_cert_expr_ret_wf_scalar r2 [] penv [] foracle vr2 Htr2 Evr2) as Hwfr2.
+      rewrite Hwl1 in Hwfl1; rewrite Hwr1 in Hwfr1;
+        rewrite Hwl2 in Hwfl2; rewrite Hwr2 in Hwfr2.
+      rewrite (eval_iop_commut op1 fl2 w1 vl2 vr2 Hcomm Hwfl2 Hwfr2).
+      exact (eval_iop_non_div_rem_monotone op1 fl1 fl2 w1 vl1 vr2 vr1 vl2
+               Ediv Hfl Hwfl1 Hwfr2 Hwfr1 Hwfl2 IHlr IHrl).
+Qed.
+
+Local Lemma check_cong_icmp_sound :
+  forall {Pa : Params} (rec : cert_expr -> cert_expr -> bool) (ctx : ub_ctx)
+         pr1 ss1 w1 l1 r1 pr2 ss2 w2 l2 r2 (penv : param_env Pa) (foracle : freeze_oracle),
+    (forall s t,
+       rec s t = true ->
+       cert_expr_bit_width s = cert_expr_bit_width t ->
+       wt_cert_expr [] s = true ->
+       wt_cert_expr [] t = true ->
+       wf_param_env_for (collect_free_vars [] s) penv ->
+       wf_param_env_for (collect_free_vars [] t) penv ->
+       refine_eou_dvalue
+         (eval_closed_cert_expr penv foracle s)
+         (eval_closed_cert_expr penv foracle t)) ->
+    check_struct_cong_step rec ctx (CE_ICmp pr1 ss1 w1 l1 r1) (CE_ICmp pr2 ss2 w2 l2 r2) = true ->
+    wt_cert_expr [] (CE_ICmp pr1 ss1 w1 l1 r1) = true ->
+    wt_cert_expr [] (CE_ICmp pr2 ss2 w2 l2 r2) = true ->
+    wf_param_env_for (collect_free_vars [] (CE_ICmp pr1 ss1 w1 l1 r1)) penv ->
+    wf_param_env_for (collect_free_vars [] (CE_ICmp pr2 ss2 w2 l2 r2)) penv ->
+    refine_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_ICmp pr1 ss1 w1 l1 r1))
+      (eval_closed_cert_expr penv foracle (CE_ICmp pr2 ss2 w2 l2 r2)).
+Proof.
+  intros Pa rec ctx pr1 ss1 w1 l1 r1 pr2 ss2 w2 l2 r2 penv foracle
+         IH Hcong Hwts Hwtt Hps Hpt.
+  cbn [check_struct_cong_step] in Hcong.
+  rewrite !andb_true_iff in Hcong; destruct Hcong as ([Hww Hss] & Hargs).
+  apply Pos.eqb_eq in Hww; subst w2.
+  cbn [wt_cert_expr collect_free_vars] in Hwts, Hwtt, Hps, Hpt.
+  rewrite !andb_true_iff in Hwts; rewrite !andb_true_iff in Hwtt.
+  destruct Hwts as (((Htl1 & Htr1) & Hwl1) & Hwr1).
+  destruct Hwtt as (((Htl2 & Htr2) & Hwl2) & Hwr2).
+  apply Pos.eqb_eq in Hwl1; apply Pos.eqb_eq in Hwr1.
+  apply Pos.eqb_eq in Hwl2; apply Pos.eqb_eq in Hwr2.
+  assert (Hpl1 : wf_param_env_for (collect_free_vars [] l1) penv)
+    by (intros x wx Hx; apply Hps, in_app_iff; left; exact Hx).
+  assert (Hpr1 : wf_param_env_for (collect_free_vars [] r1) penv)
+    by (intros x wx Hx; apply Hps, in_app_iff; right; exact Hx).
+  assert (Hpl2 : wf_param_env_for (collect_free_vars [] l2) penv)
+    by (intros x wx Hx; apply Hpt, in_app_iff; left; exact Hx).
+  assert (Hpr2 : wf_param_env_for (collect_free_vars [] r2) penv)
+    by (intros x wx Hx; apply Hpt, in_app_iff; right; exact Hx).
+  apply orb_true_iff in Hargs as [Hdir | Hswp].
+  - rewrite !andb_true_iff in Hdir; destruct Hdir as ([Hpr Hll] & Hrr);
+      apply cert_icmp_pred_eqb_eq in Hpr; subst pr2.
+    pose proof (IH l1 l2 Hll (eq_trans Hwl1 (eq_sym Hwl2))
+                   Htl1 Htl2 Hpl1 Hpl2) as IHl.
+    pose proof (IH r1 r2 Hrr (eq_trans Hwr1 (eq_sym Hwr2))
+                   Htr1 Htr2 Hpr1 Hpr2) as IHr.
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+    apply (eou_bind_refine_typed w1 _ _ _ _
+             (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
+                            (eval_cert_expr_ret_wf_scalar l1 [] penv [] foracle v Htl1 Hv) _ Hwl1)
+             (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
+                            (eval_cert_expr_ret_wf_scalar l2 [] penv [] foracle v Htl2 Hv) _ Hwl2)
+             IHl).
+    intros vl1 vl2 Hwfl1 Hwfl2 Hll_val.
+    apply (eou_bind_refine_typed w1 _ _ _ _
+             (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
+                            (eval_cert_expr_ret_wf_scalar r1 [] penv [] foracle v Htr1 Hv) _ Hwr1)
+             (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
+                            (eval_cert_expr_ret_wf_scalar r2 [] penv [] foracle v Htr2 Hv) _ Hwr2)
+             IHr).
+    intros vr1 vr2 Hwfr1 Hwfr2 Hrr_val.
+    exact (eval_icmp_monotone ss1 ss2 pr1 w1 vl1 vl2 vr1 vr2
+             Hss Hwfl1 Hwfl2 Hwfr1 Hwfr2 Hll_val Hrr_val).
+  - rewrite !andb_true_iff in Hswp; destruct Hswp as ([Hpr Hlr] & Hrl);
+      apply cert_icmp_pred_eqb_eq in Hpr; subst pr2.
+    pose proof (IH l1 r2 Hlr (eq_trans Hwl1 (eq_sym Hwr2))
+                   Htl1 Htr2 Hpl1 Hpr2) as IHlr.
+    pose proof (IH r1 l2 Hrl (eq_trans Hwr1 (eq_sym Hwl2))
+                   Htr1 Htl2 Hpr1 Hpl2) as IHrl.
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+    destruct (eval_cert_expr_totality l1 [] penv [] foracle Htl1 wf_let_val_env_nil Hpl1)
+      as [[msgl ->] | [vl1 [Evl1 Hwfl1]]]; [cbn; exact I | rewrite Evl1 in IHlr |- *; cbn [eou_bind]].
+    destruct (eval_cert_expr_totality r1 [] penv [] foracle Htr1 wf_let_val_env_nil Hpr1)
+      as [[msgr ->] | [vr1 [Evr1 Hwfr1]]]; [cbn; exact I | rewrite Evr1 in IHrl |- *; cbn [eou_bind]].
+    destruct (eval_cert_expr penv [] foracle r2) as [| | | vr2] eqn:Evr2;
+      cbn in IHlr; try contradiction.
+    destruct (eval_cert_expr penv [] foracle l2) as [| | | vl2] eqn:Evl2;
+      cbn in IHrl; try contradiction.
+    cbn [eou_bind].
+    pose proof (eval_cert_expr_ret_wf_scalar l2 [] penv [] foracle vl2 Htl2 Evl2) as Hwfl2.
+    pose proof (eval_cert_expr_ret_wf_scalar r2 [] penv [] foracle vr2 Htr2 Evr2) as Hwfr2.
+    rewrite Hwl1 in Hwfl1; rewrite Hwr1 in Hwfr1;
+      rewrite Hwl2 in Hwfl2; rewrite Hwr2 in Hwfr2.
+    rewrite (eval_icmp_swap ss1 pr1 w1 vl1 vr1 Hwfl1 Hwfr1).
+    exact (eval_icmp_monotone ss1 ss2 (swap_cert_icmp pr1) w1 vr1 vl2 vl1 vr2
+             Hss Hwfr1 Hwfl2 Hwfl1 Hwfr2 IHrl IHlr).
+Qed.
+
+Local Lemma check_cong_select_sound :
+  forall {Pa : Params} (rec : cert_expr -> cert_expr -> bool) (ctx : ub_ctx)
+         w1 c1 t1 f1 w2 c2 t2 f2 (penv : param_env Pa) (foracle : freeze_oracle),
+    (forall s t,
+       rec s t = true ->
+       cert_expr_bit_width s = cert_expr_bit_width t ->
+       wt_cert_expr [] s = true ->
+       wt_cert_expr [] t = true ->
+       wf_param_env_for (collect_free_vars [] s) penv ->
+       wf_param_env_for (collect_free_vars [] t) penv ->
+       refine_eou_dvalue
+         (eval_closed_cert_expr penv foracle s)
+         (eval_closed_cert_expr penv foracle t)) ->
+    check_struct_cong_step rec ctx (CE_Select w1 c1 t1 f1) (CE_Select w2 c2 t2 f2) = true ->
+    wt_cert_expr [] (CE_Select w1 c1 t1 f1) = true ->
+    wt_cert_expr [] (CE_Select w2 c2 t2 f2) = true ->
+    wf_param_env_for (collect_free_vars [] (CE_Select w1 c1 t1 f1)) penv ->
+    wf_param_env_for (collect_free_vars [] (CE_Select w2 c2 t2 f2)) penv ->
+    refine_eou_dvalue
+      (eval_closed_cert_expr penv foracle (CE_Select w1 c1 t1 f1))
+      (eval_closed_cert_expr penv foracle (CE_Select w2 c2 t2 f2)).
+Proof.
+  intros Pa rec ctx w1 c1 t1 f1 w2 c2 t2 f2 penv foracle
+         IH Hcong Hwts Hwtt Hps Hpt.
+  cbn [check_struct_cong_step] in Hcong.
+  apply andb_true_iff in Hcong as [Hww Hor].
+  apply Pos.eqb_eq in Hww; subst w2.
+  cbn [wt_cert_expr collect_free_vars] in Hwts, Hwtt, Hps, Hpt.
+  rewrite !andb_true_iff in Hwts; rewrite !andb_true_iff in Hwtt.
+  destruct Hwts as (((((Htc1 & Htt1) & Htf1) & Hwc1) & Hwt1) & Hwf1).
+  destruct Hwtt as (((((Htc2 & Htt2) & Htf2) & Hwc2) & Hwt2) & Hwf2).
+  apply Pos.eqb_eq in Hwc1; apply Pos.eqb_eq in Hwt1; apply Pos.eqb_eq in Hwf1.
+  apply Pos.eqb_eq in Hwc2; apply Pos.eqb_eq in Hwt2; apply Pos.eqb_eq in Hwf2.
+  assert (Hpc1 : wf_param_env_for (collect_free_vars [] c1) penv)
+    by (intros x wx Hx; apply Hps, in_app_iff; left; exact Hx).
+  assert (Hpt1 : wf_param_env_for (collect_free_vars [] t1) penv).
+  { intros x wx Hx.
+    apply Hps, in_app_iff; right; apply in_app_iff; left; exact Hx. }
+  assert (Hpf1 : wf_param_env_for (collect_free_vars [] f1) penv).
+  { intros x wx Hx.
+    apply Hps, in_app_iff; right; apply in_app_iff; right; exact Hx. }
+  assert (Hpc2 : wf_param_env_for (collect_free_vars [] c2) penv)
+    by (intros x wx Hx; apply Hpt, in_app_iff; left; exact Hx).
+  assert (Hpt2 : wf_param_env_for (collect_free_vars [] t2) penv).
+  { intros x wx Hx.
+    apply Hpt, in_app_iff; right; apply in_app_iff; left; exact Hx. }
+  assert (Hpf2 : wf_param_env_for (collect_free_vars [] f2) penv).
+  { intros x wx Hx.
+    apply Hpt, in_app_iff; right; apply in_app_iff; right; exact Hx. }
+  apply orb_true_iff in Hor as [Hdir | Hneg].
+  - rewrite !andb_true_iff in Hdir; destruct Hdir as ([Hcc Htt0] & Hff0).
+    pose proof (IH c1 c2 Hcc (eq_trans Hwc1 (eq_sym Hwc2))
+                   Htc1 Htc2 Hpc1 Hpc2) as IHc.
+    pose proof (IH t1 t2 Htt0 (eq_trans Hwt1 (eq_sym Hwt2))
+                   Htt1 Htt2 Hpt1 Hpt2) as IHt.
+    pose proof (IH f1 f2 Hff0 (eq_trans Hwf1 (eq_sym Hwf2))
+                   Htf1 Htf2 Hpf1 Hpf2) as IHf.
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+    apply (eou_bind_refine_typed 1%positive _ _ _ _
+             (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
+                            (eval_cert_expr_ret_wf_scalar c1 [] penv [] foracle v Htc1 Hv) _ Hwc1)
+             (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
+                            (eval_cert_expr_ret_wf_scalar c2 [] penv [] foracle v Htc2 Hv) _ Hwc2)
+             IHc).
+    intros vc1 vc2 Hwfc1 Hwfc2 Hcc_val.
+    apply (eou_bind_refine_typed w1 _ _ _ _
+             (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
+                            (eval_cert_expr_ret_wf_scalar t1 [] penv [] foracle v Htt1 Hv) _ Hwt1)
+             (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
+                            (eval_cert_expr_ret_wf_scalar t2 [] penv [] foracle v Htt2 Hv) _ Hwt2)
+             IHt).
+    intros vt1 vt2 Hwft1 Hwft2 Htt_val.
+    apply (eou_bind_refine_typed w1 _ _ _ _
+             (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
+                            (eval_cert_expr_ret_wf_scalar f1 [] penv [] foracle v Htf1 Hv) _ Hwf1)
+             (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
+                            (eval_cert_expr_ret_wf_scalar f2 [] penv [] foracle v Htf2 Hv) _ Hwf2)
+             IHf).
+    intros vf1 vf2 Hwff1 Hwff2 Hff_val.
+    exact (eval_select_monotone w1 vc1 vc2 vt1 vt2 vf1 vf2
+             Hwfc1 Hwfc2 Hwft1 Hwft2 Hwff1 Hwff2 Hcc_val Htt_val Hff_val).
+  - destruct c1 as [| | | | pr1 ss1 wc1 l1 r1 | | | |]; try discriminate Hneg.
+    destruct c2 as [| | | | pr2 ss2 wc2 l2 r2 | | | |]; try discriminate Hneg.
+    rewrite !andb_true_iff in Hneg;
+      destruct Hneg as ((((Hwc & Hss) & Htf0) & Hft0) & Horp).
+    apply Pos.eqb_eq in Hwc; subst wc2.
+    cbn [wt_cert_expr collect_free_vars] in Htc1, Htc2, Hpc1, Hpc2;
+      rewrite !andb_true_iff in Htc1; rewrite !andb_true_iff in Htc2.
+    destruct Htc1 as (((Htl1 & Htr1) & Hwl1) & Hwr1);
+      destruct Htc2 as (((Htl2 & Htr2) & Hwl2) & Hwr2);
+      apply Pos.eqb_eq in Hwl1; apply Pos.eqb_eq in Hwr1;
+      apply Pos.eqb_eq in Hwl2; apply Pos.eqb_eq in Hwr2.
+    assert (Hpl1 : wf_param_env_for (collect_free_vars [] l1) penv)
+      by (intros x wx Hx; apply Hpc1, in_app_iff; left; exact Hx).
+    assert (Hpr1 : wf_param_env_for (collect_free_vars [] r1) penv)
+      by (intros x wx Hx; apply Hpc1, in_app_iff; right; exact Hx).
+    assert (Hpl2 : wf_param_env_for (collect_free_vars [] l2) penv)
+      by (intros x wx Hx; apply Hpc2, in_app_iff; left; exact Hx).
+    assert (Hpr2 : wf_param_env_for (collect_free_vars [] r2) penv)
+      by (intros x wx Hx; apply Hpc2, in_app_iff; right; exact Hx).
+    pose proof (IH t1 f2 Htf0 (eq_trans Hwt1 (eq_sym Hwf2))
+                   Htt1 Htf2 Hpt1 Hpf2) as IHtf.
+    pose proof (IH f1 t2 Hft0 (eq_trans Hwf1 (eq_sym Hwt2))
+                   Htf1 Htt2 Hpf1 Hpt2) as IHft.
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
+    destruct (eval_cert_expr_totality l1 [] penv [] foracle Htl1 wf_let_val_env_nil Hpl1)
+      as [[msgl ->] | [vl1 [Evl1 Hwfl1]]]; [cbn [eou_bind]; exact I | rewrite ?Evl1; cbn [eou_bind]].
+    destruct (eval_cert_expr_totality r1 [] penv [] foracle Htr1 wf_let_val_env_nil Hpr1)
+      as [[msgr ->] | [vr1 [Evr1 Hwfr1]]]; [cbn [eou_bind]; exact I | rewrite ?Evr1; cbn [eou_bind]].
+    rewrite Hwl1 in Hwfl1; rewrite Hwr1 in Hwfr1.
+    destruct (eval_icmp_wf_scalar ss1 pr1 wc1 vl1 vr1 Hwfl1 Hwfr1) as [vc1 [Hvc1 _]].
+    pose proof Hvc1 as Hvc1_rw; rewrite Hvc1_rw; cbn [eou_bind].
+    destruct (eval_cert_expr_totality t1 [] penv [] foracle Htt1 wf_let_val_env_nil Hpt1)
+      as [[msgt ->] | [vt1 [Evt1 Hwft1]]]; [cbn [eou_bind]; exact I | rewrite Evt1 in IHtf |- *; cbn [eou_bind]].
+    destruct (eval_cert_expr_totality f1 [] penv [] foracle Htf1 wf_let_val_env_nil Hpf1)
+      as [[msgf ->] | [vf1 [Evf1 Hwff1]]]; [cbn [eou_bind]; exact I | rewrite Evf1 in IHft |- *; cbn [eou_bind]].
+    rewrite Hwt1 in Hwft1; rewrite Hwf1 in Hwff1.
+    destruct (eval_cert_expr penv [] foracle f2) as [| | | vf2] eqn:Evf2;
+      cbn in IHtf; try contradiction.
+    destruct (eval_cert_expr penv [] foracle t2) as [| | | vt2] eqn:Evt2;
+      cbn in IHft; try contradiction.
+    pose proof (eval_cert_expr_ret_wf_scalar f2 [] penv [] foracle vf2 Htf2 Evf2) as Hwff2;
+      rewrite Hwf2 in Hwff2.
+    pose proof (eval_cert_expr_ret_wf_scalar t2 [] penv [] foracle vt2 Htt2 Evt2) as Hwft2;
+      rewrite Hwt2 in Hwft2.
+    apply orb_true_iff in Horp as [Hdirp | Hswpp].
+    + rewrite !andb_true_iff in Hdirp; destruct Hdirp as ((Hpr & Hll) & Hrr).
+      apply cert_icmp_pred_eqb_eq in Hpr; subst pr2.
+      pose proof (IH l1 l2 Hll (eq_trans Hwl1 (eq_sym Hwl2))
+                     Htl1 Htl2 Hpl1 Hpl2) as IHll.
+      pose proof (IH r1 r2 Hrr (eq_trans Hwr1 (eq_sym Hwr2))
+                     Htr1 Htr2 Hpr1 Hpr2) as IHrr.
+      rewrite Evl1 in IHll; rewrite Evr1 in IHrr.
+      destruct (eval_cert_expr penv [] foracle l2) as [| | | vl2] eqn:Evl2;
+        cbn in IHll; try contradiction.
+      destruct (eval_cert_expr penv [] foracle r2) as [| | | vr2] eqn:Evr2;
+        cbn in IHrr; try contradiction.
+      pose proof (eval_cert_expr_ret_wf_scalar l2 [] penv [] foracle vl2 Htl2 Evl2) as Hwfl2;
+        rewrite Hwl2 in Hwfl2.
+      pose proof (eval_cert_expr_ret_wf_scalar r2 [] penv [] foracle vr2 Htr2 Evr2) as Hwfr2;
+        rewrite Hwr2 in Hwfr2.
+      cbn [eou_bind].
+      pose proof (eval_icmp_neg_select ss1 ss2 pr1 wc1 w1 vl1 vl2 vr1 vr2 vt1 vt2 vf1 vf2
+                    Hss Hwfl1 Hwfl2 Hwfr1 Hwfr2 Hwft1 Hwft2 Hwff1 Hwff2 IHll IHrr IHtf IHft)
+        as Hneg_sel.
+      rewrite Hvc1 in Hneg_sel; cbn [eou_bind] in Hneg_sel.
+      destruct (eval_icmp_wf_scalar ss2 (neg_cert_icmp pr1) wc1 vl2 vr2 Hwfl2 Hwfr2) as [vc2 [Hvc2 _]].
+      rewrite Hvc2 in *; cbn [eou_bind] in *; exact Hneg_sel.
+    + rewrite !andb_true_iff in Hswpp; destruct Hswpp as ((Hpr & Hlr) & Hrl).
+      apply cert_icmp_pred_eqb_eq in Hpr; subst pr2.
+      pose proof (IH l1 r2 Hlr (eq_trans Hwl1 (eq_sym Hwr2))
+                     Htl1 Htr2 Hpl1 Hpr2) as IHlr.
+      pose proof (IH r1 l2 Hrl (eq_trans Hwr1 (eq_sym Hwl2))
+                     Htr1 Htl2 Hpr1 Hpl2) as IHrl.
+      rewrite Evl1 in IHlr; rewrite Evr1 in IHrl.
+      destruct (eval_cert_expr penv [] foracle l2) as [| | | vl2] eqn:Evl2;
+        cbn in IHrl; try contradiction.
+      destruct (eval_cert_expr penv [] foracle r2) as [| | | vr2] eqn:Evr2;
+        cbn in IHlr; try contradiction.
+      pose proof (eval_cert_expr_ret_wf_scalar l2 [] penv [] foracle vl2 Htl2 Evl2) as Hwfl2;
+        rewrite Hwl2 in Hwfl2.
+      pose proof (eval_cert_expr_ret_wf_scalar r2 [] penv [] foracle vr2 Htr2 Evr2) as Hwfr2;
+        rewrite Hwr2 in Hwfr2.
+      cbn [eou_bind].
+      rewrite swap_neg_cert_icmp.
+      pose proof (eval_icmp_neg_select ss1 ss2 (swap_cert_icmp pr1) wc1 w1
+                    vr1 vl2 vl1 vr2 vt1 vt2 vf1 vf2
+                    Hss Hwfr1 Hwfl2 Hwfl1 Hwfr2 Hwft1 Hwft2 Hwff1 Hwff2 IHrl IHlr IHtf IHft)
+        as Hneg_sel.
+      rewrite <- (eval_icmp_swap ss1 pr1 wc1 vl1 vr1 Hwfl1 Hwfr1), Hvc1 in Hneg_sel.
+      destruct (eval_icmp_wf_scalar ss2 (neg_cert_icmp (swap_cert_icmp pr1)) wc1 vl2 vr2 Hwfl2 Hwfr2)
+        as [vc2 [Hvc2 _]].
+      rewrite Hvc2 in *; cbn [eou_bind] in *; exact Hneg_sel.
 Qed.
 
 Lemma check_norm_refines_fuel_sound :
@@ -2969,181 +3712,25 @@ Proof.
       * destruct Hwfvo2 as [-> | [io2 ->]]; cbn; apply dvalue_refines_poison_l.
       * destruct Hwfvo2 as [-> | [io2 ->]]; cbn;
           [apply dvalue_refines_poison_l | apply dvalue_refines_refl].
-    + destruct src as
+    + set (rec_ih := fun s t (Hs : check_norm_refines_fuel fuel' ctx s t = true)
+                         (Hbs : cert_expr_bit_width s = cert_expr_bit_width t)
+                         (Hts : wt_cert_expr [] s = true)
+                         (Htt : wt_cert_expr [] t = true)
+                         (Hps' : wf_param_env_for (collect_free_vars [] s) penv)
+                         (Hpt' : wf_param_env_for (collect_free_vars [] t) penv) =>
+                       IH s t penv foracle Hs Hbs Hts Htt Hps' Hpt' Hctx).
+      destruct src as
         [| | | op1 w1 fl1 l1 r1 | pr1 ss1 w1 l1 r1 | k1 fw1 tw1 fl1 o1 | w1 c1 t1 f1 | |];
         destruct tgt as
         [| | | op2 w2 fl2 l2 r2 | pr2 ss2 w2 l2 r2 | k2 fw2 tw2 fl2 o2 | w2 c2 t2 f2 | |];
-        cbn [check_struct_cong_step] in Hcong; try discriminate Hcong.
-      * (* CE_BinOp *)
-        rewrite !andb_true_iff in Hcong.
-        destruct Hcong as (((Hop & Hww) & Hfl) & Hargs).
-        apply cert_binop_eqb_eq in Hop; apply Pos.eqb_eq in Hww; subst op2 w2.
-        cbn [wt_cert_expr collect_free_vars] in Hwts, Hwtt, Hps, Hpt.
-        rewrite !andb_true_iff in Hwts; rewrite !andb_true_iff in Hwtt.
-        destruct Hwts as ((((_ & Htl1) & Htr1) & Hwl1) & Hwr1).
-        destruct Hwtt as ((((_ & Htl2) & Htr2) & Hwl2) & Hwr2).
-        apply Pos.eqb_eq in Hwl1; apply Pos.eqb_eq in Hwr1.
-        apply Pos.eqb_eq in Hwl2; apply Pos.eqb_eq in Hwr2.
-        assert (Hpl1 : wf_param_env_for (collect_free_vars [] l1) penv)
-          by (intros x wx Hx; apply Hps, in_app_iff; left; exact Hx).
-        assert (Hpr1 : wf_param_env_for (collect_free_vars [] r1) penv)
-          by (intros x wx Hx; apply Hps, in_app_iff; right; exact Hx).
-        assert (Hpl2 : wf_param_env_for (collect_free_vars [] l2) penv)
-          by (intros x wx Hx; apply Hpt, in_app_iff; left; exact Hx).
-        assert (Hpr2 : wf_param_env_for (collect_free_vars [] r2) penv)
-          by (intros x wx Hx; apply Hpt, in_app_iff; right; exact Hx).
-        destruct (is_div_or_rem_op op1) eqn:Ediv.
-        -- apply orb_true_iff in Hargs as [Hsame | Hnzdiv].
-           ++ apply andb_true_iff in Hsame as [Heql Hrr].
-              apply cert_expr_eqb_eq in Heql; subst l2.
-              pose proof (IH r1 r2 penv foracle Hrr (eq_trans Hwr1 (eq_sym Hwr2))
-                             Htr1 Htr2 Hpr1 Hpr2 Hctx) as IHr.
-              unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-              destruct (eval_cert_expr_totality l1 [] penv [] foracle Htl1 wf_let_val_env_nil Hpl1)
-                as [[msgl ->] | [vl [-> Hwfvl]]]; [cbn; exact I | cbn [eou_bind]].
-              rewrite Hwl1 in Hwfvl.
-              apply (eou_bind_refine_typed w1 _ _ _ _
-                       (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
-                                      (eval_cert_expr_ret_wf_scalar r1 [] penv [] foracle v Htr1 Hv) _ Hwr1)
-                       (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
-                                      (eval_cert_expr_ret_wf_scalar r2 [] penv [] foracle v Htr2 Hv) _ Hwr2)
-                       IHr).
-              intros vr1 vr2 Hwfr1 Hwfr2 Hrr_val.
-              exact (eval_iop_div_rem_same_lhs op1 fl1 fl2 w1 vl vr1 vr2
-                       Ediv Hfl Hwfvl Hwfr1 Hwfr2 Hrr_val).
-           ++ rewrite !andb_true_iff in Hnzdiv; destruct Hnzdiv as ([Hnz Hll] & Hrr).
-              destruct (expr_divisor_nonzero_sound ctx r1 penv foracle Htr1 Hnz Hctx)
-                as [ir1 [Hir1 Hnz1]].
-              revert ir1 Hir1 Hnz1; rewrite Hwr1; intros ir1 Hir1 Hnz1.
-              pose proof (IH l1 l2 penv foracle Hll (eq_trans Hwl1 (eq_sym Hwl2))
-                             Htl1 Htl2 Hpl1 Hpl2 Hctx) as IHl.
-              pose proof (IH r1 r2 penv foracle Hrr (eq_trans Hwr1 (eq_sym Hwr2))
-                             Htr1 Htr2 Hpr1 Hpr2 Hctx) as IHr.
-              rewrite Hir1 in IHr.
-              destruct (eval_closed_cert_expr penv foracle r2) as [| | | vr2] eqn:Evr2;
-                cbn in IHr; try contradiction.
-              destruct IHr as [Hpsn | ->]; [discriminate Hpsn |].
-              unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-              rewrite Hir1, Evr2.
-              apply (eou_bind_refine_typed w1 _ _ _ _
-                       (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
-                                      (eval_cert_expr_ret_wf_scalar l1 [] penv [] foracle v Htl1 Hv) _ Hwl1)
-                       (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
-                                      (eval_cert_expr_ret_wf_scalar l2 [] penv [] foracle v Htl2 Hv) _ Hwl2)
-                       IHl).
-              intros vl1 vl2 Hwfl1 Hwfl2 Hll_val; cbn [eou_bind].
-              exact (eval_iop_div_rem_nonzero_div op1 fl1 fl2 w1 ir1 vl1 vl2
-                       Ediv Hfl Hnz1 Hwfl1 Hwfl2 Hll_val).
-        -- apply orb_true_iff in Hargs as [Hdir | Hswp].
-           ++ apply andb_true_iff in Hdir as [Hll Hrr].
-              pose proof (IH l1 l2 penv foracle Hll (eq_trans Hwl1 (eq_sym Hwl2))
-                             Htl1 Htl2 Hpl1 Hpl2 Hctx) as IHl.
-              pose proof (IH r1 r2 penv foracle Hrr (eq_trans Hwr1 (eq_sym Hwr2))
-                             Htr1 Htr2 Hpr1 Hpr2 Hctx) as IHr.
-              unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-              apply (eou_bind_refine_typed w1 _ _ _ _
-                       (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
-                                      (eval_cert_expr_ret_wf_scalar l1 [] penv [] foracle v Htl1 Hv) _ Hwl1)
-                       (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
-                                      (eval_cert_expr_ret_wf_scalar l2 [] penv [] foracle v Htl2 Hv) _ Hwl2)
-                       IHl).
-              intros vl1 vl2 Hwfl1 Hwfl2 Hll_val.
-              apply (eou_bind_refine_typed w1 _ _ _ _
-                       (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
-                                      (eval_cert_expr_ret_wf_scalar r1 [] penv [] foracle v Htr1 Hv) _ Hwr1)
-                       (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
-                                      (eval_cert_expr_ret_wf_scalar r2 [] penv [] foracle v Htr2 Hv) _ Hwr2)
-                       IHr).
-              intros vr1 vr2 Hwfr1 Hwfr2 Hrr_val.
-              exact (eval_iop_non_div_rem_monotone op1 fl1 fl2 w1 vl1 vl2 vr1 vr2
-                       Ediv Hfl Hwfl1 Hwfl2 Hwfr1 Hwfr2 Hll_val Hrr_val).
-           ++ rewrite !andb_true_iff in Hswp; destruct Hswp as ([Hcomm Hlr] & Hrl).
-              pose proof (IH l1 r2 penv foracle Hlr (eq_trans Hwl1 (eq_sym Hwr2))
-                             Htl1 Htr2 Hpl1 Hpr2 Hctx) as IHlr.
-              pose proof (IH r1 l2 penv foracle Hrl (eq_trans Hwr1 (eq_sym Hwl2))
-                             Htr1 Htl2 Hpr1 Hpl2 Hctx) as IHrl.
-              unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-              destruct (eval_cert_expr_totality l1 [] penv [] foracle Htl1 wf_let_val_env_nil Hpl1)
-                as [[msgl ->] | [vl1 [Evl1 Hwfl1]]]; [cbn; exact I | rewrite Evl1 in IHlr |- *; cbn [eou_bind]].
-              destruct (eval_cert_expr_totality r1 [] penv [] foracle Htr1 wf_let_val_env_nil Hpr1)
-                as [[msgr ->] | [vr1 [Evr1 Hwfr1]]]; [cbn; exact I | rewrite Evr1 in IHrl |- *; cbn [eou_bind]].
-              destruct (eval_cert_expr penv [] foracle r2) as [| | | vr2] eqn:Evr2;
-                cbn in IHlr; try contradiction.
-              destruct (eval_cert_expr penv [] foracle l2) as [| | | vl2] eqn:Evl2;
-                cbn in IHrl; try contradiction.
-              cbn [eou_bind].
-              pose proof (eval_cert_expr_ret_wf_scalar l2 [] penv [] foracle vl2 Htl2 Evl2) as Hwfl2.
-              pose proof (eval_cert_expr_ret_wf_scalar r2 [] penv [] foracle vr2 Htr2 Evr2) as Hwfr2.
-              rewrite Hwl1 in Hwfl1; rewrite Hwr1 in Hwfr1;
-                rewrite Hwl2 in Hwfl2; rewrite Hwr2 in Hwfr2.
-              rewrite (eval_iop_commut op1 fl2 w1 vl2 vr2 Hcomm Hwfl2 Hwfr2).
-              exact (eval_iop_non_div_rem_monotone op1 fl1 fl2 w1 vl1 vr2 vr1 vl2
-                       Ediv Hfl Hwfl1 Hwfr2 Hwfr1 Hwfl2 IHlr IHrl).
-      * (* CE_ICmp *)
-        rewrite !andb_true_iff in Hcong; destruct Hcong as ([Hww Hss] & Hargs).
-        apply Pos.eqb_eq in Hww; subst w2.
-        cbn [wt_cert_expr collect_free_vars] in Hwts, Hwtt, Hps, Hpt.
-        rewrite !andb_true_iff in Hwts; rewrite !andb_true_iff in Hwtt.
-        destruct Hwts as (((Htl1 & Htr1) & Hwl1) & Hwr1).
-        destruct Hwtt as (((Htl2 & Htr2) & Hwl2) & Hwr2).
-        apply Pos.eqb_eq in Hwl1; apply Pos.eqb_eq in Hwr1.
-        apply Pos.eqb_eq in Hwl2; apply Pos.eqb_eq in Hwr2.
-        assert (Hpl1 : wf_param_env_for (collect_free_vars [] l1) penv)
-          by (intros x wx Hx; apply Hps, in_app_iff; left; exact Hx).
-        assert (Hpr1 : wf_param_env_for (collect_free_vars [] r1) penv)
-          by (intros x wx Hx; apply Hps, in_app_iff; right; exact Hx).
-        assert (Hpl2 : wf_param_env_for (collect_free_vars [] l2) penv)
-          by (intros x wx Hx; apply Hpt, in_app_iff; left; exact Hx).
-        assert (Hpr2 : wf_param_env_for (collect_free_vars [] r2) penv)
-          by (intros x wx Hx; apply Hpt, in_app_iff; right; exact Hx).
-        apply orb_true_iff in Hargs as [Hdir | Hswp].
-        -- rewrite !andb_true_iff in Hdir; destruct Hdir as ([Hpr Hll] & Hrr);
-           apply cert_icmp_pred_eqb_eq in Hpr; subst pr2.
-           pose proof (IH l1 l2 penv foracle Hll (eq_trans Hwl1 (eq_sym Hwl2))
-                          Htl1 Htl2 Hpl1 Hpl2 Hctx) as IHl.
-           pose proof (IH r1 r2 penv foracle Hrr (eq_trans Hwr1 (eq_sym Hwr2))
-                          Htr1 Htr2 Hpr1 Hpr2 Hctx) as IHr.
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-           apply (eou_bind_refine_typed w1 _ _ _ _
-                    (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
-                                   (eval_cert_expr_ret_wf_scalar l1 [] penv [] foracle v Htl1 Hv) _ Hwl1)
-                    (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
-                                   (eval_cert_expr_ret_wf_scalar l2 [] penv [] foracle v Htl2 Hv) _ Hwl2)
-                    IHl).
-           intros vl1 vl2 Hwfl1 Hwfl2 Hll_val.
-           apply (eou_bind_refine_typed w1 _ _ _ _
-                    (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
-                                   (eval_cert_expr_ret_wf_scalar r1 [] penv [] foracle v Htr1 Hv) _ Hwr1)
-                    (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
-                                   (eval_cert_expr_ret_wf_scalar r2 [] penv [] foracle v Htr2 Hv) _ Hwr2)
-                    IHr).
-           intros vr1 vr2 Hwfr1 Hwfr2 Hrr_val.
-           exact (eval_icmp_monotone ss1 ss2 pr1 w1 vl1 vl2 vr1 vr2
-                    Hss Hwfl1 Hwfl2 Hwfr1 Hwfr2 Hll_val Hrr_val).
-        -- rewrite !andb_true_iff in Hswp; destruct Hswp as ([Hpr Hlr] & Hrl);
-           apply cert_icmp_pred_eqb_eq in Hpr; subst pr2.
-           pose proof (IH l1 r2 penv foracle Hlr (eq_trans Hwl1 (eq_sym Hwr2))
-                          Htl1 Htr2 Hpl1 Hpr2 Hctx) as IHlr.
-           pose proof (IH r1 l2 penv foracle Hrl (eq_trans Hwr1 (eq_sym Hwl2))
-                          Htr1 Htl2 Hpr1 Hpl2 Hctx) as IHrl.
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-           destruct (eval_cert_expr_totality l1 [] penv [] foracle Htl1 wf_let_val_env_nil Hpl1)
-             as [[msgl ->] | [vl1 [Evl1 Hwfl1]]]; [cbn; exact I | rewrite Evl1 in IHlr |- *; cbn [eou_bind]].
-           destruct (eval_cert_expr_totality r1 [] penv [] foracle Htr1 wf_let_val_env_nil Hpr1)
-             as [[msgr ->] | [vr1 [Evr1 Hwfr1]]]; [cbn; exact I | rewrite Evr1 in IHrl |- *; cbn [eou_bind]].
-           destruct (eval_cert_expr penv [] foracle r2) as [| | | vr2] eqn:Evr2;
-             cbn in IHlr; try contradiction.
-           destruct (eval_cert_expr penv [] foracle l2) as [| | | vl2] eqn:Evl2;
-             cbn in IHrl; try contradiction.
-           cbn [eou_bind].
-           pose proof (eval_cert_expr_ret_wf_scalar l2 [] penv [] foracle vl2 Htl2 Evl2) as Hwfl2.
-           pose proof (eval_cert_expr_ret_wf_scalar r2 [] penv [] foracle vr2 Htr2 Evr2) as Hwfr2.
-           rewrite Hwl1 in Hwfl1; rewrite Hwr1 in Hwfr1;
-             rewrite Hwl2 in Hwfl2; rewrite Hwr2 in Hwfr2.
-           rewrite (eval_icmp_swap ss1 pr1 w1 vl1 vr1 Hwfl1 Hwfr1).
-           exact (eval_icmp_monotone ss1 ss2 (swap_cert_icmp pr1) w1 vr1 vl2 vl1 vr2
-                    Hss Hwfr1 Hwfl2 Hwfl1 Hwfr2 IHrl IHlr).
-      * (* CE_Cast *)
+        try (cbn [check_struct_cong_step] in Hcong; discriminate Hcong).
+      * exact (check_cong_binop_sound (check_norm_refines_fuel fuel' ctx) ctx
+                 op1 w1 fl1 l1 r1 op2 w2 fl2 l2 r2 penv foracle
+                 rec_ih Hcong Hwts Hwtt Hps Hpt Hctx).
+      * exact (check_cong_icmp_sound (check_norm_refines_fuel fuel' ctx) ctx
+                 pr1 ss1 w1 l1 r1 pr2 ss2 w2 l2 r2 penv foracle
+                 rec_ih Hcong Hwts Hwtt Hps Hpt).
+      * cbn [check_struct_cong_step] in Hcong.
         rewrite !andb_true_iff in Hcong.
         destruct Hcong as ((((Hk & Hfw) & Htw) & Hfl) & Hoo).
         apply cert_cast_kind_eqb_eq in Hk; apply Pos.eqb_eq in Hfw; apply Pos.eqb_eq in Htw.
@@ -3163,151 +3750,9 @@ Proof.
                  IHo).
         intros vo1 vo2 Hwfo1 Hwfo2 Hoo_val.
         exact (eval_cast_monotone k1 fw1 tw1 fl1 fl2 vo1 vo2 Hk1 Hk2 Hfl Hwfo1 Hwfo2 Hoo_val).
-      * (* CE_Select *)
-        apply andb_true_iff in Hcong as [Hww Hor].
-        apply Pos.eqb_eq in Hww; subst w2.
-        cbn [wt_cert_expr collect_free_vars] in Hwts, Hwtt, Hps, Hpt.
-        rewrite !andb_true_iff in Hwts; rewrite !andb_true_iff in Hwtt.
-        destruct Hwts as (((((Htc1 & Htt1) & Htf1) & Hwc1) & Hwt1) & Hwf1).
-        destruct Hwtt as (((((Htc2 & Htt2) & Htf2) & Hwc2) & Hwt2) & Hwf2).
-        apply Pos.eqb_eq in Hwc1; apply Pos.eqb_eq in Hwt1; apply Pos.eqb_eq in Hwf1.
-        apply Pos.eqb_eq in Hwc2; apply Pos.eqb_eq in Hwt2; apply Pos.eqb_eq in Hwf2.
-        assert (Hpc1 : wf_param_env_for (collect_free_vars [] c1) penv)
-          by (intros x wx Hx; apply Hps, in_app_iff; left; exact Hx).
-        assert (Hpt1 : wf_param_env_for (collect_free_vars [] t1) penv)
-          by (intros x wx Hx; apply Hps, in_app_iff; right; apply in_app_iff; left; exact Hx).
-        assert (Hpf1 : wf_param_env_for (collect_free_vars [] f1) penv)
-          by (intros x wx Hx; apply Hps, in_app_iff; right; apply in_app_iff; right; exact Hx).
-        assert (Hpc2 : wf_param_env_for (collect_free_vars [] c2) penv)
-          by (intros x wx Hx; apply Hpt, in_app_iff; left; exact Hx).
-        assert (Hpt2 : wf_param_env_for (collect_free_vars [] t2) penv)
-          by (intros x wx Hx; apply Hpt, in_app_iff; right; apply in_app_iff; left; exact Hx).
-        assert (Hpf2 : wf_param_env_for (collect_free_vars [] f2) penv)
-          by (intros x wx Hx; apply Hpt, in_app_iff; right; apply in_app_iff; right; exact Hx).
-        apply orb_true_iff in Hor as [Hdir | Hneg].
-        -- rewrite !andb_true_iff in Hdir; destruct Hdir as ([Hcc Htt0] & Hff0).
-           pose proof (IH c1 c2 penv foracle Hcc (eq_trans Hwc1 (eq_sym Hwc2))
-                          Htc1 Htc2 Hpc1 Hpc2 Hctx) as IHc.
-           pose proof (IH t1 t2 penv foracle Htt0 (eq_trans Hwt1 (eq_sym Hwt2))
-                          Htt1 Htt2 Hpt1 Hpt2 Hctx) as IHt.
-           pose proof (IH f1 f2 penv foracle Hff0 (eq_trans Hwf1 (eq_sym Hwf2))
-                          Htf1 Htf2 Hpf1 Hpf2 Hctx) as IHf.
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-           apply (eou_bind_refine_typed 1%positive _ _ _ _
-                    (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
-                                   (eval_cert_expr_ret_wf_scalar c1 [] penv [] foracle v Htc1 Hv) _ Hwc1)
-                    (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
-                                   (eval_cert_expr_ret_wf_scalar c2 [] penv [] foracle v Htc2 Hv) _ Hwc2)
-                    IHc).
-           intros vc1 vc2 Hwfc1 Hwfc2 Hcc_val.
-           apply (eou_bind_refine_typed w1 _ _ _ _
-                    (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
-                                   (eval_cert_expr_ret_wf_scalar t1 [] penv [] foracle v Htt1 Hv) _ Hwt1)
-                    (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
-                                   (eval_cert_expr_ret_wf_scalar t2 [] penv [] foracle v Htt2 Hv) _ Hwt2)
-                    IHt).
-           intros vt1 vt2 Hwft1 Hwft2 Htt_val.
-           apply (eou_bind_refine_typed w1 _ _ _ _
-                    (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
-                                   (eval_cert_expr_ret_wf_scalar f1 [] penv [] foracle v Htf1 Hv) _ Hwf1)
-                    (fun v Hv => eq_ind _ (fun z => wf_scalar_dvalue z v)
-                                   (eval_cert_expr_ret_wf_scalar f2 [] penv [] foracle v Htf2 Hv) _ Hwf2)
-                    IHf).
-           intros vf1 vf2 Hwff1 Hwff2 Hff_val.
-           exact (eval_select_monotone w1 vc1 vc2 vt1 vt2 vf1 vf2
-                    Hwfc1 Hwfc2 Hwft1 Hwft2 Hwff1 Hwff2 Hcc_val Htt_val Hff_val).
-        -- destruct c1 as [| | | | pr1 ss1 wc1 l1 r1 | | | |]; try discriminate Hneg.
-           destruct c2 as [| | | | pr2 ss2 wc2 l2 r2 | | | |]; try discriminate Hneg.
-           rewrite !andb_true_iff in Hneg;
-             destruct Hneg as ((((Hwc & Hss) & Htf0) & Hft0) & Horp).
-           apply Pos.eqb_eq in Hwc; subst wc2.
-           cbn [wt_cert_expr collect_free_vars] in Htc1, Htc2, Hpc1, Hpc2;
-             rewrite !andb_true_iff in Htc1; rewrite !andb_true_iff in Htc2.
-           destruct Htc1 as (((Htl1 & Htr1) & Hwl1) & Hwr1);
-             destruct Htc2 as (((Htl2 & Htr2) & Hwl2) & Hwr2);
-             apply Pos.eqb_eq in Hwl1; apply Pos.eqb_eq in Hwr1;
-             apply Pos.eqb_eq in Hwl2; apply Pos.eqb_eq in Hwr2.
-           assert (Hpl1 : wf_param_env_for (collect_free_vars [] l1) penv)
-             by (intros x wx Hx; apply Hpc1, in_app_iff; left; exact Hx).
-           assert (Hpr1 : wf_param_env_for (collect_free_vars [] r1) penv)
-             by (intros x wx Hx; apply Hpc1, in_app_iff; right; exact Hx).
-           assert (Hpl2 : wf_param_env_for (collect_free_vars [] l2) penv)
-             by (intros x wx Hx; apply Hpc2, in_app_iff; left; exact Hx).
-           assert (Hpr2 : wf_param_env_for (collect_free_vars [] r2) penv)
-             by (intros x wx Hx; apply Hpc2, in_app_iff; right; exact Hx).
-           pose proof (IH t1 f2 penv foracle Htf0 (eq_trans Hwt1 (eq_sym Hwf2))
-                          Htt1 Htf2 Hpt1 Hpf2 Hctx) as IHtf.
-           pose proof (IH f1 t2 penv foracle Hft0 (eq_trans Hwf1 (eq_sym Hwt2))
-                          Htf1 Htt2 Hpf1 Hpt2 Hctx) as IHft.
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
-           destruct (eval_cert_expr_totality l1 [] penv [] foracle Htl1 wf_let_val_env_nil Hpl1)
-             as [[msgl ->] | [vl1 [Evl1 Hwfl1]]]; [cbn [eou_bind]; exact I | rewrite ?Evl1; cbn [eou_bind]].
-           destruct (eval_cert_expr_totality r1 [] penv [] foracle Htr1 wf_let_val_env_nil Hpr1)
-             as [[msgr ->] | [vr1 [Evr1 Hwfr1]]]; [cbn [eou_bind]; exact I | rewrite ?Evr1; cbn [eou_bind]].
-           rewrite Hwl1 in Hwfl1; rewrite Hwr1 in Hwfr1.
-           destruct (eval_icmp_wf_scalar ss1 pr1 wc1 vl1 vr1 Hwfl1 Hwfr1) as [vc1 [Hvc1 _]].
-           pose proof Hvc1 as Hvc1_rw; rewrite Hvc1_rw; cbn [eou_bind].
-           destruct (eval_cert_expr_totality t1 [] penv [] foracle Htt1 wf_let_val_env_nil Hpt1)
-             as [[msgt ->] | [vt1 [Evt1 Hwft1]]]; [cbn [eou_bind]; exact I | rewrite Evt1 in IHtf |- *; cbn [eou_bind]].
-           destruct (eval_cert_expr_totality f1 [] penv [] foracle Htf1 wf_let_val_env_nil Hpf1)
-             as [[msgf ->] | [vf1 [Evf1 Hwff1]]]; [cbn [eou_bind]; exact I | rewrite Evf1 in IHft |- *; cbn [eou_bind]].
-           rewrite Hwt1 in Hwft1; rewrite Hwf1 in Hwff1.
-           destruct (eval_cert_expr penv [] foracle f2) as [| | | vf2] eqn:Evf2;
-             cbn in IHtf; try contradiction.
-           destruct (eval_cert_expr penv [] foracle t2) as [| | | vt2] eqn:Evt2;
-             cbn in IHft; try contradiction.
-           pose proof (eval_cert_expr_ret_wf_scalar f2 [] penv [] foracle vf2 Htf2 Evf2) as Hwff2;
-             rewrite Hwf2 in Hwff2.
-           pose proof (eval_cert_expr_ret_wf_scalar t2 [] penv [] foracle vt2 Htt2 Evt2) as Hwft2;
-             rewrite Hwt2 in Hwft2.
-           apply orb_true_iff in Horp as [Hdirp | Hswpp].
-           ++ rewrite !andb_true_iff in Hdirp; destruct Hdirp as ((Hpr & Hll) & Hrr).
-              apply cert_icmp_pred_eqb_eq in Hpr; subst pr2.
-              pose proof (IH l1 l2 penv foracle Hll (eq_trans Hwl1 (eq_sym Hwl2))
-                             Htl1 Htl2 Hpl1 Hpl2 Hctx) as IHll.
-              pose proof (IH r1 r2 penv foracle Hrr (eq_trans Hwr1 (eq_sym Hwr2))
-                             Htr1 Htr2 Hpr1 Hpr2 Hctx) as IHrr.
-              rewrite Evl1 in IHll; rewrite Evr1 in IHrr.
-              destruct (eval_cert_expr penv [] foracle l2) as [| | | vl2] eqn:Evl2;
-                cbn in IHll; try contradiction.
-              destruct (eval_cert_expr penv [] foracle r2) as [| | | vr2] eqn:Evr2;
-                cbn in IHrr; try contradiction.
-              pose proof (eval_cert_expr_ret_wf_scalar l2 [] penv [] foracle vl2 Htl2 Evl2) as Hwfl2;
-                rewrite Hwl2 in Hwfl2.
-              pose proof (eval_cert_expr_ret_wf_scalar r2 [] penv [] foracle vr2 Htr2 Evr2) as Hwfr2;
-                rewrite Hwr2 in Hwfr2.
-              cbn [eou_bind].
-              pose proof (eval_icmp_neg_select ss1 ss2 pr1 wc1 w1 vl1 vl2 vr1 vr2 vt1 vt2 vf1 vf2
-                            Hss Hwfl1 Hwfl2 Hwfr1 Hwfr2 Hwft1 Hwft2 Hwff1 Hwff2 IHll IHrr IHtf IHft)
-                as Hneg_sel.
-              rewrite Hvc1 in Hneg_sel; cbn [eou_bind] in Hneg_sel.
-              destruct (eval_icmp_wf_scalar ss2 (neg_cert_icmp pr1) wc1 vl2 vr2 Hwfl2 Hwfr2) as [vc2 [Hvc2 _]].
-              rewrite Hvc2 in *; cbn [eou_bind] in *; exact Hneg_sel.
-           ++ rewrite !andb_true_iff in Hswpp; destruct Hswpp as ((Hpr & Hlr) & Hrl).
-              apply cert_icmp_pred_eqb_eq in Hpr; subst pr2.
-              pose proof (IH l1 r2 penv foracle Hlr (eq_trans Hwl1 (eq_sym Hwr2))
-                             Htl1 Htr2 Hpl1 Hpr2 Hctx) as IHlr.
-              pose proof (IH r1 l2 penv foracle Hrl (eq_trans Hwr1 (eq_sym Hwl2))
-                             Htr1 Htl2 Hpr1 Hpl2 Hctx) as IHrl.
-              rewrite Evl1 in IHlr; rewrite Evr1 in IHrl.
-              destruct (eval_cert_expr penv [] foracle l2) as [| | | vl2] eqn:Evl2;
-                cbn in IHrl; try contradiction.
-              destruct (eval_cert_expr penv [] foracle r2) as [| | | vr2] eqn:Evr2;
-                cbn in IHlr; try contradiction.
-              pose proof (eval_cert_expr_ret_wf_scalar l2 [] penv [] foracle vl2 Htl2 Evl2) as Hwfl2;
-                rewrite Hwl2 in Hwfl2.
-              pose proof (eval_cert_expr_ret_wf_scalar r2 [] penv [] foracle vr2 Htr2 Evr2) as Hwfr2;
-                rewrite Hwr2 in Hwfr2.
-              cbn [eou_bind].
-              rewrite swap_neg_cert_icmp.
-              pose proof (eval_icmp_neg_select ss1 ss2 (swap_cert_icmp pr1) wc1 w1
-                            vr1 vl2 vl1 vr2 vt1 vt2 vf1 vf2
-                            Hss Hwfr1 Hwfl2 Hwfl1 Hwfr2 Hwft1 Hwft2 Hwff1 Hwff2 IHrl IHlr IHtf IHft)
-                as Hneg_sel.
-              rewrite <- (eval_icmp_swap ss1 pr1 wc1 vl1 vr1 Hwfl1 Hwfr1), Hvc1 in Hneg_sel.
-              destruct (eval_icmp_wf_scalar ss2 (neg_cert_icmp (swap_cert_icmp pr1)) wc1 vl2 vr2 Hwfl2 Hwfr2)
-                as [vc2 [Hvc2 _]].
-              rewrite Hvc2 in *; cbn [eou_bind] in *; exact Hneg_sel.
+      * exact (check_cong_select_sound (check_norm_refines_fuel fuel' ctx) ctx
+                 w1 c1 t1 f1 w2 c2 t2 f2 penv foracle
+                 rec_ih Hcong Hwts Hwtt Hps Hpt).
 Qed.
 
 Definition check_expr_refines (ctx : ub_ctx) (src tgt : cert_expr) : bool :=

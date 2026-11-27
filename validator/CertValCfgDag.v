@@ -232,10 +232,12 @@ Proof.
   intros defs penv foracle smap env id w ce dv Henv Hid Hev Hsc r wr cer Hf.
   destruct (RawIDOrd.eq_dec id r) as [Heq | Hneq].
   - rewrite RMF.F.add_eq_o in Hf by exact Heq; inversion Hf; subst r wr cer.
-    split; [exact Hid | exists dv; split; [apply RMF.F.add_eq_o; reflexivity | split; assumption]].
+    split; [exact Hid |].
+    exists dv; split; [apply RMF.F.add_eq_o; reflexivity | split; assumption].
   - rewrite RMF.F.add_neq_o in Hf by exact Hneq.
     destruct (Henv r wr cer Hf) as [Hr [dv' [Hfe [Hev' Hsc']]]].
-    split; [exact Hr | exists dv'; split; [rewrite RMF.F.add_neq_o by exact Hneq; exact Hfe | split; assumption]].
+    split; [exact Hr |].
+    exists dv'; split; [rewrite RMF.F.add_neq_o by exact Hneq; exact Hfe | split; assumption].
 Qed.
 
 Fixpoint wrap_evals (evals : list (positive * cert_expr)) (k : cfg_dag)
@@ -516,7 +518,8 @@ Proof.
     cbn [reify_phi_evals] in Hr.
   - inversion Hr; subst pevals seen2.
     exists []; split; [constructor | right; exists []].
-    split; [constructor | split; [intros k; reflexivity | intros tail_s; apply CSR_Ret; reflexivity]].
+    split; [constructor |].
+    split; [intros k; reflexivity | intros tail_s; apply CSR_Ret; reflexivity].
   - destruct (raw_id_in_list id defs) eqn:Hid; [| discriminate].
     destruct dt as [tb | |]; try discriminate; destruct tb as [w | | | | | | | | | |]; try discriminate.
     destruct (assoc bid_from pargs) as [op |] eqn:Hassoc; [| discriminate].
@@ -545,7 +548,9 @@ Proof.
                      Hpu id' fm' dt' pargs' md' op' idx d (or_intror Hin_p))
                   Hpe Hwfs1 Henv Hrr)
         as (draws2 & Hfa2 & [[Hub2 Hev_ub2] | [dvs_r [Hfa2_m [Hev_k Hst2]]]]).
-      * exists (draws1 ++ draws2); split; [apply Forall_app; split; assumption | left; split].
+      * exists (draws1 ++ draws2); split.
+        { apply Forall_app; split; assumption. }
+        left; split.
         -- intros tail_s; rewrite chain_draws_app; cbn [map_monad denote_phi]; rewrite Hassoc; unfold denote_exp'.
            eapply cfg_steps_to_ub_bind_r.
            ++ eapply cfg_steps_to_ret_bind;
@@ -610,7 +615,9 @@ Proof.
     cbn [reify_phi_evals] in Hr.
   - inversion Hr; subst pevals seen2.
     exists []; split; [intros _ _ [] | right; exists sigma0, []].
-    split; [exact Hwfd0 | split; [constructor | split; [intros fmap_later k _; reflexivity | apply CSR_Ret; reflexivity]]].
+    split; [exact Hwfd0 |].
+    split; [constructor |].
+    split; [intros fmap_later k _; reflexivity | apply CSR_Ret; reflexivity].
   - destruct (raw_id_in_list id defs) eqn:Hid; [| discriminate].
     destruct dt as [tb | |]; try discriminate; destruct tb as [w | | | | | | | | | |]; try discriminate.
     destruct (assoc bid_from pargs) as [op |] eqn:Hassoc; [| discriminate].
@@ -637,7 +644,8 @@ Proof.
               end) (exp_param_uses params defs (Some dt_p) e_p)) pargs_p) rest).
       assert (Hsmap_ext : wf_smap_entries ext_vars defs seen1 true smap0).
       { intros r0 wr0 cer0 Hf0; destruct (Hwfs1 r0 wr0 cer0 Hf0) as (H1 & H2 & H3 & H4 & H5 & H6).
-        repeat split; try assumption; intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
+        repeat split; try assumption.
+        intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
       assert (Hpu_ext : forall id' fm' dt' pargs' md' op' idx w0 pnm,
         In (id', Phi fm' dt' pargs', md') rest ->
         In (bid_from, op') pargs' ->
@@ -645,9 +653,11 @@ Proof.
         nth_error src_pnames idx = Some pnm ->
         In (pnm, w0) ext_vars).
       { intros id' fm' dt' pargs' md' op' idx w0 pnm Hin1 Hin2 Hin3 Hpnm.
-        apply in_app_iff; right; apply in_flat_map; exists (id', Phi fm' dt' pargs', md'); split; [exact Hin1 |].
+        apply in_app_iff; right; apply in_flat_map;
+          exists (id', Phi fm' dt' pargs', md'); split; [exact Hin1 |].
         apply in_flat_map; exists (bid_from, op'); split; [exact Hin2 |].
-        apply in_flat_map; exists (idx, DTYPE_Base (DTYPE_I w0)); split; [exact Hin3 | rewrite Hpnm; left; reflexivity]. }
+        apply in_flat_map; exists (idx, DTYPE_Base (DTYPE_I w0)); split;
+          [exact Hin3 | rewrite Hpnm; left; reflexivity]. }
       exact (proj1 (reify_phi_evals_typing rest true params src_pnames defs ext_vars smap0 bid_from
                       seen1 pevals_r seen2 Hsmap_ext Hpu_ext Hrr)). }
     destruct (eval_reified_exp_tgt op params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap0 env0 seen0
@@ -805,7 +815,8 @@ Lemma cert_insert_vec1_poison_zero {Pa : Params} :
   forall w (db : @dvalue_base Pa),
     @insert_element Pa (DTYPE_Array true 1%N (DTYPE_Base (DTYPE_I w)))
       (DVALUE_Base DVALUE_Poison) (DVALUE_Base db)
-      (DVALUE_Base (@DVALUE_I Pa 1%positive (@VellvmIntegers.zero (@Integers.bit_int 1%positive) (VInt_Bounded 1%positive)))) =
+      (DVALUE_Base
+         (@DVALUE_I Pa 1%positive (@VellvmIntegers.zero (@Integers.bit_int 1%positive) (VInt_Bounded 1%positive)))) =
     raise_ret (DVALUE_Array true [DVALUE_Base db]).
 Proof.
   intros w db; unfold insert_element, dvalue_to_Z;
@@ -816,7 +827,8 @@ Qed.
 Lemma cert_extract_vec1_zero {Pa : Params} :
   forall (dv : @dvalue Pa),
     @extract_element Pa (DVALUE_Array true [dv])
-      (DVALUE_Base (@DVALUE_I Pa 1%positive (@VellvmIntegers.zero (@Integers.bit_int 1%positive) (VInt_Bounded 1%positive)))) =
+      (DVALUE_Base
+         (@DVALUE_I Pa 1%positive (@VellvmIntegers.zero (@Integers.bit_int 1%positive) (VInt_Bounded 1%positive)))) =
     raise_ret dv.
 Proof.
   intros dv; unfold extract_element, dvalue_to_Z;
@@ -836,7 +848,8 @@ Proof.
     [set (res := acc_memory_bytes_of_dvalue_base (DTYPE_I w) DVALUE_Poison 0%N [])
     | set (res := acc_memory_bytes_of_dvalue_base (DTYPE_I w) (@DVALUE_I Pa w iv) 0%N [])];
     destruct res as [off bs];
-    cbn [bind ret EOU_monad accumulate_padding_bytes accumulate_poison_bytes accumulate_memory_bytes accumulate_padding];
+    cbn [bind ret EOU_monad accumulate_padding_bytes accumulate_poison_bytes
+         accumulate_memory_bytes accumulate_padding];
     reflexivity.
 Qed.
 
@@ -1163,7 +1176,8 @@ Local Ltac solve_piica_binop H pic w w' args :=
   cbv iota in H; try discriminate;
   apply andb_true_iff in Ew01 as [Ew0 Ew1];
   apply Pos.eqb_eq in Ew0; apply Pos.eqb_eq in Ew1; subst w0 w1;
-  inversion H; subst pic; repeat split; try assumption; try reflexivity; discriminate.
+  inversion H; subst pic; repeat split;
+    try assumption; try reflexivity; discriminate.
 
 Lemma match_pure_int_intrinsic_call_inv :
   forall ins pic,
@@ -1232,8 +1246,10 @@ Proof.
     apply Pos.eqb_eq in Ew0; subst w0;
     destruct (parse_imm_bool_arg a1) as [flag |] eqn:Hb;
     cbv iota in H; try discriminate;
-    inversion H; subst pic; repeat split; try assumption; try reflexivity;
-    eexists; repeat split; try assumption; try reflexivity; discriminate.
+    inversion H; subst pic; repeat split;
+      try assumption; try reflexivity;
+    eexists; repeat split; try assumption;
+    try reflexivity; discriminate.
 Qed.
 
 Definition lower_pure_int_intrinsic_binop
@@ -1387,7 +1403,8 @@ Proof.
       unfold pure_int_intrinsic_fn, pure_base_to_pure, llvm_int_binop, int_smin;
       cbn; rewrite !alg_pos_eq_dec_refl;
       cbn; rewrite Elt;
-      eexists; repeat split; try reflexivity; right; eexists; reflexivity.
+      eexists; repeat split; try reflexivity;
+      right; eexists; reflexivity.
   - (* PII_SMax *)
     rewrite Ha, Hb; cbn [eou_bind].
     unfold eval_icmp; rewrite eval_icmp_base_same_width.
@@ -1397,7 +1414,8 @@ Proof.
       unfold pure_int_intrinsic_fn, pure_base_to_pure, llvm_int_binop, int_smax;
       cbn; rewrite !alg_pos_eq_dec_refl;
       cbn; rewrite Elt;
-      eexists; repeat split; try reflexivity; right; eexists; reflexivity.
+      eexists; repeat split; try reflexivity;
+      right; eexists; reflexivity.
   - (* PII_UMin *)
     rewrite Ha, Hb; cbn [eou_bind].
     unfold eval_icmp; rewrite eval_icmp_base_same_width.
@@ -1407,7 +1425,8 @@ Proof.
       unfold pure_int_intrinsic_fn, pure_base_to_pure, llvm_int_binop, int_umin;
       cbn; rewrite !alg_pos_eq_dec_refl;
       cbn; rewrite Elt;
-      eexists; repeat split; try reflexivity; right; eexists; reflexivity.
+      eexists; repeat split; try reflexivity;
+      right; eexists; reflexivity.
   - (* PII_UMax *)
     rewrite Ha, Hb; cbn [eou_bind].
     unfold eval_icmp; rewrite eval_icmp_base_same_width.
@@ -1417,11 +1436,13 @@ Proof.
       unfold pure_int_intrinsic_fn, pure_base_to_pure, llvm_int_binop, int_umax;
       cbn; rewrite !alg_pos_eq_dec_refl;
       cbn; rewrite Elt;
-      eexists; repeat split; try reflexivity; right; eexists; reflexivity.
+      eexists; repeat split; try reflexivity;
+      right; eexists; reflexivity.
   - (* PII_UAddSat *)
     rewrite Ha, Hb; cbn [eou_bind].
     unfold eval_iop; rewrite !eval_iop_integer_base_same_width;
-      cbn - [eval_icmp eval_icmp_base Integers.add Integers.sub Integers.lt Integers.ltu Integers.cmp Integers.cmpu Integers.signed Integers.unsigned].
+      cbn - [eval_icmp eval_icmp_base Integers.add Integers.sub Integers.lt Integers.ltu
+             Integers.cmp Integers.cmpu Integers.signed Integers.unsigned].
     unfold eval_icmp; rewrite eval_icmp_base_same_width.
     unfold cert_to_icmp, eval_int_icmp, Integers.cmpu, dvp, tdb; cbn - [Integers.ltu Integers.add].
     unfold pure_int_intrinsic_fn, pure_base_to_pure, llvm_int_binop, int_uadd_sat;
@@ -1438,11 +1459,14 @@ Proof.
                      ((@Integers.unsigned w a + @Integers.unsigned w b) mod @Integers.modulus w)%Z).
     { unfold Integers.add; rewrite (@Integers.unsigned_repr_eq w); reflexivity. }
     destruct (Z_lt_le_dec (@Integers.unsigned w a + @Integers.unsigned w b) (@Integers.modulus w)) as [Hno | Hov].
-    + rewrite Hadd_u; rewrite (Z.mod_small (@Integers.unsigned w a + @Integers.unsigned w b) (@Integers.modulus w)) by lia.
-      destruct (Numeric.Rocqlib.zlt (@Integers.unsigned w a + @Integers.unsigned w b) (@Integers.unsigned w a)); [lia |].
+    + rewrite Hadd_u;
+        rewrite (Z.mod_small (@Integers.unsigned w a + @Integers.unsigned w b) (@Integers.modulus w)) by lia.
+      destruct (Numeric.Rocqlib.zlt (@Integers.unsigned w a + @Integers.unsigned w b)
+                  (@Integers.unsigned w a)); [lia |].
       cbn; rewrite (@Integers.unsigned_zero 1%positive); cbn.
       rewrite Z.min_l by lia.
-      unfold Integers.add; eexists; split; [reflexivity | split; [reflexivity | right; eexists; reflexivity]].
+      unfold Integers.add; eexists; split; [reflexivity |].
+      split; [reflexivity | right; eexists; reflexivity].
     + assert (Hmod_ov : ((@Integers.unsigned w a + @Integers.unsigned w b) mod @Integers.modulus w =
                          @Integers.unsigned w a + @Integers.unsigned w b - @Integers.modulus w)%Z).
       { symmetry; eapply Z.mod_unique_pos with (q := 1%Z); lia. }
@@ -1452,11 +1476,13 @@ Proof.
       cbn; rewrite (@Integers.unsigned_one 1%positive); cbn.
       rewrite Z.min_r by lia.
       rewrite Z2N.id by lia.
-      eexists; split; [reflexivity | split; [reflexivity | right; eexists; reflexivity]].
+      eexists; split; [reflexivity |].
+      split; [reflexivity | right; eexists; reflexivity].
   - (* PII_USubSat *)
     rewrite Ha, Hb; cbn [eou_bind].
     unfold eval_iop; rewrite !eval_iop_integer_base_same_width;
-      cbn - [eval_icmp eval_icmp_base Integers.add Integers.sub Integers.lt Integers.ltu Integers.cmp Integers.cmpu Integers.signed Integers.unsigned].
+      cbn - [eval_icmp eval_icmp_base Integers.add Integers.sub Integers.lt Integers.ltu
+             Integers.cmp Integers.cmpu Integers.signed Integers.unsigned].
     unfold eval_icmp; rewrite eval_icmp_base_same_width.
     unfold cert_to_icmp, eval_int_icmp, Integers.cmpu, dvp, tdb; cbn - [Integers.ltu Integers.sub].
     unfold pure_int_intrinsic_fn, pure_base_to_pure, llvm_int_binop, int_usub_sat;
@@ -1465,17 +1491,20 @@ Proof.
     unfold Integers.ltu; destruct (Numeric.Rocqlib.zlt (@Integers.unsigned w a) (@Integers.unsigned w b)).
     + cbn; rewrite (@Integers.unsigned_one 1%positive); cbn.
       rewrite (Z.max_r _ 0%Z) by lia; rewrite repr_zero_N.
-      eexists; split; [reflexivity | split; [reflexivity | right; eexists; reflexivity]].
+      eexists; split; [reflexivity |].
+      split; [reflexivity | right; eexists; reflexivity].
     + cbn; rewrite (@Integers.unsigned_zero 1%positive); cbn.
       rewrite (Z.max_l _ 0%Z) by lia; unfold Integers.sub.
-      eexists; split; [reflexivity | split; [reflexivity | right; eexists; reflexivity]].
+      eexists; split; [reflexivity |].
+      split; [reflexivity | right; eexists; reflexivity].
 Qed.
 
 Lemma pure_int_intrinsic_abs_eval_helper {Pa : Params} :
   forall w ca (flag : bool) (penv : param_env Pa) foracle va,
     wf_scalar_dvalue w va ->
     eval_closed_cert_expr penv foracle ca = raise_ret va ->
-    let vb := DVALUE_Base (@DVALUE_I Pa 1%positive (if flag then @Integers.one 1%positive else @Integers.zero 1%positive)) in
+    let vb :=
+      DVALUE_Base (@DVALUE_I Pa 1%positive (if flag then @Integers.one 1%positive else @Integers.zero 1%positive)) in
     exists dv,
       pure_int_intrinsic_fn PII_Abs w [va; vb] = raise_ret (inr dv) /\
       eval_closed_cert_expr penv foracle (lower_pure_int_intrinsic_abs w ca flag) = raise_ret dv /\
@@ -1490,7 +1519,8 @@ Proof.
     exists (DVALUE_Base DVALUE_Poison); repeat split; try left; reflexivity.
   - rewrite Ha; cbn [eou_bind].
     unfold eval_iop; rewrite eval_iop_integer_base_same_width;
-      cbn - [eval_icmp eval_icmp_base Integers.add Integers.sub Integers.lt Integers.ltu Integers.cmp Integers.cmpu Integers.signed Integers.unsigned].
+      cbn - [eval_icmp eval_icmp_base Integers.add Integers.sub Integers.lt Integers.ltu
+             Integers.cmp Integers.cmpu Integers.signed Integers.unsigned].
     unfold eval_icmp; rewrite eval_icmp_base_same_width.
     unfold cert_to_icmp, eval_int_icmp, Integers.cmp, dvp, tdb; cbn - [Integers.lt].
     rewrite repr_zero_N; rewrite ?(@Integers.signed_zero w).
@@ -1526,9 +1556,9 @@ Proof.
           pose proof (@Integers.half_modulus_modulus w) as Hhm.
           unfold Integers.min_signed in *.
           first [exists 1%Z; lia | exists (-1)%Z; lia]. }
-        exists (DVALUE_Base (@DVALUE_I Pa w a)); split;
-          [reflexivity
-          | split; [cbn; rewrite Hsub_min; reflexivity | right; eexists; reflexivity]].
+        exists (DVALUE_Base (@DVALUE_I Pa w a)); split; [reflexivity |].
+        split; [cbn; rewrite Hsub_min; reflexivity |].
+        right; eexists; reflexivity.
     + destruct (Numeric.Rocqlib.zlt (@Integers.signed w a) 0%Z) as [Hneg | Hnonneg].
       * cbn; rewrite (@Integers.unsigned_one 1%positive); cbn; rewrite ?Z.sub_0_l.
         destruct (Numeric.Rocqlib.zle (@Integers.min_signed w) (- @Integers.signed w a)%Z); [| lia].
@@ -1537,8 +1567,10 @@ Proof.
         rewrite (@Integers.eq_false w (@Integers.zero w) (@Integers.one w)
                    (fun H => @Integers.one_not_zero w (eq_sym H))).
         destruct flag; cbn;
-          rewrite ?(@Integers.sub_signed w), ?(@Integers.signed_zero w), ?Z.sub_0_l, (Z.abs_neq (@Integers.signed w a)) by lia;
-          (eexists; split; [reflexivity | split; [reflexivity | right; eexists; reflexivity]]).
+          rewrite ?(@Integers.sub_signed w), ?(@Integers.signed_zero w), ?Z.sub_0_l,
+                  (Z.abs_neq (@Integers.signed w a)) by lia;
+          (eexists; split; [reflexivity |];
+           split; [reflexivity | right; eexists; reflexivity]).
       * cbn; rewrite (@Integers.unsigned_zero 1%positive); cbn; rewrite ?Z.sub_0_l.
         destruct (Numeric.Rocqlib.zle (@Integers.min_signed w) (- @Integers.signed w a)%Z); [| lia].
         destruct (Numeric.Rocqlib.zle (- @Integers.signed w a)%Z (@Integers.max_signed w)); [| lia].
@@ -1549,7 +1581,8 @@ Proof.
           (rewrite (Z.abs_eq (@Integers.signed w a)) by lia;
            rewrite (@Integers.repr_signed w a);
            exists (DVALUE_Base (@DVALUE_I Pa w a));
-           split; [reflexivity | split; [reflexivity | right; eexists; reflexivity]]).
+           split; [reflexivity |];
+           split; [reflexivity | right; eexists; reflexivity]).
 Qed.
 
 Lemma apply_attrs_nil_cfg_steps {Pa : Params} :
@@ -1593,10 +1626,12 @@ Proof.
   intros sigma env a1 flag H; destruct a1; cbn [parse_imm_bool_arg] in H; try discriminate.
   - destruct (Z.eqb (denote_int_syntax x) 0%Z) eqn:Ez0.
     + apply Z.eqb_eq in Ez0; inversion H; subst flag.
-      apply mcfg_to_cfg_steps_ret; unfold denote_exp; cbn; rewrite Ez0; apply MSR_Ret; reflexivity.
+      apply mcfg_to_cfg_steps_ret; unfold denote_exp; cbn; rewrite Ez0.
+      apply MSR_Ret; reflexivity.
     + destruct (Z.eqb (denote_int_syntax x) 1%Z) eqn:Ez1; [| discriminate].
       apply Z.eqb_eq in Ez1; inversion H; subst flag.
-      apply mcfg_to_cfg_steps_ret; unfold denote_exp; cbn; rewrite Ez1; apply MSR_Ret; reflexivity.
+      apply mcfg_to_cfg_steps_ret; unfold denote_exp; cbn; rewrite Ez1.
+      apply MSR_Ret; reflexivity.
   - inversion H; subst flag; apply mcfg_to_cfg_steps_ret; unfold denote_exp;
       destruct b; cbn; apply MSR_Ret; reflexivity.
 Qed.
@@ -1640,8 +1675,9 @@ Proof.
   subst fn_e args.
   cbn [denote_instr].
   eapply cfg_steps_to_ret_bind.
-  - eapply denote_call_args_pair_steps;
-      unfold denote_exp'; [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ Ha0) | exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ Ha1)].
+  - eapply denote_call_args_pair_steps; unfold denote_exp';
+      [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ Ha0)
+      | exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ Ha1)].
   - eapply cfg_steps_to_ret_bind; [apply denote_operand_bundles_nil_cfg_steps |].
     eapply cfg_steps_to_ret_bind.
     + rewrite (parse_pure_int_intrinsic_is_intrinsic_exp fname op w Hp).
@@ -1683,7 +1719,10 @@ Proof.
   cbn [denote_instr denote_call_args map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
   apply cfg_steps_to_ub_bind_l.
   eapply cfg_steps_to_ub_bind_r;
-    [eapply cfg_steps_to_ret_bind; [unfold denote_exp'; exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ Ha0) | apply apply_attrs_nil_cfg_steps] |].
+    [eapply cfg_steps_to_ret_bind;
+       [unfold denote_exp'; exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ Ha0)
+       | apply apply_attrs_nil_cfg_steps]
+    |].
   apply cfg_steps_to_ub_bind_l, cfg_steps_to_ub_bind_l, cfg_steps_to_ub_bind_l; unfold denote_exp'.
   exact (mcfg_to_cfg_steps_ub _ _ _ Ha1).
 Qed.
@@ -1700,7 +1739,8 @@ Lemma cfg_steps_pure_int_intrinsic_abs_ret {Pa : Params} :
     metadata_range md = None ->
     mcfg_steps_to_ret sigma0 env0 (denote_exp (Some (DTYPE_Base (DTYPE_I w))) a0) sigma1 env0 dv0 ->
     pure_int_intrinsic_fn PII_Abs w
-      [dv0; DVALUE_Base (@DVALUE_I Pa 1%positive (if flag then @Integers.one 1%positive else @Integers.zero 1%positive))] =
+      [dv0;
+       DVALUE_Base (@DVALUE_I Pa 1%positive (if flag then @Integers.one 1%positive else @Integers.zero 1%positive))] =
       raise_ret (inr dv_out) ->
     cfg_steps_to_ret sigma0 env0
       (denote_instr (IId id, INSTR_Call (dt, fn_e) args anns [], md) varargs)
@@ -1898,8 +1938,8 @@ Lemma reify_code_single_typing :
     wf_smap_entries allowed defs seen2 uf smap2 /\
     (forall k, wf_cfg_dag allowed k = true -> wf_cfg_dag allowed (wrap_evals cevals k) = true).
 Proof.
-  intros [[iid ins] md] rest1 uf params src_pnames defs allowed smap0 seen0 opt_ev smap1 seen1 cevals_r cevals smap2 seen2
-    IH_r Hsmap0 Hpu Hstep Hrr ->.
+  intros [[iid ins] md] rest1 uf params src_pnames defs allowed smap0 seen0 opt_ev smap1 seen1
+    cevals_r cevals smap2 seen2 IH_r Hsmap0 Hpu Hstep Hrr ->.
   cbn [reify_code_step] in Hstep.
   destruct iid as [id | vid]; [destruct ins; try discriminate | destruct ins; try discriminate].
   - destruct (raw_id_in_list id defs) eqn:Hid; [| discriminate].
@@ -2031,13 +2071,16 @@ Lemma reify_code_typing :
 Proof.
   induction c as [| i1 | i1 i2 rest2 IH_tail IH_rest2] using list_2step_ind;
     intros uf params src_pnames defs allowed smap0 seen0 cevals smap2 seen2 Hsmap0 Hpu Hr.
-  - cbn [reify_code] in Hr; inversion Hr; subst; split; [intros x Hx; exact Hx | split; [exact Hsmap0 | intros k Hk; exact Hk]].
+  - cbn [reify_code] in Hr; inversion Hr; subst.
+    split; [intros x Hx; exact Hx |].
+    split; [exact Hsmap0 | intros k Hk; exact Hk].
   - cbn [reify_code] in Hr; destruct (reify_code_step uf params src_pnames defs smap0 seen0 i1)
       as [[[opt_ev smap1] seen1] |] eqn:Hstep; [| discriminate].
     assert (Hrr : reify_code uf params src_pnames defs smap1 seen1 [] = Some ([], smap1, seen1))
       by reflexivity.
     inversion Hr; subst cevals smap2 seen2; clear Hr.
-    eapply reify_code_single_typing; [| exact Hsmap0 | exact Hpu | exact Hstep | exact Hrr | destruct opt_ev; reflexivity].
+    eapply reify_code_single_typing;
+      [| exact Hsmap0 | exact Hpu | exact Hstep | exact Hrr | destruct opt_ev; reflexivity].
     intros smap1' seen1' cevals_r' smap2' seen2' Hs1' _ Hr'.
     cbn [reify_code] in Hr'; inversion Hr'; subst.
     split; [intros x Hx; exact Hx | split; [exact Hs1' | intros k Hk; exact Hk]].
@@ -2057,7 +2100,8 @@ Proof.
         In (pnm, w0) allowed).
       { intros idx w0 pnm Hin Hpnm.
         eapply Hpu; [left; rewrite Hi1; reflexivity | | exact Hpnm].
-        cbn [instr_param_uses exp_param_uses]; apply in_app_iff; right; apply in_app_iff; left; exact Hin. }
+        cbn [instr_param_uses exp_param_uses].
+        apply in_app_iff; right; apply in_app_iff; left; exact Hin. }
       destruct (reify_exp_typing val_exp uf params src_pnames defs allowed smap0 seen0
                   (Some (DTYPE_Base (DTYPE_I w1))) w ce seen1 Hsmap0 Hpu_val Hre)
         as (_ & Hwt & Hbw & Hlf & Hfv & Hinc01 & Hfk).
@@ -2080,6 +2124,553 @@ Proof.
       eapply reify_code_single_typing; [| exact Hsmap0 | exact Hpu | exact Hstep | exact Hrr | reflexivity].
       intros smap1' seen1' cevals_r' smap2' seen2' Hs1' Hpu' Hr'.
       exact (IH_tail uf params src_pnames defs allowed smap1' seen1' cevals_r' smap2' seen2' Hs1' Hpu' Hr').
+Qed.
+
+Local Lemma eval_reified_code_single_src_op {Pa : Params} :
+  forall id op md rest1 params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+         (foracle : freeze_oracle) smap0 (env0 : rmap (@dvalue Pa))
+         seen0 opt_ev smap1 seen1 cevals_r smap2 seen2,
+    (forall allowed' smap0' env0' seen0' cevals' smap2' seen2',
+      (forall iid ins md' idx dt_u,
+        In (iid, ins, md') rest1 ->
+        In (idx, dt_u) (instr_param_uses params defs ins) ->
+        nth_error arg_dtys idx = Some dt_u) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env0' = Some dv) ->
+      wf_smap_entries allowed' defs seen0' false smap0' ->
+      env_matches_smap defs (build_param_env src_pnames vs) foracle smap0' env0' ->
+      reify_code false params src_pnames defs smap0' seen0' rest1 = Some (cevals', smap2', seen2') ->
+      exists draws : list (dtyp * @dvalue Pa),
+        Forall (fun '(dt, v) => valid_draw_value dt v) draws /\
+        (((forall tail_s,
+             cfg_steps_to_ub (chain_draws draws tail_s) env0' (denote_code rest1 None)) /\
+          (forall k, eval_cfg_dag (build_param_env src_pnames vs) foracle (wrap_evals cevals' k) = DO_UB)) \/
+         (exists env2,
+            (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+               exists dv, nth_error vs idx = Some dv /\ RM.find r env2 = Some dv) /\
+            env_matches_smap defs (build_param_env src_pnames vs) foracle smap2' env2 /\
+            (forall k,
+               eval_cfg_dag (build_param_env src_pnames vs) foracle (wrap_evals cevals' k) =
+               eval_cfg_dag (build_param_env src_pnames vs) foracle k) /\
+            (forall tail_s,
+               cfg_steps_to_ret (chain_draws draws tail_s) env0' (denote_code rest1 None) tail_s env2 tt)))) ->
+    NoDup src_pnames ->
+    List.length params = List.length vs ->
+    List.length src_pnames = List.length vs ->
+    List.length arg_dtys = List.length params ->
+    Forall2 dvalue_has_dtyp vs arg_dtys ->
+    (forall iid ins md' idx dt_u,
+      In (iid, ins, md') ((IId id, INSTR_Op op, md) :: rest1) ->
+      In (idx, dt_u) (instr_param_uses params defs ins) ->
+      nth_error arg_dtys idx = Some dt_u) ->
+    (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+      exists dv, nth_error vs idx = Some dv /\ RM.find r env0 = Some dv) ->
+    wf_smap_entries allowed defs seen0 false smap0 ->
+    env_matches_smap defs (build_param_env src_pnames vs) foracle smap0 env0 ->
+    reify_code_step false params src_pnames defs smap0 seen0 (IId id, INSTR_Op op, md) =
+      Some (opt_ev, smap1, seen1) ->
+    reify_code false params src_pnames defs smap1 seen1 rest1 = Some (cevals_r, smap2, seen2) ->
+    exists draws : list (dtyp * @dvalue Pa),
+      Forall (fun '(dt, v) => valid_draw_value dt v) draws /\
+      (((forall tail_s,
+           cfg_steps_to_ub (chain_draws draws tail_s) env0
+             (denote_code ((IId id, INSTR_Op op, md) :: rest1) None)) /\
+        (forall k,
+           eval_cfg_dag (build_param_env src_pnames vs) foracle
+             (wrap_evals (match opt_ev with Some ev => ev :: cevals_r | None => cevals_r end) k) = DO_UB)) \/
+       (exists env2,
+          (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+             exists dv, nth_error vs idx = Some dv /\ RM.find r env2 = Some dv) /\
+          env_matches_smap defs (build_param_env src_pnames vs) foracle smap2 env2 /\
+          (forall k,
+             eval_cfg_dag (build_param_env src_pnames vs) foracle
+               (wrap_evals (match opt_ev with Some ev => ev :: cevals_r | None => cevals_r end) k) =
+             eval_cfg_dag (build_param_env src_pnames vs) foracle k) /\
+          (forall tail_s,
+             cfg_steps_to_ret (chain_draws draws tail_s) env0
+               (denote_code ((IId id, INSTR_Op op, md) :: rest1) None) tail_s env2 tt))).
+Proof.
+  intros id op md rest1 params src_pnames defs allowed arg_dtys vs foracle smap0 env0 seen0
+    opt_ev smap1 seen1 cevals_r smap2 seen2
+    IH Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hstep Hrr.
+  cbn [reify_code_step] in Hstep.
+  destruct (raw_id_in_list id defs) eqn:Hid; [| discriminate].
+  apply raw_id_in_list_spec in Hid.
+  destruct (reify_exp false params src_pnames defs smap0 seen0 None op)
+    as [[[w ce] seen1'] |] eqn:Hre; [| discriminate].
+  inversion Hstep; subst opt_ev smap1 seen1'; clear Hstep.
+  destruct (eval_reified_exp_src op params src_pnames defs allowed arg_dtys vs foracle smap0 env0 seen0
+              None w ce seen1 Hnd Hlp Hls Hla Hvs
+              (fun idx d Hin => Hpu (IId id) (INSTR_Op op) md idx d (or_introl eq_refl) Hin)
+              Hpe Hwfs Henv Hre)
+    as (draws1 & Hfa1 & [[Hub1 [msg1 Hev1]] | [dv1 [Hev1 [Hsc1 Hst1]]]]).
+  - exists draws1; split; [exact Hfa1 | left; split].
+    + intros tail_s; unfold denote_code; cbn [loop_monad denote_instr]; unfold denote_exp'.
+      apply cfg_steps_to_ub_bind_l, cfg_steps_to_ub_bind_l, mcfg_to_cfg_steps_ub; exact (Hub1 tail_s).
+    + intros k; cbn [wrap_evals eval_cfg_dag]; rewrite Hev1; reflexivity.
+  - set (ext_vars :=
+      allowed ++
+      List.flat_map (fun '(idx, dt_u) =>
+        match dt_u, nth_error src_pnames idx with
+        | DTYPE_Base (DTYPE_I w0), Some pnm => [(pnm, w0)]
+        | _, _ => []
+        end) (exp_param_uses params defs None op)).
+    assert (Hsmap_ext : wf_smap_entries ext_vars defs seen0 false smap0).
+    { intros r0 wr0 cer0 Hf0; destruct (Hwfs r0 wr0 cer0 Hf0) as (H1 & H2 & H3 & H4 & H5 & H6).
+      repeat split; try assumption.
+      intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
+    assert (Hpu_ext : forall idx w0 pnm,
+      In (idx, DTYPE_Base (DTYPE_I w0)) (exp_param_uses params defs None op) ->
+      nth_error src_pnames idx = Some pnm -> In (pnm, w0) ext_vars).
+    { intros idx w0 pnm Hin Hpnm; apply in_app_iff; right; apply in_flat_map.
+      exists (idx, DTYPE_Base (DTYPE_I w0)); split; [exact Hin | rewrite Hpnm; left; reflexivity]. }
+    destruct (reify_exp_typing op false params src_pnames defs ext_vars smap0 seen0 None w ce seen1
+                Hsmap_ext Hpu_ext Hre)
+      as (_ & Hwt_ce & Hbw_ce & Hlf_ce & Hfv_ce & Hinc01 & Hfk_ce).
+    pose proof (wf_smap_entries_seen_mono ext_vars defs seen0 seen1 false smap0 Hinc01 Hsmap_ext) as Hsmap_ext1.
+    pose proof (wf_smap_entries_add ext_vars defs seen1 false smap0 id w ce Hsmap_ext1
+                  Hid Hwt_ce Hbw_ce Hlf_ce Hfv_ce Hfk_ce) as Hwfs1.
+    assert (Hpe1 : forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+      exists dv, nth_error vs idx = Some dv /\ RM.find r (RM.add id dv1 env0) = Some dv).
+    { intros idx r Hnth Hnin; destruct (Hpe idx r Hnth Hnin) as [dv [Hv Hfe]].
+      exists dv; split; [exact Hv | rewrite RMF.F.add_neq_o; [exact Hfe | intros ->; exact (Hnin Hid)]]. }
+    pose proof (env_matches_smap_add defs (build_param_env src_pnames vs) foracle smap0 env0
+                  id w ce dv1 Henv Hid Hev1 Hsc1) as Henv1.
+    destruct (IH ext_vars (RM.add id (w, ce) smap0) (RM.add id dv1 env0) seen1 cevals_r smap2 seen2
+                (fun iid' ins' md' idx d Hin_i => Hpu iid' ins' md' idx d (or_intror Hin_i))
+                Hpe1 Hwfs1 Henv1 Hrr)
+      as (draws2 & Hfa2 & [[Hub2 Hev_ub2] | (env2 & Hpe2 & Henv2 & Hev_k & Hst2)]).
+    + exists (draws1 ++ draws2); split.
+      { apply Forall_app; split; assumption. }
+      left; split.
+      * intros tail_s; rewrite chain_draws_app; unfold denote_code.
+        cbn [loop_monad denote_instr]; unfold denote_exp'.
+        eapply cfg_steps_to_ub_bind_r.
+        -- eapply cfg_steps_to_ret_bind;
+             [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ (Hst1 (chain_draws draws2 tail_s))) |].
+           eapply cfg_steps_to_ret_bind; [apply cfg_steps_lwrite | apply CSR_Ret; reflexivity].
+        -- exact (Hub2 tail_s).
+      * intros k; cbn [wrap_evals eval_cfg_dag]; rewrite Hev1; exact (Hev_ub2 k).
+    + exists (draws1 ++ draws2); split.
+      { apply Forall_app; split; assumption. }
+      right; exists env2.
+      split; [exact Hpe2 | split; [exact Henv2 | split]].
+      * intros k; cbn [wrap_evals eval_cfg_dag]; rewrite Hev1; exact (Hev_k k).
+      * intros tail_s; rewrite chain_draws_app; unfold denote_code.
+        cbn [loop_monad denote_instr]; unfold denote_exp'.
+        eapply cfg_steps_to_ret_bind.
+        -- eapply cfg_steps_to_ret_bind;
+             [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ (Hst1 (chain_draws draws2 tail_s))) |].
+           eapply cfg_steps_to_ret_bind; [apply cfg_steps_lwrite | apply CSR_Ret; reflexivity].
+        -- exact (Hst2 tail_s).
+Qed.
+
+Local Lemma eval_reified_code_single_src_intrinsic_binop {Pa : Params} :
+  forall id fname args anns md op w a0 a1 rest1 params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+         (foracle : freeze_oracle) smap0 (env0 : rmap (@dvalue Pa))
+         seen0 opt_ev smap1 seen1 cevals_r smap2 seen2,
+    (forall allowed' smap0' env0' seen0' cevals' smap2' seen2',
+      (forall iid ins md' idx dt_u,
+        In (iid, ins, md') rest1 ->
+        In (idx, dt_u) (instr_param_uses params defs ins) ->
+        nth_error arg_dtys idx = Some dt_u) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env0' = Some dv) ->
+      wf_smap_entries allowed' defs seen0' false smap0' ->
+      env_matches_smap defs (build_param_env src_pnames vs) foracle smap0' env0' ->
+      reify_code false params src_pnames defs smap0' seen0' rest1 = Some (cevals', smap2', seen2') ->
+      exists draws : list (dtyp * @dvalue Pa),
+        Forall (fun '(dt, v) => valid_draw_value dt v) draws /\
+        (((forall tail_s,
+             cfg_steps_to_ub (chain_draws draws tail_s) env0' (denote_code rest1 None)) /\
+          (forall k, eval_cfg_dag (build_param_env src_pnames vs) foracle (wrap_evals cevals' k) = DO_UB)) \/
+         (exists env2,
+            (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+               exists dv, nth_error vs idx = Some dv /\ RM.find r env2 = Some dv) /\
+            env_matches_smap defs (build_param_env src_pnames vs) foracle smap2' env2 /\
+            (forall k,
+               eval_cfg_dag (build_param_env src_pnames vs) foracle (wrap_evals cevals' k) =
+               eval_cfg_dag (build_param_env src_pnames vs) foracle k) /\
+            (forall tail_s,
+               cfg_steps_to_ret (chain_draws draws tail_s) env0' (denote_code rest1 None) tail_s env2 tt)))) ->
+    NoDup src_pnames ->
+    List.length params = List.length vs ->
+    List.length src_pnames = List.length vs ->
+    List.length arg_dtys = List.length params ->
+    Forall2 dvalue_has_dtyp vs arg_dtys ->
+    (forall iid ins md' idx dt_u,
+      In (iid, ins, md')
+         ((IId id,
+           INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns [],
+           md) :: rest1) ->
+      In (idx, dt_u) (instr_param_uses params defs ins) ->
+      nth_error arg_dtys idx = Some dt_u) ->
+    (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+      exists dv, nth_error vs idx = Some dv /\ RM.find r env0 = Some dv) ->
+    wf_smap_entries allowed defs seen0 false smap0 ->
+    env_matches_smap defs (build_param_env src_pnames vs) foracle smap0 env0 ->
+    In id defs ->
+    metadata_range md = None ->
+    parse_pure_int_intrinsic fname = Some (op, w) ->
+    op <> PII_Abs ->
+    args = [((DTYPE_Base (DTYPE_I w), a0), []); ((DTYPE_Base (DTYPE_I w), a1), [])] ->
+    ann_fun_attributes anns = [] ->
+    ann_ret_attributes anns = [] ->
+    match_pure_int_intrinsic_call
+      (INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns []) =
+      Some (PIICA_Binop op w a0 a1) ->
+    reify_code_step false params src_pnames defs smap0 seen0
+      (IId id, INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns [], md) =
+      Some (opt_ev, smap1, seen1) ->
+    reify_code false params src_pnames defs smap1 seen1 rest1 = Some (cevals_r, smap2, seen2) ->
+    exists draws : list (dtyp * @dvalue Pa),
+      Forall (fun '(dt, v) => valid_draw_value dt v) draws /\
+      (((forall tail_s,
+           cfg_steps_to_ub (chain_draws draws tail_s) env0
+             (denote_code
+                ((IId id, INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns [], md)
+                 :: rest1) None)) /\
+        (forall k,
+           eval_cfg_dag (build_param_env src_pnames vs) foracle
+             (wrap_evals (match opt_ev with Some ev => ev :: cevals_r | None => cevals_r end) k) = DO_UB)) \/
+       (exists env2,
+          (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+             exists dv, nth_error vs idx = Some dv /\ RM.find r env2 = Some dv) /\
+          env_matches_smap defs (build_param_env src_pnames vs) foracle smap2 env2 /\
+          (forall k,
+             eval_cfg_dag (build_param_env src_pnames vs) foracle
+               (wrap_evals (match opt_ev with Some ev => ev :: cevals_r | None => cevals_r end) k) =
+             eval_cfg_dag (build_param_env src_pnames vs) foracle k) /\
+          (forall tail_s,
+             cfg_steps_to_ret (chain_draws draws tail_s) env0
+               (denote_code
+                  ((IId id, INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns [], md)
+                   :: rest1) None) tail_s env2 tt))).
+Proof.
+  intros id fname args anns md op w a0 a1 rest1 params src_pnames defs allowed arg_dtys vs foracle
+    smap0 env0 seen0 opt_ev smap1 seen1 cevals_r smap2 seen2
+    IH Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hid Hmr Hp_intr Hop_neq Hargs Hfa Hra Hpic Hstep Hrr.
+  cbn [reify_code_step] in Hstep.
+  rewrite (proj2 (raw_id_in_list_spec id defs) Hid), Hmr, Hpic in Hstep.
+  cbn [andb] in Hstep; cbv iota in Hstep.
+  destruct (reify_exp false params src_pnames defs smap0 seen0 (Some (DTYPE_Base (DTYPE_I w))) a0)
+    as [[[wa0 ca] seen_a] |] eqn:Hra0; [| discriminate].
+  destruct (reify_exp false params src_pnames defs smap0 seen_a (Some (DTYPE_Base (DTYPE_I w))) a1)
+    as [[[wa1 cb] seen_b] |] eqn:Hra1; [| discriminate].
+  destruct (list_empty_b (collect_freeze_keys ca) && list_empty_b (collect_freeze_keys cb)) eqn:Hfk01;
+    [| discriminate].
+  apply andb_true_iff in Hfk01 as [Hfka_b Hfkb_b].
+  apply list_empty_b_spec in Hfka_b; apply list_empty_b_spec in Hfkb_b.
+  inversion Hstep; subst opt_ev smap1 seen1; clear Hstep.
+  assert (Hpua0 : forall idx dt_u,
+    In (idx, dt_u) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a0) ->
+    nth_error arg_dtys idx = Some dt_u).
+  { intros idx dt_u Hin; eapply Hpu; [left; reflexivity |].
+    unfold instr_param_uses; rewrite Hpic; apply in_app_iff; left; exact Hin. }
+  assert (Hpua1 : forall idx dt_u,
+    In (idx, dt_u) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a1) ->
+    nth_error arg_dtys idx = Some dt_u).
+  { intros idx dt_u Hin; eapply Hpu; [left; reflexivity |].
+    unfold instr_param_uses; rewrite Hpic; apply in_app_iff; right; exact Hin. }
+  set (ext_vars :=
+    allowed ++
+    List.flat_map (fun '(idx, dt_u) =>
+      match dt_u, nth_error src_pnames idx with
+      | DTYPE_Base (DTYPE_I w0), Some pnm => [(pnm, w0)]
+      | _, _ => []
+      end) (instr_param_uses params defs
+              (INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns []))).
+  assert (Hsmap_ext : wf_smap_entries ext_vars defs seen0 false smap0).
+  { intros r0 wr0 cer0 Hf0; destruct (Hwfs r0 wr0 cer0 Hf0) as (H1 & H2 & H3 & H4 & H5 & H6).
+    repeat split; try assumption.
+    intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
+  assert (Hpua0_ext : forall idx w0 pnm,
+    In (idx, DTYPE_Base (DTYPE_I w0)) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a0) ->
+    nth_error src_pnames idx = Some pnm -> In (pnm, w0) ext_vars).
+  { intros idx w0 pnm Hin Hpnm; apply in_app_iff; right; apply in_flat_map.
+    exists (idx, DTYPE_Base (DTYPE_I w0)); split;
+      [unfold instr_param_uses; rewrite Hpic; apply in_app_iff; left; exact Hin
+      | rewrite Hpnm; left; reflexivity]. }
+  assert (Hpua1_ext : forall idx w0 pnm,
+    In (idx, DTYPE_Base (DTYPE_I w0)) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a1) ->
+    nth_error src_pnames idx = Some pnm -> In (pnm, w0) ext_vars).
+  { intros idx w0 pnm Hin Hpnm; apply in_app_iff; right; apply in_flat_map.
+    exists (idx, DTYPE_Base (DTYPE_I w0)); split;
+      [unfold instr_param_uses; rewrite Hpic; apply in_app_iff; right; exact Hin
+      | rewrite Hpnm; left; reflexivity]. }
+  destruct (reify_exp_typing a0 false params src_pnames defs ext_vars smap0 seen0
+              (Some (DTYPE_Base (DTYPE_I w))) wa0 ca seen_a Hsmap_ext Hpua0_ext Hra0)
+    as (Htopa & Hwta & Hbwa & Hlfa & _ & Hinca & _).
+  apply check_opt_int_width_some_inv in Htopa; subst wa0.
+  pose proof (wf_smap_entries_seen_mono ext_vars defs seen0 seen_a false smap0 Hinca Hsmap_ext) as Hsmap_ext_a.
+  destruct (reify_exp_typing a1 false params src_pnames defs ext_vars smap0 seen_a
+              (Some (DTYPE_Base (DTYPE_I w))) wa1 cb seen_b Hsmap_ext_a Hpua1_ext Hra1)
+    as (Htopb & Hwtb & Hbwb & Hlfb & _ & Hincb & _).
+  apply check_opt_int_width_some_inv in Htopb; subst wa1.
+  pose proof (wf_smap_entries_seen_mono allowed defs seen0 seen_a false smap0 Hinca Hwfs) as Hwfs_a.
+  destruct (eval_reified_exp_src a0 params src_pnames defs allowed arg_dtys vs foracle smap0 env0 seen0
+              (Some (DTYPE_Base (DTYPE_I w))) w ca seen_a Hnd Hlp Hls Hla Hvs Hpua0 Hpe Hwfs Henv Hra0)
+    as (draws0 & Hfa0 & [[Hub0 [msg0 Hev0]] | [dv0 [Hev0 [Hsc0 Hst0]]]]).
+  - exists draws0; split; [exact Hfa0 | left; split].
+    + intros tail_s; unfold denote_code; cbn [loop_monad].
+      exact (cfg_steps_pure_int_intrinsic_binop_ub0 (chain_draws draws0 tail_s) env0 id (DTYPE_Base (DTYPE_I w))
+               (EXP_Ident (ID_Global (Name fname))) args anns md w a0 a1 None rest1 Hargs (Hub0 tail_s)).
+    + intros k; cbn [wrap_evals eval_cfg_dag].
+      destruct (lower_pure_int_intrinsic_binop_ub_l op w ca cb
+                  (build_param_env src_pnames vs) foracle msg0 Hop_neq Hev0) as [msg' Hev'].
+      rewrite Hev'; reflexivity.
+  - destruct (eval_reified_exp_src a1 params src_pnames defs allowed arg_dtys vs foracle smap0 env0 seen_a
+                (Some (DTYPE_Base (DTYPE_I w))) w cb seen_b Hnd Hlp Hls Hla Hvs Hpua1 Hpe Hwfs_a Henv Hra1)
+      as (draws1 & Hfa1 & [[Hub1 [msg1 Hev1]] | [dv1 [Hev1 [Hsc1 Hst1]]]]).
+    + exists (draws0 ++ draws1); split.
+      { apply Forall_app; split; assumption. }
+      left; split.
+      * intros tail_s; rewrite chain_draws_app; unfold denote_code; cbn [loop_monad].
+        exact (cfg_steps_pure_int_intrinsic_binop_ub1
+                 (chain_draws draws0 (chain_draws draws1 tail_s))
+                 (chain_draws draws1 tail_s) env0 id (DTYPE_Base (DTYPE_I w))
+                 (EXP_Ident (ID_Global (Name fname))) args anns md w a0 a1 dv0 None rest1
+                 Hargs (Hst0 (chain_draws draws1 tail_s)) (Hub1 tail_s)).
+      * intros k; cbn [wrap_evals eval_cfg_dag].
+        destruct (lower_pure_int_intrinsic_binop_ub_r op w ca cb
+                    (build_param_env src_pnames vs) foracle dv0 msg1 Hop_neq Hev0 Hev1) as [msg' Hev'].
+        rewrite Hev'; reflexivity.
+    + destruct (pure_int_intrinsic_binop_eval_helpers op w ca cb
+                  (build_param_env src_pnames vs) foracle dv0 dv1 Hop_neq Hsc0 Hsc1 Hev0 Hev1)
+        as (dv_out & Hpi & Hev_ce & Hsc_out).
+      pose proof (wf_smap_entries_seen_mono ext_vars defs seen0 seen_b false smap0
+                    (fun x Hx => Hincb x (Hinca x Hx)) Hsmap_ext) as Hsmap_ext_b.
+      set (ce := lower_pure_int_intrinsic_binop op w ca cb).
+      fold ce in Hev_ce.
+      assert (Hext_ce : incl (collect_free_vars [] ce) ext_vars).
+      { pose proof (reify_exp_typing a0 false params src_pnames defs ext_vars smap0 seen0
+                      (Some (DTYPE_Base (DTYPE_I w))) w ca seen_a Hsmap_ext Hpua0_ext Hra0)
+          as (_ & _ & _ & _ & Hfva_e & _).
+        pose proof (reify_exp_typing a1 false params src_pnames defs ext_vars smap0 seen_a
+                      (Some (DTYPE_Base (DTYPE_I w))) w cb seen_b Hsmap_ext_a Hpua1_ext Hra1)
+          as (_ & _ & _ & _ & Hfvb_e & _).
+        destruct (lower_pure_int_intrinsic_binop_typing op w ca cb
+                    Hwta Hbwa Hlfa Hfka_b Hwtb Hbwb Hlfb Hfkb_b) as (_ & _ & _ & _ & Hsub).
+        intros x Hx; apply Hsub, in_app_iff in Hx as [Hx | Hx];
+          [exact (Hfva_e x Hx) | exact (Hfvb_e x Hx)]. }
+      destruct (lower_pure_int_intrinsic_binop_typing op w ca cb
+                  Hwta Hbwa Hlfa Hfka_b Hwtb Hbwb Hlfb Hfkb_b)
+        as (Hwt_ce & Hbw_ce & Hlf_ce & Hfk_nil & _).
+      pose proof (wf_smap_entries_add ext_vars defs seen_b false smap0 id w ce Hsmap_ext_b
+                    Hid Hwt_ce Hbw_ce Hlf_ce Hext_ce (fun H => match H with end)) as Hwfs1.
+      assert (Hpe1 : forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r (RM.add id dv_out env0) = Some dv).
+      { intros idx r Hnth Hnin; destruct (Hpe idx r Hnth Hnin) as [dv [Hv Hfe]].
+        exists dv; split; [exact Hv | rewrite RMF.F.add_neq_o; [exact Hfe | intros ->; exact (Hnin Hid)]]. }
+      pose proof (env_matches_smap_add defs (build_param_env src_pnames vs) foracle smap0 env0
+                    id w ce dv_out Henv Hid Hev_ce Hsc_out) as Henv1.
+      destruct (IH ext_vars (RM.add id (w, ce) smap0) (RM.add id dv_out env0) seen_b
+                  cevals_r smap2 seen2
+                  (fun iid' ins' md' idx d Hin_i => Hpu iid' ins' md' idx d (or_intror Hin_i))
+                  Hpe1 Hwfs1 Henv1 Hrr)
+        as (draws2 & Hfa2 & [[Hub2 Hev_ub2] | (env2 & Hpe2 & Henv2 & Hev_k & Hst2)]).
+      * exists (draws0 ++ draws1 ++ draws2); split.
+        { apply Forall_app; split; [exact Hfa0 | apply Forall_app; split; assumption]. }
+        left; split.
+        -- intros tail_s; rewrite !chain_draws_app; unfold denote_code; cbn [loop_monad].
+           eapply cfg_steps_to_ub_bind_r.
+           ++ eapply cfg_steps_pure_int_intrinsic_binop_ret;
+                [reflexivity | exact Hp_intr | exact Hargs | exact Hfa | exact Hra | exact Hmr
+                | exact (Hst0 (chain_draws draws1 (chain_draws draws2 tail_s)))
+                | exact (Hst1 (chain_draws draws2 tail_s))
+                | exact Hpi].
+           ++ exact (Hub2 tail_s).
+        -- intros k; cbn [wrap_evals eval_cfg_dag]; fold ce; rewrite Hev_ce; exact (Hev_ub2 k).
+      * exists (draws0 ++ draws1 ++ draws2); split.
+        { apply Forall_app; split; [exact Hfa0 | apply Forall_app; split; assumption]. }
+        right; exists env2.
+        split; [exact Hpe2 | split; [exact Henv2 | split]].
+        -- intros k; cbn [wrap_evals eval_cfg_dag]; fold ce; rewrite Hev_ce; exact (Hev_k k).
+        -- intros tail_s; rewrite !chain_draws_app; unfold denote_code; cbn [loop_monad].
+           eapply cfg_steps_to_ret_bind.
+           ++ eapply cfg_steps_pure_int_intrinsic_binop_ret;
+                [reflexivity | exact Hp_intr | exact Hargs | exact Hfa | exact Hra | exact Hmr
+                | exact (Hst0 (chain_draws draws1 (chain_draws draws2 tail_s)))
+                | exact (Hst1 (chain_draws draws2 tail_s))
+                | exact Hpi].
+           ++ exact (Hst2 tail_s).
+Qed.
+
+Local Lemma eval_reified_code_single_src_intrinsic_abs {Pa : Params} :
+  forall id fname args anns md w a0 a1 flag rest1 params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+         (foracle : freeze_oracle) smap0 (env0 : rmap (@dvalue Pa))
+         seen0 opt_ev smap1 seen1 cevals_r smap2 seen2,
+    (forall allowed' smap0' env0' seen0' cevals' smap2' seen2',
+      (forall iid ins md' idx dt_u,
+        In (iid, ins, md') rest1 ->
+        In (idx, dt_u) (instr_param_uses params defs ins) ->
+        nth_error arg_dtys idx = Some dt_u) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env0' = Some dv) ->
+      wf_smap_entries allowed' defs seen0' false smap0' ->
+      env_matches_smap defs (build_param_env src_pnames vs) foracle smap0' env0' ->
+      reify_code false params src_pnames defs smap0' seen0' rest1 = Some (cevals', smap2', seen2') ->
+      exists draws : list (dtyp * @dvalue Pa),
+        Forall (fun '(dt, v) => valid_draw_value dt v) draws /\
+        (((forall tail_s,
+             cfg_steps_to_ub (chain_draws draws tail_s) env0' (denote_code rest1 None)) /\
+          (forall k, eval_cfg_dag (build_param_env src_pnames vs) foracle (wrap_evals cevals' k) = DO_UB)) \/
+         (exists env2,
+            (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+               exists dv, nth_error vs idx = Some dv /\ RM.find r env2 = Some dv) /\
+            env_matches_smap defs (build_param_env src_pnames vs) foracle smap2' env2 /\
+            (forall k,
+               eval_cfg_dag (build_param_env src_pnames vs) foracle (wrap_evals cevals' k) =
+               eval_cfg_dag (build_param_env src_pnames vs) foracle k) /\
+            (forall tail_s,
+               cfg_steps_to_ret (chain_draws draws tail_s) env0' (denote_code rest1 None) tail_s env2 tt)))) ->
+    NoDup src_pnames ->
+    List.length params = List.length vs ->
+    List.length src_pnames = List.length vs ->
+    List.length arg_dtys = List.length params ->
+    Forall2 dvalue_has_dtyp vs arg_dtys ->
+    (forall iid ins md' idx dt_u,
+      In (iid, ins, md')
+         ((IId id,
+           INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns [],
+           md) :: rest1) ->
+      In (idx, dt_u) (instr_param_uses params defs ins) ->
+      nth_error arg_dtys idx = Some dt_u) ->
+    (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+      exists dv, nth_error vs idx = Some dv /\ RM.find r env0 = Some dv) ->
+    wf_smap_entries allowed defs seen0 false smap0 ->
+    env_matches_smap defs (build_param_env src_pnames vs) foracle smap0 env0 ->
+    In id defs ->
+    metadata_range md = None ->
+    parse_pure_int_intrinsic fname = Some (PII_Abs, w) ->
+    args = [((DTYPE_Base (DTYPE_I w), a0), []); ((DTYPE_Base (DTYPE_I 1%positive), a1), [])] ->
+    parse_imm_bool_arg a1 = Some flag ->
+    ann_fun_attributes anns = [] ->
+    ann_ret_attributes anns = [] ->
+    match_pure_int_intrinsic_call
+      (INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns []) =
+      Some (PIICA_Abs w a0 flag) ->
+    reify_code_step false params src_pnames defs smap0 seen0
+      (IId id, INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns [], md) =
+      Some (opt_ev, smap1, seen1) ->
+    reify_code false params src_pnames defs smap1 seen1 rest1 = Some (cevals_r, smap2, seen2) ->
+    exists draws : list (dtyp * @dvalue Pa),
+      Forall (fun '(dt, v) => valid_draw_value dt v) draws /\
+      (((forall tail_s,
+           cfg_steps_to_ub (chain_draws draws tail_s) env0
+             (denote_code
+                ((IId id, INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns [], md)
+                 :: rest1) None)) /\
+        (forall k,
+           eval_cfg_dag (build_param_env src_pnames vs) foracle
+             (wrap_evals (match opt_ev with Some ev => ev :: cevals_r | None => cevals_r end) k) = DO_UB)) \/
+       (exists env2,
+          (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+             exists dv, nth_error vs idx = Some dv /\ RM.find r env2 = Some dv) /\
+          env_matches_smap defs (build_param_env src_pnames vs) foracle smap2 env2 /\
+          (forall k,
+             eval_cfg_dag (build_param_env src_pnames vs) foracle
+               (wrap_evals (match opt_ev with Some ev => ev :: cevals_r | None => cevals_r end) k) =
+             eval_cfg_dag (build_param_env src_pnames vs) foracle k) /\
+          (forall tail_s,
+             cfg_steps_to_ret (chain_draws draws tail_s) env0
+               (denote_code
+                  ((IId id, INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns [], md)
+                   :: rest1) None) tail_s env2 tt))).
+Proof.
+  intros id fname args anns md w a0 a1 flag rest1 params src_pnames defs allowed arg_dtys vs foracle
+    smap0 env0 seen0 opt_ev smap1 seen1 cevals_r smap2 seen2
+    IH Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hid Hmr Hp_intr Hargs Hflag Hfa Hra Hpic Hstep Hrr.
+  cbn [reify_code_step] in Hstep.
+  rewrite (proj2 (raw_id_in_list_spec id defs) Hid), Hmr, Hpic in Hstep.
+  cbn [andb] in Hstep; cbv iota in Hstep.
+  destruct (reify_exp false params src_pnames defs smap0 seen0 (Some (DTYPE_Base (DTYPE_I w))) a0)
+    as [[[wa0 ca] seen_a] |] eqn:Hra0; [| discriminate].
+  destruct (list_empty_b (collect_freeze_keys ca)) eqn:Hfka_b; [| discriminate].
+  apply list_empty_b_spec in Hfka_b.
+  inversion Hstep; subst opt_ev smap1 seen1; clear Hstep.
+  assert (Hpua0 : forall idx dt_u,
+    In (idx, dt_u) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a0) ->
+    nth_error arg_dtys idx = Some dt_u).
+  { intros idx dt_u Hin; eapply Hpu; [left; reflexivity |].
+    unfold instr_param_uses; rewrite Hpic; exact Hin. }
+  set (ext_vars :=
+    allowed ++
+    List.flat_map (fun '(idx, dt_u) =>
+      match dt_u, nth_error src_pnames idx with
+      | DTYPE_Base (DTYPE_I w0), Some pnm => [(pnm, w0)]
+      | _, _ => []
+      end) (instr_param_uses params defs
+              (INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns []))).
+  assert (Hsmap_ext : wf_smap_entries ext_vars defs seen0 false smap0).
+  { intros r0 wr0 cer0 Hf0; destruct (Hwfs r0 wr0 cer0 Hf0) as (H1 & H2 & H3 & H4 & H5 & H6).
+    repeat split; try assumption.
+    intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
+  assert (Hpua0_ext : forall idx w0 pnm,
+    In (idx, DTYPE_Base (DTYPE_I w0)) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a0) ->
+    nth_error src_pnames idx = Some pnm -> In (pnm, w0) ext_vars).
+  { intros idx w0 pnm Hin Hpnm; apply in_app_iff; right; apply in_flat_map.
+    exists (idx, DTYPE_Base (DTYPE_I w0)); split;
+      [unfold instr_param_uses; rewrite Hpic; exact Hin | rewrite Hpnm; left; reflexivity]. }
+  destruct (reify_exp_typing a0 false params src_pnames defs ext_vars smap0 seen0
+              (Some (DTYPE_Base (DTYPE_I w))) wa0 ca seen_a Hsmap_ext Hpua0_ext Hra0)
+    as (Htopa & Hwta & Hbwa & Hlfa & Hfva_e & Hinca & _).
+  apply check_opt_int_width_some_inv in Htopa; subst wa0.
+  destruct (eval_reified_exp_src a0 params src_pnames defs allowed arg_dtys vs foracle smap0 env0 seen0
+              (Some (DTYPE_Base (DTYPE_I w))) w ca seen_a Hnd Hlp Hls Hla Hvs Hpua0 Hpe Hwfs Henv Hra0)
+    as (draws0 & Hfa0 & [[Hub0 [msg0 Hev0]] | [dv0 [Hev0 [Hsc0 Hst0]]]]).
+  - exists draws0; split; [exact Hfa0 | left; split].
+    + intros tail_s; unfold denote_code; cbn [loop_monad].
+      exact (cfg_steps_pure_int_intrinsic_abs_ub0 (chain_draws draws0 tail_s) env0 id (DTYPE_Base (DTYPE_I w))
+               (EXP_Ident (ID_Global (Name fname))) args anns md w a0 a1 None rest1 Hargs (Hub0 tail_s)).
+    + intros k; cbn [wrap_evals eval_cfg_dag].
+      destruct (lower_pure_int_intrinsic_abs_ub w ca flag
+                  (build_param_env src_pnames vs) foracle msg0 Hev0) as [msg' Hev'].
+      rewrite Hev'; reflexivity.
+  - destruct (pure_int_intrinsic_abs_eval_helper w ca flag
+                (build_param_env src_pnames vs) foracle dv0 Hsc0 Hev0)
+      as (dv_out & Hpi & Hev_ce & Hsc_out).
+    pose proof (wf_smap_entries_seen_mono ext_vars defs seen0 seen_a false smap0 Hinca Hsmap_ext) as Hsmap_ext_a.
+    set (ce := lower_pure_int_intrinsic_abs w ca flag).
+    fold ce in Hev_ce.
+    destruct (lower_pure_int_intrinsic_abs_typing w ca flag Hwta Hbwa Hlfa Hfka_b)
+      as (Hwt_ce & Hbw_ce & Hlf_ce & Hfk_nil & Hsub).
+    assert (Hext_ce : incl (collect_free_vars [] ce) ext_vars)
+      by (intros x Hx; exact (Hfva_e x (Hsub x Hx))).
+    pose proof (wf_smap_entries_add ext_vars defs seen_a false smap0 id w ce Hsmap_ext_a
+                  Hid Hwt_ce Hbw_ce Hlf_ce Hext_ce (fun H => match H with end)) as Hwfs1.
+    assert (Hpe1 : forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+      exists dv, nth_error vs idx = Some dv /\ RM.find r (RM.add id dv_out env0) = Some dv).
+    { intros idx r Hnth Hnin; destruct (Hpe idx r Hnth Hnin) as [dv [Hv Hfe]].
+      exists dv; split; [exact Hv | rewrite RMF.F.add_neq_o; [exact Hfe | intros ->; exact (Hnin Hid)]]. }
+    pose proof (env_matches_smap_add defs (build_param_env src_pnames vs) foracle smap0 env0
+                  id w ce dv_out Henv Hid Hev_ce Hsc_out) as Henv1.
+    destruct (IH ext_vars (RM.add id (w, ce) smap0) (RM.add id dv_out env0) seen_a
+                cevals_r smap2 seen2
+                (fun iid' ins' md' idx d Hin_i => Hpu iid' ins' md' idx d (or_intror Hin_i))
+                Hpe1 Hwfs1 Henv1 Hrr)
+      as (draws2 & Hfa2 & [[Hub2 Hev_ub2] | (env2 & Hpe2 & Henv2 & Hev_k & Hst2)]).
+    + exists (draws0 ++ draws2); split.
+      { apply Forall_app; split; assumption. }
+      left; split.
+      * intros tail_s; rewrite chain_draws_app; unfold denote_code; cbn [loop_monad].
+        eapply cfg_steps_to_ub_bind_r.
+        -- eapply cfg_steps_pure_int_intrinsic_abs_ret;
+             [reflexivity | exact Hp_intr | exact Hargs | exact Hflag | exact Hfa | exact Hra | exact Hmr
+             | exact (Hst0 (chain_draws draws2 tail_s)) | exact Hpi].
+        -- exact (Hub2 tail_s).
+      * intros k; cbn [wrap_evals eval_cfg_dag]; fold ce; rewrite Hev_ce; exact (Hev_ub2 k).
+    + exists (draws0 ++ draws2); split.
+      { apply Forall_app; split; assumption. }
+      right; exists env2.
+      split; [exact Hpe2 | split; [exact Henv2 | split]].
+      * intros k; cbn [wrap_evals eval_cfg_dag]; fold ce; rewrite Hev_ce; exact (Hev_k k).
+      * intros tail_s; rewrite chain_draws_app; unfold denote_code; cbn [loop_monad].
+        eapply cfg_steps_to_ret_bind.
+        -- eapply cfg_steps_pure_int_intrinsic_abs_ret;
+             [reflexivity | exact Hp_intr | exact Hargs | exact Hflag | exact Hfa | exact Hra | exact Hmr
+             | exact (Hst0 (chain_draws draws2 tail_s)) | exact Hpi].
+        -- exact (Hst2 tail_s).
 Qed.
 
 Lemma eval_reified_code_single_src {Pa : Params} :
@@ -2144,79 +2735,22 @@ Proof.
   intros [[iid ins] md] rest1 params src_pnames defs allowed arg_dtys vs foracle smap0 env0 seen0
     opt_ev smap1 seen1 cevals_r cevals smap2 seen2
     IH Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hstep Hrr ->.
-  cbn [reify_code_step] in Hstep.
-  destruct iid as [id | vid]; [destruct ins; try discriminate | destruct ins; try discriminate].
-  - destruct (raw_id_in_list id defs) eqn:Hid; [| discriminate].
-    apply raw_id_in_list_spec in Hid.
-    destruct (reify_exp false params src_pnames defs smap0 seen0 None op)
-      as [[[w ce] seen1'] |] eqn:Hre; [| discriminate].
-    inversion Hstep; subst opt_ev smap1 seen1'; clear Hstep.
-    destruct (eval_reified_exp_src op params src_pnames defs allowed arg_dtys vs foracle smap0 env0 seen0
-                None w ce seen1 Hnd Hlp Hls Hla Hvs
-                (fun idx d Hin => Hpu (IId id) (INSTR_Op op) md idx d (or_introl eq_refl) Hin)
-                Hpe Hwfs Henv Hre)
-      as (draws1 & Hfa1 & [[Hub1 [msg1 Hev1]] | [dv1 [Hev1 [Hsc1 Hst1]]]]).
-    + exists draws1; split; [exact Hfa1 | left; split].
-      * intros tail_s; unfold denote_code; cbn [loop_monad denote_instr]; unfold denote_exp'.
-        apply cfg_steps_to_ub_bind_l, cfg_steps_to_ub_bind_l, mcfg_to_cfg_steps_ub; exact (Hub1 tail_s).
-      * intros k; cbn [wrap_evals eval_cfg_dag]; rewrite Hev1; reflexivity.
-    + set (ext_vars :=
-        allowed ++
-        List.flat_map (fun '(idx, dt_u) =>
-          match dt_u, nth_error src_pnames idx with
-          | DTYPE_Base (DTYPE_I w0), Some pnm => [(pnm, w0)]
-          | _, _ => []
-          end) (exp_param_uses params defs None op)).
-      assert (Hsmap_ext : wf_smap_entries ext_vars defs seen0 false smap0).
-      { intros r0 wr0 cer0 Hf0; destruct (Hwfs r0 wr0 cer0 Hf0) as (H1 & H2 & H3 & H4 & H5 & H6).
-        repeat split; try assumption; intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
-      assert (Hpu_ext : forall idx w0 pnm,
-        In (idx, DTYPE_Base (DTYPE_I w0)) (exp_param_uses params defs None op) ->
-        nth_error src_pnames idx = Some pnm -> In (pnm, w0) ext_vars).
-      { intros idx w0 pnm Hin Hpnm; apply in_app_iff; right; apply in_flat_map.
-        exists (idx, DTYPE_Base (DTYPE_I w0)); split; [exact Hin | rewrite Hpnm; left; reflexivity]. }
-      destruct (reify_exp_typing op false params src_pnames defs ext_vars smap0 seen0 None w ce seen1
-                  Hsmap_ext Hpu_ext Hre)
-        as (_ & Hwt_ce & Hbw_ce & Hlf_ce & Hfv_ce & Hinc01 & Hfk_ce).
-      pose proof (wf_smap_entries_seen_mono ext_vars defs seen0 seen1 false smap0 Hinc01 Hsmap_ext) as Hsmap_ext1.
-      pose proof (wf_smap_entries_add ext_vars defs seen1 false smap0 id w ce Hsmap_ext1
-                    Hid Hwt_ce Hbw_ce Hlf_ce Hfv_ce Hfk_ce) as Hwfs1.
-      assert (Hpe1 : forall idx r, nth_error params idx = Some r -> ~ In r defs ->
-        exists dv, nth_error vs idx = Some dv /\ RM.find r (RM.add id dv1 env0) = Some dv).
-      { intros idx r Hnth Hnin; destruct (Hpe idx r Hnth Hnin) as [dv [Hv Hfe]].
-        exists dv; split; [exact Hv | rewrite RMF.F.add_neq_o; [exact Hfe | intros ->; exact (Hnin Hid)]]. }
-      pose proof (env_matches_smap_add defs (build_param_env src_pnames vs) foracle smap0 env0
-                    id w ce dv1 Henv Hid Hev1 Hsc1) as Henv1.
-      destruct (IH ext_vars (RM.add id (w, ce) smap0) (RM.add id dv1 env0) seen1 cevals_r smap2 seen2
-                  (fun iid' ins' md' idx d Hin_i => Hpu iid' ins' md' idx d (or_intror Hin_i))
-                  Hpe1 Hwfs1 Henv1 Hrr)
-        as (draws2 & Hfa2 & [[Hub2 Hev_ub2] | (env2 & Hpe2 & Henv2 & Hev_k & Hst2)]).
-      * exists (draws1 ++ draws2); split; [apply Forall_app; split; assumption | left; split].
-        -- intros tail_s; rewrite chain_draws_app; unfold denote_code; cbn [loop_monad denote_instr]; unfold denote_exp'.
-           eapply cfg_steps_to_ub_bind_r.
-           ++ eapply cfg_steps_to_ret_bind;
-                [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ (Hst1 (chain_draws draws2 tail_s))) |].
-              eapply cfg_steps_to_ret_bind; [apply cfg_steps_lwrite | apply CSR_Ret; reflexivity].
-           ++ exact (Hub2 tail_s).
-        -- intros k; cbn [wrap_evals eval_cfg_dag]; rewrite Hev1; exact (Hev_ub2 k).
-      * exists (draws1 ++ draws2); split; [apply Forall_app; split; assumption | right; exists env2].
-        split; [exact Hpe2 | split; [exact Henv2 | split]].
-        -- intros k; cbn [wrap_evals eval_cfg_dag]; rewrite Hev1; exact (Hev_k k).
-        -- intros tail_s; rewrite chain_draws_app; unfold denote_code; cbn [loop_monad denote_instr]; unfold denote_exp'.
-           eapply cfg_steps_to_ret_bind.
-           ++ eapply cfg_steps_to_ret_bind;
-                [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ (Hst1 (chain_draws draws2 tail_s))) |].
-              eapply cfg_steps_to_ret_bind; [apply cfg_steps_lwrite | apply CSR_Ret; reflexivity].
-           ++ exact (Hst2 tail_s).
+  destruct iid as [id | vid]; [destruct ins; try (cbn [reify_code_step] in Hstep; discriminate)
+                              | destruct ins; try (cbn [reify_code_step] in Hstep; discriminate)].
+  - exact (eval_reified_code_single_src_op id op md rest1 params src_pnames defs allowed arg_dtys vs foracle
+             smap0 env0 seen0 opt_ev smap1 seen1 cevals_r smap2 seen2
+             IH Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hstep Hrr).
   - set (ins := INSTR_Call fn args anns obs) in Hstep |- *.
     destruct (raw_id_in_list id defs &&
               match metadata_range md with None => true | Some _ => false end) eqn:Hhdr;
-      [| discriminate].
+      [| cbn [reify_code_step] in Hstep; unfold ins in Hstep; rewrite Hhdr in Hstep; discriminate].
     apply andb_true_iff in Hhdr as [Hid Hmr_b]; apply raw_id_in_list_spec in Hid.
-    assert (Hmr : metadata_range md = None) by (destruct (metadata_range md); [discriminate | reflexivity]).
-    destruct (match_pure_int_intrinsic_call ins) as [pic |] eqn:Hpic; [| discriminate].
+    assert (Hmr : metadata_range md = None) by (destruct (metadata_range md); [discriminate Hmr_b | reflexivity]).
+    destruct (match_pure_int_intrinsic_call ins) as [pic |] eqn:Hpic;
+      [| cbn [reify_code_step] in Hstep; unfold ins in Hstep; fold ins in Hstep;
+         rewrite (proj2 (raw_id_in_list_spec id defs) Hid), Hmr, Hpic in Hstep; discriminate].
     pose proof (match_pure_int_intrinsic_call_inv ins pic Hpic) as Hpic_inv.
-    unfold ins in Hpic, Hpic_inv;
+    unfold ins in Hstep, Hpic, Hpic_inv |- *; clear ins.
     destruct pic as [op w a0 a1 | w a0 flag];
       destruct fn as [dt_fn fn_e]; destruct fn_e; cbn in Hpic_inv; try contradiction Hpic_inv;
       match type of Hpic_inv with
@@ -2230,222 +2764,16 @@ Proof.
       destruct obs; cbn in Hpic_inv; try contradiction Hpic_inv;
       destruct Hpic_inv as (Hdt_fn & Hp_intr & Hpic_rest); subst dt_fn.
     + destruct Hpic_rest as (Hop_neq & Hargs & Hfa & Hra).
-      destruct (reify_exp false params src_pnames defs smap0 seen0 (Some (DTYPE_Base (DTYPE_I w))) a0)
-        as [[[wa0 ca] seen_a] |] eqn:Hra0; [| discriminate].
-      destruct (reify_exp false params src_pnames defs smap0 seen_a (Some (DTYPE_Base (DTYPE_I w))) a1)
-        as [[[wa1 cb] seen_b] |] eqn:Hra1; [| discriminate].
-      destruct (list_empty_b (collect_freeze_keys ca) && list_empty_b (collect_freeze_keys cb)) eqn:Hfk01;
-        [| discriminate].
-      apply andb_true_iff in Hfk01 as [Hfka_b Hfkb_b].
-      apply list_empty_b_spec in Hfka_b; apply list_empty_b_spec in Hfkb_b.
-      inversion Hstep; subst opt_ev smap1 seen1; clear Hstep.
-      assert (Hpua0 : forall idx dt_u,
-        In (idx, dt_u) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a0) ->
-        nth_error arg_dtys idx = Some dt_u).
-      { intros idx dt_u Hin; eapply Hpu; [left; reflexivity |].
-        unfold instr_param_uses; rewrite Hpic; apply in_app_iff; left; exact Hin. }
-      assert (Hpua1 : forall idx dt_u,
-        In (idx, dt_u) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a1) ->
-        nth_error arg_dtys idx = Some dt_u).
-      { intros idx dt_u Hin; eapply Hpu; [left; reflexivity |].
-        unfold instr_param_uses; rewrite Hpic; apply in_app_iff; right; exact Hin. }
-      set (ext_vars :=
-        allowed ++
-        List.flat_map (fun '(idx, dt_u) =>
-          match dt_u, nth_error src_pnames idx with
-          | DTYPE_Base (DTYPE_I w0), Some pnm => [(pnm, w0)]
-          | _, _ => []
-          end) (instr_param_uses params defs (INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns []))).
-      assert (Hsmap_ext : wf_smap_entries ext_vars defs seen0 false smap0).
-      { intros r0 wr0 cer0 Hf0; destruct (Hwfs r0 wr0 cer0 Hf0) as (H1 & H2 & H3 & H4 & H5 & H6).
-        repeat split; try assumption; intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
-      assert (Hpua0_ext : forall idx w0 pnm,
-        In (idx, DTYPE_Base (DTYPE_I w0)) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a0) ->
-        nth_error src_pnames idx = Some pnm -> In (pnm, w0) ext_vars).
-      { intros idx w0 pnm Hin Hpnm; apply in_app_iff; right; apply in_flat_map.
-        exists (idx, DTYPE_Base (DTYPE_I w0)); split;
-          [unfold instr_param_uses; rewrite Hpic; apply in_app_iff; left; exact Hin | rewrite Hpnm; left; reflexivity]. }
-      assert (Hpua1_ext : forall idx w0 pnm,
-        In (idx, DTYPE_Base (DTYPE_I w0)) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a1) ->
-        nth_error src_pnames idx = Some pnm -> In (pnm, w0) ext_vars).
-      { intros idx w0 pnm Hin Hpnm; apply in_app_iff; right; apply in_flat_map.
-        exists (idx, DTYPE_Base (DTYPE_I w0)); split;
-          [unfold instr_param_uses; rewrite Hpic; apply in_app_iff; right; exact Hin | rewrite Hpnm; left; reflexivity]. }
-      destruct (reify_exp_typing a0 false params src_pnames defs ext_vars smap0 seen0
-                  (Some (DTYPE_Base (DTYPE_I w))) wa0 ca seen_a Hsmap_ext Hpua0_ext Hra0)
-        as (Htopa & Hwta & Hbwa & Hlfa & _ & Hinca & _).
-      apply check_opt_int_width_some_inv in Htopa; subst wa0.
-      pose proof (wf_smap_entries_seen_mono ext_vars defs seen0 seen_a false smap0 Hinca Hsmap_ext) as Hsmap_ext_a.
-      destruct (reify_exp_typing a1 false params src_pnames defs ext_vars smap0 seen_a
-                  (Some (DTYPE_Base (DTYPE_I w))) wa1 cb seen_b Hsmap_ext_a Hpua1_ext Hra1)
-        as (Htopb & Hwtb & Hbwb & Hlfb & _ & Hincb & _).
-      apply check_opt_int_width_some_inv in Htopb; subst wa1.
-      pose proof (wf_smap_entries_seen_mono allowed defs seen0 seen_a false smap0 Hinca Hwfs) as Hwfs_a.
-      destruct (eval_reified_exp_src a0 params src_pnames defs allowed arg_dtys vs foracle smap0 env0 seen0
-                  (Some (DTYPE_Base (DTYPE_I w))) w ca seen_a Hnd Hlp Hls Hla Hvs Hpua0 Hpe Hwfs Henv Hra0)
-        as (draws0 & Hfa0 & [[Hub0 [msg0 Hev0]] | [dv0 [Hev0 [Hsc0 Hst0]]]]).
-      * exists draws0; split; [exact Hfa0 | left; split].
-        -- intros tail_s; unfold denote_code; cbn [loop_monad].
-           exact (cfg_steps_pure_int_intrinsic_binop_ub0 (chain_draws draws0 tail_s) env0 id (DTYPE_Base (DTYPE_I w))
-                    (EXP_Ident (ID_Global (Name fname))) args anns md w a0 a1 None rest1 Hargs (Hub0 tail_s)).
-        -- intros k; cbn [wrap_evals eval_cfg_dag].
-           destruct (lower_pure_int_intrinsic_binop_ub_l op w ca cb
-                       (build_param_env src_pnames vs) foracle msg0 Hop_neq Hev0) as [msg' Hev'].
-           rewrite Hev'; reflexivity.
-      * destruct (eval_reified_exp_src a1 params src_pnames defs allowed arg_dtys vs foracle smap0 env0 seen_a
-                    (Some (DTYPE_Base (DTYPE_I w))) w cb seen_b Hnd Hlp Hls Hla Hvs Hpua1 Hpe Hwfs_a Henv Hra1)
-          as (draws1 & Hfa1 & [[Hub1 [msg1 Hev1]] | [dv1 [Hev1 [Hsc1 Hst1]]]]).
-        -- exists (draws0 ++ draws1); split; [apply Forall_app; split; assumption | left; split].
-           ++ intros tail_s; rewrite chain_draws_app; unfold denote_code; cbn [loop_monad].
-              exact (cfg_steps_pure_int_intrinsic_binop_ub1
-                       (chain_draws draws0 (chain_draws draws1 tail_s))
-                       (chain_draws draws1 tail_s) env0 id (DTYPE_Base (DTYPE_I w))
-                       (EXP_Ident (ID_Global (Name fname))) args anns md w a0 a1 dv0 None rest1
-                       Hargs (Hst0 (chain_draws draws1 tail_s)) (Hub1 tail_s)).
-           ++ intros k; cbn [wrap_evals eval_cfg_dag].
-              destruct (lower_pure_int_intrinsic_binop_ub_r op w ca cb
-                          (build_param_env src_pnames vs) foracle dv0 msg1 Hop_neq Hev0 Hev1) as [msg' Hev'].
-              rewrite Hev'; reflexivity.
-        -- destruct (pure_int_intrinsic_binop_eval_helpers op w ca cb
-                       (build_param_env src_pnames vs) foracle dv0 dv1 Hop_neq Hsc0 Hsc1 Hev0 Hev1)
-             as (dv_out & Hpi & Hev_ce & Hsc_out).
-           pose proof (wf_smap_entries_seen_mono ext_vars defs seen0 seen_b false smap0
-                         (fun x Hx => Hincb x (Hinca x Hx)) Hsmap_ext) as Hsmap_ext_b.
-           set (ce := lower_pure_int_intrinsic_binop op w ca cb).
-           fold ce in Hev_ce.
-           assert (Hext_ce : incl (collect_free_vars [] ce) ext_vars).
-           { pose proof (reify_exp_typing a0 false params src_pnames defs ext_vars smap0 seen0
-                           (Some (DTYPE_Base (DTYPE_I w))) w ca seen_a Hsmap_ext Hpua0_ext Hra0)
-               as (_ & _ & _ & _ & Hfva_e & _).
-             pose proof (reify_exp_typing a1 false params src_pnames defs ext_vars smap0 seen_a
-                           (Some (DTYPE_Base (DTYPE_I w))) w cb seen_b Hsmap_ext_a Hpua1_ext Hra1)
-               as (_ & _ & _ & _ & Hfvb_e & _).
-             destruct (lower_pure_int_intrinsic_binop_typing op w ca cb
-                         Hwta Hbwa Hlfa Hfka_b Hwtb Hbwb Hlfb Hfkb_b) as (_ & _ & _ & _ & Hsub).
-             intros x Hx; apply Hsub, in_app_iff in Hx as [Hx | Hx];
-               [exact (Hfva_e x Hx) | exact (Hfvb_e x Hx)]. }
-           destruct (lower_pure_int_intrinsic_binop_typing op w ca cb
-                       Hwta Hbwa Hlfa Hfka_b Hwtb Hbwb Hlfb Hfkb_b)
-             as (Hwt_ce & Hbw_ce & Hlf_ce & Hfk_nil & _).
-           pose proof (wf_smap_entries_add ext_vars defs seen_b false smap0 id w ce Hsmap_ext_b
-                         Hid Hwt_ce Hbw_ce Hlf_ce Hext_ce (fun H => match H with end)) as Hwfs1.
-           assert (Hpe1 : forall idx r, nth_error params idx = Some r -> ~ In r defs ->
-             exists dv, nth_error vs idx = Some dv /\ RM.find r (RM.add id dv_out env0) = Some dv).
-           { intros idx r Hnth Hnin; destruct (Hpe idx r Hnth Hnin) as [dv [Hv Hfe]].
-             exists dv; split; [exact Hv | rewrite RMF.F.add_neq_o; [exact Hfe | intros ->; exact (Hnin Hid)]]. }
-           pose proof (env_matches_smap_add defs (build_param_env src_pnames vs) foracle smap0 env0
-                         id w ce dv_out Henv Hid Hev_ce Hsc_out) as Henv1.
-           destruct (IH ext_vars (RM.add id (w, ce) smap0) (RM.add id dv_out env0) seen_b
-                       cevals_r smap2 seen2
-                       (fun iid' ins' md' idx d Hin_i => Hpu iid' ins' md' idx d (or_intror Hin_i))
-                       Hpe1 Hwfs1 Henv1 Hrr)
-             as (draws2 & Hfa2 & [[Hub2 Hev_ub2] | (env2 & Hpe2 & Henv2 & Hev_k & Hst2)]).
-           ++ exists (draws0 ++ draws1 ++ draws2); split;
-                [apply Forall_app; split; [exact Hfa0 | apply Forall_app; split; assumption] | left; split].
-              ** intros tail_s; rewrite !chain_draws_app; unfold denote_code; cbn [loop_monad].
-                 eapply cfg_steps_to_ub_bind_r.
-                 --- unfold ins; eapply cfg_steps_pure_int_intrinsic_binop_ret;
-                       [reflexivity | exact Hp_intr | exact Hargs | exact Hfa | exact Hra | exact Hmr
-                       | exact (Hst0 (chain_draws draws1 (chain_draws draws2 tail_s)))
-                       | exact (Hst1 (chain_draws draws2 tail_s))
-                       | exact Hpi].
-                 --- exact (Hub2 tail_s).
-              ** intros k; cbn [wrap_evals eval_cfg_dag]; fold ce; rewrite Hev_ce; exact (Hev_ub2 k).
-           ++ exists (draws0 ++ draws1 ++ draws2); split;
-                [apply Forall_app; split; [exact Hfa0 | apply Forall_app; split; assumption] | right; exists env2].
-              split; [exact Hpe2 | split; [exact Henv2 | split]].
-              ** intros k; cbn [wrap_evals eval_cfg_dag]; fold ce; rewrite Hev_ce; exact (Hev_k k).
-              ** intros tail_s; rewrite !chain_draws_app; unfold denote_code; cbn [loop_monad].
-                 eapply cfg_steps_to_ret_bind.
-                 --- unfold ins; eapply cfg_steps_pure_int_intrinsic_binop_ret;
-                       [reflexivity | exact Hp_intr | exact Hargs | exact Hfa | exact Hra | exact Hmr
-                       | exact (Hst0 (chain_draws draws1 (chain_draws draws2 tail_s)))
-                       | exact (Hst1 (chain_draws draws2 tail_s))
-                       | exact Hpi].
-                 --- exact (Hst2 tail_s).
+      exact (eval_reified_code_single_src_intrinsic_binop id fname args anns md op w a0 a1 rest1
+               params src_pnames defs allowed arg_dtys vs foracle smap0 env0 seen0 opt_ev smap1 seen1
+               cevals_r smap2 seen2 IH Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hid Hmr Hp_intr Hop_neq
+               Hargs Hfa Hra Hpic Hstep Hrr).
     + destruct Hpic_rest as (a1 & Hargs & Hflag & Hfa & Hra).
-      destruct (reify_exp false params src_pnames defs smap0 seen0 (Some (DTYPE_Base (DTYPE_I w))) a0)
-        as [[[wa0 ca] seen_a] |] eqn:Hra0; [| discriminate].
-      destruct (list_empty_b (collect_freeze_keys ca)) eqn:Hfka_b; [| discriminate].
-      apply list_empty_b_spec in Hfka_b.
-      inversion Hstep; subst opt_ev smap1 seen1; clear Hstep.
-      assert (Hpua0 : forall idx dt_u,
-        In (idx, dt_u) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a0) ->
-        nth_error arg_dtys idx = Some dt_u).
-      { intros idx dt_u Hin; eapply Hpu; [left; reflexivity |].
-        unfold instr_param_uses; rewrite Hpic; exact Hin. }
-      set (ext_vars :=
-        allowed ++
-        List.flat_map (fun '(idx, dt_u) =>
-          match dt_u, nth_error src_pnames idx with
-          | DTYPE_Base (DTYPE_I w0), Some pnm => [(pnm, w0)]
-          | _, _ => []
-          end) (instr_param_uses params defs (INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns []))).
-      assert (Hsmap_ext : wf_smap_entries ext_vars defs seen0 false smap0).
-      { intros r0 wr0 cer0 Hf0; destruct (Hwfs r0 wr0 cer0 Hf0) as (H1 & H2 & H3 & H4 & H5 & H6).
-        repeat split; try assumption; intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
-      assert (Hpua0_ext : forall idx w0 pnm,
-        In (idx, DTYPE_Base (DTYPE_I w0)) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a0) ->
-        nth_error src_pnames idx = Some pnm -> In (pnm, w0) ext_vars).
-      { intros idx w0 pnm Hin Hpnm; apply in_app_iff; right; apply in_flat_map.
-        exists (idx, DTYPE_Base (DTYPE_I w0)); split;
-          [unfold instr_param_uses; rewrite Hpic; exact Hin | rewrite Hpnm; left; reflexivity]. }
-      destruct (reify_exp_typing a0 false params src_pnames defs ext_vars smap0 seen0
-                  (Some (DTYPE_Base (DTYPE_I w))) wa0 ca seen_a Hsmap_ext Hpua0_ext Hra0)
-        as (Htopa & Hwta & Hbwa & Hlfa & Hfva_e & Hinca & _).
-      apply check_opt_int_width_some_inv in Htopa; subst wa0.
-      destruct (eval_reified_exp_src a0 params src_pnames defs allowed arg_dtys vs foracle smap0 env0 seen0
-                  (Some (DTYPE_Base (DTYPE_I w))) w ca seen_a Hnd Hlp Hls Hla Hvs Hpua0 Hpe Hwfs Henv Hra0)
-        as (draws0 & Hfa0 & [[Hub0 [msg0 Hev0]] | [dv0 [Hev0 [Hsc0 Hst0]]]]).
-      * exists draws0; split; [exact Hfa0 | left; split].
-        -- intros tail_s; unfold denote_code; cbn [loop_monad].
-           exact (cfg_steps_pure_int_intrinsic_abs_ub0 (chain_draws draws0 tail_s) env0 id (DTYPE_Base (DTYPE_I w))
-                    (EXP_Ident (ID_Global (Name fname))) args anns md w a0 a1 None rest1 Hargs (Hub0 tail_s)).
-        -- intros k; cbn [wrap_evals eval_cfg_dag].
-           destruct (lower_pure_int_intrinsic_abs_ub w ca flag
-                       (build_param_env src_pnames vs) foracle msg0 Hev0) as [msg' Hev'].
-           rewrite Hev'; reflexivity.
-      * destruct (pure_int_intrinsic_abs_eval_helper w ca flag
-                    (build_param_env src_pnames vs) foracle dv0 Hsc0 Hev0)
-          as (dv_out & Hpi & Hev_ce & Hsc_out).
-        pose proof (wf_smap_entries_seen_mono ext_vars defs seen0 seen_a false smap0 Hinca Hsmap_ext) as Hsmap_ext_a.
-        set (ce := lower_pure_int_intrinsic_abs w ca flag).
-        fold ce in Hev_ce.
-        destruct (lower_pure_int_intrinsic_abs_typing w ca flag Hwta Hbwa Hlfa Hfka_b)
-          as (Hwt_ce & Hbw_ce & Hlf_ce & Hfk_nil & Hsub).
-        assert (Hext_ce : incl (collect_free_vars [] ce) ext_vars)
-          by (intros x Hx; exact (Hfva_e x (Hsub x Hx))).
-        pose proof (wf_smap_entries_add ext_vars defs seen_a false smap0 id w ce Hsmap_ext_a
-                      Hid Hwt_ce Hbw_ce Hlf_ce Hext_ce (fun H => match H with end)) as Hwfs1.
-        assert (Hpe1 : forall idx r, nth_error params idx = Some r -> ~ In r defs ->
-          exists dv, nth_error vs idx = Some dv /\ RM.find r (RM.add id dv_out env0) = Some dv).
-        { intros idx r Hnth Hnin; destruct (Hpe idx r Hnth Hnin) as [dv [Hv Hfe]].
-          exists dv; split; [exact Hv | rewrite RMF.F.add_neq_o; [exact Hfe | intros ->; exact (Hnin Hid)]]. }
-        pose proof (env_matches_smap_add defs (build_param_env src_pnames vs) foracle smap0 env0
-                      id w ce dv_out Henv Hid Hev_ce Hsc_out) as Henv1.
-        destruct (IH ext_vars (RM.add id (w, ce) smap0) (RM.add id dv_out env0) seen_a
-                    cevals_r smap2 seen2
-                    (fun iid' ins' md' idx d Hin_i => Hpu iid' ins' md' idx d (or_intror Hin_i))
-                    Hpe1 Hwfs1 Henv1 Hrr)
-          as (draws2 & Hfa2 & [[Hub2 Hev_ub2] | (env2 & Hpe2 & Henv2 & Hev_k & Hst2)]).
-        -- exists (draws0 ++ draws2); split; [apply Forall_app; split; assumption | left; split].
-           ++ intros tail_s; rewrite chain_draws_app; unfold denote_code; cbn [loop_monad].
-              eapply cfg_steps_to_ub_bind_r.
-              ** unfold ins; eapply cfg_steps_pure_int_intrinsic_abs_ret;
-                   [reflexivity | exact Hp_intr | exact Hargs | exact Hflag | exact Hfa | exact Hra | exact Hmr
-                   | exact (Hst0 (chain_draws draws2 tail_s)) | exact Hpi].
-              ** exact (Hub2 tail_s).
-           ++ intros k; cbn [wrap_evals eval_cfg_dag]; fold ce; rewrite Hev_ce; exact (Hev_ub2 k).
-        -- exists (draws0 ++ draws2); split; [apply Forall_app; split; assumption | right; exists env2].
-           split; [exact Hpe2 | split; [exact Henv2 | split]].
-           ++ intros k; cbn [wrap_evals eval_cfg_dag]; fold ce; rewrite Hev_ce; exact (Hev_k k).
-           ++ intros tail_s; rewrite chain_draws_app; unfold denote_code; cbn [loop_monad].
-              eapply cfg_steps_to_ret_bind.
-              ** unfold ins; eapply cfg_steps_pure_int_intrinsic_abs_ret;
-                   [reflexivity | exact Hp_intr | exact Hargs | exact Hflag | exact Hfa | exact Hra | exact Hmr
-                   | exact (Hst0 (chain_draws draws2 tail_s)) | exact Hpi].
-              ** exact (Hst2 tail_s).
-  - inversion Hstep; subst opt_ev smap1 seen1; clear Hstep.
+      exact (eval_reified_code_single_src_intrinsic_abs id fname args anns md w a0 a1 flag rest1
+               params src_pnames defs allowed arg_dtys vs foracle smap0 env0 seen0 opt_ev smap1 seen1
+               cevals_r smap2 seen2 IH Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hid Hmr Hp_intr Hargs
+               Hflag Hfa Hra Hpic Hstep Hrr).
+  - cbn [reify_code_step] in Hstep; inversion Hstep; subst opt_ev smap1 seen1; clear Hstep.
     destruct (IH allowed smap0 env0 seen0 cevals_r smap2 seen2
                 (fun iid' ins' md' idx d Hin_i => Hpu iid' ins' md' idx d (or_intror Hin_i))
                 Hpe Hwfs Henv Hrr)
@@ -2498,7 +2826,9 @@ Proof.
            Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr.
   - cbn [reify_code] in Hr; inversion Hr; subst cevals smap2 seen2.
     exists []; split; [constructor | right; exists env0].
-    split; [exact Hpe | split; [exact Henv | split; [intros k; reflexivity | intros tail_s; apply CSR_Ret; reflexivity]]].
+    split; [exact Hpe |].
+    split; [exact Henv |].
+    split; [intros k; reflexivity | intros tail_s; apply CSR_Ret; reflexivity].
   - cbn [reify_code] in Hr; destruct (reify_code_step false params src_pnames defs smap0 seen0 i1)
       as [[[opt_ev smap1] seen1] |] eqn:Hstep; [| discriminate].
     assert (Hrr : reify_code false params src_pnames defs smap1 seen1 [] = Some ([], smap1, seen1))
@@ -2510,7 +2840,9 @@ Proof.
     intros allowed' smap0' env0' seen0' cevals' smap2' seen2' _ Hpe' _ Henv' Hr'.
     cbn [reify_code] in Hr'; inversion Hr'; subst.
     exists []; split; [constructor | right; exists env0'].
-    split; [exact Hpe' | split; [exact Henv' | split; [intros k; reflexivity | intros tail_s; apply CSR_Ret; reflexivity]]].
+    split; [exact Hpe' |].
+    split; [exact Henv' |].
+    split; [intros k; reflexivity | intros tail_s; apply CSR_Ret; reflexivity].
   - rewrite reify_code_unfold_pair in Hr.
     destruct (match_vec1_id_pair smap0 defs params i1 i2)
       as [[[[[tmp dst] w1] val_exp] kind] |] eqn:Hvec; cbv iota beta zeta in Hr.
@@ -2528,7 +2860,8 @@ Proof.
         nth_error arg_dtys idx = Some dt_u).
       { intros idx dt_u Hin.
         eapply Hpu; [left; rewrite Hi1; reflexivity |].
-        cbn [instr_param_uses exp_param_uses]; apply in_app_iff; right; apply in_app_iff; left; exact Hin. }
+        cbn [instr_param_uses exp_param_uses].
+        apply in_app_iff; right; apply in_app_iff; left; exact Hin. }
       destruct (eval_reified_exp_src val_exp params src_pnames defs allowed arg_dtys vs foracle smap0 env0 seen0
                   (Some (DTYPE_Base (DTYPE_I w))) w ce seen1 Hnd Hlp Hls Hla Hvs Hpu_val Hpe Hwfs Henv Hre)
         as (draws1 & Hfa1 & [[Hub1 [msg1 Hev1]] | [dv1 [Hev1 [Hsc1 Hst1]]]]).
@@ -2544,7 +2877,8 @@ Proof.
             end) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) val_exp)).
         assert (Hsmap_ext : wf_smap_entries ext_vars defs seen0 false smap0).
         { intros r0 wr0 cer0 Hf0; destruct (Hwfs r0 wr0 cer0 Hf0) as (H1 & H2 & H3 & H4 & H5 & H6).
-          repeat split; try assumption; intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
+          repeat split; try assumption.
+          intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
         assert (Hpu_ext : forall idx w0 pnm,
           In (idx, DTYPE_Base (DTYPE_I w0)) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) val_exp) ->
           nth_error src_pnames idx = Some pnm -> In (pnm, w0) ext_vars).
@@ -2574,12 +2908,16 @@ Proof.
                     (fun iid' ins' md' idx d Hin_i => Hpu iid' ins' md' idx d (or_intror (or_intror Hin_i)))
                     Hpe1 Hwfs1 Henv1 Hrr)
           as (draws2 & Hfa2 & [[Hub2 Hev_ub2] | (env2 & Hpe2 & Henv2 & Hev_k & Hst2)]).
-        -- exists (draws1 ++ draws2); split; [apply Forall_app; split; assumption | left; split].
+        -- exists (draws1 ++ draws2); split.
+           { apply Forall_app; split; assumption. }
+           left; split.
            ++ intros tail_s; rewrite chain_draws_app.
               eapply cfg_steps_vec1_pair_ub_rest;
                 [exact Hvec | exact Hsc1 | exact (Hst1 (chain_draws draws2 tail_s)) | exact (Hub2 tail_s)].
            ++ intros k; cbn [wrap_evals eval_cfg_dag]; rewrite Hev1; exact (Hev_ub2 k).
-        -- exists (draws1 ++ draws2); split; [apply Forall_app; split; assumption | right; exists env2].
+        -- exists (draws1 ++ draws2); split.
+           { apply Forall_app; split; assumption. }
+           right; exists env2.
            split; [exact Hpe2 | split; [exact Henv2 | split]].
            ++ intros k; cbn [wrap_evals eval_cfg_dag]; rewrite Hev1; exact (Hev_k k).
            ++ intros tail_s; rewrite chain_draws_app; unfold denote_code; cbn [loop_monad].
@@ -2617,15 +2955,18 @@ Proof.
         end) (instr_param_uses params defs ins)) c).
   assert (Hsmap_ext : wf_smap_entries ext_vars defs seen0 uf smap0).
   { intros r0 wr0 cer0 Hf0; destruct (Hsmap0 r0 wr0 cer0 Hf0) as (H1 & H2 & H3 & H4 & H5 & H6).
-    repeat split; try assumption; intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
+    repeat split; try assumption.
+    intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
   assert (Hpu_ext : forall iid ins md idx w0 pnm,
     In (iid, ins, md) c ->
     In (idx, DTYPE_Base (DTYPE_I w0)) (instr_param_uses params defs ins) ->
     nth_error src_pnames idx = Some pnm ->
     In (pnm, w0) ext_vars).
   { intros iid ins md idx w0 pnm Hin1 Hin2 Hpnm.
-    apply in_app_iff; right; apply in_flat_map; exists (iid, ins, md); split; [exact Hin1 |].
-    apply in_flat_map; exists (idx, DTYPE_Base (DTYPE_I w0)); split; [exact Hin2 | rewrite Hpnm; left; reflexivity]. }
+    apply in_app_iff; right; apply in_flat_map.
+    exists (iid, ins, md); split; [exact Hin1 |].
+    apply in_flat_map; exists (idx, DTYPE_Base (DTYPE_I w0)); split;
+      [exact Hin2 | rewrite Hpnm; left; reflexivity]. }
   destruct (reify_code_typing c uf params src_pnames defs ext_vars smap0 seen0 cevals smap2 seen2
               Hsmap_ext Hpu_ext Hr)
     as (Hinc & Hsmap2 & _).
@@ -2653,7 +2994,8 @@ Proof.
           end) (exp_param_uses params defs (Some dt_p) e_p)) pargs_p) phis).
   assert (Hsmap_ext : wf_smap_entries ext_vars defs seen0 uf smap0).
   { intros r0 wr0 cer0 Hf0; destruct (Hsmap0 r0 wr0 cer0 Hf0) as (H1 & H2 & H3 & H4 & H5 & H6).
-    repeat split; try assumption; intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
+    repeat split; try assumption.
+    intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
   assert (Hpu_ext : forall id' fm' dt' pargs' md' op' idx w0 pnm,
     In (id', Phi fm' dt' pargs', md') phis ->
     In (bid_from, op') pargs' ->
@@ -2661,14 +3003,738 @@ Proof.
     nth_error src_pnames idx = Some pnm ->
     In (pnm, w0) ext_vars).
   { intros id' fm' dt' pargs' md' op' idx w0 pnm Hin1 Hin2 Hin3 Hpnm.
-    apply in_app_iff; right; apply in_flat_map; exists (id', Phi fm' dt' pargs', md'); split; [exact Hin1 |].
+    apply in_app_iff; right; apply in_flat_map.
+    exists (id', Phi fm' dt' pargs', md'); split; [exact Hin1 |].
     apply in_flat_map; exists (bid_from, op'); split; [exact Hin2 |].
-    apply in_flat_map; exists (idx, DTYPE_Base (DTYPE_I w0)); split; [exact Hin3 | rewrite Hpnm; left; reflexivity]. }
+    apply in_flat_map; exists (idx, DTYPE_Base (DTYPE_I w0)); split;
+      [exact Hin3 | rewrite Hpnm; left; reflexivity]. }
   destruct (reify_phi_evals_typing phis uf params src_pnames defs ext_vars smap0 bid_from
               seen0 pevals seen2 Hsmap_ext Hpu_ext Hr)
     as [Hinc Hfa].
   pose proof (wf_smap_entries_seen_mono ext_vars defs seen0 seen2 uf smap0 Hinc Hsmap_ext) as Hsmap2.
   exists ext_vars; split; [exact Hinc | split; [exact Hfa | exact (apply_phi_smap_wf _ _ _ _ _ _ Hsmap2 Hfa)]].
+Qed.
+
+Local Lemma eval_reified_code_single_tgt_op {Pa : Params} :
+  forall id op md rest1 params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+         (sigma0 : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+         smap0 (env0 : rmap (@dvalue Pa)) seen0 opt_ev smap1 seen1 cevals_r smap2 seen2,
+    (forall allowed' sigma' fmap' smap' env' seen' cevals' smap2' seen2',
+      (forall iid ins md' idx dt_u,
+        In (iid, ins, md') rest1 ->
+        In (idx, dt_u) (instr_param_uses params defs ins) ->
+        nth_error arg_dtys idx = Some dt_u) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env' = Some dv) ->
+      wf_draw_strat sigma' ->
+      wf_smap_entries allowed' defs seen' true smap' ->
+      env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap') smap' env' ->
+      reify_code true params src_pnames defs smap' seen' rest1 = Some (cevals', smap2', seen2') ->
+      exists added : list (freeze_key * Z),
+        (forall key z, In (key, z) added -> In key seen2' /\ ~ In key seen') /\
+        ((forall k,
+            eval_cfg_dag (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap')) (wrap_evals cevals' k) = DO_UB) \/
+         (exists sigma2 env2,
+            wf_draw_strat sigma2 /\
+            (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+               exists dv, nth_error vs idx = Some dv /\ RM.find r env2 = Some dv) /\
+            env_matches_smap defs (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap')) smap2' env2 /\
+            (forall fmap_later k,
+               (forall key z, In (key, z) fmap_later -> ~ In key seen2') ->
+               eval_cfg_dag (build_param_env src_pnames vs)
+                 (oracle_of_fmap (fmap_later ++ added ++ fmap')) (wrap_evals cevals' k) =
+               eval_cfg_dag (build_param_env src_pnames vs)
+                 (oracle_of_fmap (fmap_later ++ added ++ fmap')) k) /\
+            cfg_steps_to_ret sigma' env' (denote_code rest1 None) sigma2 env2 tt))) ->
+    NoDup src_pnames ->
+    List.length params = List.length vs ->
+    List.length src_pnames = List.length vs ->
+    List.length arg_dtys = List.length params ->
+    Forall2 dvalue_has_dtyp vs arg_dtys ->
+    (forall iid ins md' idx dt_u,
+      In (iid, ins, md') ((IId id, INSTR_Op op, md) :: rest1) ->
+      In (idx, dt_u) (instr_param_uses params defs ins) ->
+      nth_error arg_dtys idx = Some dt_u) ->
+    (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+      exists dv, nth_error vs idx = Some dv /\ RM.find r env0 = Some dv) ->
+    wf_draw_strat sigma0 ->
+    wf_smap_entries allowed defs seen0 true smap0 ->
+    env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap0) smap0 env0 ->
+    reify_code_step true params src_pnames defs smap0 seen0 (IId id, INSTR_Op op, md) =
+      Some (opt_ev, smap1, seen1) ->
+    reify_code true params src_pnames defs smap1 seen1 rest1 = Some (cevals_r, smap2, seen2) ->
+    exists added : list (freeze_key * Z),
+      (forall key z, In (key, z) added -> In key seen2 /\ ~ In key seen0) /\
+      ((forall k,
+          eval_cfg_dag (build_param_env src_pnames vs)
+            (oracle_of_fmap (added ++ fmap0))
+            (wrap_evals (match opt_ev with Some ev => ev :: cevals_r | None => cevals_r end) k) = DO_UB) \/
+       (exists sigma2 env2,
+          wf_draw_strat sigma2 /\
+          (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+             exists dv, nth_error vs idx = Some dv /\ RM.find r env2 = Some dv) /\
+          env_matches_smap defs (build_param_env src_pnames vs)
+            (oracle_of_fmap (added ++ fmap0)) smap2 env2 /\
+          (forall fmap_later k,
+             (forall key z, In (key, z) fmap_later -> ~ In key seen2) ->
+             eval_cfg_dag (build_param_env src_pnames vs)
+               (oracle_of_fmap (fmap_later ++ added ++ fmap0))
+               (wrap_evals (match opt_ev with Some ev => ev :: cevals_r | None => cevals_r end) k) =
+             eval_cfg_dag (build_param_env src_pnames vs)
+               (oracle_of_fmap (fmap_later ++ added ++ fmap0)) k) /\
+          cfg_steps_to_ret sigma0 env0 (denote_code ((IId id, INSTR_Op op, md) :: rest1) None) sigma2 env2 tt)).
+Proof.
+  intros id op md rest1 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap0 env0 seen0
+    opt_ev smap1 seen1 cevals_r smap2 seen2
+    IH Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hstep Hrr.
+  cbn [reify_code_step] in Hstep.
+  destruct (raw_id_in_list id defs) eqn:Hid; [| discriminate].
+  apply raw_id_in_list_spec in Hid.
+  destruct (reify_exp true params src_pnames defs smap0 seen0 None op)
+    as [[[w ce] seen1'] |] eqn:Hre; [| discriminate].
+  inversion Hstep; subst opt_ev smap1 seen1'; clear Hstep.
+  set (ext_vars :=
+    allowed ++
+    List.flat_map (fun '(idx, dt_u) =>
+      match dt_u, nth_error src_pnames idx with
+      | DTYPE_Base (DTYPE_I w0), Some pnm => [(pnm, w0)]
+      | _, _ => []
+      end) (exp_param_uses params defs None op)).
+  assert (Hsmap_ext : wf_smap_entries ext_vars defs seen0 true smap0).
+  { intros r0 wr0 cer0 Hf0; destruct (Hwfs0 r0 wr0 cer0 Hf0) as (H1 & H2 & H3 & H4 & H5 & H6).
+    repeat split; try assumption.
+    intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
+  assert (Hpu_ext : forall idx w0 pnm,
+    In (idx, DTYPE_Base (DTYPE_I w0)) (exp_param_uses params defs None op) ->
+    nth_error src_pnames idx = Some pnm -> In (pnm, w0) ext_vars).
+  { intros idx w0 pnm Hin Hpnm; apply in_app_iff; right; apply in_flat_map.
+    exists (idx, DTYPE_Base (DTYPE_I w0)); split; [exact Hin | rewrite Hpnm; left; reflexivity]. }
+  destruct (reify_exp_typing op true params src_pnames defs ext_vars smap0 seen0 None w ce seen1
+              Hsmap_ext Hpu_ext Hre)
+    as (_ & Hwt_ce & Hbw_ce & Hlf_ce & Hfv_ce & Hinc01 & Hfk_ce).
+  pose proof (wf_smap_entries_seen_mono ext_vars defs seen0 seen1 true smap0 Hinc01 Hsmap_ext) as Hsmap_ext1.
+  pose proof (wf_smap_entries_add ext_vars defs seen1 true smap0 id w ce Hsmap_ext1
+                Hid Hwt_ce Hbw_ce Hlf_ce Hfv_ce Hfk_ce) as Hwfs1.
+  destruct (reify_code_wf_smap rest1 true params src_pnames defs ext_vars
+              (RM.add id (w, ce) smap0) seen1 cevals_r smap2 seen2 Hwfs1 Hrr)
+    as (_ & Hinc12 & _).
+  destruct (eval_reified_exp_tgt op params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap0 env0 seen0
+              None w ce seen1 Hnd Hlp Hls Hla Hvs
+              (fun idx d Hin => Hpu (IId id) (INSTR_Op op) md idx d (or_introl eq_refl) Hin)
+              Hpe Hwfd0 Hwfs0 Henv0 Hre)
+    as (added1 & Had1 & [[msg1 Hev1] | (sigma1 & dv1 & Hwfd1 & Hev1 & Hsc1 & Hst1)]).
+  - exists added1; split.
+    + intros k z Hkz; destruct (Had1 k z Hkz) as [Hs1 Hn0]; split; [exact (Hinc12 k Hs1) | exact Hn0].
+    + left; intros k; cbn [wrap_evals eval_cfg_dag]; rewrite Hev1; reflexivity.
+  - pose proof (env_matches_smap_oracle_prepend allowed defs seen0 added1 fmap0
+                  (build_param_env src_pnames vs) smap0 env0 Hwfs0
+                  (fun k z H => proj2 (Had1 k z H)) Henv0) as Henv0'.
+    pose proof (env_matches_smap_add defs (build_param_env src_pnames vs) (oracle_of_fmap (added1 ++ fmap0))
+                  smap0 env0 id w ce dv1 Henv0' Hid Hev1 Hsc1) as Henv1.
+    assert (Hpe1 : forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+      exists dv, nth_error vs idx = Some dv /\ RM.find r (RM.add id dv1 env0) = Some dv).
+    { intros idx r Hnth Hnin; destruct (Hpe idx r Hnth Hnin) as [dv [Hv Hfe]].
+      exists dv; split; [exact Hv | rewrite RMF.F.add_neq_o; [exact Hfe | intros ->; exact (Hnin Hid)]]. }
+    destruct (IH ext_vars sigma1 (added1 ++ fmap0)
+                (RM.add id (w, ce) smap0) (RM.add id dv1 env0) seen1 cevals_r smap2 seen2
+                (fun iid' ins' md' idx d Hin_i => Hpu iid' ins' md' idx d (or_intror Hin_i))
+                Hpe1 Hwfd1 Hwfs1 Henv1 Hrr)
+      as (added2 & Had2 & [Hev_ub2 | (sigma2 & env2 & Hwfd2 & Hpe2 & Henv2 & Hev_k & Hst2)]).
+    + exists (added2 ++ added1).
+      assert (Had12 : forall k z, In (k, z) (added2 ++ added1) -> In k seen2 /\ ~ In k seen0).
+      { intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk1].
+        - destruct (Had2 k z Hk2) as [Hs2 Hn1]; split; [exact Hs2 | intros Hs0; exact (Hn1 (Hinc01 k Hs0))].
+        - destruct (Had1 k z Hk1) as [Hs1 Hn0]; split; [exact (Hinc12 k Hs1) | exact Hn0]. }
+      split; [exact Had12 | left; intros k].
+      rewrite <- app_assoc.
+      pose proof (eval_let_free_prepend_fmap ce (build_param_env src_pnames vs)
+                    added2 (added1 ++ fmap0) seen1 Hlf_ce (Hfk_ce eq_refl)
+                    (fun q z H => proj2 (Had2 q z H))) as Hev1'.
+      cbn [wrap_evals eval_cfg_dag]; rewrite Hev1', Hev1; exact (Hev_ub2 k).
+    + exists (added2 ++ added1).
+      assert (Had12 : forall k z, In (k, z) (added2 ++ added1) -> In k seen2 /\ ~ In k seen0).
+      { intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk1].
+        - destruct (Had2 k z Hk2) as [Hs2 Hn1]; split; [exact Hs2 | intros Hs0; exact (Hn1 (Hinc01 k Hs0))].
+        - destruct (Had1 k z Hk1) as [Hs1 Hn0]; split; [exact (Hinc12 k Hs1) | exact Hn0]. }
+      split; [exact Had12 | right; exists sigma2, env2].
+      split; [exact Hwfd2 | split; [exact Hpe2 | split; [rewrite <- app_assoc; exact Henv2 | split]]].
+      * intros fmap_later k Hdisj_lat.
+        assert (Hdisj_lat1 : forall key z, In (key, z) (fmap_later ++ added2) -> ~ In key seen1).
+        { intros key z Hkz; apply in_app_iff in Hkz as [Hl | Ha2].
+          - intros Hs1; exact (Hdisj_lat key z Hl (Hinc12 key Hs1)).
+          - exact (proj2 (Had2 key z Ha2)). }
+        replace (fmap_later ++ (added2 ++ added1) ++ fmap0)
+          with ((fmap_later ++ added2) ++ (added1 ++ fmap0))
+          by (rewrite !app_assoc; reflexivity).
+        pose proof (eval_let_free_prepend_fmap ce (build_param_env src_pnames vs)
+                      (fmap_later ++ added2) (added1 ++ fmap0) seen1 Hlf_ce (Hfk_ce eq_refl) Hdisj_lat1)
+          as Hev_lat1.
+        cbn [wrap_evals eval_cfg_dag]; rewrite Hev_lat1, Hev1.
+        replace ((fmap_later ++ added2) ++ added1 ++ fmap0)
+          with (fmap_later ++ (added2 ++ (added1 ++ fmap0)))
+          by (rewrite !app_assoc; reflexivity).
+        exact (Hev_k fmap_later k Hdisj_lat).
+      * unfold denote_code; cbn [loop_monad denote_instr]; unfold denote_exp'.
+        eapply cfg_steps_to_ret_bind.
+        -- eapply cfg_steps_to_ret_bind;
+             [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ Hst1) |].
+           eapply cfg_steps_to_ret_bind; [apply cfg_steps_lwrite | apply CSR_Ret; reflexivity].
+        -- exact Hst2.
+Qed.
+
+Local Lemma eval_reified_code_single_tgt_intrinsic_binop_tail {Pa : Params} :
+  forall id fname args anns md op w a0 a1 rest1 params src_pnames defs (vs : list (@dvalue Pa))
+         (sigma0 sigma1 sigma1b : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+         (smap0 : RM.t (positive * cert_expr)) (env0 : rmap (@dvalue Pa))
+         seen0 seen_a seen_b cevals_r smap2 seen2
+         ca cb dv0 dv1 dv_out added0 added1 added2,
+    let ce := lower_pure_int_intrinsic_binop op w ca cb in
+    parse_pure_int_intrinsic fname = Some (op, w) ->
+    args = [((DTYPE_Base (DTYPE_I w), a0), []); ((DTYPE_Base (DTYPE_I w), a1), [])] ->
+    ann_fun_attributes anns = [] ->
+    ann_ret_attributes anns = [] ->
+    metadata_range md = None ->
+    incl seen0 seen_a ->
+    incl seen_a seen_b ->
+    incl seen0 seen_b ->
+    incl seen_b seen2 ->
+    is_let_free_expr ce = true ->
+    collect_freeze_keys ce = [] ->
+    mcfg_steps_to_ret sigma0 env0 (denote_exp (Some (DTYPE_Base (DTYPE_I w))) a0) sigma1 env0 dv0 ->
+    mcfg_steps_to_ret sigma1 env0 (denote_exp (Some (DTYPE_Base (DTYPE_I w))) a1) sigma1b env0 dv1 ->
+    pure_int_intrinsic_fn op w [dv0; dv1] = raise_ret (inr dv_out) ->
+    eval_closed_cert_expr (build_param_env src_pnames vs)
+      (oracle_of_fmap (added1 ++ added0 ++ fmap0)) ce = raise_ret dv_out ->
+    (forall k z, In (k, z) added0 -> In k seen_a /\ ~ In k seen0) ->
+    (forall k z, In (k, z) added1 -> In k seen_b /\ ~ In k seen_a) ->
+    (forall key z, In (key, z) added2 -> In key seen2 /\ ~ In key seen_b) ->
+    ((forall k,
+        eval_cfg_dag (build_param_env src_pnames vs)
+          (oracle_of_fmap (added2 ++ added1 ++ added0 ++ fmap0)) (wrap_evals cevals_r k) = DO_UB) \/
+     (exists sigma2 env2,
+        wf_draw_strat sigma2 /\
+        (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+           exists dv, nth_error vs idx = Some dv /\ RM.find r env2 = Some dv) /\
+        env_matches_smap defs (build_param_env src_pnames vs)
+          (oracle_of_fmap (added2 ++ added1 ++ added0 ++ fmap0)) smap2 env2 /\
+        (forall fmap_later k,
+           (forall key z, In (key, z) fmap_later -> ~ In key seen2) ->
+           eval_cfg_dag (build_param_env src_pnames vs)
+             (oracle_of_fmap (fmap_later ++ added2 ++ added1 ++ added0 ++ fmap0)) (wrap_evals cevals_r k) =
+           eval_cfg_dag (build_param_env src_pnames vs)
+             (oracle_of_fmap (fmap_later ++ added2 ++ added1 ++ added0 ++ fmap0)) k) /\
+        cfg_steps_to_ret sigma1b (RM.add id dv_out env0) (denote_code rest1 None) sigma2 env2 tt)) ->
+    exists added : list (freeze_key * Z),
+      (forall key z, In (key, z) added -> In key seen2 /\ ~ In key seen0) /\
+      ((forall k,
+          eval_cfg_dag (build_param_env src_pnames vs)
+            (oracle_of_fmap (added ++ fmap0)) (wrap_evals ((w, ce) :: cevals_r) k) = DO_UB) \/
+       (exists sigma2 env2,
+          wf_draw_strat sigma2 /\
+          (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+             exists dv, nth_error vs idx = Some dv /\ RM.find r env2 = Some dv) /\
+          env_matches_smap defs (build_param_env src_pnames vs)
+            (oracle_of_fmap (added ++ fmap0)) smap2 env2 /\
+          (forall fmap_later k,
+             (forall key z, In (key, z) fmap_later -> ~ In key seen2) ->
+             eval_cfg_dag (build_param_env src_pnames vs)
+               (oracle_of_fmap (fmap_later ++ added ++ fmap0)) (wrap_evals ((w, ce) :: cevals_r) k) =
+             eval_cfg_dag (build_param_env src_pnames vs)
+               (oracle_of_fmap (fmap_later ++ added ++ fmap0)) k) /\
+          cfg_steps_to_ret sigma0 env0
+            (denote_code
+               ((IId id,
+                 INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns [],
+                 md) :: rest1) None) sigma2 env2 tt)).
+Proof.
+  intros id fname args anns md op w a0 a1 rest1 params src_pnames defs vs sigma0 sigma1 sigma1b fmap0
+    smap0 env0 seen0 seen_a seen_b cevals_r smap2 seen2 ca cb dv0 dv1 dv_out added0 added1 added2
+    ce Hp_intr Hargs Hfa Hra Hmr Hinca Hincb Hinc0b Hincb2 Hlf_ce Hfk_nil Hst0 Hst1 Hpi Hev_ce
+    Had0 Had1 Had2 Htail.
+  assert (Had_all : forall k z, In (k, z) (added2 ++ added1 ++ added0) -> In k seen2 /\ ~ In k seen0).
+  { intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk10].
+    - destruct (Had2 k z Hk2) as [Hs2 Hn_b];
+        split; [exact Hs2 | intros Hs0; exact (Hn_b (Hinc0b k Hs0))].
+    - apply in_app_iff in Hk10 as [Hk1 | Hk0].
+      + destruct (Had1 k z Hk1) as [Hsb Hn_a];
+          split; [exact (Hincb2 k Hsb) | intros Hs0; exact (Hn_a (Hinca k Hs0))].
+      + destruct (Had0 k z Hk0) as [Hsa Hn0];
+          split; [exact (Hincb2 k (Hincb k Hsa)) | exact Hn0]. }
+  destruct Htail as [Hev_ub2 | (sigma2 & env2 & Hwfd2 & Hpe2 & Henv2 & Hev_k & Hst2)].
+  - exists (added2 ++ added1 ++ added0); split; [exact Had_all | left; intros k].
+    rewrite <- !app_assoc.
+    pose proof (eval_let_free_prepend_fmap ce (build_param_env src_pnames vs)
+                  added2 (added1 ++ added0 ++ fmap0) seen_b Hlf_ce
+                  (fun q Hq => ltac:(rewrite Hfk_nil in Hq; destruct Hq))
+                  (fun q z H => proj2 (Had2 q z H))) as Hev_ce'.
+    cbn [wrap_evals eval_cfg_dag]; fold ce; rewrite Hev_ce', Hev_ce; exact (Hev_ub2 k).
+  - exists (added2 ++ added1 ++ added0); split; [exact Had_all | right; exists sigma2, env2].
+    split; [exact Hwfd2 | split; [exact Hpe2 | split; [rewrite <- !app_assoc; exact Henv2 | split]]].
+    + intros fmap_later k Hdisj_lat.
+      assert (Hdisj_latb : forall key z, In (key, z) (fmap_later ++ added2) -> ~ In key seen_b).
+      { intros key z Hkz; apply in_app_iff in Hkz as [Hl | Ha2].
+        - intros Hsb; exact (Hdisj_lat key z Hl (Hincb2 key Hsb)).
+        - exact (proj2 (Had2 key z Ha2)). }
+      replace (fmap_later ++ (added2 ++ added1 ++ added0) ++ fmap0)
+        with ((fmap_later ++ added2) ++ (added1 ++ added0 ++ fmap0))
+        by (rewrite !app_assoc; reflexivity).
+      pose proof (eval_let_free_prepend_fmap ce (build_param_env src_pnames vs)
+                    (fmap_later ++ added2) (added1 ++ added0 ++ fmap0) seen_b
+                    Hlf_ce (fun q Hq => ltac:(rewrite Hfk_nil in Hq; destruct Hq))
+                    Hdisj_latb) as Hev_lat.
+      cbn [wrap_evals eval_cfg_dag]; fold ce; rewrite Hev_lat, Hev_ce.
+      replace ((fmap_later ++ added2) ++ added1 ++ added0 ++ fmap0)
+        with (fmap_later ++ (added2 ++ (added1 ++ added0 ++ fmap0)))
+        by (rewrite !app_assoc; reflexivity).
+      exact (Hev_k fmap_later k Hdisj_lat).
+    + unfold denote_code; cbn [loop_monad].
+      eapply cfg_steps_to_ret_bind.
+      * eapply cfg_steps_pure_int_intrinsic_binop_ret;
+          [reflexivity | exact Hp_intr | exact Hargs | exact Hfa | exact Hra | exact Hmr
+          | exact Hst0 | exact Hst1 | exact Hpi].
+      * exact Hst2.
+Qed.
+
+Local Lemma eval_reified_code_single_tgt_intrinsic_binop {Pa : Params} :
+  forall id fname args anns md op w a0 a1 rest1 params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+         (sigma0 : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+         smap0 (env0 : rmap (@dvalue Pa)) seen0 opt_ev smap1 seen1 cevals_r smap2 seen2,
+    (forall allowed' sigma' fmap' smap' env' seen' cevals' smap2' seen2',
+      (forall iid ins md' idx dt_u,
+        In (iid, ins, md') rest1 ->
+        In (idx, dt_u) (instr_param_uses params defs ins) ->
+        nth_error arg_dtys idx = Some dt_u) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env' = Some dv) ->
+      wf_draw_strat sigma' ->
+      wf_smap_entries allowed' defs seen' true smap' ->
+      env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap') smap' env' ->
+      reify_code true params src_pnames defs smap' seen' rest1 = Some (cevals', smap2', seen2') ->
+      exists added : list (freeze_key * Z),
+        (forall key z, In (key, z) added -> In key seen2' /\ ~ In key seen') /\
+        ((forall k,
+            eval_cfg_dag (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap')) (wrap_evals cevals' k) = DO_UB) \/
+         (exists sigma2 env2,
+            wf_draw_strat sigma2 /\
+            (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+               exists dv, nth_error vs idx = Some dv /\ RM.find r env2 = Some dv) /\
+            env_matches_smap defs (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap')) smap2' env2 /\
+            (forall fmap_later k,
+               (forall key z, In (key, z) fmap_later -> ~ In key seen2') ->
+               eval_cfg_dag (build_param_env src_pnames vs)
+                 (oracle_of_fmap (fmap_later ++ added ++ fmap')) (wrap_evals cevals' k) =
+               eval_cfg_dag (build_param_env src_pnames vs)
+                 (oracle_of_fmap (fmap_later ++ added ++ fmap')) k) /\
+            cfg_steps_to_ret sigma' env' (denote_code rest1 None) sigma2 env2 tt))) ->
+    NoDup src_pnames ->
+    List.length params = List.length vs ->
+    List.length src_pnames = List.length vs ->
+    List.length arg_dtys = List.length params ->
+    Forall2 dvalue_has_dtyp vs arg_dtys ->
+    (forall iid ins md' idx dt_u,
+      In (iid, ins, md')
+         ((IId id,
+           INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns [],
+           md) :: rest1) ->
+      In (idx, dt_u) (instr_param_uses params defs ins) ->
+      nth_error arg_dtys idx = Some dt_u) ->
+    (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+      exists dv, nth_error vs idx = Some dv /\ RM.find r env0 = Some dv) ->
+    wf_draw_strat sigma0 ->
+    wf_smap_entries allowed defs seen0 true smap0 ->
+    env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap0) smap0 env0 ->
+    In id defs ->
+    metadata_range md = None ->
+    parse_pure_int_intrinsic fname = Some (op, w) ->
+    op <> PII_Abs ->
+    args = [((DTYPE_Base (DTYPE_I w), a0), []); ((DTYPE_Base (DTYPE_I w), a1), [])] ->
+    ann_fun_attributes anns = [] ->
+    ann_ret_attributes anns = [] ->
+    match_pure_int_intrinsic_call
+      (INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns []) =
+      Some (PIICA_Binop op w a0 a1) ->
+    reify_code_step true params src_pnames defs smap0 seen0
+      (IId id, INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns [], md) =
+      Some (opt_ev, smap1, seen1) ->
+    reify_code true params src_pnames defs smap1 seen1 rest1 = Some (cevals_r, smap2, seen2) ->
+    exists added : list (freeze_key * Z),
+      (forall key z, In (key, z) added -> In key seen2 /\ ~ In key seen0) /\
+      ((forall k,
+          eval_cfg_dag (build_param_env src_pnames vs)
+            (oracle_of_fmap (added ++ fmap0))
+            (wrap_evals (match opt_ev with Some ev => ev :: cevals_r | None => cevals_r end) k) = DO_UB) \/
+       (exists sigma2 env2,
+          wf_draw_strat sigma2 /\
+          (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+             exists dv, nth_error vs idx = Some dv /\ RM.find r env2 = Some dv) /\
+          env_matches_smap defs (build_param_env src_pnames vs)
+            (oracle_of_fmap (added ++ fmap0)) smap2 env2 /\
+          (forall fmap_later k,
+             (forall key z, In (key, z) fmap_later -> ~ In key seen2) ->
+             eval_cfg_dag (build_param_env src_pnames vs)
+               (oracle_of_fmap (fmap_later ++ added ++ fmap0))
+               (wrap_evals (match opt_ev with Some ev => ev :: cevals_r | None => cevals_r end) k) =
+             eval_cfg_dag (build_param_env src_pnames vs)
+               (oracle_of_fmap (fmap_later ++ added ++ fmap0)) k) /\
+          cfg_steps_to_ret sigma0 env0
+            (denote_code
+               ((IId id, INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns [], md)
+                :: rest1) None) sigma2 env2 tt)).
+Proof.
+  intros id fname args anns md op w a0 a1 rest1 params src_pnames defs allowed arg_dtys vs sigma0 fmap0
+    smap0 env0 seen0 opt_ev smap1 seen1 cevals_r smap2 seen2
+    IH Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hid Hmr Hp_intr Hop_neq Hargs Hfa Hra Hpic Hstep Hrr.
+  cbn [reify_code_step] in Hstep.
+  rewrite (proj2 (raw_id_in_list_spec id defs) Hid), Hmr, Hpic in Hstep.
+  cbn [andb] in Hstep; cbv iota in Hstep.
+  destruct (reify_exp true params src_pnames defs smap0 seen0 (Some (DTYPE_Base (DTYPE_I w))) a0)
+    as [[[wa0 ca] seen_a] |] eqn:Hra0; [| discriminate].
+  destruct (reify_exp true params src_pnames defs smap0 seen_a (Some (DTYPE_Base (DTYPE_I w))) a1)
+    as [[[wa1 cb] seen_b] |] eqn:Hra1; [| discriminate].
+  destruct (list_empty_b (collect_freeze_keys ca) && list_empty_b (collect_freeze_keys cb)) eqn:Hfk01;
+    [| discriminate].
+  apply andb_true_iff in Hfk01 as [Hfka_b Hfkb_b].
+  apply list_empty_b_spec in Hfka_b; apply list_empty_b_spec in Hfkb_b.
+  inversion Hstep; subst opt_ev smap1 seen1; clear Hstep.
+  assert (Hpua0 : forall idx dt_u,
+    In (idx, dt_u) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a0) ->
+    nth_error arg_dtys idx = Some dt_u).
+  { intros idx dt_u Hin; eapply Hpu; [left; reflexivity |].
+    unfold instr_param_uses; rewrite Hpic; apply in_app_iff; left; exact Hin. }
+  assert (Hpua1 : forall idx dt_u,
+    In (idx, dt_u) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a1) ->
+    nth_error arg_dtys idx = Some dt_u).
+  { intros idx dt_u Hin; eapply Hpu; [left; reflexivity |].
+    unfold instr_param_uses; rewrite Hpic; apply in_app_iff; right; exact Hin. }
+  set (ext_vars :=
+    allowed ++
+    List.flat_map (fun '(idx, dt_u) =>
+      match dt_u, nth_error src_pnames idx with
+      | DTYPE_Base (DTYPE_I w0), Some pnm => [(pnm, w0)]
+      | _, _ => []
+      end) (instr_param_uses params defs
+              (INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns []))).
+  assert (Hsmap_ext : wf_smap_entries ext_vars defs seen0 true smap0).
+  { intros r0 wr0 cer0 Hf0; destruct (Hwfs0 r0 wr0 cer0 Hf0) as (H1 & H2 & H3 & H4 & H5 & H6).
+    repeat split; try assumption.
+    intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
+  assert (Hpua0_ext : forall idx w0 pnm,
+    In (idx, DTYPE_Base (DTYPE_I w0)) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a0) ->
+    nth_error src_pnames idx = Some pnm -> In (pnm, w0) ext_vars).
+  { intros idx w0 pnm Hin Hpnm; apply in_app_iff; right; apply in_flat_map.
+    exists (idx, DTYPE_Base (DTYPE_I w0)); split;
+      [unfold instr_param_uses; rewrite Hpic; apply in_app_iff; left; exact Hin
+      | rewrite Hpnm; left; reflexivity]. }
+  assert (Hpua1_ext : forall idx w0 pnm,
+    In (idx, DTYPE_Base (DTYPE_I w0)) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a1) ->
+    nth_error src_pnames idx = Some pnm -> In (pnm, w0) ext_vars).
+  { intros idx w0 pnm Hin Hpnm; apply in_app_iff; right; apply in_flat_map.
+    exists (idx, DTYPE_Base (DTYPE_I w0)); split;
+      [unfold instr_param_uses; rewrite Hpic; apply in_app_iff; right; exact Hin
+      | rewrite Hpnm; left; reflexivity]. }
+  destruct (reify_exp_typing a0 true params src_pnames defs ext_vars smap0 seen0
+              (Some (DTYPE_Base (DTYPE_I w))) wa0 ca seen_a Hsmap_ext Hpua0_ext Hra0)
+    as (Htopa & Hwta & Hbwa & Hlfa & Hfva_e & Hinca & _).
+  apply check_opt_int_width_some_inv in Htopa; subst wa0.
+  pose proof (wf_smap_entries_seen_mono ext_vars defs seen0 seen_a true smap0 Hinca Hsmap_ext) as Hsmap_ext_a.
+  destruct (reify_exp_typing a1 true params src_pnames defs ext_vars smap0 seen_a
+              (Some (DTYPE_Base (DTYPE_I w))) wa1 cb seen_b Hsmap_ext_a Hpua1_ext Hra1)
+    as (Htopb & Hwtb & Hbwb & Hlfb & Hfvb_e & Hincb & _).
+  apply check_opt_int_width_some_inv in Htopb; subst wa1.
+  assert (Hinc0b : incl seen0 seen_b) by (intros x Hx; exact (Hincb x (Hinca x Hx))).
+  pose proof (wf_smap_entries_seen_mono ext_vars defs seen0 seen_b true smap0 Hinc0b Hsmap_ext) as Hsmap_ext_b.
+  set (ce := lower_pure_int_intrinsic_binop op w ca cb).
+  destruct (lower_pure_int_intrinsic_binop_typing op w ca cb
+              Hwta Hbwa Hlfa Hfka_b Hwtb Hbwb Hlfb Hfkb_b)
+    as (Hwt_ce & Hbw_ce & Hlf_ce & Hfk_nil & Hsub).
+  assert (Hext_ce : incl (collect_free_vars [] ce) ext_vars).
+  { intros x Hx; apply Hsub, in_app_iff in Hx as [Hx | Hx]; [exact (Hfva_e x Hx) | exact (Hfvb_e x Hx)]. }
+  pose proof (wf_smap_entries_add ext_vars defs seen_b true smap0 id w ce Hsmap_ext_b
+                Hid Hwt_ce Hbw_ce Hlf_ce Hext_ce
+                (fun _ x Hx => ltac:(unfold ce in Hx; rewrite Hfk_nil in Hx; destruct Hx))) as Hwfs1.
+  destruct (reify_code_wf_smap rest1 true params src_pnames defs ext_vars
+              (RM.add id (w, ce) smap0) seen_b cevals_r smap2 seen2 Hwfs1 Hrr)
+    as (_ & Hincb2 & _).
+  pose proof (wf_smap_entries_seen_mono allowed defs seen0 seen_a true smap0 Hinca Hwfs0) as Hwfs0_a.
+  destruct (eval_reified_exp_tgt a0 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap0 env0 seen0
+              (Some (DTYPE_Base (DTYPE_I w))) w ca seen_a Hnd Hlp Hls Hla Hvs Hpua0
+              Hpe Hwfd0 Hwfs0 Henv0 Hra0)
+    as (added0 & Had0 & [[msg0 Hev0] | (sigma1 & dv0 & Hwfd1 & Hev0 & Hsc0 & Hst0)]).
+  - exists added0; split.
+    + intros k z Hkz; destruct (Had0 k z Hkz) as [Hsa Hn0];
+        split; [exact (Hincb2 k (Hincb k Hsa)) | exact Hn0].
+    + left; intros k; cbn [wrap_evals eval_cfg_dag]; fold ce.
+      destruct (lower_pure_int_intrinsic_binop_ub_l op w ca cb
+                  (build_param_env src_pnames vs) (oracle_of_fmap (added0 ++ fmap0)) msg0 Hop_neq Hev0)
+        as [msg' Hev'].
+      unfold ce; rewrite Hev'; reflexivity.
+  - pose proof (env_matches_smap_oracle_prepend allowed defs seen0 added0 fmap0
+                  (build_param_env src_pnames vs) smap0 env0 Hwfs0
+                  (fun k z H => proj2 (Had0 k z H)) Henv0) as Henv0'.
+    destruct (eval_reified_exp_tgt a1 params src_pnames defs allowed arg_dtys vs sigma1 (added0 ++ fmap0)
+                smap0 env0 seen_a (Some (DTYPE_Base (DTYPE_I w))) w cb seen_b
+                Hnd Hlp Hls Hla Hvs Hpua1 Hpe Hwfd1 Hwfs0_a Henv0' Hra1)
+      as (added1 & Had1 & [[msg1 Hev1] | (sigma1b & dv1 & Hwfd1b & Hev1 & Hsc1 & Hst1)]).
+    + exists (added1 ++ added0); split.
+      * intros k z Hkz; apply in_app_iff in Hkz as [Hk1 | Hk0].
+        -- destruct (Had1 k z Hk1) as [Hsb Hn_a];
+             split; [exact (Hincb2 k Hsb) | intros Hs0; exact (Hn_a (Hinca k Hs0))].
+        -- destruct (Had0 k z Hk0) as [Hsa Hn0];
+             split; [exact (Hincb2 k (Hincb k Hsa)) | exact Hn0].
+      * left; intros k; rewrite <- app_assoc.
+        pose proof (eval_let_free_prepend_fmap ca (build_param_env src_pnames vs)
+                      added1 (added0 ++ fmap0) seen_a Hlfa
+                      (fun q Hq => ltac:(rewrite Hfka_b in Hq; destruct Hq))
+                      (fun q z H => proj2 (Had1 q z H))) as Hev0'.
+        rewrite Hev0 in Hev0'.
+        destruct (lower_pure_int_intrinsic_binop_ub_r op w ca cb
+                    (build_param_env src_pnames vs) (oracle_of_fmap (added1 ++ added0 ++ fmap0))
+                    dv0 msg1 Hop_neq Hev0' Hev1) as [msg' Hev'].
+        cbn [wrap_evals eval_cfg_dag]; fold ce; unfold ce; rewrite Hev'; reflexivity.
+    + pose proof (eval_let_free_prepend_fmap ca (build_param_env src_pnames vs)
+                    added1 (added0 ++ fmap0) seen_a Hlfa
+                    (fun q Hq => ltac:(rewrite Hfka_b in Hq; destruct Hq))
+                    (fun q z H => proj2 (Had1 q z H))) as Hev0'.
+      rewrite Hev0 in Hev0'.
+      destruct (pure_int_intrinsic_binop_eval_helpers op w ca cb
+                  (build_param_env src_pnames vs) (oracle_of_fmap (added1 ++ added0 ++ fmap0))
+                  dv0 dv1 Hop_neq Hsc0 Hsc1 Hev0' Hev1)
+        as (dv_out & Hpi & Hev_ce & Hsc_out).
+      fold ce in Hev_ce.
+      pose proof (env_matches_smap_oracle_prepend allowed defs seen_a added1 (added0 ++ fmap0)
+                    (build_param_env src_pnames vs) smap0 env0 Hwfs0_a
+                    (fun k z H => proj2 (Had1 k z H)) Henv0') as Henv0''.
+      pose proof (env_matches_smap_add defs (build_param_env src_pnames vs)
+                    (oracle_of_fmap (added1 ++ added0 ++ fmap0)) smap0 env0
+                    id w ce dv_out Henv0'' Hid Hev_ce Hsc_out) as Henv1.
+      assert (Hpe1 : forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r (RM.add id dv_out env0) = Some dv).
+      { intros idx r Hnth Hnin; destruct (Hpe idx r Hnth Hnin) as [dv [Hv Hfe]].
+        exists dv; split; [exact Hv | rewrite RMF.F.add_neq_o; [exact Hfe | intros ->; exact (Hnin Hid)]]. }
+      destruct (IH ext_vars sigma1b (added1 ++ added0 ++ fmap0)
+                  (RM.add id (w, ce) smap0) (RM.add id dv_out env0) seen_b cevals_r smap2 seen2
+                  (fun iid' ins' md' idx d Hin_i => Hpu iid' ins' md' idx d (or_intror Hin_i))
+                  Hpe1 Hwfd1b Hwfs1 Henv1 Hrr)
+        as (added2 & Had2 & Htail).
+      exact (eval_reified_code_single_tgt_intrinsic_binop_tail
+               id fname args anns md op w a0 a1 rest1 params src_pnames defs vs
+               sigma0 sigma1 sigma1b fmap0 smap0 env0 seen0 seen_a seen_b cevals_r smap2 seen2
+               ca cb dv0 dv1 dv_out added0 added1 added2
+               Hp_intr Hargs Hfa Hra Hmr Hinca Hincb Hinc0b Hincb2 Hlf_ce Hfk_nil
+               Hst0 Hst1 Hpi Hev_ce Had0 Had1 Had2 Htail).
+Qed.
+
+Local Lemma eval_reified_code_single_tgt_intrinsic_abs {Pa : Params} :
+  forall id fname args anns md w a0 a1 flag rest1 params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+         (sigma0 : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+         smap0 (env0 : rmap (@dvalue Pa)) seen0 opt_ev smap1 seen1 cevals_r smap2 seen2,
+    (forall allowed' sigma' fmap' smap' env' seen' cevals' smap2' seen2',
+      (forall iid ins md' idx dt_u,
+        In (iid, ins, md') rest1 ->
+        In (idx, dt_u) (instr_param_uses params defs ins) ->
+        nth_error arg_dtys idx = Some dt_u) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env' = Some dv) ->
+      wf_draw_strat sigma' ->
+      wf_smap_entries allowed' defs seen' true smap' ->
+      env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap') smap' env' ->
+      reify_code true params src_pnames defs smap' seen' rest1 = Some (cevals', smap2', seen2') ->
+      exists added : list (freeze_key * Z),
+        (forall key z, In (key, z) added -> In key seen2' /\ ~ In key seen') /\
+        ((forall k,
+            eval_cfg_dag (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap')) (wrap_evals cevals' k) = DO_UB) \/
+         (exists sigma2 env2,
+            wf_draw_strat sigma2 /\
+            (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+               exists dv, nth_error vs idx = Some dv /\ RM.find r env2 = Some dv) /\
+            env_matches_smap defs (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap')) smap2' env2 /\
+            (forall fmap_later k,
+               (forall key z, In (key, z) fmap_later -> ~ In key seen2') ->
+               eval_cfg_dag (build_param_env src_pnames vs)
+                 (oracle_of_fmap (fmap_later ++ added ++ fmap')) (wrap_evals cevals' k) =
+               eval_cfg_dag (build_param_env src_pnames vs)
+                 (oracle_of_fmap (fmap_later ++ added ++ fmap')) k) /\
+            cfg_steps_to_ret sigma' env' (denote_code rest1 None) sigma2 env2 tt))) ->
+    NoDup src_pnames ->
+    List.length params = List.length vs ->
+    List.length src_pnames = List.length vs ->
+    List.length arg_dtys = List.length params ->
+    Forall2 dvalue_has_dtyp vs arg_dtys ->
+    (forall iid ins md' idx dt_u,
+      In (iid, ins, md')
+         ((IId id,
+           INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns [],
+           md) :: rest1) ->
+      In (idx, dt_u) (instr_param_uses params defs ins) ->
+      nth_error arg_dtys idx = Some dt_u) ->
+    (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+      exists dv, nth_error vs idx = Some dv /\ RM.find r env0 = Some dv) ->
+    wf_draw_strat sigma0 ->
+    wf_smap_entries allowed defs seen0 true smap0 ->
+    env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap0) smap0 env0 ->
+    In id defs ->
+    metadata_range md = None ->
+    parse_pure_int_intrinsic fname = Some (PII_Abs, w) ->
+    args = [((DTYPE_Base (DTYPE_I w), a0), []); ((DTYPE_Base (DTYPE_I 1%positive), a1), [])] ->
+    parse_imm_bool_arg a1 = Some flag ->
+    ann_fun_attributes anns = [] ->
+    ann_ret_attributes anns = [] ->
+    match_pure_int_intrinsic_call
+      (INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns []) =
+      Some (PIICA_Abs w a0 flag) ->
+    reify_code_step true params src_pnames defs smap0 seen0
+      (IId id, INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns [], md) =
+      Some (opt_ev, smap1, seen1) ->
+    reify_code true params src_pnames defs smap1 seen1 rest1 = Some (cevals_r, smap2, seen2) ->
+    exists added : list (freeze_key * Z),
+      (forall key z, In (key, z) added -> In key seen2 /\ ~ In key seen0) /\
+      ((forall k,
+          eval_cfg_dag (build_param_env src_pnames vs)
+            (oracle_of_fmap (added ++ fmap0))
+            (wrap_evals (match opt_ev with Some ev => ev :: cevals_r | None => cevals_r end) k) = DO_UB) \/
+       (exists sigma2 env2,
+          wf_draw_strat sigma2 /\
+          (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+             exists dv, nth_error vs idx = Some dv /\ RM.find r env2 = Some dv) /\
+          env_matches_smap defs (build_param_env src_pnames vs)
+            (oracle_of_fmap (added ++ fmap0)) smap2 env2 /\
+          (forall fmap_later k,
+             (forall key z, In (key, z) fmap_later -> ~ In key seen2) ->
+             eval_cfg_dag (build_param_env src_pnames vs)
+               (oracle_of_fmap (fmap_later ++ added ++ fmap0))
+               (wrap_evals (match opt_ev with Some ev => ev :: cevals_r | None => cevals_r end) k) =
+             eval_cfg_dag (build_param_env src_pnames vs)
+               (oracle_of_fmap (fmap_later ++ added ++ fmap0)) k) /\
+          cfg_steps_to_ret sigma0 env0
+            (denote_code
+               ((IId id, INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns [], md)
+                :: rest1) None) sigma2 env2 tt)).
+Proof.
+  intros id fname args anns md w a0 a1 flag rest1 params src_pnames defs allowed arg_dtys vs sigma0 fmap0
+    smap0 env0 seen0 opt_ev smap1 seen1 cevals_r smap2 seen2
+    IH Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hid Hmr Hp_intr Hargs Hflag Hfa Hra Hpic Hstep Hrr.
+  cbn [reify_code_step] in Hstep.
+  rewrite (proj2 (raw_id_in_list_spec id defs) Hid), Hmr, Hpic in Hstep.
+  cbn [andb] in Hstep; cbv iota in Hstep.
+  destruct (reify_exp true params src_pnames defs smap0 seen0 (Some (DTYPE_Base (DTYPE_I w))) a0)
+    as [[[wa0 ca] seen_a] |] eqn:Hra0; [| discriminate].
+  destruct (list_empty_b (collect_freeze_keys ca)) eqn:Hfka_b; [| discriminate].
+  apply list_empty_b_spec in Hfka_b.
+  inversion Hstep; subst opt_ev smap1 seen1; clear Hstep.
+  assert (Hpua0 : forall idx dt_u,
+    In (idx, dt_u) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a0) ->
+    nth_error arg_dtys idx = Some dt_u).
+  { intros idx dt_u Hin; eapply Hpu; [left; reflexivity |].
+    unfold instr_param_uses; rewrite Hpic; exact Hin. }
+  set (ext_vars :=
+    allowed ++
+    List.flat_map (fun '(idx, dt_u) =>
+      match dt_u, nth_error src_pnames idx with
+      | DTYPE_Base (DTYPE_I w0), Some pnm => [(pnm, w0)]
+      | _, _ => []
+      end) (instr_param_uses params defs
+              (INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns []))).
+  assert (Hsmap_ext : wf_smap_entries ext_vars defs seen0 true smap0).
+  { intros r0 wr0 cer0 Hf0; destruct (Hwfs0 r0 wr0 cer0 Hf0) as (H1 & H2 & H3 & H4 & H5 & H6).
+    repeat split; try assumption.
+    intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
+  assert (Hpua0_ext : forall idx w0 pnm,
+    In (idx, DTYPE_Base (DTYPE_I w0)) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a0) ->
+    nth_error src_pnames idx = Some pnm -> In (pnm, w0) ext_vars).
+  { intros idx w0 pnm Hin Hpnm; apply in_app_iff; right; apply in_flat_map.
+    exists (idx, DTYPE_Base (DTYPE_I w0)); split;
+      [unfold instr_param_uses; rewrite Hpic; exact Hin | rewrite Hpnm; left; reflexivity]. }
+  destruct (reify_exp_typing a0 true params src_pnames defs ext_vars smap0 seen0
+              (Some (DTYPE_Base (DTYPE_I w))) wa0 ca seen_a Hsmap_ext Hpua0_ext Hra0)
+    as (Htopa & Hwta & Hbwa & Hlfa & Hfva_e & Hinca & _).
+  apply check_opt_int_width_some_inv in Htopa; subst wa0.
+  pose proof (wf_smap_entries_seen_mono ext_vars defs seen0 seen_a true smap0 Hinca Hsmap_ext) as Hsmap_ext_a.
+  set (ce := lower_pure_int_intrinsic_abs w ca flag).
+  destruct (lower_pure_int_intrinsic_abs_typing w ca flag Hwta Hbwa Hlfa Hfka_b)
+    as (Hwt_ce & Hbw_ce & Hlf_ce & Hfk_nil & Hsub).
+  assert (Hext_ce : incl (collect_free_vars [] ce) ext_vars)
+    by (intros x Hx; exact (Hfva_e x (Hsub x Hx))).
+  pose proof (wf_smap_entries_add ext_vars defs seen_a true smap0 id w ce Hsmap_ext_a
+                Hid Hwt_ce Hbw_ce Hlf_ce Hext_ce
+                (fun _ x Hx => ltac:(unfold ce in Hx; rewrite Hfk_nil in Hx; destruct Hx))) as Hwfs1.
+  destruct (reify_code_wf_smap rest1 true params src_pnames defs ext_vars
+              (RM.add id (w, ce) smap0) seen_a cevals_r smap2 seen2 Hwfs1 Hrr)
+    as (_ & Hinca2 & _).
+  destruct (eval_reified_exp_tgt a0 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap0 env0 seen0
+              (Some (DTYPE_Base (DTYPE_I w))) w ca seen_a Hnd Hlp Hls Hla Hvs Hpua0
+              Hpe Hwfd0 Hwfs0 Henv0 Hra0)
+    as (added0 & Had0 & [[msg0 Hev0] | (sigma1 & dv0 & Hwfd1 & Hev0 & Hsc0 & Hst0)]).
+  - exists added0; split.
+    + intros k z Hkz; destruct (Had0 k z Hkz) as [Hsa Hn0]; split; [exact (Hinca2 k Hsa) | exact Hn0].
+    + left; intros k; cbn [wrap_evals eval_cfg_dag]; fold ce.
+      destruct (lower_pure_int_intrinsic_abs_ub w ca flag
+                  (build_param_env src_pnames vs) (oracle_of_fmap (added0 ++ fmap0)) msg0 Hev0)
+        as [msg' Hev'].
+      unfold ce; rewrite Hev'; reflexivity.
+  - destruct (pure_int_intrinsic_abs_eval_helper w ca flag
+                (build_param_env src_pnames vs) (oracle_of_fmap (added0 ++ fmap0)) dv0 Hsc0 Hev0)
+      as (dv_out & Hpi & Hev_ce & Hsc_out).
+    fold ce in Hev_ce.
+    pose proof (env_matches_smap_oracle_prepend allowed defs seen0 added0 fmap0
+                  (build_param_env src_pnames vs) smap0 env0 Hwfs0
+                  (fun k z H => proj2 (Had0 k z H)) Henv0) as Henv0'.
+    pose proof (env_matches_smap_add defs (build_param_env src_pnames vs)
+                  (oracle_of_fmap (added0 ++ fmap0)) smap0 env0
+                  id w ce dv_out Henv0' Hid Hev_ce Hsc_out) as Henv1.
+    assert (Hpe1 : forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+      exists dv, nth_error vs idx = Some dv /\ RM.find r (RM.add id dv_out env0) = Some dv).
+    { intros idx r Hnth Hnin; destruct (Hpe idx r Hnth Hnin) as [dv [Hv Hfe]].
+      exists dv; split; [exact Hv | rewrite RMF.F.add_neq_o; [exact Hfe | intros ->; exact (Hnin Hid)]]. }
+    destruct (IH ext_vars sigma1 (added0 ++ fmap0)
+                (RM.add id (w, ce) smap0) (RM.add id dv_out env0) seen_a cevals_r smap2 seen2
+                (fun iid' ins' md' idx d Hin_i => Hpu iid' ins' md' idx d (or_intror Hin_i))
+                Hpe1 Hwfd1 Hwfs1 Henv1 Hrr)
+      as (added2 & Had2 & [Hev_ub2 | (sigma2 & env2 & Hwfd2 & Hpe2 & Henv2 & Hev_k & Hst2)]).
+    + exists (added2 ++ added0); split.
+      * intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk0].
+        -- destruct (Had2 k z Hk2) as [Hs2 Hn_a]; split; [exact Hs2 | intros Hs0; exact (Hn_a (Hinca k Hs0))].
+        -- destruct (Had0 k z Hk0) as [Hsa Hn0]; split; [exact (Hinca2 k Hsa) | exact Hn0].
+      * left; intros k; rewrite <- app_assoc.
+        pose proof (eval_let_free_prepend_fmap ce (build_param_env src_pnames vs)
+                      added2 (added0 ++ fmap0) seen_a Hlf_ce
+                      (fun q Hq => ltac:(try unfold ce in Hfk_nil, Hq; rewrite Hfk_nil in Hq; destruct Hq))
+                      (fun q z H => proj2 (Had2 q z H))) as Hev_ce'.
+        cbn [wrap_evals eval_cfg_dag]; fold ce; rewrite Hev_ce', Hev_ce; exact (Hev_ub2 k).
+    + exists (added2 ++ added0); split.
+      * intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk0].
+        -- destruct (Had2 k z Hk2) as [Hs2 Hn_a]; split; [exact Hs2 | intros Hs0; exact (Hn_a (Hinca k Hs0))].
+        -- destruct (Had0 k z Hk0) as [Hsa Hn0]; split; [exact (Hinca2 k Hsa) | exact Hn0].
+      * right; exists sigma2, env2.
+        split; [exact Hwfd2 | split; [exact Hpe2 | split; [rewrite <- app_assoc; exact Henv2 | split]]].
+        -- intros fmap_later k Hdisj_lat.
+           assert (Hdisj_lata : forall key z, In (key, z) (fmap_later ++ added2) -> ~ In key seen_a).
+           { intros key z Hkz; apply in_app_iff in Hkz as [Hl | Ha2].
+             - intros Hsa; exact (Hdisj_lat key z Hl (Hinca2 key Hsa)).
+             - exact (proj2 (Had2 key z Ha2)). }
+           replace (fmap_later ++ (added2 ++ added0) ++ fmap0)
+             with ((fmap_later ++ added2) ++ (added0 ++ fmap0))
+             by (rewrite !app_assoc; reflexivity).
+           pose proof (eval_let_free_prepend_fmap ce (build_param_env src_pnames vs)
+                         (fmap_later ++ added2) (added0 ++ fmap0) seen_a
+                         Hlf_ce (fun q Hq => ltac:(try unfold ce in Hfk_nil, Hq; rewrite Hfk_nil in Hq; destruct Hq))
+                         Hdisj_lata) as Hev_lat.
+           cbn [wrap_evals eval_cfg_dag]; fold ce; rewrite Hev_lat, Hev_ce.
+           replace ((fmap_later ++ added2) ++ added0 ++ fmap0)
+             with (fmap_later ++ (added2 ++ (added0 ++ fmap0)))
+             by (rewrite !app_assoc; reflexivity).
+           exact (Hev_k fmap_later k Hdisj_lat).
+        -- unfold denote_code; cbn [loop_monad].
+           eapply cfg_steps_to_ret_bind.
+           ++ eapply cfg_steps_pure_int_intrinsic_abs_ret;
+                [reflexivity | exact Hp_intr | exact Hargs | exact Hflag | exact Hfa | exact Hra | exact Hmr
+                | exact Hst0 | exact Hpi].
+           ++ exact Hst2.
 Qed.
 
 Lemma eval_reified_code_single_tgt {Pa : Params} :
@@ -2743,108 +3809,22 @@ Proof.
   intros [[iid ins] md] rest1 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap0 env0 seen0
     opt_ev smap1 seen1 cevals_r cevals smap2 seen2
     IH Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hstep Hrr ->.
-  cbn [reify_code_step] in Hstep.
-  destruct iid as [id | vid]; [destruct ins; try discriminate | destruct ins; try discriminate].
-  - destruct (raw_id_in_list id defs) eqn:Hid; [| discriminate].
-    apply raw_id_in_list_spec in Hid.
-    destruct (reify_exp true params src_pnames defs smap0 seen0 None op)
-      as [[[w ce] seen1'] |] eqn:Hre; [| discriminate].
-    inversion Hstep; subst opt_ev smap1 seen1'; clear Hstep.
-    set (ext_vars :=
-      allowed ++
-      List.flat_map (fun '(idx, dt_u) =>
-        match dt_u, nth_error src_pnames idx with
-        | DTYPE_Base (DTYPE_I w0), Some pnm => [(pnm, w0)]
-        | _, _ => []
-        end) (exp_param_uses params defs None op)).
-    assert (Hsmap_ext : wf_smap_entries ext_vars defs seen0 true smap0).
-    { intros r0 wr0 cer0 Hf0; destruct (Hwfs0 r0 wr0 cer0 Hf0) as (H1 & H2 & H3 & H4 & H5 & H6).
-      repeat split; try assumption; intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
-    assert (Hpu_ext : forall idx w0 pnm,
-      In (idx, DTYPE_Base (DTYPE_I w0)) (exp_param_uses params defs None op) ->
-      nth_error src_pnames idx = Some pnm -> In (pnm, w0) ext_vars).
-    { intros idx w0 pnm Hin Hpnm; apply in_app_iff; right; apply in_flat_map.
-      exists (idx, DTYPE_Base (DTYPE_I w0)); split; [exact Hin | rewrite Hpnm; left; reflexivity]. }
-    destruct (reify_exp_typing op true params src_pnames defs ext_vars smap0 seen0 None w ce seen1
-                Hsmap_ext Hpu_ext Hre)
-      as (_ & Hwt_ce & Hbw_ce & Hlf_ce & Hfv_ce & Hinc01 & Hfk_ce).
-    pose proof (wf_smap_entries_seen_mono ext_vars defs seen0 seen1 true smap0 Hinc01 Hsmap_ext) as Hsmap_ext1.
-    pose proof (wf_smap_entries_add ext_vars defs seen1 true smap0 id w ce Hsmap_ext1
-                  Hid Hwt_ce Hbw_ce Hlf_ce Hfv_ce Hfk_ce) as Hwfs1.
-    destruct (reify_code_wf_smap rest1 true params src_pnames defs ext_vars
-                (RM.add id (w, ce) smap0) seen1 cevals_r smap2 seen2 Hwfs1 Hrr)
-      as (_ & Hinc12 & _).
-    destruct (eval_reified_exp_tgt op params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap0 env0 seen0
-                None w ce seen1 Hnd Hlp Hls Hla Hvs
-                (fun idx d Hin => Hpu (IId id) (INSTR_Op op) md idx d (or_introl eq_refl) Hin)
-                Hpe Hwfd0 Hwfs0 Henv0 Hre)
-      as (added1 & Had1 & [[msg1 Hev1] | (sigma1 & dv1 & Hwfd1 & Hev1 & Hsc1 & Hst1)]).
-    + exists added1; split.
-      * intros k z Hkz; destruct (Had1 k z Hkz) as [Hs1 Hn0]; split; [exact (Hinc12 k Hs1) | exact Hn0].
-      * left; intros k; cbn [wrap_evals eval_cfg_dag]; rewrite Hev1; reflexivity.
-    + pose proof (env_matches_smap_oracle_prepend allowed defs seen0 added1 fmap0
-                    (build_param_env src_pnames vs) smap0 env0 Hwfs0
-                    (fun k z H => proj2 (Had1 k z H)) Henv0) as Henv0'.
-      pose proof (env_matches_smap_add defs (build_param_env src_pnames vs) (oracle_of_fmap (added1 ++ fmap0))
-                    smap0 env0 id w ce dv1 Henv0' Hid Hev1 Hsc1) as Henv1.
-      assert (Hpe1 : forall idx r, nth_error params idx = Some r -> ~ In r defs ->
-        exists dv, nth_error vs idx = Some dv /\ RM.find r (RM.add id dv1 env0) = Some dv).
-      { intros idx r Hnth Hnin; destruct (Hpe idx r Hnth Hnin) as [dv [Hv Hfe]].
-        exists dv; split; [exact Hv | rewrite RMF.F.add_neq_o; [exact Hfe | intros ->; exact (Hnin Hid)]]. }
-      destruct (IH ext_vars sigma1 (added1 ++ fmap0)
-                  (RM.add id (w, ce) smap0) (RM.add id dv1 env0) seen1 cevals_r smap2 seen2
-                  (fun iid' ins' md' idx d Hin_i => Hpu iid' ins' md' idx d (or_intror Hin_i))
-                  Hpe1 Hwfd1 Hwfs1 Henv1 Hrr)
-        as (added2 & Had2 & [Hev_ub2 | (sigma2 & env2 & Hwfd2 & Hpe2 & Henv2 & Hev_k & Hst2)]).
-      * exists (added2 ++ added1).
-        assert (Had12 : forall k z, In (k, z) (added2 ++ added1) -> In k seen2 /\ ~ In k seen0).
-        { intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk1].
-          - destruct (Had2 k z Hk2) as [Hs2 Hn1]; split; [exact Hs2 | intros Hs0; exact (Hn1 (Hinc01 k Hs0))].
-          - destruct (Had1 k z Hk1) as [Hs1 Hn0]; split; [exact (Hinc12 k Hs1) | exact Hn0]. }
-        split; [exact Had12 | left; intros k].
-        rewrite <- app_assoc.
-        pose proof (eval_let_free_prepend_fmap ce (build_param_env src_pnames vs)
-                      added2 (added1 ++ fmap0) seen1 Hlf_ce (Hfk_ce eq_refl)
-                      (fun q z H => proj2 (Had2 q z H))) as Hev1'.
-        cbn [wrap_evals eval_cfg_dag]; rewrite Hev1', Hev1; exact (Hev_ub2 k).
-      * exists (added2 ++ added1).
-        assert (Had12 : forall k z, In (k, z) (added2 ++ added1) -> In k seen2 /\ ~ In k seen0).
-        { intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk1].
-          - destruct (Had2 k z Hk2) as [Hs2 Hn1]; split; [exact Hs2 | intros Hs0; exact (Hn1 (Hinc01 k Hs0))].
-          - destruct (Had1 k z Hk1) as [Hs1 Hn0]; split; [exact (Hinc12 k Hs1) | exact Hn0]. }
-        split; [exact Had12 | right; exists sigma2, env2].
-        split; [exact Hwfd2 | split; [exact Hpe2 | split; [rewrite <- app_assoc; exact Henv2 | split]]].
-        -- intros fmap_later k Hdisj_lat.
-           assert (Hdisj_lat1 : forall key z, In (key, z) (fmap_later ++ added2) -> ~ In key seen1).
-           { intros key z Hkz; apply in_app_iff in Hkz as [Hl | Ha2].
-             - intros Hs1; exact (Hdisj_lat key z Hl (Hinc12 key Hs1)).
-             - exact (proj2 (Had2 key z Ha2)). }
-           replace (fmap_later ++ (added2 ++ added1) ++ fmap0)
-             with ((fmap_later ++ added2) ++ (added1 ++ fmap0))
-             by (rewrite !app_assoc; reflexivity).
-           pose proof (eval_let_free_prepend_fmap ce (build_param_env src_pnames vs)
-                         (fmap_later ++ added2) (added1 ++ fmap0) seen1 Hlf_ce (Hfk_ce eq_refl) Hdisj_lat1)
-             as Hev_lat1.
-           cbn [wrap_evals eval_cfg_dag]; rewrite Hev_lat1, Hev1.
-           replace ((fmap_later ++ added2) ++ added1 ++ fmap0)
-             with (fmap_later ++ (added2 ++ (added1 ++ fmap0)))
-             by (rewrite !app_assoc; reflexivity).
-           exact (Hev_k fmap_later k Hdisj_lat).
-        -- unfold denote_code; cbn [loop_monad denote_instr]; unfold denote_exp'.
-           eapply cfg_steps_to_ret_bind.
-           ++ eapply cfg_steps_to_ret_bind;
-                [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ Hst1) |].
-              eapply cfg_steps_to_ret_bind; [apply cfg_steps_lwrite | apply CSR_Ret; reflexivity].
-           ++ exact Hst2.
+  destruct iid as [id | vid]; [destruct ins; try (cbn [reify_code_step] in Hstep; discriminate)
+                              | destruct ins; try (cbn [reify_code_step] in Hstep; discriminate)].
+  - exact (eval_reified_code_single_tgt_op id op md rest1 params src_pnames defs allowed arg_dtys vs sigma0 fmap0
+             smap0 env0 seen0 opt_ev smap1 seen1 cevals_r smap2 seen2
+             IH Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hstep Hrr).
   - set (ins := INSTR_Call fn args anns obs) in Hstep |- *.
     destruct (raw_id_in_list id defs &&
               match metadata_range md with None => true | Some _ => false end) eqn:Hhdr;
-      [| discriminate].
+      [| cbn [reify_code_step] in Hstep; unfold ins in Hstep; rewrite Hhdr in Hstep; discriminate].
     apply andb_true_iff in Hhdr as [Hid Hmr_b]; apply raw_id_in_list_spec in Hid.
     assert (Hmr : metadata_range md = None) by (destruct (metadata_range md); [discriminate Hmr_b | reflexivity]).
-    destruct (match_pure_int_intrinsic_call ins) as [pic |] eqn:Hpic; [| discriminate].
+    destruct (match_pure_int_intrinsic_call ins) as [pic |] eqn:Hpic;
+      [| cbn [reify_code_step] in Hstep; unfold ins in Hstep; fold ins in Hstep;
+         rewrite (proj2 (raw_id_in_list_spec id defs) Hid), Hmr, Hpic in Hstep; discriminate].
     pose proof (match_pure_int_intrinsic_call_inv ins pic Hpic) as Hpic_inv.
-    unfold ins in Hpic, Hpic_inv;
+    unfold ins in Hstep, Hpic, Hpic_inv |- *; clear ins.
     destruct pic as [op w a0 a1 | w a0 flag];
       destruct fn as [dt_fn fn_e]; destruct fn_e; cbn in Hpic_inv; try contradiction Hpic_inv;
       match type of Hpic_inv with
@@ -2858,283 +3838,16 @@ Proof.
       destruct obs; cbn in Hpic_inv; try contradiction Hpic_inv;
       destruct Hpic_inv as (Hdt_fn & Hp_intr & Hpic_rest); subst dt_fn.
     + destruct Hpic_rest as (Hop_neq & Hargs & Hfa & Hra).
-      destruct (reify_exp true params src_pnames defs smap0 seen0 (Some (DTYPE_Base (DTYPE_I w))) a0)
-        as [[[wa0 ca] seen_a] |] eqn:Hra0; [| discriminate].
-      destruct (reify_exp true params src_pnames defs smap0 seen_a (Some (DTYPE_Base (DTYPE_I w))) a1)
-        as [[[wa1 cb] seen_b] |] eqn:Hra1; [| discriminate].
-      destruct (list_empty_b (collect_freeze_keys ca) && list_empty_b (collect_freeze_keys cb)) eqn:Hfk01;
-        [| discriminate].
-      apply andb_true_iff in Hfk01 as [Hfka_b Hfkb_b].
-      apply list_empty_b_spec in Hfka_b; apply list_empty_b_spec in Hfkb_b.
-      inversion Hstep; subst opt_ev smap1 seen1; clear Hstep.
-      assert (Hpua0 : forall idx dt_u,
-        In (idx, dt_u) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a0) ->
-        nth_error arg_dtys idx = Some dt_u).
-      { intros idx dt_u Hin; eapply Hpu; [left; reflexivity |].
-        unfold instr_param_uses; rewrite Hpic; apply in_app_iff; left; exact Hin. }
-      assert (Hpua1 : forall idx dt_u,
-        In (idx, dt_u) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a1) ->
-        nth_error arg_dtys idx = Some dt_u).
-      { intros idx dt_u Hin; eapply Hpu; [left; reflexivity |].
-        unfold instr_param_uses; rewrite Hpic; apply in_app_iff; right; exact Hin. }
-      set (ext_vars :=
-        allowed ++
-        List.flat_map (fun '(idx, dt_u) =>
-          match dt_u, nth_error src_pnames idx with
-          | DTYPE_Base (DTYPE_I w0), Some pnm => [(pnm, w0)]
-          | _, _ => []
-          end) (instr_param_uses params defs (INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns []))).
-      assert (Hsmap_ext : wf_smap_entries ext_vars defs seen0 true smap0).
-      { intros r0 wr0 cer0 Hf0; destruct (Hwfs0 r0 wr0 cer0 Hf0) as (H1 & H2 & H3 & H4 & H5 & H6).
-        repeat split; try assumption; intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
-      assert (Hpua0_ext : forall idx w0 pnm,
-        In (idx, DTYPE_Base (DTYPE_I w0)) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a0) ->
-        nth_error src_pnames idx = Some pnm -> In (pnm, w0) ext_vars).
-      { intros idx w0 pnm Hin Hpnm; apply in_app_iff; right; apply in_flat_map.
-        exists (idx, DTYPE_Base (DTYPE_I w0)); split;
-          [unfold instr_param_uses; rewrite Hpic; apply in_app_iff; left; exact Hin | rewrite Hpnm; left; reflexivity]. }
-      assert (Hpua1_ext : forall idx w0 pnm,
-        In (idx, DTYPE_Base (DTYPE_I w0)) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a1) ->
-        nth_error src_pnames idx = Some pnm -> In (pnm, w0) ext_vars).
-      { intros idx w0 pnm Hin Hpnm; apply in_app_iff; right; apply in_flat_map.
-        exists (idx, DTYPE_Base (DTYPE_I w0)); split;
-          [unfold instr_param_uses; rewrite Hpic; apply in_app_iff; right; exact Hin | rewrite Hpnm; left; reflexivity]. }
-      destruct (reify_exp_typing a0 true params src_pnames defs ext_vars smap0 seen0
-                  (Some (DTYPE_Base (DTYPE_I w))) wa0 ca seen_a Hsmap_ext Hpua0_ext Hra0)
-        as (Htopa & Hwta & Hbwa & Hlfa & Hfva_e & Hinca & _).
-      apply check_opt_int_width_some_inv in Htopa; subst wa0.
-      pose proof (wf_smap_entries_seen_mono ext_vars defs seen0 seen_a true smap0 Hinca Hsmap_ext) as Hsmap_ext_a.
-      destruct (reify_exp_typing a1 true params src_pnames defs ext_vars smap0 seen_a
-                  (Some (DTYPE_Base (DTYPE_I w))) wa1 cb seen_b Hsmap_ext_a Hpua1_ext Hra1)
-        as (Htopb & Hwtb & Hbwb & Hlfb & Hfvb_e & Hincb & _).
-      apply check_opt_int_width_some_inv in Htopb; subst wa1.
-      assert (Hinc0b : incl seen0 seen_b) by (intros x Hx; exact (Hincb x (Hinca x Hx))).
-      pose proof (wf_smap_entries_seen_mono ext_vars defs seen0 seen_b true smap0 Hinc0b Hsmap_ext) as Hsmap_ext_b.
-      set (ce := lower_pure_int_intrinsic_binop op w ca cb).
-      destruct (lower_pure_int_intrinsic_binop_typing op w ca cb
-                  Hwta Hbwa Hlfa Hfka_b Hwtb Hbwb Hlfb Hfkb_b)
-        as (Hwt_ce & Hbw_ce & Hlf_ce & Hfk_nil & Hsub).
-      assert (Hext_ce : incl (collect_free_vars [] ce) ext_vars).
-      { intros x Hx; apply Hsub, in_app_iff in Hx as [Hx | Hx]; [exact (Hfva_e x Hx) | exact (Hfvb_e x Hx)]. }
-      pose proof (wf_smap_entries_add ext_vars defs seen_b true smap0 id w ce Hsmap_ext_b
-                    Hid Hwt_ce Hbw_ce Hlf_ce Hext_ce (fun _ x Hx => ltac:(unfold ce in Hx; rewrite Hfk_nil in Hx; destruct Hx))) as Hwfs1.
-      destruct (reify_code_wf_smap rest1 true params src_pnames defs ext_vars
-                  (RM.add id (w, ce) smap0) seen_b cevals_r smap2 seen2 Hwfs1 Hrr)
-        as (_ & Hincb2 & _).
-      pose proof (wf_smap_entries_seen_mono allowed defs seen0 seen_a true smap0 Hinca Hwfs0) as Hwfs0_a.
-      destruct (eval_reified_exp_tgt a0 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap0 env0 seen0
-                  (Some (DTYPE_Base (DTYPE_I w))) w ca seen_a Hnd Hlp Hls Hla Hvs Hpua0
-                  Hpe Hwfd0 Hwfs0 Henv0 Hra0)
-        as (added0 & Had0 & [[msg0 Hev0] | (sigma1 & dv0 & Hwfd1 & Hev0 & Hsc0 & Hst0)]).
-      * exists added0; split.
-        -- intros k z Hkz; destruct (Had0 k z Hkz) as [Hsa Hn0];
-             split; [exact (Hincb2 k (Hincb k Hsa)) | exact Hn0].
-        -- left; intros k; cbn [wrap_evals eval_cfg_dag]; fold ce.
-           destruct (lower_pure_int_intrinsic_binop_ub_l op w ca cb
-                       (build_param_env src_pnames vs) (oracle_of_fmap (added0 ++ fmap0)) msg0 Hop_neq Hev0)
-             as [msg' Hev'].
-           unfold ce; rewrite Hev'; reflexivity.
-      * pose proof (env_matches_smap_oracle_prepend allowed defs seen0 added0 fmap0
-                      (build_param_env src_pnames vs) smap0 env0 Hwfs0
-                      (fun k z H => proj2 (Had0 k z H)) Henv0) as Henv0'.
-        destruct (eval_reified_exp_tgt a1 params src_pnames defs allowed arg_dtys vs sigma1 (added0 ++ fmap0)
-                    smap0 env0 seen_a (Some (DTYPE_Base (DTYPE_I w))) w cb seen_b
-                    Hnd Hlp Hls Hla Hvs Hpua1 Hpe Hwfd1 Hwfs0_a Henv0' Hra1)
-          as (added1 & Had1 & [[msg1 Hev1] | (sigma1b & dv1 & Hwfd1b & Hev1 & Hsc1 & Hst1)]).
-        -- exists (added1 ++ added0); split.
-           ++ intros k z Hkz; apply in_app_iff in Hkz as [Hk1 | Hk0].
-              ** destruct (Had1 k z Hk1) as [Hsb Hn_a]; split; [exact (Hincb2 k Hsb) | intros Hs0; exact (Hn_a (Hinca k Hs0))].
-              ** destruct (Had0 k z Hk0) as [Hsa Hn0]; split; [exact (Hincb2 k (Hincb k Hsa)) | exact Hn0].
-           ++ left; intros k; rewrite <- app_assoc.
-              pose proof (eval_let_free_prepend_fmap ca (build_param_env src_pnames vs)
-                            added1 (added0 ++ fmap0) seen_a Hlfa
-                            (fun q Hq => ltac:(rewrite Hfka_b in Hq; destruct Hq))
-                            (fun q z H => proj2 (Had1 q z H))) as Hev0'.
-              rewrite Hev0 in Hev0'.
-              destruct (lower_pure_int_intrinsic_binop_ub_r op w ca cb
-                          (build_param_env src_pnames vs) (oracle_of_fmap (added1 ++ added0 ++ fmap0))
-                          dv0 msg1 Hop_neq Hev0' Hev1) as [msg' Hev'].
-              cbn [wrap_evals eval_cfg_dag]; fold ce; unfold ce; rewrite Hev'; reflexivity.
-        -- pose proof (eval_let_free_prepend_fmap ca (build_param_env src_pnames vs)
-                         added1 (added0 ++ fmap0) seen_a Hlfa
-                         (fun q Hq => ltac:(rewrite Hfka_b in Hq; destruct Hq))
-                         (fun q z H => proj2 (Had1 q z H))) as Hev0'.
-           rewrite Hev0 in Hev0'.
-           destruct (pure_int_intrinsic_binop_eval_helpers op w ca cb
-                       (build_param_env src_pnames vs) (oracle_of_fmap (added1 ++ added0 ++ fmap0))
-                       dv0 dv1 Hop_neq Hsc0 Hsc1 Hev0' Hev1)
-             as (dv_out & Hpi & Hev_ce & Hsc_out).
-           fold ce in Hev_ce.
-           pose proof (env_matches_smap_oracle_prepend allowed defs seen_a added1 (added0 ++ fmap0)
-                         (build_param_env src_pnames vs) smap0 env0 Hwfs0_a
-                         (fun k z H => proj2 (Had1 k z H)) Henv0') as Henv0''.
-           pose proof (env_matches_smap_add defs (build_param_env src_pnames vs)
-                         (oracle_of_fmap (added1 ++ added0 ++ fmap0)) smap0 env0
-                         id w ce dv_out Henv0'' Hid Hev_ce Hsc_out) as Henv1.
-           assert (Hpe1 : forall idx r, nth_error params idx = Some r -> ~ In r defs ->
-             exists dv, nth_error vs idx = Some dv /\ RM.find r (RM.add id dv_out env0) = Some dv).
-           { intros idx r Hnth Hnin; destruct (Hpe idx r Hnth Hnin) as [dv [Hv Hfe]].
-             exists dv; split; [exact Hv | rewrite RMF.F.add_neq_o; [exact Hfe | intros ->; exact (Hnin Hid)]]. }
-           destruct (IH ext_vars sigma1b (added1 ++ added0 ++ fmap0)
-                       (RM.add id (w, ce) smap0) (RM.add id dv_out env0) seen_b cevals_r smap2 seen2
-                       (fun iid' ins' md' idx d Hin_i => Hpu iid' ins' md' idx d (or_intror Hin_i))
-                       Hpe1 Hwfd1b Hwfs1 Henv1 Hrr)
-             as (added2 & Had2 & [Hev_ub2 | (sigma2 & env2 & Hwfd2 & Hpe2 & Henv2 & Hev_k & Hst2)]).
-           ++ exists (added2 ++ added1 ++ added0); split.
-              ** intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk10].
-                 --- destruct (Had2 k z Hk2) as [Hs2 Hn_b]; split; [exact Hs2 | intros Hs0; exact (Hn_b (Hinc0b k Hs0))].
-                 --- apply in_app_iff in Hk10 as [Hk1 | Hk0].
-                     +++ destruct (Had1 k z Hk1) as [Hsb Hn_a]; split; [exact (Hincb2 k Hsb) | intros Hs0; exact (Hn_a (Hinca k Hs0))].
-                     +++ destruct (Had0 k z Hk0) as [Hsa Hn0]; split; [exact (Hincb2 k (Hincb k Hsa)) | exact Hn0].
-              ** left; intros k; rewrite <- !app_assoc.
-                 pose proof (eval_let_free_prepend_fmap ce (build_param_env src_pnames vs)
-                               added2 (added1 ++ added0 ++ fmap0) seen_b Hlf_ce
-                               (fun q Hq => ltac:(unfold ce in Hq; rewrite Hfk_nil in Hq; destruct Hq))
-                               (fun q z H => proj2 (Had2 q z H))) as Hev_ce'.
-                 cbn [wrap_evals eval_cfg_dag]; fold ce; rewrite Hev_ce', Hev_ce; exact (Hev_ub2 k).
-           ++ exists (added2 ++ added1 ++ added0); split.
-              ** intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk10].
-                 --- destruct (Had2 k z Hk2) as [Hs2 Hn_b]; split; [exact Hs2 | intros Hs0; exact (Hn_b (Hinc0b k Hs0))].
-                 --- apply in_app_iff in Hk10 as [Hk1 | Hk0].
-                     +++ destruct (Had1 k z Hk1) as [Hsb Hn_a]; split; [exact (Hincb2 k Hsb) | intros Hs0; exact (Hn_a (Hinca k Hs0))].
-                     +++ destruct (Had0 k z Hk0) as [Hsa Hn0]; split; [exact (Hincb2 k (Hincb k Hsa)) | exact Hn0].
-              ** right; exists sigma2, env2.
-                 split; [exact Hwfd2 | split; [exact Hpe2 | split; [rewrite <- !app_assoc; exact Henv2 | split]]].
-                 --- intros fmap_later k Hdisj_lat.
-                     assert (Hdisj_latb : forall key z, In (key, z) (fmap_later ++ added2) -> ~ In key seen_b).
-                     { intros key z Hkz; apply in_app_iff in Hkz as [Hl | Ha2].
-                       - intros Hsb; exact (Hdisj_lat key z Hl (Hincb2 key Hsb)).
-                       - exact (proj2 (Had2 key z Ha2)). }
-                     replace (fmap_later ++ (added2 ++ added1 ++ added0) ++ fmap0)
-                       with ((fmap_later ++ added2) ++ (added1 ++ added0 ++ fmap0))
-                       by (rewrite !app_assoc; reflexivity).
-                     pose proof (eval_let_free_prepend_fmap ce (build_param_env src_pnames vs)
-                                   (fmap_later ++ added2) (added1 ++ added0 ++ fmap0) seen_b
-                                   Hlf_ce (fun q Hq => ltac:(unfold ce in Hq; rewrite Hfk_nil in Hq; destruct Hq))
-                                   Hdisj_latb) as Hev_lat.
-                     cbn [wrap_evals eval_cfg_dag]; fold ce; rewrite Hev_lat, Hev_ce.
-                     replace ((fmap_later ++ added2) ++ added1 ++ added0 ++ fmap0)
-                       with (fmap_later ++ (added2 ++ (added1 ++ added0 ++ fmap0)))
-                       by (rewrite !app_assoc; reflexivity).
-                     exact (Hev_k fmap_later k Hdisj_lat).
-                 --- unfold denote_code; cbn [loop_monad].
-                     eapply cfg_steps_to_ret_bind.
-                     +++ unfold ins; eapply cfg_steps_pure_int_intrinsic_binop_ret;
-                           [reflexivity | exact Hp_intr | exact Hargs | exact Hfa | exact Hra | exact Hmr
-                           | exact Hst0 | exact Hst1 | exact Hpi].
-                     +++ exact Hst2.
+      exact (eval_reified_code_single_tgt_intrinsic_binop id fname args anns md op w a0 a1 rest1
+               params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap0 env0 seen0 opt_ev smap1 seen1
+               cevals_r smap2 seen2 IH Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hid Hmr Hp_intr Hop_neq
+               Hargs Hfa Hra Hpic Hstep Hrr).
     + destruct Hpic_rest as (a1 & Hargs & Hflag & Hfa & Hra).
-      destruct (reify_exp true params src_pnames defs smap0 seen0 (Some (DTYPE_Base (DTYPE_I w))) a0)
-        as [[[wa0 ca] seen_a] |] eqn:Hra0; [| discriminate].
-      destruct (list_empty_b (collect_freeze_keys ca)) eqn:Hfka_b; [| discriminate].
-      apply list_empty_b_spec in Hfka_b.
-      inversion Hstep; subst opt_ev smap1 seen1; clear Hstep.
-      assert (Hpua0 : forall idx dt_u,
-        In (idx, dt_u) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a0) ->
-        nth_error arg_dtys idx = Some dt_u).
-      { intros idx dt_u Hin; eapply Hpu; [left; reflexivity |].
-        unfold instr_param_uses; rewrite Hpic; exact Hin. }
-      set (ext_vars :=
-        allowed ++
-        List.flat_map (fun '(idx, dt_u) =>
-          match dt_u, nth_error src_pnames idx with
-          | DTYPE_Base (DTYPE_I w0), Some pnm => [(pnm, w0)]
-          | _, _ => []
-          end) (instr_param_uses params defs (INSTR_Call (DTYPE_Base (DTYPE_I w), EXP_Ident (ID_Global (Name fname))) args anns []))).
-      assert (Hsmap_ext : wf_smap_entries ext_vars defs seen0 true smap0).
-      { intros r0 wr0 cer0 Hf0; destruct (Hwfs0 r0 wr0 cer0 Hf0) as (H1 & H2 & H3 & H4 & H5 & H6).
-        repeat split; try assumption; intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
-      assert (Hpua0_ext : forall idx w0 pnm,
-        In (idx, DTYPE_Base (DTYPE_I w0)) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) a0) ->
-        nth_error src_pnames idx = Some pnm -> In (pnm, w0) ext_vars).
-      { intros idx w0 pnm Hin Hpnm; apply in_app_iff; right; apply in_flat_map.
-        exists (idx, DTYPE_Base (DTYPE_I w0)); split;
-          [unfold instr_param_uses; rewrite Hpic; exact Hin | rewrite Hpnm; left; reflexivity]. }
-      destruct (reify_exp_typing a0 true params src_pnames defs ext_vars smap0 seen0
-                  (Some (DTYPE_Base (DTYPE_I w))) wa0 ca seen_a Hsmap_ext Hpua0_ext Hra0)
-        as (Htopa & Hwta & Hbwa & Hlfa & Hfva_e & Hinca & _).
-      apply check_opt_int_width_some_inv in Htopa; subst wa0.
-      pose proof (wf_smap_entries_seen_mono ext_vars defs seen0 seen_a true smap0 Hinca Hsmap_ext) as Hsmap_ext_a.
-      set (ce := lower_pure_int_intrinsic_abs w ca flag).
-      destruct (lower_pure_int_intrinsic_abs_typing w ca flag Hwta Hbwa Hlfa Hfka_b)
-        as (Hwt_ce & Hbw_ce & Hlf_ce & Hfk_nil & Hsub).
-      assert (Hext_ce : incl (collect_free_vars [] ce) ext_vars)
-        by (intros x Hx; exact (Hfva_e x (Hsub x Hx))).
-      pose proof (wf_smap_entries_add ext_vars defs seen_a true smap0 id w ce Hsmap_ext_a
-                    Hid Hwt_ce Hbw_ce Hlf_ce Hext_ce (fun _ x Hx => ltac:(unfold ce in Hx; rewrite Hfk_nil in Hx; destruct Hx))) as Hwfs1.
-      destruct (reify_code_wf_smap rest1 true params src_pnames defs ext_vars
-                  (RM.add id (w, ce) smap0) seen_a cevals_r smap2 seen2 Hwfs1 Hrr)
-        as (_ & Hinca2 & _).
-      destruct (eval_reified_exp_tgt a0 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap0 env0 seen0
-                  (Some (DTYPE_Base (DTYPE_I w))) w ca seen_a Hnd Hlp Hls Hla Hvs Hpua0
-                  Hpe Hwfd0 Hwfs0 Henv0 Hra0)
-        as (added0 & Had0 & [[msg0 Hev0] | (sigma1 & dv0 & Hwfd1 & Hev0 & Hsc0 & Hst0)]).
-      * exists added0; split.
-        -- intros k z Hkz; destruct (Had0 k z Hkz) as [Hsa Hn0]; split; [exact (Hinca2 k Hsa) | exact Hn0].
-        -- left; intros k; cbn [wrap_evals eval_cfg_dag]; fold ce.
-           destruct (lower_pure_int_intrinsic_abs_ub w ca flag
-                       (build_param_env src_pnames vs) (oracle_of_fmap (added0 ++ fmap0)) msg0 Hev0)
-             as [msg' Hev'].
-           unfold ce; rewrite Hev'; reflexivity.
-      * destruct (pure_int_intrinsic_abs_eval_helper w ca flag
-                    (build_param_env src_pnames vs) (oracle_of_fmap (added0 ++ fmap0)) dv0 Hsc0 Hev0)
-          as (dv_out & Hpi & Hev_ce & Hsc_out).
-        fold ce in Hev_ce.
-        pose proof (env_matches_smap_oracle_prepend allowed defs seen0 added0 fmap0
-                      (build_param_env src_pnames vs) smap0 env0 Hwfs0
-                      (fun k z H => proj2 (Had0 k z H)) Henv0) as Henv0'.
-        pose proof (env_matches_smap_add defs (build_param_env src_pnames vs)
-                      (oracle_of_fmap (added0 ++ fmap0)) smap0 env0
-                      id w ce dv_out Henv0' Hid Hev_ce Hsc_out) as Henv1.
-        assert (Hpe1 : forall idx r, nth_error params idx = Some r -> ~ In r defs ->
-          exists dv, nth_error vs idx = Some dv /\ RM.find r (RM.add id dv_out env0) = Some dv).
-        { intros idx r Hnth Hnin; destruct (Hpe idx r Hnth Hnin) as [dv [Hv Hfe]].
-          exists dv; split; [exact Hv | rewrite RMF.F.add_neq_o; [exact Hfe | intros ->; exact (Hnin Hid)]]. }
-        destruct (IH ext_vars sigma1 (added0 ++ fmap0)
-                    (RM.add id (w, ce) smap0) (RM.add id dv_out env0) seen_a cevals_r smap2 seen2
-                    (fun iid' ins' md' idx d Hin_i => Hpu iid' ins' md' idx d (or_intror Hin_i))
-                    Hpe1 Hwfd1 Hwfs1 Henv1 Hrr)
-          as (added2 & Had2 & [Hev_ub2 | (sigma2 & env2 & Hwfd2 & Hpe2 & Henv2 & Hev_k & Hst2)]).
-        -- exists (added2 ++ added0); split.
-           ++ intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk0].
-              ** destruct (Had2 k z Hk2) as [Hs2 Hn_a]; split; [exact Hs2 | intros Hs0; exact (Hn_a (Hinca k Hs0))].
-              ** destruct (Had0 k z Hk0) as [Hsa Hn0]; split; [exact (Hinca2 k Hsa) | exact Hn0].
-           ++ left; intros k; rewrite <- app_assoc.
-              pose proof (eval_let_free_prepend_fmap ce (build_param_env src_pnames vs)
-                            added2 (added0 ++ fmap0) seen_a Hlf_ce
-                            (fun q Hq => ltac:(unfold ce in Hq; rewrite Hfk_nil in Hq; destruct Hq))
-                            (fun q z H => proj2 (Had2 q z H))) as Hev_ce'.
-              cbn [wrap_evals eval_cfg_dag]; fold ce; rewrite Hev_ce', Hev_ce; exact (Hev_ub2 k).
-        -- exists (added2 ++ added0); split.
-           ++ intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk0].
-              ** destruct (Had2 k z Hk2) as [Hs2 Hn_a]; split; [exact Hs2 | intros Hs0; exact (Hn_a (Hinca k Hs0))].
-              ** destruct (Had0 k z Hk0) as [Hsa Hn0]; split; [exact (Hinca2 k Hsa) | exact Hn0].
-           ++ right; exists sigma2, env2.
-              split; [exact Hwfd2 | split; [exact Hpe2 | split; [rewrite <- app_assoc; exact Henv2 | split]]].
-              ** intros fmap_later k Hdisj_lat.
-                 assert (Hdisj_lata : forall key z, In (key, z) (fmap_later ++ added2) -> ~ In key seen_a).
-                 { intros key z Hkz; apply in_app_iff in Hkz as [Hl | Ha2].
-                   - intros Hsa; exact (Hdisj_lat key z Hl (Hinca2 key Hsa)).
-                   - exact (proj2 (Had2 key z Ha2)). }
-                 replace (fmap_later ++ (added2 ++ added0) ++ fmap0)
-                   with ((fmap_later ++ added2) ++ (added0 ++ fmap0))
-                   by (rewrite !app_assoc; reflexivity).
-                 pose proof (eval_let_free_prepend_fmap ce (build_param_env src_pnames vs)
-                               (fmap_later ++ added2) (added0 ++ fmap0) seen_a
-                               Hlf_ce (fun q Hq => ltac:(unfold ce in Hq; rewrite Hfk_nil in Hq; destruct Hq))
-                               Hdisj_lata) as Hev_lat.
-                 cbn [wrap_evals eval_cfg_dag]; fold ce; rewrite Hev_lat, Hev_ce.
-                 replace ((fmap_later ++ added2) ++ added0 ++ fmap0)
-                   with (fmap_later ++ (added2 ++ (added0 ++ fmap0)))
-                   by (rewrite !app_assoc; reflexivity).
-                 exact (Hev_k fmap_later k Hdisj_lat).
-              ** unfold denote_code; cbn [loop_monad].
-                 eapply cfg_steps_to_ret_bind.
-                 --- unfold ins; eapply cfg_steps_pure_int_intrinsic_abs_ret;
-                       [reflexivity | exact Hp_intr | exact Hargs | exact Hflag | exact Hfa | exact Hra | exact Hmr
-                       | exact Hst0 | exact Hpi].
-                 --- exact Hst2.
-  - inversion Hstep; subst opt_ev smap1 seen1; clear Hstep.
+      exact (eval_reified_code_single_tgt_intrinsic_abs id fname args anns md w a0 a1 flag rest1
+               params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap0 env0 seen0 opt_ev smap1 seen1
+               cevals_r smap2 seen2 IH Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hid Hmr Hp_intr Hargs
+               Hflag Hfa Hra Hpic Hstep Hrr).
+  - cbn [reify_code_step] in Hstep; inversion Hstep; subst opt_ev smap1 seen1; clear Hstep.
     destruct (IH allowed sigma0 fmap0 smap0 env0 seen0 cevals_r smap2 seen2
                 (fun iid' ins' md' idx d Hin_i => Hpu iid' ins' md' idx d (or_intror Hin_i))
                 Hpe Hwfd0 Hwfs0 Henv0 Hrr)
@@ -3221,7 +3934,8 @@ Proof.
         nth_error arg_dtys idx = Some dt_u).
       { intros idx dt_u Hin.
         eapply Hpu; [left; rewrite Hi1; reflexivity |].
-        cbn [instr_param_uses exp_param_uses]; apply in_app_iff; right; apply in_app_iff; left; exact Hin. }
+        cbn [instr_param_uses exp_param_uses].
+        apply in_app_iff; right; apply in_app_iff; left; exact Hin. }
       set (ext_vars :=
         allowed ++
         List.flat_map (fun '(idx, dt_u) =>
@@ -3231,7 +3945,8 @@ Proof.
           end) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) val_exp)).
       assert (Hsmap_ext : wf_smap_entries ext_vars defs seen0 true smap0).
       { intros r0 wr0 cer0 Hf0; destruct (Hwfs0 r0 wr0 cer0 Hf0) as (H1 & H2 & H3 & H4 & H5 & H6).
-        repeat split; try assumption; intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
+        repeat split; try assumption.
+        intros u Hu; apply in_app_iff; left; exact (H5 u Hu). }
       assert (Hpu_ext : forall idx w0 pnm,
         In (idx, DTYPE_Base (DTYPE_I w0)) (exp_param_uses params defs (Some (DTYPE_Base (DTYPE_I w))) val_exp) ->
         nth_error src_pnames idx = Some pnm -> In (pnm, w0) ext_vars).

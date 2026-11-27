@@ -335,7 +335,8 @@ Proof.
     destruct dt2 as [tb2 | |]; try discriminate; destruct tb2 as [w2 | | | | | | | | | |]; try discriminate.
     destruct (Pos.eqb w1 w2 && check_opt_int_width top w1) eqn:Hcw; [| discriminate].
     apply andb_true_iff in Hcw as [Hw12 Hcw]; apply Pos.eqb_eq in Hw12; subst w2.
-    destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I 1%positive))) ec) as [[wc' cec] |] eqn:Hrc; [| discriminate].
+    destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I 1%positive))) ec)
+      as [[wc' cec] |] eqn:Hrc; [| discriminate].
     destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I w1))) e1) as [[wa ce1] |] eqn:Hr1; [| discriminate].
     destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I w1))) e2) as [[wb ce2] |] eqn:Hr2; [| discriminate].
     inversion Hr; subst w1 ce; clear Hr.
@@ -520,7 +521,8 @@ Lemma pure_mcfg_steps_bind {Pa : Params} {R S : Type} :
     @pure_mcfg_steps Pa S env0 (ITree.bind t k) env2 y.
 Proof.
   intros env0 t env1 x k env2 y H1 H2.
-  induction H1 as [env t r Ho | env t t' env' r Ho _ IH | env t id dv ke env' r Ho Hf _ IH | env t id dv ke env' r Ho _ IH].
+  induction H1 as
+    [env t r Ho | env t t' env' r Ho _ IH | env t id dv ke env' r Ho Hf _ IH | env t id dv ke env' r Ho _ IH].
   - eapply pure_mcfg_steps_obs; [symmetry; rewrite observe_bind, Ho; reflexivity | exact H2].
   - eapply PMS_Tau; [rewrite observe_bind, Ho; reflexivity | exact (IH H2)].
   - eapply PMS_LocalRead; [rewrite observe_bind, Ho; reflexivity | exact Hf | exact (IH H2)].
@@ -533,7 +535,8 @@ Lemma pure_mcfg_to_mcfg_ret {Pa : Params} {R : Type} :
     mcfg_steps_to_ret sigma env t sigma env' r.
 Proof.
   intros sigma env t env' r H.
-  induction H as [env t r Ho | env t t' env' r Ho _ IH | env t id dv ke env' r Ho Hf _ IH | env t id dv ke env' r Ho _ IH].
+  induction H as
+    [env t r Ho | env t t' env' r Ho _ IH | env t id dv ke env' r Ho Hf _ IH | env t id dv ke env' r Ho _ IH].
   - apply MSR_Ret; exact Ho.
   - eapply MSR_Tau; [exact Ho | exact IH].
   - eapply MSR_LocalRead; [exact Ho | exact Hf | exact IH].
@@ -546,7 +549,8 @@ Lemma pure_mcfg_to_pure_cfg {Pa : Params} {R : Type} :
     @pure_cfg_steps Pa R env (withCall t) env' r.
 Proof.
   intros env t env' r H.
-  induction H as [env t r Ho | env t t' env' r Ho _ IH | env t id dv ke env' r Ho Hf _ IH | env t id dv ke env' r Ho _ IH];
+  induction H as
+    [env t r Ho | env t t' env' r Ho _ IH | env t id dv ke env' r Ho Hf _ IH | env t id dv ke env' r Ho _ IH];
     unfold withCall in *.
   - apply PCS_Ret; rewrite observe_translate, Ho; reflexivity.
   - eapply PCS_Tau; [rewrite observe_translate, Ho; reflexivity | exact IH].
@@ -573,7 +577,8 @@ Lemma pure_cfg_steps_bind {Pa : Params} {R S : Type} :
     @pure_cfg_steps Pa S env0 (ITree.bind t k) env2 y.
 Proof.
   intros env0 t env1 x k env2 y H1 H2.
-  induction H1 as [env t r Ho | env t t' env' r Ho _ IH | env t id dv ke env' r Ho Hf _ IH | env t id dv ke env' r Ho _ IH].
+  induction H1 as
+    [env t r Ho | env t t' env' r Ho _ IH | env t id dv ke env' r Ho Hf _ IH | env t id dv ke env' r Ho _ IH].
   - eapply pure_cfg_steps_obs; [symmetry; rewrite observe_bind, Ho; reflexivity | exact H2].
   - eapply PCS_Tau; [rewrite observe_bind, Ho; reflexivity | exact (IH H2)].
   - eapply PCS_LocalRead; [rewrite observe_bind, Ho; reflexivity | exact Hf | exact (IH H2)].
@@ -611,14 +616,16 @@ Lemma pure_cfg_steps_det_ref_bind_l {Pa : Params} {A R1 R2 : Type}
       (run_draws s1 (run_cfg_locals env1 (ITree.bind t1 k1))) u2.
 Proof.
   intros s1 env1 t1 env1' x1 k1 u2 H1 Hk.
-  induction H1 as [env t r Ho | env t t' env' r Ho _ IH | env t id dv ke env' r Ho Hf _ IH | env t id dv ke env' r Ho _ IH].
+  induction H1 as
+    [env t r Ho | env t t' env' r Ho _ IH | env t id dv ke env' r Ho Hf _ IH | env t id dv ke env' r Ho _ IH].
   - eapply det_ref__obs_eq;
       [symmetry; rewrite !observe_run_draws, !observe_run_cfg_locals, observe_bind, Ho; reflexivity
       | reflexivity | exact Hk].
   - eapply DR_TauL;
       [rewrite observe_run_draws, observe_run_cfg_locals, observe_bind, Ho; reflexivity | exact (IH Hk)].
   - eapply DR_TauL;
-      [rewrite observe_run_draws, observe_run_cfg_locals, observe_bind, Ho; cbn; rewrite Hf; reflexivity | exact (IH Hk)].
+      [rewrite observe_run_draws, observe_run_cfg_locals, observe_bind, Ho; cbn; rewrite Hf; reflexivity
+      | exact (IH Hk)].
   - eapply DR_TauL;
       [rewrite observe_run_draws, observe_run_cfg_locals, observe_bind, Ho; reflexivity | exact (IH Hk)].
 Qed.
@@ -635,7 +642,8 @@ Lemma pure_cfg_steps_det_ref_bind_r {Pa : Params} {A R1 R2 : Type}
       u1 (run_draws s2 (run_cfg_locals env2 (ITree.bind t2 k2))).
 Proof.
   intros u1 s2 env2 t2 env2' x2 k2 H2 Hk.
-  induction H2 as [env t r Ho | env t t' env' r Ho _ IH | env t id dv ke env' r Ho Hf _ IH | env t id dv ke env' r Ho _ IH].
+  induction H2 as
+    [env t r Ho | env t t' env' r Ho _ IH | env t id dv ke env' r Ho Hf _ IH | env t id dv ke env' r Ho _ IH].
   - eapply det_ref__obs_eq;
       [reflexivity
       | symmetry; rewrite !observe_run_draws, !observe_run_cfg_locals, observe_bind, Ho; reflexivity
@@ -643,7 +651,8 @@ Proof.
   - eapply DR_TauR;
       [rewrite observe_run_draws, observe_run_cfg_locals, observe_bind, Ho; reflexivity | exact (IH Hk)].
   - eapply DR_TauR;
-      [rewrite observe_run_draws, observe_run_cfg_locals, observe_bind, Ho; cbn; rewrite Hf; reflexivity | exact (IH Hk)].
+      [rewrite observe_run_draws, observe_run_cfg_locals, observe_bind, Ho; cbn; rewrite Hf; reflexivity
+      | exact (IH Hk)].
   - eapply DR_TauR;
       [rewrite observe_run_draws, observe_run_cfg_locals, observe_bind, Ho; reflexivity | exact (IH Hk)].
 Qed.
@@ -682,8 +691,9 @@ Proof.
     destruct (ibinop_to_cert_roundtrip iop cop cfl Hiop) as [Heq_iop _].
     destruct (IH1 penv lmap env (Some (DTYPE_Base (DTYPE_I w))) w1 ce1 Henv Hr1)
       as [[Hub1 [msg1 Hev1]] | [dv1 [Hev1 [Hsc1 Hst1]]]].
-    + left; split; [intros sigma; cbn [denote_exp]; apply mcfg_steps_to_ub_bind_l; exact (Hub1 sigma)
-                   | exists msg1; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity].
+    + left; split.
+      * intros sigma; cbn [denote_exp]; apply mcfg_steps_to_ub_bind_l; exact (Hub1 sigma).
+      * exists msg1; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
     + destruct (IH2 penv lmap env (Some (DTYPE_Base (DTYPE_I w))) w2 ce2 Henv Hr2)
         as [[Hub2 [msg2 Hev2]] | [dv2 [Hev2 [Hsc2 Hst2]]]].
       * left; split;
@@ -719,8 +729,9 @@ Proof.
     inversion Hr; subst w ce; clear Hr.
     destruct (IH1 penv lmap env (Some (DTYPE_Base (DTYPE_I wb))) w1 ce1 Henv Hr1)
       as [[Hub1 [msg1 Hev1]] | [dv1 [Hev1 [Hsc1 Hst1]]]].
-    + left; split; [intros sigma; cbn [denote_exp]; apply mcfg_steps_to_ub_bind_l; exact (Hub1 sigma)
-                   | exists msg1; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity].
+    + left; split.
+      * intros sigma; cbn [denote_exp]; apply mcfg_steps_to_ub_bind_l; exact (Hub1 sigma).
+      * exists msg1; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
     + destruct (IH2 penv lmap env (Some (DTYPE_Base (DTYPE_I wb))) w2 ce2 Henv Hr2)
         as [[Hub2 [msg2 Hev2]] | [dv2 [Hev2 [Hsc2 Hst2]]]].
       * left; split;
@@ -758,8 +769,9 @@ Proof.
     pose proof (pure_conv_to_cert_roundtrip pc ck cfl Hpc) as Heq_pc.
     destruct (IH1 penv lmap env (Some (DTYPE_Base (DTYPE_I fw))) w1 ce1 Henv Hr1)
       as [[Hub1 [msg1 Hev1]] | [dv1 [Hev1 [Hsc1 Hst1]]]].
-    + left; split; [intros sigma; cbn [denote_exp]; apply mcfg_steps_to_ub_bind_l; exact (Hub1 sigma)
-                   | exists msg1; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity].
+    + left; split.
+      * intros sigma; cbn [denote_exp]; apply mcfg_steps_to_ub_bind_l; exact (Hub1 sigma).
+      * exists msg1; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
     + pose proof (check_opt_int_width_some_inv _ _ (reify_pure_exp_top_width _ _ _ _ _ Hr1)) as Hw1.
       subst w1; unfold w_ok in Hwok.
       destruct (eval_cast_wf_scalar ck fw tw cfl dv1 Hwok Hsc1) as [vout [Hev_cast Hsc_out]].
@@ -775,14 +787,16 @@ Proof.
     destruct dt2 as [tb2 | |]; try discriminate; destruct tb2 as [w2 | | | | | | | | | |]; try discriminate.
     destruct (Pos.eqb w1 w2 && check_opt_int_width top w1) eqn:Hcw; [| discriminate].
     apply andb_true_iff in Hcw as [Hw12 Hcw]; apply Pos.eqb_eq in Hw12; subst w2.
-    destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I 1%positive))) ec) as [[wc' cec] |] eqn:Hrc; [| discriminate].
+    destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I 1%positive))) ec)
+      as [[wc' cec] |] eqn:Hrc; [| discriminate].
     destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I w1))) e1) as [[wa ce1] |] eqn:Hr1; [| discriminate].
     destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I w1))) e2) as [[wb ce2] |] eqn:Hr2; [| discriminate].
     inversion Hr; subst w1 ce; clear Hr.
     destruct (IHc penv lmap env (Some (DTYPE_Base (DTYPE_I 1%positive))) wc' cec Henv Hrc)
       as [[Hubc [msgc Hevc]] | [dvc [Hevc [Hscc Hstc]]]].
-    + left; split; [intros sigma; cbn [denote_exp]; apply mcfg_steps_to_ub_bind_l; exact (Hubc sigma)
-                   | exists msgc; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hevc; reflexivity].
+    + left; split.
+      * intros sigma; cbn [denote_exp]; apply mcfg_steps_to_ub_bind_l; exact (Hubc sigma).
+      * exists msgc; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hevc; reflexivity.
     + destruct (IH1 penv lmap env (Some (DTYPE_Base (DTYPE_I w))) wa ce1 Henv Hr1)
         as [[Hub1 [msg1 Hev1]] | [dv1 [Hev1 [Hsc1 Hst1]]]].
       * left; split;
@@ -824,7 +838,8 @@ Proof.
     + destruct top as [dt |]; [| discriminate].
       destruct dt as [tb | |]; try discriminate; destruct tb as [wt | | | | | | | | | |]; try discriminate.
       inversion Hr; subst wt ce; clear Hr.
-      right; exists (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N (reify_int_const w (denote_int_syntax x)))))).
+      right;
+        exists (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N (reify_int_const w (denote_int_syntax x)))))).
       split; [reflexivity | split; [right; eexists; reflexivity |]].
       cbn [denote_exp]; rewrite repr_reify_int_const; apply PMS_Ret; reflexivity.
     + destruct (check_opt_int_width top 1%positive) eqn:Hcw; [| discriminate].
@@ -915,7 +930,9 @@ Proof.
   induction phis as [| [[id [fm dt pargs]] md] rest IH];
     intros penv bid_from lmap env pevals Henv Hr;
     cbn [reify_pure_phis] in Hr.
-  - inversion Hr; subst pevals; right; exists []; split; [constructor | apply PCS_Ret; reflexivity].
+  - inversion Hr; subst pevals; right; exists []; split.
+    + constructor.
+    + apply PCS_Ret; reflexivity.
   - destruct dt as [tb | |]; try discriminate; destruct tb as [w | | | | | | | | | |]; try discriminate.
     destruct (is_supported_bit_width w); [| discriminate].
     destruct (assoc bid_from pargs) as [op |] eqn:Hassoc; [| discriminate].
@@ -1031,7 +1048,9 @@ Proof.
     intros varargs penv lmap0 env0 cevals lmap2 Henv0 Hr;
     cbn [reify_pure_code] in Hr.
   - inversion Hr; subst cevals lmap2; right; exists env0.
-    split; [exact Henv0 | split; [apply Forall_nil | split; [intros r _; reflexivity | apply PCS_Ret; reflexivity]]].
+    split; [exact Henv0 |].
+    split; [apply Forall_nil |].
+    split; [intros r _; reflexivity | apply PCS_Ret; reflexivity].
   - destruct iid as [id | vid]; destruct ins; try discriminate Hr.
     + destruct (reify_pure_exp lmap0 None op) as [[w ce] |] eqn:Hre; [| discriminate].
       destruct (reify_pure_code (RM.add id (w, ce) lmap0) rest) as [[cevals_r lmap2'] |] eqn:Hrr; [| discriminate].
@@ -1156,8 +1175,10 @@ Proof.
   - rewrite (IHo penv1 penv2 foracle Hlf Hag); reflexivity.
   - rewrite !andb_true_iff in Hlf; destruct Hlf as ([Hlfc Hlft] & Hlff).
     rewrite (IHc penv1 penv2 foracle Hlfc (fun n w0 H => Hag n w0 (proj2 (in_app_iff _ _ _) (or_introl H)))).
-    rewrite (IHt penv1 penv2 foracle Hlft (fun n w0 H => Hag n w0 (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_introl H)))))).
-    rewrite (IHf penv1 penv2 foracle Hlff (fun n w0 H => Hag n w0 (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_intror H)))))).
+    rewrite (IHt penv1 penv2 foracle Hlft
+      (fun n w0 H => Hag n w0 (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_introl H)))))).
+    rewrite (IHf penv1 penv2 foracle Hlff
+      (fun n w0 H => Hag n w0 (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_intror H)))))).
     reflexivity.
   - rewrite (IHo penv1 penv2 foracle Hlf Hag); reflexivity.
 Qed.
@@ -1205,9 +1226,11 @@ Proof.
     by (destruct Hsc_t as [-> | [it ->]]; [reflexivity | cbn [check_scalar_width]; rewrite Pos.eqb_refl; reflexivity]).
   rewrite Hp, Hv, Hcw_t.
   destruct Hsc_s as [-> | [is0 ->]].
-  - cbn [cut_p_dvalue check_scalar_width]; rewrite Pos.eqb_refl; cbn [eou_bind eval_select eval_select_base_dvalue]; rewrite bit1_zero_unsigned; reflexivity.
+  - cbn [cut_p_dvalue check_scalar_width]; rewrite Pos.eqb_refl;
+      cbn [eou_bind eval_select eval_select_base_dvalue]; rewrite bit1_zero_unsigned; reflexivity.
   - destruct Href as [Habs | ->]; [discriminate Habs |].
-    cbn [cut_p_dvalue check_scalar_width]; rewrite Pos.eqb_refl; cbn [eou_bind eval_select eval_select_base_dvalue]; rewrite bit1_one_unsigned; reflexivity.
+    cbn [cut_p_dvalue check_scalar_width]; rewrite Pos.eqb_refl;
+      cbn [eou_bind eval_select eval_select_base_dvalue]; rewrite bit1_one_unsigned; reflexivity.
 Qed.
 
 Fixpoint cut_names_from (idx : nat) (pspecs : list (raw_id * raw_id * positive))
@@ -1470,7 +1493,8 @@ Proof.
     destruct (build_param_env_nth src_pnames vs idx pnm Hnd_s Hls Hnth_p) as [dv' [Hnth_v' Hp]].
     rewrite Hnth_v in Hnth_v'; injection Hnth_v' as <-.
     pose proof (Hdt idx (DTYPE_Base (DTYPE_I w)) (or_introl eq_refl)) as Hnth_dt.
-    pose proof (Forall2_nth_error_l dvalue_has_dtyp vs arg_dtys Hvs idx dv (DTYPE_Base (DTYPE_I w)) Hnth_v Hnth_dt) as Hty.
+    pose proof (Forall2_nth_error_l dvalue_has_dtyp vs arg_dtys Hvs
+                  idx dv (DTYPE_Base (DTYPE_I w)) Hnth_v Hnth_dt) as Hty.
     apply dvalue_has_dtyp_i_iff_wf_scalar in Hty.
     intros r wr cer Hf.
     destruct (RawIDOrd.eq_dec r0 r) as [Heq | Hneq].
@@ -1506,7 +1530,8 @@ Proof.
     + destruct (reify_pure_exp lmap0 None op) as [[w0 ce0] |]; [| discriminate Hr].
       destruct (reify_pure_code (RM.add id (w0, ce0) lmap0) rest) as [[cr l2] |] eqn:Hrr; [| discriminate Hr].
       inversion Hr; subst cevals lmap2; clear Hr.
-      assert (Hdom1 : forall r' w' ce', RM.find r' (RM.add id (w0, ce0) lmap0) = Some (w', ce') -> In r' (dom0 ++ [id])).
+      assert (Hdom1 :
+        forall r' w' ce', RM.find r' (RM.add id (w0, ce0) lmap0) = Some (w', ce') -> In r' (dom0 ++ [id])).
       { intros r' w' ce' Hf'.
         destruct (RawIDOrd.eq_dec id r') as [<- | Hneq].
         - apply in_app_iff; right; left; reflexivity.
@@ -1572,7 +1597,8 @@ Lemma pure_cfg_steps_bind_to_tau {Pa : Params} {R S : Type} :
     @pure_cfg_steps_to_tau Pa S env0 (ITree.bind t k) env2 m.
 Proof.
   intros env0 t env1 x k env2 m H1 H2.
-  induction H1 as [env t r Ho | env t t' env' r Ho _ IH | env t id dv ke env' r Ho Hf _ IH | env t id dv ke env' r Ho _ IH].
+  induction H1 as
+    [env t r Ho | env t t' env' r Ho _ IH | env t id dv ke env' r Ho Hf _ IH | env t id dv ke env' r Ho _ IH].
   - eapply pure_cfg_steps_to_tau_obs; [symmetry; rewrite observe_bind, Ho; reflexivity | exact H2].
   - eapply PCT_StepTau; [rewrite observe_bind, Ho; reflexivity | exact (IH H2)].
   - eapply PCT_LocalRead; [rewrite observe_bind, Ho; reflexivity | exact Hf | exact (IH H2)].
@@ -1585,7 +1611,8 @@ Lemma pure_cfg_steps_to_tau_bind {Pa : Params} {R S : Type} :
     @pure_cfg_steps_to_tau Pa S env0 (ITree.bind t k) env1 (ITree.bind m k).
 Proof.
   intros env0 t env1 m k H.
-  induction H as [env t m Ho | env t t' env' m Ho _ IH | env t id dv ke env' m Ho Hf _ IH | env t id dv ke env' m Ho _ IH].
+  induction H as
+    [env t m Ho | env t t' env' m Ho _ IH | env t id dv ke env' m Ho Hf _ IH | env t id dv ke env' m Ho _ IH].
   - apply PCT_Tau; rewrite observe_bind, Ho; reflexivity.
   - eapply PCT_StepTau; [rewrite observe_bind, Ho; reflexivity | exact IH].
   - eapply PCT_LocalRead; [rewrite observe_bind, Ho; reflexivity | exact Hf | exact IH].
@@ -1599,7 +1626,8 @@ Lemma pure_cfg_steps_to_tau_trans {Pa : Params} {R : Type} :
     @pure_cfg_steps_to_tau Pa R env0 t0 env2 m2.
 Proof.
   intros env0 t0 env1 m1 env2 m2 H1 H2.
-  induction H1 as [env t m Ho | env t t' env' m Ho _ IH | env t id dv ke env' m Ho Hf _ IH | env t id dv ke env' m Ho _ IH].
+  induction H1 as
+    [env t m Ho | env t t' env' m Ho _ IH | env t id dv ke env' m Ho Hf _ IH | env t id dv ke env' m Ho _ IH].
   - eapply PCT_StepTau; [exact Ho | exact H2].
   - eapply PCT_StepTau; [exact Ho | exact (IH H2)].
   - eapply PCT_LocalRead; [exact Ho | exact Hf | exact (IH H2)].
@@ -1613,7 +1641,8 @@ Lemma pure_cfg_steps_to_tau_then_ret {Pa : Params} {R : Type} :
     @pure_cfg_steps Pa R env0 t0 env2 v.
 Proof.
   intros env0 t0 env1 m1 env2 v H1 H2.
-  induction H1 as [env t m Ho | env t t' env' m Ho _ IH | env t id dv ke env' m Ho Hf _ IH | env t id dv ke env' m Ho _ IH].
+  induction H1 as
+    [env t m Ho | env t t' env' m Ho _ IH | env t id dv ke env' m Ho Hf _ IH | env t id dv ke env' m Ho _ IH].
   - eapply PCS_Tau; [exact Ho | exact H2].
   - eapply PCS_Tau; [exact Ho | exact (IH H2)].
   - eapply PCS_LocalRead; [exact Ho | exact Hf | exact (IH H2)].
@@ -1627,7 +1656,8 @@ Lemma pure_cfg_steps_to_tau_then_ub {Pa : Params} {R : Type} :
     cfg_steps_to_ub sigma env0 t0.
 Proof.
   intros sigma env0 t0 env1 m1 H1 H2.
-  induction H1 as [env t m Ho | env t t' env' m Ho _ IH | env t id dv ke env' m Ho Hf _ IH | env t id dv ke env' m Ho _ IH].
+  induction H1 as
+    [env t m Ho | env t t' env' m Ho _ IH | env t id dv ke env' m Ho Hf _ IH | env t id dv ke env' m Ho _ IH].
   - eapply CSU_Tau; [exact Ho | exact H2].
   - eapply CSU_Tau; [exact Ho | exact (IH H2)].
   - eapply CSU_LocalRead; [exact Ho | exact Hf | exact (IH H2)].
@@ -1645,10 +1675,12 @@ Lemma pure_cfg_steps_to_tau_det_ref_l {Pa : Params} {R1 R2 : Type}
       (run_draws s1 (run_cfg_locals env1 t1)) u2.
 Proof.
   intros s1 env1 t1 env1' m1 u2 H1 Hk.
-  induction H1 as [env t m Ho | env t t' env' m Ho _ IH | env t id dv ke env' m Ho Hf _ IH | env t id dv ke env' m Ho _ IH].
+  induction H1 as
+    [env t m Ho | env t t' env' m Ho _ IH | env t id dv ke env' m Ho Hf _ IH | env t id dv ke env' m Ho _ IH].
   - eapply DR_TauL; [rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity | exact Hk].
   - eapply DR_TauL; [rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity | exact (IH Hk)].
-  - eapply DR_TauL; [rewrite observe_run_draws, observe_run_cfg_locals, Ho; cbn; rewrite Hf; reflexivity | exact (IH Hk)].
+  - eapply DR_TauL;
+      [rewrite observe_run_draws, observe_run_cfg_locals, Ho; cbn; rewrite Hf; reflexivity | exact (IH Hk)].
   - eapply DR_TauL; [rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity | exact (IH Hk)].
 Qed.
 
@@ -1667,15 +1699,20 @@ Lemma pure_cfg_steps_to_tau_sync {Pa : Params} {R1 R2 : Type}
       (run_draws s2 (run_cfg_locals env2 t2)).
 Proof.
   intros s1 s2 env1 t1 env1' m1 env2 t2 env2' m2 H1 H2 Hself.
-  induction H1 as [env t m Ho1 | env t t' env' m Ho1 _ IH1 | env t id dv ke env' m Ho1 Hf _ IH1 | env t id dv ke env' m Ho1 _ IH1].
-  - induction H2 as [eb tb mb Ho2 | eb tb tb' eb' mb Ho2 _ IH2 | eb tb id dv ke eb' mb Ho2 Hf _ IH2 | eb tb id dv ke eb' mb Ho2 _ IH2].
+  induction H1 as
+    [env t m Ho1 | env t t' env' m Ho1 _ IH1 | env t id dv ke env' m Ho1 Hf _ IH1 | env t id dv ke env' m Ho1 _ IH1].
+  - induction H2 as
+      [eb tb mb Ho2 | eb tb tb' eb' mb Ho2 _ IH2 | eb tb id dv ke eb' mb Ho2 Hf _ IH2
+      | eb tb id dv ke eb' mb Ho2 _ IH2].
     + apply DR_Step; unfold det_step_body.
       rewrite !observe_run_draws, !observe_run_cfg_locals, Ho1, Ho2; exact Hself.
     + eapply DR_TauR; [rewrite observe_run_draws, observe_run_cfg_locals, Ho2; reflexivity | exact (IH2 Hself)].
-    + eapply DR_TauR; [rewrite observe_run_draws, observe_run_cfg_locals, Ho2; cbn; rewrite Hf; reflexivity | exact (IH2 Hself)].
+    + eapply DR_TauR;
+        [rewrite observe_run_draws, observe_run_cfg_locals, Ho2; cbn; rewrite Hf; reflexivity | exact (IH2 Hself)].
     + eapply DR_TauR; [rewrite observe_run_draws, observe_run_cfg_locals, Ho2; reflexivity | exact (IH2 Hself)].
   - eapply DR_TauL; [rewrite observe_run_draws, observe_run_cfg_locals, Ho1; reflexivity | exact (IH1 Hself)].
-  - eapply DR_TauL; [rewrite observe_run_draws, observe_run_cfg_locals, Ho1; cbn; rewrite Hf; reflexivity | exact (IH1 Hself)].
+  - eapply DR_TauL;
+      [rewrite observe_run_draws, observe_run_cfg_locals, Ho1; cbn; rewrite Hf; reflexivity | exact (IH1 Hself)].
   - eapply DR_TauL; [rewrite observe_run_draws, observe_run_cfg_locals, Ho1; reflexivity | exact (IH1 Hself)].
 Qed.
 
@@ -1786,7 +1823,8 @@ Lemma eval_eff_loop_cond {Pa : Params} :
 Proof.
   intros penv pol ce cbit Hev; destruct pol; cbn [eff_loop_cond].
   - exists cbit; split; [exact Hev | destruct (@Integers.unsigned 1 cbit =? 1)%Z; reflexivity].
-  - unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev; cbn [eou_bind eval_select eval_select_base_dvalue].
+  - unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev;
+      cbn [eou_bind eval_select eval_select_base_dvalue].
     destruct (@Integers.unsigned 1 cbit =? 1)%Z.
     + exists (@Integers.repr 1%positive (Z.of_N 0%N)); split; [reflexivity | exact bit1_repr_zero_unsigned].
     + exists (@Integers.repr 1%positive (Z.of_N 1%N)); split; [reflexivity | exact bit1_repr_one_unsigned].
@@ -1888,7 +1926,8 @@ Proof.
     cbn [phi_eval_pair_matches] in Hpmt; destruct Hpmt as [-> [Hev_t Hsc_t]].
     pose proof (fun nm w0 H => Hpenv nm w0 (Hfvs (nm, w0) H)) as Hps.
     pose proof (fun nm w0 H => Hpenv nm w0 (Hfvt (nm, w0) H)) as Hpt.
-    pose proof (check_expr_refines_with_lrat_sound ctx ce_s ce_t opt_pf penv dummy_freeze_oracle Href Hps Hpt Hctx) as Hdv.
+    pose proof (check_expr_refines_with_lrat_sound ctx ce_s ce_t opt_pf penv
+                  dummy_freeze_oracle Href Hps Hpt Hctx) as Hdv.
     rewrite Hev_s, Hev_t in Hdv; cbn [refine_eou_dvalue] in Hdv.
     destruct (IH rs rt dvs_sr dvs_tr allowed ctx opt_pf penv Hpenv Hctx Hfas_r Hfat_r Hms_r Hmt_r Hrest)
       as (Hrel_r & Hmap_s & Hmap_t).
@@ -2060,7 +2099,8 @@ Definition reify_natural_loop
                                                 match blk_term b_body, reify_pure_code lmap_hdr_c (blk_code b_body) with
                                                 | (_, TERM_Br_1 br_back, _), Some (evals_body, lmap_latch) =>
                                                     if raw_id_eqb br_back bid_hdr then
-                                                      Some (br_latch, evals_body, lmap_latch, code_written_ids (blk_code b_body))
+                                                      Some (br_latch, evals_body, lmap_latch,
+                                                            code_written_ids (blk_code b_body))
                                                     else None
                                                 | _, _ => None
                                                 end
@@ -2071,19 +2111,23 @@ Definition reify_natural_loop
                                       | None => None
                                       | Some (bid_latch_from, evals_body, lmap_latch, body_wr) =>
                                           let dom_entry := args G ++ code_written_ids (blk_code b_entry) in
-                                          let loop_wr := List.map fst hspecs ++ code_written_ids (blk_code b_hdr) ++ body_wr in
-                                          if negb (disjoint_raw_ids dom_entry loop_wr) || raw_id_eqb br_exit bid_hdr then None
+                                          let loop_wr :=
+                                            List.map fst hspecs ++ code_written_ids (blk_code b_hdr) ++ body_wr in
+                                          if negb (disjoint_raw_ids dom_entry loop_wr) ||
+                                             raw_id_eqb br_exit bid_hdr then None
                                           else
                                             match reify_pure_phis bid_latch_from lmap_latch (blk_phis b_hdr),
                                                   RM.find br_exit bmap with
                                             | Some next_pevals, Some b_exit =>
                                                 if negb (list_empty_b (blk_phis b_exit)) then None
                                                 else
-                                                  match reify_pure_code lmap_hdr_c (blk_code b_exit), blk_term b_exit with
+                                                  match reify_pure_code lmap_hdr_c (blk_code b_exit),
+                                                        blk_term b_exit with
                                                   | Some (evals_exit, lmap_exit),
                                                     (_, TERM_Ret (DTYPE_Base (DTYPE_I w_ret), op_ret), _) =>
                                                       if is_supported_bit_width w_ret then
-                                                        match reify_pure_exp lmap_exit (Some (DTYPE_Base (DTYPE_I w_ret))) op_ret with
+                                                        match reify_pure_exp lmap_exit
+                                                                (Some (DTYPE_Base (DTYPE_I w_ret))) op_ret with
                                                         | Some (_, ce_ret) =>
                                                             Some (hspecs, {|
                                                               nls_bid_hdr := bid_hdr;
@@ -2186,14 +2230,320 @@ Lemma pure_cfg_to_cfg_ret {Pa : Params} {R : Type} :
     cfg_steps_to_ret sigma env t sigma env' r.
 Proof.
   intros sigma env t env' r H.
-  induction H as [env t r Ho | env t t' env' r Ho _ IH | env t id dv ke env' r Ho Hf _ IH | env t id dv ke env' r Ho _ IH].
+  induction H as
+    [env t r Ho | env t t' env' r Ho _ IH | env t id dv ke env' r Ho Hf _ IH | env t id dv ke env' r Ho _ IH].
   - apply CSR_Ret; exact Ho.
   - eapply CSR_Tau; [exact Ho | exact IH].
   - eapply CSR_LocalRead; [exact Ho | exact Hf | exact IH].
   - eapply CSR_LocalWrite; [exact Ho | exact IH].
 Qed.
 
+Local Lemma reify_natural_loop_latch_step {Pa : Params} :
+  forall (bmap : rmap (block dtyp)) bid_hdr br_latch bid_latch_from
+         evals_body lmap_latch body_wr lmap_hdr_c
+         (dom_entry h_wr : list raw_id)
+         (varargs : option (@ptr _ (@PTR Pa))) (penv_cut : param_env Pa)
+         bid_prev (env_prev env_hdr_c : rmap (@dvalue Pa)),
+    disjoint_raw_ids dom_entry (h_wr ++ body_wr) = true ->
+    (if raw_id_eqb br_latch bid_hdr
+     then Some (bid_hdr, @nil cert_expr, lmap_hdr_c, @nil raw_id)
+     else
+       match RM.find br_latch bmap with
+       | Some b_body =>
+           if list_empty_b (blk_phis b_body) then
+             match blk_term b_body, reify_pure_code lmap_hdr_c (blk_code b_body) with
+             | (_, TERM_Br_1 br_back, _), Some (evals_b, lmap_b) =>
+                 if raw_id_eqb br_back bid_hdr
+                 then Some (br_latch, evals_b, lmap_b, code_written_ids (blk_code b_body))
+                 else None
+             | _, _ => None
+             end
+           else None
+       | None => None
+       end) = Some (bid_latch_from, evals_body, lmap_latch, body_wr) ->
+    lmap_matches_env penv_cut lmap_hdr_c env_hdr_c ->
+    (forall r, In r dom_entry -> ~ In r body_wr -> RM.find r env_hdr_c = RM.find r env_prev) ->
+    pure_cfg_steps_to_tau env_prev
+      (denote_cfg_from bmap varargs (bid_prev, bid_hdr))
+      env_hdr_c
+      (denote_cfg_from bmap varargs (bid_hdr, br_latch)) ->
+    ((forall sigma, cfg_steps_to_ub sigma env_prev (denote_cfg_from bmap varargs (bid_prev, bid_hdr))) /\
+     exists ce msg, In ce evals_body /\
+       eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ub msg) \/
+    (exists env_latch,
+       lmap_matches_env penv_cut lmap_latch env_latch /\
+       Forall (fun ce => exists dv, eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ret dv)
+         evals_body /\
+       (forall r, In r dom_entry -> RM.find r env_latch = RM.find r env_prev) /\
+       pure_cfg_steps_to_tau env_prev (denote_cfg_from bmap varargs (bid_prev, bid_hdr))
+         env_latch (denote_cfg_from bmap varargs (bid_latch_from, bid_hdr))).
+Proof.
+  intros bmap bid_hdr br_latch bid_latch_from evals_body lmap_latch body_wr lmap_hdr_c
+         dom_entry h_wr varargs penv_cut bid_prev env_prev env_hdr_c
+         Edisj Elatch Henv_hc Hpres_hc_dom Hhdr_jump.
+  destruct (raw_id_eqb br_latch bid_hdr) eqn:Eself.
+  - apply raw_id_eqb_eq in Eself; inversion Elatch;
+      subst br_latch bid_latch_from evals_body lmap_latch body_wr.
+    right; exists env_hdr_c.
+    split; [exact Henv_hc |].
+    split; [constructor |].
+    split; [intros r Hr; exact (Hpres_hc_dom r Hr (fun H => H)) | exact Hhdr_jump].
+  - destruct (RM.find br_latch bmap) as [b_body |] eqn:Hf_body; [| discriminate Elatch].
+    destruct (list_empty_b (blk_phis b_body)) eqn:Ep_body; [| discriminate Elatch].
+    apply list_empty_b_nil in Ep_body.
+    destruct (blk_term b_body) as [[ti_b tm_b] md_b] eqn:Htm_body.
+    destruct tm_b as [| | | br_back | | | | |]; try discriminate Elatch.
+    destruct (reify_pure_code lmap_hdr_c (blk_code b_body))
+      as [[eb0 ll0] |] eqn:Hr_body; [| discriminate Elatch].
+    destruct (raw_id_eqb br_back bid_hdr) eqn:Eback; [| discriminate Elatch].
+    apply raw_id_eqb_eq in Eback; inversion Elatch;
+      subst br_back bid_latch_from evals_body lmap_latch body_wr; clear Elatch.
+    destruct (eval_reified_pure_code (blk_code b_body) varargs penv_cut
+                lmap_hdr_c env_hdr_c eb0 ll0 Henv_hc Hr_body)
+      as [[Hub_b Hce_b] | (env_latch & Henv_l & Hfa_ev_b & Hpres_b & Hst_b)].
+    + left; split; [| exact Hce_b].
+      intros sigma; eapply pure_cfg_steps_to_tau_then_ub; [exact Hhdr_jump |].
+      eapply denote_cfg_from_block_ub; [exact Hf_body |].
+      unfold denote_block; rewrite Ep_body, Htm_body.
+      eapply cfg_steps_to_ub_bind_r;
+        [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ (denote_empty_phis_ret bid_hdr env_hdr_c))
+        | apply cfg_steps_to_ub_bind_l; exact (Hub_b sigma)].
+    + right; exists env_latch.
+      split; [exact Henv_l | split; [exact Hfa_ev_b | split]].
+      * intros r Hdom.
+        pose proof (disjoint_raw_ids_spec _ _ r Edisj Hdom) as Hnin_loop.
+        assert (Hnin_b : ~ In r (code_written_ids (blk_code b_body)))
+          by (intros Hb; exact (Hnin_loop (proj2 (in_app_iff _ _ _) (or_intror Hb)))).
+        rewrite (Hpres_b r Hnin_b); exact (Hpres_hc_dom r Hdom Hnin_b).
+      * eapply pure_cfg_steps_to_tau_trans; [exact Hhdr_jump |].
+        eapply denote_cfg_from_block_jump; [exact Hf_body |].
+        unfold denote_block; rewrite Ep_body, Htm_body.
+        eapply pure_cfg_steps_bind; [apply denote_empty_phis_ret |].
+        eapply pure_cfg_steps_bind; [exact Hst_b | apply PCS_Ret; reflexivity].
+Qed.
+
+Local Lemma reify_natural_loop_exit_step {Pa : Params} :
+  forall (bmap : rmap (block dtyp)) bid_hdr br_exit b_exit
+         lmap_hdr_c evals_exit lmap_exit ti_x w_ret op_ret md_x ce_ret
+         (varargs : option (@ptr _ (@PTR Pa))) (penv_cut : param_env Pa)
+         bid_prev (env_prev env_hdr_c : rmap (@dvalue Pa)),
+    RM.find br_exit bmap = Some b_exit ->
+    blk_phis b_exit = [] ->
+    reify_pure_code lmap_hdr_c (blk_code b_exit) = Some (evals_exit, lmap_exit) ->
+    blk_term b_exit = (ti_x, TERM_Ret (DTYPE_Base (DTYPE_I w_ret), op_ret), md_x) ->
+    reify_pure_exp lmap_exit (Some (DTYPE_Base (DTYPE_I w_ret))) op_ret = Some (w_ret, ce_ret) ->
+    lmap_matches_env penv_cut lmap_hdr_c env_hdr_c ->
+    pure_cfg_steps_to_tau env_prev
+      (denote_cfg_from bmap varargs (bid_prev, bid_hdr))
+      env_hdr_c
+      (denote_cfg_from bmap varargs (bid_hdr, br_exit)) ->
+    ((forall sigma, cfg_steps_to_ub sigma env_prev (denote_cfg_from bmap varargs (bid_prev, bid_hdr))) /\
+     exists ce msg, In ce (ce_ret :: evals_exit) /\
+       eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ub msg) \/
+    (exists env_exit dv_ret,
+       Forall (fun ce => exists dv, eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ret dv)
+         evals_exit /\
+       eval_closed_cert_expr penv_cut dummy_freeze_oracle ce_ret = raise_ret dv_ret /\
+       wf_scalar_dvalue w_ret dv_ret /\
+       pure_cfg_steps env_prev (denote_cfg_from bmap varargs (bid_prev, bid_hdr))
+         env_exit dv_ret).
+Proof.
+  intros bmap bid_hdr br_exit b_exit lmap_hdr_c evals_exit lmap_exit
+         ti_x w_ret op_ret md_x ce_ret varargs penv_cut bid_prev env_prev env_hdr_c
+         Hf_exit Ep_exit Hr_exit Htm_exit Hr_ret Henv_hc Hhdr_jump.
+  destruct (eval_reified_pure_code (blk_code b_exit) varargs penv_cut
+              lmap_hdr_c env_hdr_c evals_exit lmap_exit Henv_hc Hr_exit)
+    as [[Hub_x (ce_x & msg_x & Hin_x & Hev_x)] | (env_exit & Henv_x & Hfa_ev_x & _ & Hst_x)].
+  - left; split.
+    + intros sigma; eapply pure_cfg_steps_to_tau_then_ub; [exact Hhdr_jump |].
+      eapply denote_cfg_from_block_ub; [exact Hf_exit |].
+      unfold denote_block; rewrite Ep_exit, Htm_exit.
+      eapply cfg_steps_to_ub_bind_r;
+        [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ (denote_empty_phis_ret bid_hdr env_hdr_c))
+        | apply cfg_steps_to_ub_bind_l; exact (Hub_x sigma)].
+    + exists ce_x, msg_x; split; [right; exact Hin_x | exact Hev_x].
+  - destruct (eval_reified_pure_exp op_ret penv_cut lmap_exit env_exit
+                (Some (DTYPE_Base (DTYPE_I w_ret))) w_ret ce_ret Henv_x Hr_ret)
+      as [[Hub_r [msg_r Hev_r]] | [dv_ret [Hev_r [Hsc_r Hst_r]]]].
+    + left; split.
+      * intros sigma; eapply pure_cfg_steps_to_tau_then_ub; [exact Hhdr_jump |].
+        eapply denote_cfg_from_block_ub; [exact Hf_exit |].
+        unfold denote_block; rewrite Ep_exit, Htm_exit.
+        eapply cfg_steps_to_ub_bind_r;
+          [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ (denote_empty_phis_ret bid_hdr env_hdr_c)) |].
+        eapply cfg_steps_to_ub_bind_r;
+          [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ Hst_x) |].
+        cbn [denote_terminator]; unfold denote_exp'.
+        apply cfg_steps_to_ub_bind_l, mcfg_to_cfg_steps_ub; exact (Hub_r sigma).
+      * exists ce_ret, msg_r; split; [left; reflexivity | exact Hev_r].
+    + right; exists env_exit, dv_ret.
+      split; [exact Hfa_ev_x | split; [exact Hev_r | split; [exact Hsc_r |]]].
+      eapply pure_cfg_steps_to_tau_then_ret; [exact Hhdr_jump |].
+      eapply denote_cfg_from_block_ret; [exact Hf_exit |].
+      unfold denote_block; rewrite Ep_exit, Htm_exit.
+      eapply pure_cfg_steps_bind; [apply denote_empty_phis_ret |].
+      eapply pure_cfg_steps_bind; [exact Hst_x |].
+      cbn [denote_terminator]; unfold denote_exp'.
+      eapply pure_cfg_steps_bind;
+        [exact (pure_mcfg_to_pure_cfg _ _ _ _ Hst_r) | apply PCS_Ret; reflexivity].
+Qed.
+
+Local Lemma reify_natural_loop_hdr_step {Pa : Params} :
+  forall G b_entry b_hdr (hspecs : list (raw_id * positive))
+         (lmap_entry : rmap (positive * cert_expr)) wrap_cut
+         evals_hdr lmap_hdr_c ti_h op_cond br1 br2 md_h ce_cond
+         pol br_latch br_exit bid_latch_from evals_body lmap_latch body_wr
+         b_exit evals_exit lmap_exit ti_x w_ret op_ret md_x ce_ret bid_hdr
+         (varargs : option (@ptr _ (@PTR Pa))) (penv_cut : param_env Pa)
+         bid_prev (env_prev : rmap (@dvalue Pa)) (dvs : list (raw_id * @dvalue Pa)),
+    let bmap := ocfg_map (blks G) in
+    let dom_entry := args G ++ code_written_ids (blk_code b_entry) in
+    RM.find bid_hdr bmap = Some b_hdr ->
+    reify_pure_code (wrap_cut lmap_entry hspecs) (blk_code b_hdr) = Some (evals_hdr, lmap_hdr_c) ->
+    blk_term b_hdr = (ti_h, TERM_Br (DTYPE_Base (DTYPE_I 1%positive), op_cond) br1 br2, md_h) ->
+    reify_pure_exp lmap_hdr_c (Some (DTYPE_Base (DTYPE_I 1%positive))) op_cond = Some (1%positive, ce_cond) ->
+    (forall b : bool, (if b then br1 else br2) = (if Bool.eqb b pol then br_latch else br_exit)) ->
+    (if raw_id_eqb br_latch bid_hdr
+     then Some (bid_hdr, @nil cert_expr, lmap_hdr_c, @nil raw_id)
+     else
+       match RM.find br_latch bmap with
+       | Some b_body =>
+           if list_empty_b (blk_phis b_body) then
+             match blk_term b_body, reify_pure_code lmap_hdr_c (blk_code b_body) with
+             | (_, TERM_Br_1 br_back, _), Some (evals_b, lmap_b) =>
+                 if raw_id_eqb br_back bid_hdr
+                 then Some (br_latch, evals_b, lmap_b, code_written_ids (blk_code b_body))
+                 else None
+             | _, _ => None
+             end
+           else None
+       | None => None
+       end) = Some (bid_latch_from, evals_body, lmap_latch, body_wr) ->
+    disjoint_raw_ids dom_entry (List.map fst hspecs ++ code_written_ids (blk_code b_hdr) ++ body_wr) = true ->
+    RM.find br_exit bmap = Some b_exit ->
+    blk_phis b_exit = [] ->
+    reify_pure_code lmap_hdr_c (blk_code b_exit) = Some (evals_exit, lmap_exit) ->
+    blk_term b_exit = (ti_x, TERM_Ret (DTYPE_Base (DTYPE_I w_ret), op_ret), md_x) ->
+    reify_pure_exp lmap_exit (Some (DTYPE_Base (DTYPE_I w_ret))) op_ret = Some (w_ret, ce_ret) ->
+    List.map fst dvs = List.map fst hspecs ->
+    pure_cfg_steps env_prev (denote_phis bid_prev (blk_phis b_hdr)) (apply_phi_env env_prev dvs) tt ->
+    lmap_matches_env penv_cut (wrap_cut lmap_entry hspecs) (apply_phi_env env_prev dvs) ->
+    ((forall sigma, cfg_steps_to_ub sigma env_prev (denote_cfg_from bmap varargs (bid_prev, bid_hdr))) /\
+     ((exists ce msg, In ce (ce_cond :: evals_hdr) /\
+         eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ub msg) \/
+      eval_closed_cert_expr penv_cut dummy_freeze_oracle ce_cond =
+        raise_ret (DVALUE_Base DVALUE_Poison))) \/
+    (exists (cbit : @Integers.bit_int 1),
+       Forall (fun ce => exists dv, eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ret dv)
+         evals_hdr /\
+       eval_closed_cert_expr penv_cut dummy_freeze_oracle ce_cond =
+         raise_ret (DVALUE_Base (@DVALUE_I Pa 1 cbit)) /\
+       (Bool.eqb (@Integers.unsigned 1 cbit =? 1)%Z pol = true ->
+        ((forall sigma, cfg_steps_to_ub sigma env_prev (denote_cfg_from bmap varargs (bid_prev, bid_hdr))) /\
+         exists ce msg, In ce evals_body /\
+           eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ub msg) \/
+        (exists env_latch,
+           lmap_matches_env penv_cut lmap_latch env_latch /\
+           Forall (fun ce => exists dv, eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ret dv)
+             evals_body /\
+           (forall r, In r dom_entry -> RM.find r env_latch = RM.find r env_prev) /\
+           pure_cfg_steps_to_tau env_prev (denote_cfg_from bmap varargs (bid_prev, bid_hdr))
+             env_latch (denote_cfg_from bmap varargs (bid_latch_from, bid_hdr)))) /\
+       (Bool.eqb (@Integers.unsigned 1 cbit =? 1)%Z pol = false ->
+        ((forall sigma, cfg_steps_to_ub sigma env_prev (denote_cfg_from bmap varargs (bid_prev, bid_hdr))) /\
+         exists ce msg, In ce (ce_ret :: evals_exit) /\
+           eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ub msg) \/
+        (exists env_exit dv_ret,
+           Forall (fun ce => exists dv, eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ret dv)
+             evals_exit /\
+           eval_closed_cert_expr penv_cut dummy_freeze_oracle ce_ret = raise_ret dv_ret /\
+           wf_scalar_dvalue w_ret dv_ret /\
+           pure_cfg_steps env_prev (denote_cfg_from bmap varargs (bid_prev, bid_hdr))
+             env_exit dv_ret))).
+Proof.
+  intros G b_entry b_hdr hspecs lmap_entry wrap_cut evals_hdr lmap_hdr_c ti_h op_cond br1 br2 md_h ce_cond
+         pol br_latch br_exit bid_latch_from evals_body lmap_latch body_wr b_exit evals_exit lmap_exit
+         ti_x w_ret op_ret md_x ce_ret bid_hdr varargs penv_cut bid_prev env_prev dvs
+         bmap dom_entry Hf_hdr Hr_hdr Htm_hdr Hr_cond Hpol_br Elatch Edisj
+         Hf_exit Ep_exit Hr_exit Htm_exit Hr_ret Hmap_dvs Hst_phis Henv_hdr0.
+  destruct (eval_reified_pure_code (blk_code b_hdr) varargs penv_cut
+              (wrap_cut lmap_entry hspecs) (apply_phi_env env_prev dvs)
+              evals_hdr lmap_hdr_c Henv_hdr0 Hr_hdr)
+    as [[Hub_h (ce_h & msg_h & Hin_h & Hev_h)] | (env_hdr_c & Henv_hc & Hfa_ev_h & Hpres_h & Hst_h)].
+  - left; split.
+    + intros sigma; eapply denote_cfg_from_block_ub; [exact Hf_hdr |].
+      unfold denote_block.
+      eapply cfg_steps_to_ub_bind_r;
+        [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ Hst_phis)
+        | apply cfg_steps_to_ub_bind_l; exact (Hub_h sigma)].
+    + left; exists ce_h, msg_h; split; [right; exact Hin_h | exact Hev_h].
+  - destruct (eval_reified_pure_exp op_cond penv_cut lmap_hdr_c env_hdr_c
+                (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive ce_cond Henv_hc Hr_cond)
+      as [[Hub_c [msg_c Hev_c]] | [dv_c [Hev_c [Hsc_c Hst_c]]]].
+    + left; split.
+      * intros sigma; eapply denote_cfg_from_block_ub; [exact Hf_hdr |].
+        unfold denote_block; rewrite Htm_hdr.
+        eapply cfg_steps_to_ub_bind_r; [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ Hst_phis) |].
+        eapply cfg_steps_to_ub_bind_r; [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ Hst_h) |].
+        cbn [denote_terminator]; unfold denote_exp'.
+        apply cfg_steps_to_ub_bind_l, mcfg_to_cfg_steps_ub; exact (Hub_c sigma).
+      * left; exists ce_cond, msg_c; split; [left; reflexivity | exact Hev_c].
+    + destruct Hsc_c as [-> | [cbit ->]].
+      * left; split; [| right; exact Hev_c].
+        intros sigma; eapply denote_cfg_from_block_ub; [exact Hf_hdr |].
+        unfold denote_block; rewrite Htm_hdr.
+        eapply cfg_steps_to_ub_bind_r; [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ Hst_phis) |].
+        eapply cfg_steps_to_ub_bind_r; [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ Hst_h) |].
+        cbn [denote_terminator]; unfold denote_exp'.
+        eapply cfg_steps_to_ub_bind_r;
+          [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ (pure_mcfg_to_mcfg_ret sigma _ _ _ _ Hst_c))
+          | apply cfg_steps_raiseUB].
+      * right; exists cbit; split; [exact Hfa_ev_h | split; [exact Hev_c |]].
+        set (br_tgt := if (@Integers.unsigned 1 cbit =? 1)%Z then br1 else br2).
+        assert (Hhdr_jump :
+          pure_cfg_steps_to_tau env_prev
+            (denote_cfg_from bmap varargs (bid_prev, bid_hdr))
+            env_hdr_c
+            (denote_cfg_from bmap varargs (bid_hdr, br_tgt))).
+        { eapply denote_cfg_from_block_jump; [exact Hf_hdr |].
+          unfold denote_block; rewrite Htm_hdr.
+          eapply pure_cfg_steps_bind; [exact Hst_phis |].
+          eapply pure_cfg_steps_bind; [exact Hst_h |].
+          cbn [denote_terminator]; unfold denote_exp'.
+          eapply pure_cfg_steps_bind; [exact (pure_mcfg_to_pure_cfg _ _ _ _ Hst_c) |].
+          cbn iota beta; rewrite bit_int_1_equ_one_eq_unsigned; unfold br_tgt.
+          destruct (@Integers.unsigned 1 cbit =? 1)%Z; apply PCS_Ret; reflexivity. }
+        assert (Hpres_hc_dom :
+          forall r, In r dom_entry -> ~ In r body_wr -> RM.find r env_hdr_c = RM.find r env_prev).
+        { intros r Hdom _.
+          pose proof (disjoint_raw_ids_spec _ _ r Edisj Hdom) as Hnin_loop.
+          rewrite (Hpres_h r
+            (fun Hc => Hnin_loop (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_introl Hc)))))).
+          apply apply_phi_env_preserves_not_in.
+          rewrite Hmap_dvs; intros Hp; exact (Hnin_loop (proj2 (in_app_iff _ _ _) (or_introl Hp))). }
+        split.
+        -- intros Econt.
+           assert (Hbr_latch : br_tgt = br_latch)
+             by (unfold br_tgt; rewrite (Hpol_br (@Integers.unsigned 1 cbit =? 1)%Z), Econt; reflexivity).
+           rewrite Hbr_latch in Hhdr_jump.
+           rewrite app_assoc in Edisj.
+           exact (reify_natural_loop_latch_step bmap bid_hdr br_latch bid_latch_from
+                    evals_body lmap_latch body_wr lmap_hdr_c dom_entry
+                    (List.map fst hspecs ++ code_written_ids (blk_code b_hdr))
+                    varargs penv_cut bid_prev env_prev env_hdr_c
+                    Edisj Elatch Henv_hc Hpres_hc_dom Hhdr_jump).
+        -- intros Eexit.
+           assert (Hbr_exit : br_tgt = br_exit)
+             by (unfold br_tgt; rewrite (Hpol_br (@Integers.unsigned 1 cbit =? 1)%Z), Eexit; reflexivity).
+           rewrite Hbr_exit in Hhdr_jump.
+           exact (reify_natural_loop_exit_step bmap bid_hdr br_exit b_exit
+                    lmap_hdr_c evals_exit lmap_exit ti_x w_ret op_ret md_x ce_ret
+                    varargs penv_cut bid_prev env_prev env_hdr_c
+                    Hf_exit Ep_exit Hr_exit Htm_exit Hr_ret Henv_hc Hhdr_jump).
+Qed.
+
 Lemma reify_natural_loop_spec :
+
   forall G hdr_name allowed cut_allowed lmap0 wrap_cut hspecs s,
     wf_pure_lmap allowed lmap0 ->
     (forall r w ce, RM.find r lmap0 = Some (w, ce) -> In r (args G)) ->
@@ -2322,11 +2672,13 @@ Proof.
                     (List.map fst hspecs' ++ code_written_ids (blk_code b_hdr) ++ body_wr)) ||
             raw_id_eqb br_exit bid_hdr) eqn:Edisj_bad; [discriminate Hr |].
   apply orb_false_iff in Edisj_bad as [Edisj _]; apply negb_false_iff in Edisj.
-  destruct (reify_pure_phis bid_latch_from lmap_latch (blk_phis b_hdr)) as [next_pevals |] eqn:Hr_next; [| discriminate Hr].
+  destruct (reify_pure_phis bid_latch_from lmap_latch (blk_phis b_hdr))
+    as [next_pevals |] eqn:Hr_next; [| discriminate Hr].
   destruct (RM.find br_exit bmap) as [b_exit |] eqn:Hf_exit; [| discriminate Hr].
   destruct (negb (list_empty_b (blk_phis b_exit))) eqn:Ep_exit; [discriminate Hr |].
   apply negb_false_iff, list_empty_b_nil in Ep_exit.
-  destruct (reify_pure_code lmap_hdr_c (blk_code b_exit)) as [[evals_exit lmap_exit] |] eqn:Hr_exit; [| discriminate Hr].
+  destruct (reify_pure_code lmap_hdr_c (blk_code b_exit))
+    as [[evals_exit lmap_exit] |] eqn:Hr_exit; [| discriminate Hr].
   destruct (blk_term b_exit) as [[ti_x tm_x] md_x] eqn:Htm_exit.
   destruct tm_x as [[dt_r op_ret] | | | | | | | |]; try discriminate Hr.
   destruct dt_r as [tb_r | |]; try discriminate Hr;
@@ -2359,7 +2711,8 @@ Proof.
       destruct (blk_term b_body) as [[_ tm_b] _]; destruct tm_b; try discriminate Elatch.
       destruct (reify_pure_code lmap_hdr_c (blk_code b_body)) as [[eb ll] |] eqn:Hrb; [| discriminate Elatch].
       destruct (raw_id_eqb br bid_hdr); [| discriminate Elatch].
-      inversion Elatch; subst; exact (reify_pure_code_typing _ cut_allowed lmap_hdr_c evals_body lmap_latch Hlmap_hdrc Hrb). }
+      inversion Elatch; subst.
+      exact (reify_pure_code_typing _ cut_allowed lmap_hdr_c evals_body lmap_latch Hlmap_hdrc Hrb). }
   destruct Hlatch_ty as [Hfa_body Hlmap_latch].
   pose proof (reify_pure_phis_typing _ cut_allowed bid_latch_from lmap_latch next_pevals Hlmap_latch Hr_next)
     as Hfa_next.
@@ -2369,11 +2722,25 @@ Proof.
               (Some (DTYPE_Base (DTYPE_I w_ret))) w_ret ce_ret Hlmap_exit Hr_ret)
     as (_ & Hwt_ret & Hbw_ret & Hlf_ret & Hfv_ret).
   exists b_entry, b_hdr.
-  split; [exact Hf_ent | split; [exact Hf_hdr | split; [exact Ehspecs | split; [exact Hr_init | split; [exact Hr_next |]]]]].
-  split; [exact Hlmap_ent | split; [exact Hdom_ent | split; [exact Hfa_ent | split; [exact Hfa_init |]]]].
-  split; [exact Hfa_hdr | split; [repeat split; assumption | split; [exact Hbw_cond |]]].
-  split; [exact Hfa_body | split; [exact Hfa_next | split; [exact Hfa_exit |]]].
-  split; [repeat split; assumption | split; [exact Hbw_ret | split; [exact Hsup_ret | split]]].
+  split; [exact Hf_ent |].
+  split; [exact Hf_hdr |].
+  split; [exact Ehspecs |].
+  split; [exact Hr_init |].
+  split; [exact Hr_next |].
+  split; [exact Hlmap_ent |].
+  split; [exact Hdom_ent |].
+  split; [exact Hfa_ent |].
+  split; [exact Hfa_init |].
+  split; [exact Hfa_hdr |].
+  split; [repeat split; assumption |].
+  split; [exact Hbw_cond |].
+  split; [exact Hfa_body |].
+  split; [exact Hfa_next |].
+  split; [exact Hfa_exit |].
+  split; [repeat split; assumption |].
+  split; [exact Hbw_ret |].
+  split; [exact Hsup_ret |].
+  split.
   - (* Entry block step *)
     intros Pa varargs penv env0 Henv0.
     destruct (eval_reified_pure_code (blk_code b_entry) varargs penv lmap0 env0 evals_entry lmap_entry Henv0 Hr_ent)
@@ -2391,143 +2758,13 @@ Proof.
       eapply pure_cfg_steps_bind; [exact Hst_e | apply PCS_Ret; reflexivity].
   - (* Header + Latch/Exit step *)
     intros Pa varargs penv_cut bid_prev env_prev dvs Hmap_dvs Hst_phis Henv_hdr0.
-    destruct (eval_reified_pure_code (blk_code b_hdr) varargs penv_cut
-                (wrap_cut lmap_entry hspecs) (apply_phi_env env_prev dvs)
-                evals_hdr lmap_hdr_c Henv_hdr0 Hr_hdr)
-      as [[Hub_h (ce_h & msg_h & Hin_h & Hev_h)] | (env_hdr_c & Henv_hc & Hfa_ev_h & Hpres_h & Hst_h)].
-    + left; split.
-      * intros sigma; eapply denote_cfg_from_block_ub; [exact Hf_hdr |].
-        unfold denote_block.
-        eapply cfg_steps_to_ub_bind_r;
-          [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ Hst_phis)
-          | apply cfg_steps_to_ub_bind_l; exact (Hub_h sigma)].
-      * left; exists ce_h, msg_h; split; [right; exact Hin_h | exact Hev_h].
-    + destruct (eval_reified_pure_exp op_cond penv_cut lmap_hdr_c env_hdr_c
-                  (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive ce_cond Henv_hc Hr_cond)
-        as [[Hub_c [msg_c Hev_c]] | [dv_c [Hev_c [Hsc_c Hst_c]]]].
-      * left; split.
-        -- intros sigma; eapply denote_cfg_from_block_ub; [exact Hf_hdr |].
-           unfold denote_block; rewrite Htm_hdr.
-           eapply cfg_steps_to_ub_bind_r; [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ Hst_phis) |].
-           eapply cfg_steps_to_ub_bind_r; [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ Hst_h) |].
-           cbn [denote_terminator]; unfold denote_exp'.
-           apply cfg_steps_to_ub_bind_l, mcfg_to_cfg_steps_ub; exact (Hub_c sigma).
-        -- left; exists ce_cond, msg_c; split; [left; reflexivity | exact Hev_c].
-      * destruct Hsc_c as [-> | [cbit ->]].
-        -- left; split; [| right; exact Hev_c].
-           intros sigma; eapply denote_cfg_from_block_ub; [exact Hf_hdr |].
-           unfold denote_block; rewrite Htm_hdr.
-           eapply cfg_steps_to_ub_bind_r; [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ Hst_phis) |].
-           eapply cfg_steps_to_ub_bind_r; [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ Hst_h) |].
-           cbn [denote_terminator]; unfold denote_exp'.
-           eapply cfg_steps_to_ub_bind_r;
-             [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ (pure_mcfg_to_mcfg_ret sigma _ _ _ _ Hst_c))
-             | apply cfg_steps_raiseUB].
-        -- right; exists cbit; split; [exact Hfa_ev_h | split; [exact Hev_c |]].
-           set (br_tgt := if (@Integers.unsigned 1 cbit =? 1)%Z then br1 else br2).
-           assert (Hhdr_jump :
-             pure_cfg_steps_to_tau env_prev
-               (denote_cfg_from bmap varargs (bid_prev, bid_hdr))
-               env_hdr_c
-               (denote_cfg_from bmap varargs (bid_hdr, br_tgt))).
-           { eapply denote_cfg_from_block_jump; [exact Hf_hdr |].
-             unfold denote_block; rewrite Htm_hdr.
-             eapply pure_cfg_steps_bind; [exact Hst_phis |].
-             eapply pure_cfg_steps_bind; [exact Hst_h |].
-             cbn [denote_terminator]; unfold denote_exp'.
-             eapply pure_cfg_steps_bind; [exact (pure_mcfg_to_pure_cfg _ _ _ _ Hst_c) |].
-             cbn iota beta; rewrite bit_int_1_equ_one_eq_unsigned; unfold br_tgt.
-             destruct (@Integers.unsigned 1 cbit =? 1)%Z; apply PCS_Ret; reflexivity. }
-           assert (Hpres_hc_dom :
-             forall r, In r (args G ++ code_written_ids (blk_code b_entry)) ->
-               ~ In r body_wr ->
-               RM.find r env_hdr_c = RM.find r env_prev).
-           { intros r Hdom _.
-             pose proof (disjoint_raw_ids_spec _ _ r Edisj Hdom) as Hnin_loop.
-             rewrite (Hpres_h r (fun Hc => Hnin_loop (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_introl Hc)))))).
-             apply apply_phi_env_preserves_not_in.
-             rewrite Hmap_dvs; intros Hp; exact (Hnin_loop (proj2 (in_app_iff _ _ _) (or_introl Hp))). }
-           split.
-           ++ (* Latch branch *)
-              intros Econt.
-              assert (Hbr_latch : br_tgt = br_latch).
-              { unfold br_tgt; rewrite (Hpol_br (@Integers.unsigned 1 cbit =? 1)%Z), Econt; reflexivity. }
-              rewrite Hbr_latch in Hhdr_jump.
-              destruct (raw_id_eqb br_latch bid_hdr) eqn:Eself.
-              ** apply raw_id_eqb_eq in Eself; inversion Elatch;
-                   subst br_latch bid_latch_from evals_body lmap_latch body_wr.
-                 right; exists env_hdr_c.
-                 split; [exact Henv_hc | split; [constructor | split; [intros r Hr; exact (Hpres_hc_dom r Hr (fun H => H)) | exact Hhdr_jump]]].
-              ** destruct (RM.find br_latch bmap) as [b_body |] eqn:Hf_body; [| discriminate Elatch].
-                 destruct (list_empty_b (blk_phis b_body)) eqn:Ep_body; [| discriminate Elatch].
-                 apply list_empty_b_nil in Ep_body.
-                 destruct (blk_term b_body) as [[ti_b tm_b] md_b] eqn:Htm_body.
-                 destruct tm_b as [| | | br_back | | | | |]; try discriminate Elatch.
-                 destruct (reify_pure_code lmap_hdr_c (blk_code b_body))
-                   as [[eb0 ll0] |] eqn:Hr_body; [| discriminate Elatch].
-                 destruct (raw_id_eqb br_back bid_hdr) eqn:Eback; [| discriminate Elatch].
-                 apply raw_id_eqb_eq in Eback; inversion Elatch;
-                   subst br_back bid_latch_from evals_body lmap_latch body_wr; clear Elatch.
-                 destruct (eval_reified_pure_code (blk_code b_body) varargs penv_cut lmap_hdr_c env_hdr_c eb0 ll0 Henv_hc Hr_body)
-                   as [[Hub_b Hce_b] | (env_latch & Henv_l & Hfa_ev_b & Hpres_b & Hst_b)].
-                 --- left; split; [| exact Hce_b].
-                     intros sigma; eapply pure_cfg_steps_to_tau_then_ub; [exact Hhdr_jump |].
-                     eapply denote_cfg_from_block_ub; [exact Hf_body |].
-                     unfold denote_block; rewrite Ep_body, Htm_body.
-                     eapply cfg_steps_to_ub_bind_r;
-                       [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ (denote_empty_phis_ret bid_hdr env_hdr_c))
-                       | apply cfg_steps_to_ub_bind_l; exact (Hub_b sigma)].
-                 --- right; exists env_latch.
-                     split; [exact Henv_l | split; [exact Hfa_ev_b | split]].
-                     +++ intros r Hdom.
-                         pose proof (disjoint_raw_ids_spec _ _ r Edisj Hdom) as Hnin_loop.
-                         assert (Hnin_b : ~ In r (code_written_ids (blk_code b_body)))
-                           by (intros Hb; exact (Hnin_loop (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_intror Hb)))))).
-                         rewrite (Hpres_b r Hnin_b); exact (Hpres_hc_dom r Hdom Hnin_b).
-                     +++ eapply pure_cfg_steps_to_tau_trans; [exact Hhdr_jump |].
-                         eapply denote_cfg_from_block_jump; [exact Hf_body |].
-                         unfold denote_block; rewrite Ep_body, Htm_body.
-                         eapply pure_cfg_steps_bind; [apply denote_empty_phis_ret |].
-                         eapply pure_cfg_steps_bind; [exact Hst_b | apply PCS_Ret; reflexivity].
-           ++ (* Exit branch *)
-              intros Eexit.
-              assert (Hbr_exit : br_tgt = br_exit).
-              { unfold br_tgt; rewrite (Hpol_br (@Integers.unsigned 1 cbit =? 1)%Z), Eexit; reflexivity. }
-              rewrite Hbr_exit in Hhdr_jump.
-              destruct (eval_reified_pure_code (blk_code b_exit) varargs penv_cut lmap_hdr_c env_hdr_c evals_exit lmap_exit Henv_hc Hr_exit)
-                as [[Hub_x (ce_x & msg_x & Hin_x & Hev_x)] | (env_exit & Henv_x & Hfa_ev_x & _ & Hst_x)].
-              ** left; split.
-                 --- intros sigma; eapply pure_cfg_steps_to_tau_then_ub; [exact Hhdr_jump |].
-                     eapply denote_cfg_from_block_ub; [exact Hf_exit |].
-                     unfold denote_block; rewrite Ep_exit, Htm_exit.
-                     eapply cfg_steps_to_ub_bind_r;
-                       [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ (denote_empty_phis_ret bid_hdr env_hdr_c))
-                       | apply cfg_steps_to_ub_bind_l; exact (Hub_x sigma)].
-                 --- exists ce_x, msg_x; split; [right; exact Hin_x | exact Hev_x].
-              ** destruct (eval_reified_pure_exp op_ret penv_cut lmap_exit env_exit
-                             (Some (DTYPE_Base (DTYPE_I w_ret))) w_ret ce_ret Henv_x Hr_ret)
-                   as [[Hub_r [msg_r Hev_r]] | [dv_ret [Hev_r [Hsc_r Hst_r]]]].
-                 --- left; split.
-                     +++ intros sigma; eapply pure_cfg_steps_to_tau_then_ub; [exact Hhdr_jump |].
-                         eapply denote_cfg_from_block_ub; [exact Hf_exit |].
-                         unfold denote_block; rewrite Ep_exit, Htm_exit.
-                         eapply cfg_steps_to_ub_bind_r;
-                           [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ (denote_empty_phis_ret bid_hdr env_hdr_c)) |].
-                         eapply cfg_steps_to_ub_bind_r;
-                           [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ Hst_x) |].
-                         cbn [denote_terminator]; unfold denote_exp'.
-                         apply cfg_steps_to_ub_bind_l, mcfg_to_cfg_steps_ub; exact (Hub_r sigma).
-                     +++ exists ce_ret, msg_r; split; [left; reflexivity | exact Hev_r].
-                 --- right; exists env_exit, dv_ret.
-                     split; [exact Hfa_ev_x | split; [exact Hev_r | split; [exact Hsc_r |]]].
-                     eapply pure_cfg_steps_to_tau_then_ret; [exact Hhdr_jump |].
-                     eapply denote_cfg_from_block_ret; [exact Hf_exit |].
-                     unfold denote_block; rewrite Ep_exit, Htm_exit.
-                     eapply pure_cfg_steps_bind; [apply denote_empty_phis_ret |].
-                     eapply pure_cfg_steps_bind; [exact Hst_x |].
-                     cbn [denote_terminator]; unfold denote_exp'.
-                     eapply pure_cfg_steps_bind;
-                       [exact (pure_mcfg_to_pure_cfg _ _ _ _ Hst_r) | apply PCS_Ret; reflexivity].
+    exact (reify_natural_loop_hdr_step G b_entry b_hdr hspecs lmap_entry wrap_cut
+             evals_hdr lmap_hdr_c ti_h op_cond br1 br2 md_h ce_cond
+             pol br_latch br_exit bid_latch_from evals_body lmap_latch body_wr
+             b_exit evals_exit lmap_exit ti_x w_ret op_ret md_x ce_ret bid_hdr
+             varargs penv_cut bid_prev env_prev dvs
+             Hf_hdr Hr_hdr Htm_hdr Hr_cond Hpol_br Elatch Edisj
+             Hf_exit Ep_exit Hr_exit Htm_exit Hr_ret Hmap_dvs Hst_phis Henv_hdr0).
 Qed.
 
 Lemma wf_pure_lmap_mono :
@@ -2794,7 +3031,498 @@ Proof.
   intros allowed es Hfa; rewrite Forall_forall in Hfa; exact Hfa.
 Qed.
 
+Local Lemma check_loop_cutpoint_continue_step {Pa : Params} :
+  forall cut_allowed opt_pf pspecs
+         (src_cfg tgt_cfg : CFG.cfg dtyp)
+         s_s s_t b_ent_s b_ent_t b_hdr_s b_hdr_t
+         ctx_cont_0 ctx_cont latch_uas
+         (penv_cut : param_env Pa)
+         bid_prev_s bid_prev_t
+         (env_prev_s env_prev_t : rmap (@dvalue Pa))
+         (cbit_s cbit_t : @Integers.bit_int 1),
+    let bmap_s := ocfg_map (blks src_cfg) in
+    let bmap_t := ocfg_map (blks tgt_cfg) in
+    let dom_entry_s := args src_cfg ++ code_written_ids (blk_code b_ent_s) in
+    let dom_entry_t := args tgt_cfg ++ code_written_ids (blk_code b_ent_t) in
+    wf_param_env_for cut_allowed penv_cut ->
+    ub_ctx_holds penv_cut dummy_freeze_oracle ctx_cont_0 ->
+    (forall c, In c [nls_ce_cond s_s] ->
+       exists cbit : @Integers.bit_int 1,
+         eval_closed_cert_expr penv_cut dummy_freeze_oracle c =
+         raise_ret (DVALUE_Base (@DVALUE_I Pa 1 cbit))) ->
+    Forall (wf_pure_eval_entry cut_allowed) (nls_evals_hdr s_s) ->
+    Forall (wf_pure_eval_entry cut_allowed) (nls_evals_body s_s) ->
+    Forall (fun '(_, w, ce) =>
+      is_supported_bit_width w = true /\ cert_expr_bit_width ce = w /\ wf_pure_eval_entry cut_allowed ce)
+      (nls_next_pevals s_s) ->
+    Forall (fun '(_, w, ce) =>
+      is_supported_bit_width w = true /\ cert_expr_bit_width ce = w /\ wf_pure_eval_entry cut_allowed ce)
+      (nls_next_pevals s_t) ->
+    Forall (wf_pure_eval_entry cut_allowed) (nls_evals_body s_t) ->
+    Forall (fun ce => exists dv, eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ret dv)
+      (nls_evals_hdr s_s) ->
+    Bool.eqb (@Integers.unsigned 1 cbit_t =? 1)%Z (nls_latch_on_true s_t) =
+    Bool.eqb (@Integers.unsigned 1 cbit_s =? 1)%Z (nls_latch_on_true s_s) ->
+    Bool.eqb (@Integers.unsigned 1 cbit_s =? 1)%Z (nls_latch_on_true s_s) = true ->
+    fold_ub_assumptions cut_allowed (nls_evals_hdr s_s ++ nls_evals_body s_s)
+      [nls_ce_cond s_s] ctx_cont_0 latch_uas = Some ctx_cont ->
+    forallb (expr_safe_under_src ctx_cont (nls_evals_hdr s_s ++ nls_evals_body s_s))
+      (nls_evals_body s_t) = true ->
+    forallb (expr_safe_under_src ctx_cont
+               ((nls_evals_hdr s_s ++ nls_evals_body s_s) ++ peval_exprs (nls_next_pevals s_s)))
+      (peval_exprs (nls_next_pevals s_t)) = true ->
+    check_pevals_refine ctx_cont opt_pf pspecs (nls_next_pevals s_s) (nls_next_pevals s_t) = true ->
+    reify_pure_phis (nls_bid_latch_from s_s) (nls_lmap_latch s_s) (blk_phis b_hdr_s) = Some (nls_next_pevals s_s) ->
+    reify_pure_phis (nls_bid_latch_from s_t) (nls_lmap_latch s_t) (blk_phis b_hdr_t) = Some (nls_next_pevals s_t) ->
+    RM.find (nls_bid_hdr s_s) bmap_s = Some b_hdr_s ->
+    (Bool.eqb (@Integers.unsigned 1 cbit_s =? 1)%Z (nls_latch_on_true s_s) = true ->
+     ((forall sigma, cfg_steps_to_ub sigma env_prev_s (denote_cfg_from bmap_s None (bid_prev_s, nls_bid_hdr s_s))) /\
+      exists ce msg, In ce (nls_evals_body s_s) /\
+        eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ub msg) \/
+     (exists env_latch_s,
+        lmap_matches_env penv_cut (nls_lmap_latch s_s) env_latch_s /\
+        Forall (fun ce => exists dv, eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ret dv)
+          (nls_evals_body s_s) /\
+        (forall r, In r dom_entry_s -> RM.find r env_latch_s = RM.find r env_prev_s) /\
+        pure_cfg_steps_to_tau env_prev_s (denote_cfg_from bmap_s None (bid_prev_s, nls_bid_hdr s_s))
+          env_latch_s (denote_cfg_from bmap_s None (nls_bid_latch_from s_s, nls_bid_hdr s_s)))) ->
+    (Bool.eqb (@Integers.unsigned 1 cbit_t =? 1)%Z (nls_latch_on_true s_t) = true ->
+     ((forall sigma, cfg_steps_to_ub sigma env_prev_t (denote_cfg_from bmap_t None (bid_prev_t, nls_bid_hdr s_t))) /\
+      exists ce msg, In ce (nls_evals_body s_t) /\
+        eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ub msg) \/
+     (exists env_latch_t,
+        lmap_matches_env penv_cut (nls_lmap_latch s_t) env_latch_t /\
+        Forall (fun ce => exists dv, eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ret dv)
+          (nls_evals_body s_t) /\
+        (forall r, In r dom_entry_t -> RM.find r env_latch_t = RM.find r env_prev_t) /\
+        pure_cfg_steps_to_tau env_prev_t (denote_cfg_from bmap_t None (bid_prev_t, nls_bid_hdr s_t))
+          env_latch_t (denote_cfg_from bmap_t None (nls_bid_latch_from s_t, nls_bid_hdr s_t)))) ->
+    (forall sigma, cfg_steps_to_ub sigma env_prev_s (denote_cfg_from bmap_s None (bid_prev_s, nls_bid_hdr s_s))) \/
+    (exists env_latch_s env_latch_t dvs_next_s dvs_next_t,
+       (forall r0, In r0 dom_entry_s -> RM.find r0 env_latch_s = RM.find r0 env_prev_s) /\
+       (forall r0, In r0 dom_entry_t -> RM.find r0 env_latch_t = RM.find r0 env_prev_t) /\
+       pure_cfg_steps_to_tau env_prev_s (denote_cfg_from bmap_s None (bid_prev_s, nls_bid_hdr s_s))
+         env_latch_s (denote_cfg_from bmap_s None (nls_bid_latch_from s_s, nls_bid_hdr s_s)) /\
+       pure_cfg_steps_to_tau env_prev_t (denote_cfg_from bmap_t None (bid_prev_t, nls_bid_hdr s_t))
+         env_latch_t (denote_cfg_from bmap_t None (nls_bid_latch_from s_t, nls_bid_hdr s_t)) /\
+       pure_cfg_steps env_latch_s (denote_phis (nls_bid_latch_from s_s) (blk_phis b_hdr_s))
+         (apply_phi_env env_latch_s dvs_next_s) tt /\
+       pure_cfg_steps env_latch_t (denote_phis (nls_bid_latch_from s_t) (blk_phis b_hdr_t))
+         (apply_phi_env env_latch_t dvs_next_t) tt /\
+       cut_phi_rel pspecs dvs_next_s dvs_next_t).
+Proof.
+  intros cut_allowed opt_pf pspecs src_cfg tgt_cfg s_s s_t b_ent_s b_ent_t b_hdr_s b_hdr_t
+         ctx_cont_0 ctx_cont latch_uas penv_cut bid_prev_s bid_prev_t env_prev_s env_prev_t
+         cbit_s cbit_t bmap_s bmap_t dom_entry_s dom_entry_t
+         Hpenv_cut Hctx_cont0 Hbr_hdr_s Hfa_hdr_s Hfa_body_s Hfa_next_s Hfa_next_t Hfa_body_t
+         Hret_hdr_s Epol_eq Econt Ef_cont Hsafe_body_t Hsafe_next_t Href_next
+         Hr_next_s Hr_next_t Hf_hdr_s Hcont_s Hcont_t.
+  destruct (Hcont_s Econt)
+    as [[Hub_bs _] | (env_latch_s & Hlm_latch_s & Hret_body_s & Hpres_ls & Htau_s)].
+  - left; exact Hub_bs.
+  - assert (Hret_hb_s :
+      Forall (fun ce => exists dv, eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ret dv)
+        (nls_evals_hdr s_s ++ nls_evals_body s_s))
+      by (apply Forall_app; split; assumption).
+    assert (Hwf_hb_s : Forall (wf_pure_eval_entry cut_allowed) (nls_evals_hdr s_s ++ nls_evals_body s_s))
+      by (apply Forall_app; split; assumption).
+    pose proof (fold_ub_assumptions_sound _ cut_allowed
+                  (nls_evals_hdr s_s ++ nls_evals_body s_s) [nls_ce_cond s_s]
+                  ctx_cont_0 ctx_cont penv_cut dummy_freeze_oracle Hpenv_cut
+                  (forall_wf_pure_in _ _ Hwf_hb_s)
+                  (forall_ret_in _ _ _ Hret_hb_s)
+                  Hbr_hdr_s Hctx_cont0 Ef_cont) as Hctx_cont.
+    destruct (pure_phis_denote_step (blk_phis b_hdr_s) penv_cut (nls_bid_latch_from s_s)
+                (nls_lmap_latch s_s) env_latch_s (nls_next_pevals s_s) Hlm_latch_s Hr_next_s)
+      as [[Hub_np_s _] | [dvs_next_s [Hpm_next_s Hst_np_s]]].
+    + left; intros sigma; eapply pure_cfg_steps_to_tau_then_ub; [exact Htau_s |].
+      eapply denote_cfg_from_block_ub; [exact Hf_hdr_s |].
+      unfold denote_block; apply cfg_steps_to_ub_bind_l; exact (Hub_np_s sigma).
+    + rewrite Econt in Epol_eq.
+      destruct (Hcont_t Epol_eq)
+        as [[_ (ce_bt & msg_bt & Hin_bt & Hev_bt)]
+           | (env_latch_t & Hlm_latch_t & _ & Hpres_lt & Htau_t)].
+      * exfalso; exact (exprs_safe_under_src_sound (nls_evals_body s_t) cut_allowed ctx_cont
+                          (nls_evals_hdr s_s ++ nls_evals_body s_s) penv_cut Hpenv_cut Hctx_cont
+                          (forall_ret_in _ _ _ Hret_hb_s) Hfa_body_t Hsafe_body_t
+                          ce_bt msg_bt Hin_bt Hev_bt).
+      * assert (Hret_hbn_s :
+          Forall (fun ce => exists dv, eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ret dv)
+            ((nls_evals_hdr s_s ++ nls_evals_body s_s) ++ peval_exprs (nls_next_pevals s_s)))
+          by (apply Forall_app; split; [exact Hret_hb_s | exact (peval_exprs_ret _ _ _ Hpm_next_s)]).
+        destruct (pure_phis_denote_step (blk_phis b_hdr_t) penv_cut (nls_bid_latch_from s_t)
+                    (nls_lmap_latch s_t) env_latch_t (nls_next_pevals s_t) Hlm_latch_t Hr_next_t)
+          as [[_ (ce_npt & msg_npt & Hin_npt & Hev_npt)] | [dvs_next_t [Hpm_next_t Hst_np_t]]].
+        -- exfalso; exact (exprs_safe_under_src_sound (peval_exprs (nls_next_pevals s_t))
+                              cut_allowed ctx_cont
+                              ((nls_evals_hdr s_s ++ nls_evals_body s_s) ++
+                               peval_exprs (nls_next_pevals s_s))
+                              penv_cut Hpenv_cut Hctx_cont
+                              (forall_ret_in _ _ _ Hret_hbn_s)
+                              (peval_exprs_typing _ _ Hfa_next_t) Hsafe_next_t
+                              ce_npt msg_npt Hin_npt Hev_npt).
+        -- destruct (check_pevals_refine_sound pspecs (nls_next_pevals s_s) (nls_next_pevals s_t)
+                        dvs_next_s dvs_next_t cut_allowed ctx_cont opt_pf penv_cut
+                        Hpenv_cut Hctx_cont Hfa_next_s Hfa_next_t Hpm_next_s Hpm_next_t Href_next)
+              as (Hrel_next & _ & _).
+           right; exists env_latch_s, env_latch_t, dvs_next_s, dvs_next_t.
+           repeat split; assumption.
+Qed.
+
+Local Lemma check_loop_cutpoint_exit_step {Pa : Params} :
+  forall cut_allowed opt_pf (src_cfg tgt_cfg : CFG.cfg dtyp)
+         s_s s_t ctx_exit_0 ctx_exit b_exit_uas
+         (sigma_tgt : @draw_strat Pa) (penv_cut : param_env Pa)
+         bid_prev_s bid_prev_t (env_prev_s env_prev_t : rmap (@dvalue Pa))
+         (cbit_s cbit_t : @Integers.bit_int 1),
+    let bmap_s := ocfg_map (blks src_cfg) in
+    let bmap_t := ocfg_map (blks tgt_cfg) in
+    wf_param_env_for cut_allowed penv_cut ->
+    ub_ctx_holds penv_cut dummy_freeze_oracle ctx_exit_0 ->
+    (forall c, In c [nls_ce_cond s_s] ->
+       exists cbit : @Integers.bit_int 1,
+         eval_closed_cert_expr penv_cut dummy_freeze_oracle c =
+         raise_ret (DVALUE_Base (@DVALUE_I Pa 1 cbit))) ->
+    Forall (wf_pure_eval_entry cut_allowed) (nls_evals_hdr s_s) ->
+    Forall (wf_pure_eval_entry cut_allowed) (nls_evals_exit s_s) ->
+    Forall (wf_pure_eval_entry cut_allowed) (nls_evals_exit s_t) ->
+    wf_pure_eval_entry cut_allowed (nls_ce_ret s_s) ->
+    wf_pure_eval_entry cut_allowed (nls_ce_ret s_t) ->
+    Forall (fun ce => exists dv, eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ret dv)
+      (nls_evals_hdr s_s) ->
+    Bool.eqb (@Integers.unsigned 1 cbit_t =? 1)%Z (nls_latch_on_true s_t) =
+    Bool.eqb (@Integers.unsigned 1 cbit_s =? 1)%Z (nls_latch_on_true s_s) ->
+    Bool.eqb (@Integers.unsigned 1 cbit_s =? 1)%Z (nls_latch_on_true s_s) = false ->
+    fold_ub_assumptions cut_allowed (nls_evals_hdr s_s ++ nls_evals_exit s_s)
+      [nls_ce_cond s_s] ctx_exit_0 b_exit_uas = Some ctx_exit ->
+    forallb (expr_safe_under_src ctx_exit (nls_evals_hdr s_s ++ nls_evals_exit s_s))
+      (nls_ce_ret s_t :: nls_evals_exit s_t) = true ->
+    check_expr_refines_with_lrat ctx_exit (nls_ce_ret s_s) (nls_ce_ret s_t) opt_pf = true ->
+    (Bool.eqb (@Integers.unsigned 1 cbit_s =? 1)%Z (nls_latch_on_true s_s) = false ->
+     ((forall sigma, cfg_steps_to_ub sigma env_prev_s (denote_cfg_from bmap_s None (bid_prev_s, nls_bid_hdr s_s))) /\
+      exists ce msg, In ce (nls_ce_ret s_s :: nls_evals_exit s_s) /\
+        eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ub msg) \/
+     (exists env_exit_s dv_ret_s,
+        Forall (fun ce => exists dv, eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ret dv)
+          (nls_evals_exit s_s) /\
+        eval_closed_cert_expr penv_cut dummy_freeze_oracle (nls_ce_ret s_s) = raise_ret dv_ret_s /\
+        wf_scalar_dvalue (nls_w_ret s_s) dv_ret_s /\
+        pure_cfg_steps env_prev_s (denote_cfg_from bmap_s None (bid_prev_s, nls_bid_hdr s_s))
+          env_exit_s dv_ret_s)) ->
+    (Bool.eqb (@Integers.unsigned 1 cbit_t =? 1)%Z (nls_latch_on_true s_t) = false ->
+     ((forall sigma, cfg_steps_to_ub sigma env_prev_t (denote_cfg_from bmap_t None (bid_prev_t, nls_bid_hdr s_t))) /\
+      exists ce msg, In ce (nls_ce_ret s_t :: nls_evals_exit s_t) /\
+        eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ub msg) \/
+     (exists env_exit_t dv_ret_t,
+        Forall (fun ce => exists dv, eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ret dv)
+          (nls_evals_exit s_t) /\
+        eval_closed_cert_expr penv_cut dummy_freeze_oracle (nls_ce_ret s_t) = raise_ret dv_ret_t /\
+        wf_scalar_dvalue (nls_w_ret s_t) dv_ret_t /\
+        pure_cfg_steps env_prev_t (denote_cfg_from bmap_t None (bid_prev_t, nls_bid_hdr s_t))
+          env_exit_t dv_ret_t)) ->
+    det_ref dvalue_refines
+      (run_draws sigma_tgt (run_cfg_locals env_prev_s (denote_cfg_from bmap_s None (bid_prev_s, nls_bid_hdr s_s))))
+      (run_draws sigma_tgt (run_cfg_locals env_prev_t (denote_cfg_from bmap_t None (bid_prev_t, nls_bid_hdr s_t)))).
+Proof.
+  intros cut_allowed opt_pf src_cfg tgt_cfg s_s s_t ctx_exit_0 ctx_exit b_exit_uas
+         sigma_tgt penv_cut bid_prev_s bid_prev_t env_prev_s env_prev_t cbit_s cbit_t
+         bmap_s bmap_t Hpenv_cut Hctx_exit0 Hbr_hdr_s Hfa_hdr_s Hfa_exit_s Hfa_exit_t
+         Hwf_ret_s Hwf_ret_t Hret_hdr_s Epol_eq Econt Ef_exit Hsafe_exit_t Href_ret Hexit_s Hexit_t.
+  destruct (Hexit_s Econt)
+    as [[Hub_xs _] | (env_exit_s & dv_ret_s & Hret_exit_s & Hev_ret_s & _ & Hret_st_s)].
+  - exact (cfg_steps_ub_det_ref dvalue_refines sigma_tgt _ _ _ (Hub_xs sigma_tgt)).
+  - assert (Hret_hx_s :
+      Forall (fun ce => exists dv, eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ret dv)
+        (nls_evals_hdr s_s ++ nls_evals_exit s_s))
+      by (apply Forall_app; split; assumption).
+    assert (Hwf_hx_s : Forall (wf_pure_eval_entry cut_allowed) (nls_evals_hdr s_s ++ nls_evals_exit s_s))
+      by (apply Forall_app; split; assumption).
+    pose proof (fold_ub_assumptions_sound _ cut_allowed
+                  (nls_evals_hdr s_s ++ nls_evals_exit s_s) [nls_ce_cond s_s]
+                  ctx_exit_0 ctx_exit penv_cut dummy_freeze_oracle Hpenv_cut
+                  (forall_wf_pure_in _ _ Hwf_hx_s)
+                  (forall_ret_in _ _ _ Hret_hx_s)
+                  Hbr_hdr_s Hctx_exit0 Ef_exit) as Hctx_exit.
+    rewrite Econt in Epol_eq.
+    destruct (Hexit_t Epol_eq)
+      as [[_ (ce_xt & msg_xt & Hin_xt & Hev_xt)]
+         | (env_exit_t & dv_ret_t & _ & Hev_ret_t & _ & Hret_st_t)].
+    + exfalso; exact (exprs_safe_under_src_sound (nls_ce_ret s_t :: nls_evals_exit s_t)
+                        cut_allowed ctx_exit (nls_evals_hdr s_s ++ nls_evals_exit s_s)
+                        penv_cut Hpenv_cut Hctx_exit
+                        (forall_ret_in _ _ _ Hret_hx_s)
+                        (Forall_cons _ Hwf_ret_t Hfa_exit_t) Hsafe_exit_t
+                        ce_xt msg_xt Hin_xt Hev_xt).
+    + destruct Hwf_ret_s as (_ & _ & Hfv_ret_s).
+      destruct Hwf_ret_t as (_ & _ & Hfv_ret_t).
+      pose proof (check_expr_refines_with_lrat_sound ctx_exit (nls_ce_ret s_s) (nls_ce_ret s_t)
+                    opt_pf penv_cut dummy_freeze_oracle Href_ret
+                    (fun n w0 H => Hpenv_cut n w0 (Hfv_ret_s (n, w0) H))
+                    (fun n w0 H => Hpenv_cut n w0 (Hfv_ret_t (n, w0) H))
+                    Hctx_exit) as Hdv_ret.
+      rewrite Hev_ret_s, Hev_ret_t in Hdv_ret; cbn [refine_eou_dvalue] in Hdv_ret.
+      exact (cfg_steps_ret_det_ref dvalue_refines
+               sigma_tgt env_prev_s _ sigma_tgt env_exit_s dv_ret_s
+               sigma_tgt env_prev_t _ sigma_tgt env_exit_t dv_ret_t
+               (pure_cfg_to_cfg_ret sigma_tgt _ _ _ _ Hret_st_s)
+               (pure_cfg_to_cfg_ret sigma_tgt _ _ _ _ Hret_st_t)
+               Hdv_ret).
+Qed.
+
+Local Lemma check_loop_cutpoint_cfg_loop_bisim {Pa : Params} :
+  forall allowed cut_allowed opt_pf pspecs
+         (src_cfg tgt_cfg : CFG.cfg dtyp) src_hdr tgt_hdr
+         hspecs_s hspecs_t s_s s_t b_ent_s b_ent_t b_hdr_s b_hdr_t
+         ctx_ent ctx_hdr ctx_cont ctx_exit
+         (src_pnames : list string) hdr_uas latch_uas b_exit_uas
+         (sigma_tgt : @draw_strat Pa) (penv : param_env Pa)
+         (env_entry_s env_entry_t : rmap (@dvalue Pa)),
+    let bmap_s := ocfg_map (blks src_cfg) in
+    let bmap_t := ocfg_map (blks tgt_cfg) in
+    let base_loop_ctx := filter_param_ub_ctx src_pnames ctx_ent in
+    let eff_s := eff_loop_cond (nls_latch_on_true s_s) (nls_ce_cond s_s) in
+    let eff_t := eff_loop_cond (nls_latch_on_true s_t) (nls_ce_cond s_t) in
+    let ctx_cont_0 :=
+      extract_branch_cond_assumptions (nls_latch_on_true s_s) (nls_ce_cond s_s) ++ ctx_hdr in
+    let ctx_exit_0 :=
+      extract_branch_cond_assumptions (negb (nls_latch_on_true s_s)) (nls_ce_cond s_s) ++ ctx_hdr in
+    cut_allowed = allowed ++ cut_vars_from 0%nat pspecs ->
+    NoDup (cut_names_from 0%nat pspecs) ->
+    (forall x, In x src_pnames -> ~ In x (cut_names_from 0%nat pspecs)) ->
+    (forall nm w, In (nm, w) allowed -> ~ In nm (cut_names_from 0%nat pspecs)) ->
+    pair_phi_specs hspecs_s hspecs_t = Some pspecs ->
+    wf_param_env_for allowed penv ->
+    ub_ctx_holds penv dummy_freeze_oracle ctx_ent ->
+    fold_ub_assumptions cut_allowed (nls_evals_hdr s_s) [nls_ce_cond s_s]
+      base_loop_ctx hdr_uas = Some ctx_hdr ->
+    fold_ub_assumptions cut_allowed (nls_evals_hdr s_s ++ nls_evals_body s_s)
+      [nls_ce_cond s_s] ctx_cont_0 latch_uas = Some ctx_cont ->
+    fold_ub_assumptions cut_allowed (nls_evals_hdr s_s ++ nls_evals_exit s_s)
+      [nls_ce_cond s_s] ctx_exit_0 b_exit_uas = Some ctx_exit ->
+    forallb (expr_safe_under_src ctx_hdr (nls_evals_hdr s_s))
+      (nls_ce_cond s_t :: nls_evals_hdr s_t) = true ->
+    check_expr_refines_with_lrat ctx_hdr eff_s eff_t opt_pf = true ->
+    forallb (expr_safe_under_src ctx_cont (nls_evals_hdr s_s ++ nls_evals_body s_s))
+      (nls_evals_body s_t) = true ->
+    forallb (expr_safe_under_src ctx_cont
+               ((nls_evals_hdr s_s ++ nls_evals_body s_s) ++ peval_exprs (nls_next_pevals s_s)))
+      (peval_exprs (nls_next_pevals s_t)) = true ->
+    check_pevals_refine ctx_cont opt_pf pspecs (nls_next_pevals s_s) (nls_next_pevals s_t) = true ->
+    forallb (expr_safe_under_src ctx_exit (nls_evals_hdr s_s ++ nls_evals_exit s_s))
+      (nls_ce_ret s_t :: nls_evals_exit s_t) = true ->
+    check_expr_refines_with_lrat ctx_exit (nls_ce_ret s_s) (nls_ce_ret s_t) opt_pf = true ->
+    (forall idx w0 pnm,
+       In (idx, DTYPE_Base (DTYPE_I w0)) (param_idx_uses_cfg src_cfg) ->
+       nth_error src_pnames idx = Some pnm -> In (pnm, w0) allowed) ->
+    (forall idx w0 pnm,
+       In (idx, DTYPE_Base (DTYPE_I w0)) (param_idx_uses_cfg tgt_cfg) ->
+       nth_error src_pnames idx = Some pnm -> In (pnm, w0) allowed) ->
+    (forall lmap, wf_pure_lmap allowed lmap ->
+       wf_pure_lmap cut_allowed (overlay_hspecs_s 0%nat lmap hspecs_s)) ->
+    (forall lmap, wf_pure_lmap allowed lmap ->
+       wf_pure_lmap cut_allowed (overlay_hspecs_t 0%nat lmap hspecs_t)) ->
+    reify_natural_loop src_cfg src_hdr
+      (init_param_lmap (args src_cfg) src_pnames (param_idx_uses_cfg src_cfg))
+      (overlay_hspecs_s 0%nat) = Some (hspecs_s, s_s) ->
+    reify_natural_loop tgt_cfg tgt_hdr
+      (init_param_lmap (args tgt_cfg) src_pnames (param_idx_uses_cfg tgt_cfg))
+      (overlay_hspecs_t 0%nat) = Some (hspecs_t, s_t) ->
+    RM.find (init src_cfg) bmap_s = Some b_ent_s ->
+    RM.find (init tgt_cfg) bmap_t = Some b_ent_t ->
+    RM.find (nls_bid_hdr s_s) bmap_s = Some b_hdr_s ->
+    RM.find (nls_bid_hdr s_t) bmap_t = Some b_hdr_t ->
+    lmap_matches_env penv (nls_lmap_entry s_s) env_entry_s ->
+    lmap_matches_env penv (nls_lmap_entry s_t) env_entry_t ->
+    forall bid_prev_s bid_prev_t env_prev_s env_prev_t dvs_s dvs_t,
+      (forall r0, In r0 (args src_cfg ++ code_written_ids (blk_code b_ent_s)) ->
+         RM.find r0 env_prev_s = RM.find r0 env_entry_s) ->
+      (forall r0, In r0 (args tgt_cfg ++ code_written_ids (blk_code b_ent_t)) ->
+         RM.find r0 env_prev_t = RM.find r0 env_entry_t) ->
+      pure_cfg_steps env_prev_s (denote_phis bid_prev_s (blk_phis b_hdr_s))
+        (apply_phi_env env_prev_s dvs_s) tt ->
+      pure_cfg_steps env_prev_t (denote_phis bid_prev_t (blk_phis b_hdr_t))
+        (apply_phi_env env_prev_t dvs_t) tt ->
+      cut_phi_rel pspecs dvs_s dvs_t ->
+      det_ref dvalue_refines
+        (run_draws sigma_tgt (run_cfg_locals env_prev_s
+           (denote_cfg_from bmap_s None (bid_prev_s, nls_bid_hdr s_s))))
+        (run_draws sigma_tgt (run_cfg_locals env_prev_t
+           (denote_cfg_from bmap_t None (bid_prev_t, nls_bid_hdr s_t)))).
+Proof.
+  intros allowed cut_allowed opt_pf pspecs src_cfg tgt_cfg src_hdr tgt_hdr
+         hspecs_s hspecs_t s_s s_t b_ent_s b_ent_t b_hdr_s b_hdr_t
+         ctx_ent ctx_hdr ctx_cont ctx_exit src_pnames hdr_uas latch_uas b_exit_uas
+         sigma_tgt penv env_entry_s env_entry_t
+         bmap_s bmap_t base_loop_ctx eff_s eff_t ctx_cont_0 ctx_exit_0
+         Hcut_eq Hnd_cut Hdisj_sp_cut Hall_not_cut Epair Hpenv0 Hctx_ent
+         Ef_hdr Ef_cont Ef_exit Hsafe_hdr_t Href_eff Hsafe_body_t Hsafe_next_t Href_next
+         Hsafe_exit_t Href_ret Hpu_s Hpu_t Hwrap_s Hwrap_t Er_s Er_t
+         Hf_ent_s Hf_ent_t Hf_hdr_s Hf_hdr_t Henv_ent_s Henv_ent_t.
+  destruct (reify_natural_loop_spec src_cfg src_hdr allowed cut_allowed
+              (init_param_lmap (args src_cfg) src_pnames (param_idx_uses_cfg src_cfg))
+              (overlay_hspecs_s 0%nat) hspecs_s s_s
+              (init_param_lmap_typing (param_idx_uses_cfg src_cfg) (args src_cfg) src_pnames allowed Hpu_s)
+              (init_param_lmap_dom (param_idx_uses_cfg src_cfg) (args src_cfg) src_pnames)
+              Hwrap_s Er_s)
+    as (b_ent_s' & b_hdr_s' & Hf_ent_s' & Hf_hdr_s' & _ & _ & Hr_next_s &
+        Hlmap_ent_s & Hdom_ent_s & _ & _ & Hfa_hdr_s &
+        Hwf_cond_s & Hbw_cond_s & Hfa_body_s & Hfa_next_s & Hfa_exit_s &
+        Hwf_ret_s & _ & _ & _ & Hstep_hdr_s).
+  destruct (reify_natural_loop_spec tgt_cfg tgt_hdr allowed cut_allowed
+              (init_param_lmap (args tgt_cfg) src_pnames (param_idx_uses_cfg tgt_cfg))
+              (overlay_hspecs_t 0%nat) hspecs_t s_t
+              (init_param_lmap_typing (param_idx_uses_cfg tgt_cfg) (args tgt_cfg) src_pnames allowed Hpu_t)
+              (init_param_lmap_dom (param_idx_uses_cfg tgt_cfg) (args tgt_cfg) src_pnames)
+              Hwrap_t Er_t)
+    as (b_ent_t' & b_hdr_t' & Hf_ent_t' & Hf_hdr_t' & _ & _ & Hr_next_t &
+        Hlmap_ent_t & Hdom_ent_t & _ & _ & Hfa_hdr_t &
+        Hwf_cond_t & Hbw_cond_t & Hfa_body_t & Hfa_next_t & Hfa_exit_t &
+        Hwf_ret_t & _ & _ & _ & Hstep_hdr_t).
+  fold bmap_s in Hf_ent_s', Hf_hdr_s'; fold bmap_t in Hf_ent_t', Hf_hdr_t'.
+  rewrite Hf_ent_s in Hf_ent_s'; injection Hf_ent_s' as <-.
+  rewrite Hf_hdr_s in Hf_hdr_s'; injection Hf_hdr_s' as <-.
+  rewrite Hf_ent_t in Hf_ent_t'; injection Hf_ent_t' as <-.
+  rewrite Hf_hdr_t in Hf_hdr_t'; injection Hf_hdr_t' as <-.
+  pcofix CIH.
+  intros bid_prev_s bid_prev_t env_prev_s env_prev_t dvs_s dvs_t Hag_s Hag_t Hphis_s Hphis_t Hrel.
+  set (bs := cut_bindings_from 0%nat pspecs dvs_s dvs_t).
+  set (penv_cut := extend_penv bs penv).
+  pose proof (cut_bindings_fst pspecs dvs_s dvs_t 0%nat Hrel) as Hbs_fst; fold bs in Hbs_fst.
+  assert (Hnd_bs : NoDup (List.map fst bs)) by (rewrite Hbs_fst; exact Hnd_cut).
+  assert (Hp_agree : forall nm w, In (nm, w) allowed -> penv nm = penv_cut nm).
+  { intros nm w Hin; symmetry; unfold penv_cut; apply extend_penv_not_in.
+    rewrite Hbs_fst; exact (Hall_not_cut nm w Hin). }
+  pose proof (lmap_matches_env_transfer allowed _ penv penv_cut
+                (nls_lmap_entry s_s) env_entry_s env_prev_s
+                Hlmap_ent_s Hdom_ent_s Hp_agree Hag_s Henv_ent_s) as Hlm_prev_s.
+  pose proof (lmap_matches_env_transfer allowed _ penv penv_cut
+                (nls_lmap_entry s_t) env_entry_t env_prev_t
+                Hlmap_ent_t Hdom_ent_t Hp_agree Hag_t Henv_ent_t) as Hlm_prev_t.
+  destruct (overlay_cut_lmap_matches pspecs dvs_s dvs_t 0%nat bs penv
+              (nls_lmap_entry s_s) (nls_lmap_entry s_t) env_prev_s env_prev_t
+              Hrel Hnd_bs (incl_refl bs) Hlm_prev_s Hlm_prev_t)
+    as [Hlm_hdr0_s Hlm_hdr0_t].
+  destruct (pair_phi_specs_overlay hspecs_s hspecs_t pspecs 0%nat
+              (nls_lmap_entry s_s) (nls_lmap_entry s_t) Epair)
+    as (Hos_eq & Hot_eq & Hms_eq & Hmt_eq).
+  rewrite <- Hos_eq in Hlm_hdr0_s; rewrite <- Hot_eq in Hlm_hdr0_t.
+  assert (Hmap_dvs :
+    List.map fst dvs_s = List.map fst hspecs_s /\
+    List.map fst dvs_t = List.map fst hspecs_t).
+  { rewrite Hms_eq, Hmt_eq; clear -Hrel.
+    induction Hrel; cbn.
+    - split; reflexivity.
+    - destruct IHHrel as [Hs Ht]; split; f_equal; assumption. }
+  destruct Hmap_dvs as [Hmap_dvs_s Hmap_dvs_t].
+  pose proof (extend_penv_wf_param_union allowed pspecs dvs_s dvs_t penv
+                Hpenv0 Hrel Hnd_cut Hall_not_cut) as Hpenv_cut;
+    fold bs penv_cut in Hpenv_cut; rewrite <- Hcut_eq in Hpenv_cut.
+  destruct (Hstep_hdr_s Pa None penv_cut bid_prev_s env_prev_s dvs_s Hmap_dvs_s Hphis_s Hlm_hdr0_s)
+    as [[Hub_hs _] | (cbit_s & Hret_hdr_s & Hev_cond_s & Hcont_s & Hexit_s)].
+  - eapply paco2_mon;
+      [exact (cfg_steps_ub_det_ref dvalue_refines sigma_tgt _ _ _ (Hub_hs sigma_tgt))
+      | intros ? ? []].
+  - assert (Hdisj_bs : forall x, In x src_pnames -> ~ In x (List.map fst bs))
+      by (rewrite Hbs_fst; exact Hdisj_sp_cut).
+    pose proof (filter_param_ub_ctx_holds src_pnames ctx_ent bs penv dummy_freeze_oracle
+                  Hdisj_bs Hctx_ent) as Hbase_ctx;
+      fold penv_cut base_loop_ctx in Hbase_ctx.
+    assert (Hbr_hdr_s : forall c, In c [nls_ce_cond s_s] ->
+      exists cbit : @Integers.bit_int 1,
+        eval_closed_cert_expr penv_cut dummy_freeze_oracle c =
+        raise_ret (DVALUE_Base (@DVALUE_I Pa 1 cbit))).
+    { intros c [<- | []]; exists cbit_s; exact Hev_cond_s. }
+    pose proof (fold_ub_assumptions_sound _ cut_allowed (nls_evals_hdr s_s) [nls_ce_cond s_s]
+                  base_loop_ctx ctx_hdr penv_cut dummy_freeze_oracle Hpenv_cut
+                  (forall_wf_pure_in _ _ Hfa_hdr_s)
+                  (forall_ret_in _ _ _ Hret_hdr_s)
+                  Hbr_hdr_s Hbase_ctx Ef_hdr) as Hctx_hdr.
+    destruct (eff_loop_cond_typing cut_allowed (nls_latch_on_true s_s) (nls_ce_cond s_s)
+                Hwf_cond_s Hbw_cond_s) as [(_ & _ & Hfv_eff_s) _].
+    destruct (eff_loop_cond_typing cut_allowed (nls_latch_on_true s_t) (nls_ce_cond s_t)
+                Hwf_cond_t Hbw_cond_t) as [(_ & _ & Hfv_eff_t) _].
+    fold eff_s in Hfv_eff_s; fold eff_t in Hfv_eff_t.
+    destruct (eval_eff_loop_cond penv_cut (nls_latch_on_true s_s) (nls_ce_cond s_s)
+                cbit_s Hev_cond_s) as [ebit_s [Hev_eff_s Eebit_s]]; fold eff_s in Hev_eff_s.
+    pose proof (check_expr_refines_with_lrat_sound ctx_hdr eff_s eff_t opt_pf
+                  penv_cut dummy_freeze_oracle Href_eff
+                  (fun n w0 H => Hpenv_cut n w0 (Hfv_eff_s (n, w0) H))
+                  (fun n w0 H => Hpenv_cut n w0 (Hfv_eff_t (n, w0) H))
+                  Hctx_hdr) as Href_eff_ev.
+    rewrite Hev_eff_s in Href_eff_ev.
+    destruct (Hstep_hdr_t Pa None penv_cut bid_prev_t env_prev_t dvs_t Hmap_dvs_t Hphis_t Hlm_hdr0_t)
+      as [[_ [(ce_ht & msg_ht & Hin_ht & Hev_ht) | Hev_ct_ps]]
+         | (cbit_t & _ & Hev_cond_t & Hcont_t & Hexit_t)].
+    + exfalso; exact (exprs_safe_under_src_sound (nls_ce_cond s_t :: nls_evals_hdr s_t)
+                        cut_allowed ctx_hdr (nls_evals_hdr s_s) penv_cut Hpenv_cut Hctx_hdr
+                        (forall_ret_in _ _ _ Hret_hdr_s)
+                        (Forall_cons _ Hwf_cond_t Hfa_hdr_t) Hsafe_hdr_t
+                        ce_ht msg_ht Hin_ht Hev_ht).
+    + exfalso.
+      pose proof (eff_loop_cond_poison penv_cut (nls_latch_on_true s_t) (nls_ce_cond s_t) Hev_ct_ps)
+        as Hev_eff_t_ps; fold eff_t in Hev_eff_t_ps.
+      rewrite Hev_eff_t_ps in Href_eff_ev; cbn [refine_eou_dvalue] in Href_eff_ev.
+      destruct Href_eff_ev as [Habs | Habs]; discriminate Habs.
+    + destruct (eval_eff_loop_cond penv_cut (nls_latch_on_true s_t) (nls_ce_cond s_t)
+                  cbit_t Hev_cond_t) as [ebit_t [Hev_eff_t Eebit_t]]; fold eff_t in Hev_eff_t.
+      rewrite Hev_eff_t in Href_eff_ev; cbn [refine_eou_dvalue] in Href_eff_ev.
+      assert (Heb_eq : ebit_s = ebit_t).
+      { destruct Href_eff_ev as [Habs | Heq_dv]; [discriminate Habs |].
+        exact (eq_sym (dvalue_base_I_same_sz_inj 1 ebit_t ebit_s Heq_dv)). }
+      subst ebit_t.
+      assert (Epol_eq :
+        Bool.eqb (@Integers.unsigned 1 cbit_t =? 1)%Z (nls_latch_on_true s_t) =
+        Bool.eqb (@Integers.unsigned 1 cbit_s =? 1)%Z (nls_latch_on_true s_s))
+        by congruence.
+      destruct Hwf_cond_s as (Hwt_cs & Hlf_cs & _).
+      case_eq (Bool.eqb (@Integers.unsigned 1 cbit_s =? 1)%Z (nls_latch_on_true s_s));
+        intro Econt.
+      * (* Loop continues *)
+        pose proof (bool_eqb_swap_inv _ _ true Econt) as Ecbit_cont.
+        replace (Bool.eqb true (nls_latch_on_true s_s)) with (nls_latch_on_true s_s) in Ecbit_cont
+          by (destruct (nls_latch_on_true s_s); reflexivity).
+        pose proof (extract_branch_cond_assumptions_sound penv_cut dummy_freeze_oracle
+                      (nls_latch_on_true s_s) (nls_ce_cond s_s) cbit_s ctx_hdr
+                      Hwt_cs Hlf_cs Hev_cond_s Ecbit_cont Hctx_hdr) as Hctx_cont0;
+          fold ctx_cont_0 in Hctx_cont0.
+        destruct (check_loop_cutpoint_continue_step cut_allowed opt_pf pspecs src_cfg tgt_cfg
+                    s_s s_t b_ent_s b_ent_t b_hdr_s b_hdr_t ctx_cont_0 ctx_cont latch_uas
+                    penv_cut bid_prev_s bid_prev_t env_prev_s env_prev_t cbit_s cbit_t
+                    Hpenv_cut Hctx_cont0 Hbr_hdr_s Hfa_hdr_s Hfa_body_s Hfa_next_s Hfa_next_t
+                    Hfa_body_t Hret_hdr_s Epol_eq Econt Ef_cont Hsafe_body_t Hsafe_next_t
+                    Href_next Hr_next_s Hr_next_t Hf_hdr_s Hcont_s Hcont_t)
+          as [Hub_cont
+             | (env_latch_s & env_latch_t & dvs_next_s & dvs_next_t &
+                Hpres_ls & Hpres_lt & Htau_s & Htau_t & Hst_np_s & Hst_np_t & Hrel_next)].
+        -- eapply paco2_mon;
+             [exact (cfg_steps_ub_det_ref dvalue_refines sigma_tgt _ _ _ (Hub_cont sigma_tgt))
+             | intros ? ? []].
+        -- pstep; eapply pure_cfg_steps_to_tau_sync; [exact Htau_s | exact Htau_t | right].
+           exact (CIH (nls_bid_latch_from s_s) (nls_bid_latch_from s_t)
+                      env_latch_s env_latch_t dvs_next_s dvs_next_t
+                      (fun r0 Hr0 => eq_trans (Hpres_ls r0 Hr0) (Hag_s r0 Hr0))
+                      (fun r0 Hr0 => eq_trans (Hpres_lt r0 Hr0) (Hag_t r0 Hr0))
+                      Hst_np_s Hst_np_t Hrel_next).
+      * (* Loop exits *)
+        pose proof (bool_eqb_swap_inv _ _ false Econt) as Ecbit_exit.
+        replace (Bool.eqb false (nls_latch_on_true s_s)) with (negb (nls_latch_on_true s_s)) in Ecbit_exit
+          by (destruct (nls_latch_on_true s_s); reflexivity).
+        pose proof (extract_branch_cond_assumptions_sound penv_cut dummy_freeze_oracle
+                      (negb (nls_latch_on_true s_s)) (nls_ce_cond s_s) cbit_s ctx_hdr
+                      Hwt_cs Hlf_cs Hev_cond_s Ecbit_exit Hctx_hdr) as Hctx_exit0;
+          fold ctx_exit_0 in Hctx_exit0.
+        eapply paco2_mon;
+          [exact (check_loop_cutpoint_exit_step cut_allowed opt_pf src_cfg tgt_cfg
+                    s_s s_t ctx_exit_0 ctx_exit b_exit_uas sigma_tgt penv_cut
+                    bid_prev_s bid_prev_t env_prev_s env_prev_t cbit_s cbit_t
+                    Hpenv_cut Hctx_exit0 Hbr_hdr_s Hfa_hdr_s Hfa_exit_s Hfa_exit_t
+                    Hwf_ret_s Hwf_ret_t Hret_hdr_s Epol_eq Econt Ef_exit
+                    Hsafe_exit_t Href_ret Hexit_s Hexit_t)
+          | intros ? ? []].
+Qed.
+
 Lemma check_loop_cutpoint_cfg_open_sound {Pa : Params} :
+
   forall allowed init_ctx (src_cfg tgt_cfg : CFG.cfg dtyp)
          cert lci opt_pf arg_dtys (vs : list (@dvalue Pa)),
     NoDup (args src_cfg) ->
@@ -2956,9 +3684,11 @@ Proof.
           eapply denote_cfg_from_block_ub; [exact Hf_hdr_s |].
           unfold denote_block; apply cfg_steps_to_ub_bind_l; exact (Hub_ip_s sigma_tgt). }
         exact (cfg_steps_ub_det_ref dvalue_refines sigma_tgt _ _ _ Hub_from_ent).
-      * pose proof (Forall_app (wf_pure_eval_entry allowed) (nls_evals_entry s_s) (peval_exprs (nls_init_pevals s_s))) as Hfa_app_ip.
-        assert (Hret_ent_ip_s : Forall (fun ce => exists dv, eval_closed_cert_expr penv dummy_freeze_oracle ce = raise_ret dv)
-                                  (nls_evals_entry s_s ++ peval_exprs (nls_init_pevals s_s)))
+      * pose proof (Forall_app (wf_pure_eval_entry allowed)
+                    (nls_evals_entry s_s) (peval_exprs (nls_init_pevals s_s))) as Hfa_app_ip.
+        assert (Hret_ent_ip_s :
+          Forall (fun ce => exists dv, eval_closed_cert_expr penv dummy_freeze_oracle ce = raise_ret dv)
+            (nls_evals_entry s_s ++ peval_exprs (nls_init_pevals s_s)))
           by (apply Forall_app; split; [exact Hret_ent_s | exact (peval_exprs_ret penv _ _ Hpm0_s)]).
         destruct (pure_phis_denote_step (blk_phis b_hdr_t) penv (init tgt_cfg)
                     (nls_lmap_entry s_t) env_entry_t (nls_init_pevals s_t) Henv_ent_t Hr_init_t)
@@ -2972,225 +3702,20 @@ Proof.
                        dvs0_s dvs0_t allowed ctx_ent opt_pf penv Hpenv0 Hctx_ent
                        Hfa_init_s Hfa_init_t Hpm0_s Hpm0_t Href_init)
              as (Hrel0 & _ & _).
-           assert (Hloop :
-             forall bid_prev_s bid_prev_t env_prev_s env_prev_t dvs_s dvs_t,
-               (forall r0, In r0 (args src_cfg ++ code_written_ids (blk_code b_ent_s)) ->
-                  RM.find r0 env_prev_s = RM.find r0 env_entry_s) ->
-               (forall r0, In r0 (args tgt_cfg ++ code_written_ids (blk_code b_ent_t)) ->
-                  RM.find r0 env_prev_t = RM.find r0 env_entry_t) ->
-               pure_cfg_steps env_prev_s (denote_phis bid_prev_s (blk_phis b_hdr_s))
-                 (apply_phi_env env_prev_s dvs_s) tt ->
-               pure_cfg_steps env_prev_t (denote_phis bid_prev_t (blk_phis b_hdr_t))
-                 (apply_phi_env env_prev_t dvs_t) tt ->
-               cut_phi_rel pspecs dvs_s dvs_t ->
-               det_ref dvalue_refines
-                 (run_draws sigma_tgt (run_cfg_locals env_prev_s
-                    (denote_cfg_from bmap_s None (bid_prev_s, nls_bid_hdr s_s))))
-                 (run_draws sigma_tgt (run_cfg_locals env_prev_t
-                    (denote_cfg_from bmap_t None (bid_prev_t, nls_bid_hdr s_t))))).
-           { pcofix CIH.
-             intros bid_prev_s bid_prev_t env_prev_s env_prev_t dvs_s dvs_t
-                    Hag_s Hag_t Hphis_s Hphis_t Hrel.
-             set (bs := cut_bindings_from 0%nat pspecs dvs_s dvs_t).
-             set (penv_cut := extend_penv bs penv).
-             pose proof (cut_bindings_fst pspecs dvs_s dvs_t 0%nat Hrel) as Hbs_fst; fold bs in Hbs_fst.
-             assert (Hnd_bs : NoDup (List.map fst bs)) by (rewrite Hbs_fst; exact Hnd_cut).
-             assert (Hp_agree : forall nm w, In (nm, w) allowed -> penv nm = penv_cut nm).
-             { intros nm w Hin; symmetry; unfold penv_cut; apply extend_penv_not_in.
-               rewrite Hbs_fst; exact (Hall_not_cut nm w Hin). }
-             pose proof (lmap_matches_env_transfer allowed _ penv penv_cut
-                           (nls_lmap_entry s_s) env_entry_s env_prev_s
-                           Hlmap_ent_s Hdom_ent_s Hp_agree Hag_s Henv_ent_s) as Hlm_prev_s.
-             pose proof (lmap_matches_env_transfer allowed _ penv penv_cut
-                           (nls_lmap_entry s_t) env_entry_t env_prev_t
-                           Hlmap_ent_t Hdom_ent_t Hp_agree Hag_t Henv_ent_t) as Hlm_prev_t.
-             destruct (overlay_cut_lmap_matches pspecs dvs_s dvs_t 0%nat bs penv
-                         (nls_lmap_entry s_s) (nls_lmap_entry s_t) env_prev_s env_prev_t
-                         Hrel Hnd_bs (incl_refl bs) Hlm_prev_s Hlm_prev_t)
-               as [Hlm_hdr0_s Hlm_hdr0_t].
-             destruct (pair_phi_specs_overlay hspecs_s hspecs_t pspecs 0%nat
-                         (nls_lmap_entry s_s) (nls_lmap_entry s_t) Epair)
-               as (Hos_eq & Hot_eq & Hms_eq & Hmt_eq).
-             rewrite <- Hos_eq in Hlm_hdr0_s; rewrite <- Hot_eq in Hlm_hdr0_t.
-             assert (Hmap_dvs :
-               List.map fst dvs_s = List.map fst hspecs_s /\
-               List.map fst dvs_t = List.map fst hspecs_t).
-             { rewrite Hms_eq, Hmt_eq; clear -Hrel.
-               induction Hrel; cbn; [split; reflexivity | destruct IHHrel as [Hs Ht]; split; f_equal; assumption]. }
-             destruct Hmap_dvs as [Hmap_dvs_s Hmap_dvs_t].
-             pose proof (extend_penv_wf_param_union allowed pspecs dvs_s dvs_t penv
-                           Hpenv0 Hrel Hnd_cut Hall_not_cut) as Hpenv_cut;
-               fold cut_allowed bs penv_cut in Hpenv_cut.
-             destruct (Hstep_hdr_s Pa None penv_cut bid_prev_s env_prev_s dvs_s
-                         Hmap_dvs_s Hphis_s Hlm_hdr0_s)
-               as [[Hub_hs _] | (cbit_s & Hret_hdr_s & Hev_cond_s & Hcont_s & Hexit_s)].
-             - eapply paco2_mon; [exact (cfg_steps_ub_det_ref dvalue_refines sigma_tgt _ _ _ (Hub_hs sigma_tgt)) | intros ? ? []].
-             - assert (Hdisj_bs : forall x, In x src_pnames -> ~ In x (List.map fst bs))
-                 by (rewrite Hbs_fst; exact Hdisj_sp_cut).
-               pose proof (filter_param_ub_ctx_holds src_pnames ctx_ent bs penv dummy_freeze_oracle
-                             Hdisj_bs Hctx_ent) as Hbase_ctx;
-                 fold penv_cut base_loop_ctx in Hbase_ctx.
-               assert (Hbr_hdr_s : forall c, In c [nls_ce_cond s_s] ->
-                 exists cbit : @Integers.bit_int 1,
-                   eval_closed_cert_expr penv_cut dummy_freeze_oracle c =
-                   raise_ret (DVALUE_Base (@DVALUE_I Pa 1 cbit))).
-               { intros c [<- | []]; exists cbit_s; exact Hev_cond_s. }
-               pose proof (fold_ub_assumptions_sound _ cut_allowed (nls_evals_hdr s_s) [nls_ce_cond s_s]
-                             base_loop_ctx ctx_hdr penv_cut dummy_freeze_oracle Hpenv_cut
-                             (forall_wf_pure_in _ _ Hfa_hdr_s)
-                             (forall_ret_in _ _ _ Hret_hdr_s)
-                             Hbr_hdr_s Hbase_ctx Ef_hdr) as Hctx_hdr.
-               destruct (eff_loop_cond_typing cut_allowed (nls_latch_on_true s_s) (nls_ce_cond s_s)
-                           Hwf_cond_s Hbw_cond_s) as [(_ & _ & Hfv_eff_s) _].
-               destruct (eff_loop_cond_typing cut_allowed (nls_latch_on_true s_t) (nls_ce_cond s_t)
-                           Hwf_cond_t Hbw_cond_t) as [(_ & _ & Hfv_eff_t) _].
-               fold eff_s in Hfv_eff_s; fold eff_t in Hfv_eff_t.
-               destruct (eval_eff_loop_cond penv_cut (nls_latch_on_true s_s) (nls_ce_cond s_s)
-                           cbit_s Hev_cond_s) as [ebit_s [Hev_eff_s Eebit_s]]; fold eff_s in Hev_eff_s.
-               pose proof (check_expr_refines_with_lrat_sound ctx_hdr eff_s eff_t opt_pf
-                             penv_cut dummy_freeze_oracle Href_eff
-                             (fun n w0 H => Hpenv_cut n w0 (Hfv_eff_s (n, w0) H))
-                             (fun n w0 H => Hpenv_cut n w0 (Hfv_eff_t (n, w0) H))
-                             Hctx_hdr) as Href_eff_ev.
-               rewrite Hev_eff_s in Href_eff_ev.
-               destruct (Hstep_hdr_t Pa None penv_cut bid_prev_t env_prev_t dvs_t
-                           Hmap_dvs_t Hphis_t Hlm_hdr0_t)
-                 as [[_ [(ce_ht & msg_ht & Hin_ht & Hev_ht) | Hev_ct_ps]]
-                    | (cbit_t & _ & Hev_cond_t & Hcont_t & Hexit_t)].
-               + exfalso; exact (exprs_safe_under_src_sound (nls_ce_cond s_t :: nls_evals_hdr s_t)
-                                   cut_allowed ctx_hdr (nls_evals_hdr s_s) penv_cut Hpenv_cut Hctx_hdr
-                                   (forall_ret_in _ _ _ Hret_hdr_s)
-                                   (Forall_cons _ Hwf_cond_t Hfa_hdr_t) Hsafe_hdr_t
-                                   ce_ht msg_ht Hin_ht Hev_ht).
-               + exfalso.
-                 pose proof (eff_loop_cond_poison penv_cut (nls_latch_on_true s_t) (nls_ce_cond s_t) Hev_ct_ps)
-                   as Hev_eff_t_ps; fold eff_t in Hev_eff_t_ps.
-                 rewrite Hev_eff_t_ps in Href_eff_ev; cbn [refine_eou_dvalue] in Href_eff_ev.
-                 destruct Href_eff_ev as [Habs | Habs]; discriminate Habs.
-               + destruct (eval_eff_loop_cond penv_cut (nls_latch_on_true s_t) (nls_ce_cond s_t)
-                             cbit_t Hev_cond_t) as [ebit_t [Hev_eff_t Eebit_t]]; fold eff_t in Hev_eff_t.
-                 rewrite Hev_eff_t in Href_eff_ev; cbn [refine_eou_dvalue] in Href_eff_ev.
-                 assert (Heb_eq : ebit_s = ebit_t).
-                 { destruct Href_eff_ev as [Habs | Heq_dv]; [discriminate Habs |].
-                   exact (eq_sym (dvalue_base_I_same_sz_inj 1 ebit_t ebit_s Heq_dv)). }
-                 subst ebit_t.
-                 assert (Epol_eq :
-                   Bool.eqb (@Integers.unsigned 1 cbit_t =? 1)%Z (nls_latch_on_true s_t) =
-                   Bool.eqb (@Integers.unsigned 1 cbit_s =? 1)%Z (nls_latch_on_true s_s))
-                   by congruence.
-                 destruct Hwf_cond_s as (Hwt_cs & Hlf_cs & _).
-                 destruct (Bool.eqb (@Integers.unsigned 1 cbit_s =? 1)%Z (nls_latch_on_true s_s)) eqn:Econt.
-                 * (* Loop continues *)
-                   pose proof (bool_eqb_swap_inv _ _ true Econt) as Ecbit_cont.
-                   replace (Bool.eqb true (nls_latch_on_true s_s)) with (nls_latch_on_true s_s) in Ecbit_cont
-                     by (destruct (nls_latch_on_true s_s); reflexivity).
-                   pose proof (extract_branch_cond_assumptions_sound penv_cut dummy_freeze_oracle
-                                 (nls_latch_on_true s_s) (nls_ce_cond s_s) cbit_s ctx_hdr
-                                 Hwt_cs Hlf_cs Hev_cond_s Ecbit_cont Hctx_hdr) as Hctx_cont0;
-                     fold ctx_cont_0 in Hctx_cont0.
-                   destruct (Hcont_s eq_refl)
-                     as [[Hub_bs _] | (env_latch_s & Hlm_latch_s & Hret_body_s & Hpres_ls & Htau_s)].
-                   -- eapply paco2_mon; [exact (cfg_steps_ub_det_ref dvalue_refines sigma_tgt _ _ _ (Hub_bs sigma_tgt)) | intros ? ? []].
-                   -- assert (Hret_hb_s : Forall (fun ce => exists dv, eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ret dv)
-                                            (nls_evals_hdr s_s ++ nls_evals_body s_s))
-                        by (apply Forall_app; split; assumption).
-                      assert (Hwf_hb_s : Forall (wf_pure_eval_entry cut_allowed) (nls_evals_hdr s_s ++ nls_evals_body s_s))
-                        by (apply Forall_app; split; assumption).
-                      pose proof (fold_ub_assumptions_sound _ cut_allowed
-                                    (nls_evals_hdr s_s ++ nls_evals_body s_s) [nls_ce_cond s_s]
-                                    ctx_cont_0 ctx_cont penv_cut dummy_freeze_oracle Hpenv_cut
-                                    (forall_wf_pure_in _ _ Hwf_hb_s)
-                                    (forall_ret_in _ _ _ Hret_hb_s)
-                                    Hbr_hdr_s Hctx_cont0 Ef_cont) as Hctx_cont.
-                      destruct (pure_phis_denote_step (blk_phis b_hdr_s) penv_cut (nls_bid_latch_from s_s)
-                                  (nls_lmap_latch s_s) env_latch_s (nls_next_pevals s_s) Hlm_latch_s Hr_next_s)
-                        as [[Hub_np_s _] | [dvs_next_s [Hpm_next_s Hst_np_s]]].
-                      ++ assert (Hub_latch_np : cfg_steps_to_ub sigma_tgt env_prev_s
-                                   (denote_cfg_from bmap_s None (bid_prev_s, nls_bid_hdr s_s))).
-                         { eapply pure_cfg_steps_to_tau_then_ub; [exact Htau_s |].
-                           eapply denote_cfg_from_block_ub; [exact Hf_hdr_s |].
-                           unfold denote_block; apply cfg_steps_to_ub_bind_l; exact (Hub_np_s sigma_tgt). }
-                         eapply paco2_mon; [exact (cfg_steps_ub_det_ref dvalue_refines sigma_tgt _ _ _ Hub_latch_np) | intros ? ? []].
-                      ++ destruct (Hcont_t Epol_eq)
-                           as [[_ (ce_bt & msg_bt & Hin_bt & Hev_bt)]
-                              | (env_latch_t & Hlm_latch_t & _ & Hpres_lt & Htau_t)].
-                         ** exfalso; exact (exprs_safe_under_src_sound (nls_evals_body s_t) cut_allowed ctx_cont
-                                              (nls_evals_hdr s_s ++ nls_evals_body s_s) penv_cut Hpenv_cut Hctx_cont
-                                              (forall_ret_in _ _ _ Hret_hb_s) Hfa_body_t Hsafe_body_t
-                                              ce_bt msg_bt Hin_bt Hev_bt).
-                         ** assert (Hret_hbn_s :
-                              Forall (fun ce => exists dv, eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ret dv)
-                                ((nls_evals_hdr s_s ++ nls_evals_body s_s) ++ peval_exprs (nls_next_pevals s_s)))
-                              by (apply Forall_app; split; [exact Hret_hb_s | exact (peval_exprs_ret _ _ _ Hpm_next_s)]).
-                            destruct (pure_phis_denote_step (blk_phis b_hdr_t) penv_cut (nls_bid_latch_from s_t)
-                                        (nls_lmap_latch s_t) env_latch_t (nls_next_pevals s_t) Hlm_latch_t Hr_next_t)
-                              as [[_ (ce_npt & msg_npt & Hin_npt & Hev_npt)] | [dvs_next_t [Hpm_next_t Hst_np_t]]].
-                            --- exfalso; exact (exprs_safe_under_src_sound (peval_exprs (nls_next_pevals s_t))
-                                                  cut_allowed ctx_cont
-                                                  ((nls_evals_hdr s_s ++ nls_evals_body s_s) ++ peval_exprs (nls_next_pevals s_s))
-                                                  penv_cut Hpenv_cut Hctx_cont
-                                                  (forall_ret_in _ _ _ Hret_hbn_s)
-                                                  (peval_exprs_typing _ _ Hfa_next_t) Hsafe_next_t
-                                                  ce_npt msg_npt Hin_npt Hev_npt).
-                            --- destruct (check_pevals_refine_sound pspecs (nls_next_pevals s_s) (nls_next_pevals s_t)
-                                            dvs_next_s dvs_next_t cut_allowed ctx_cont opt_pf penv_cut
-                                            Hpenv_cut Hctx_cont Hfa_next_s Hfa_next_t Hpm_next_s Hpm_next_t Href_next)
-                                  as (Hrel_next & _ & _).
-                                pstep; eapply pure_cfg_steps_to_tau_sync; [exact Htau_s | exact Htau_t | right].
-                                exact (CIH (nls_bid_latch_from s_s) (nls_bid_latch_from s_t)
-                                           env_latch_s env_latch_t dvs_next_s dvs_next_t
-                                           (fun r0 Hr0 => eq_trans (Hpres_ls r0 Hr0) (Hag_s r0 Hr0))
-                                           (fun r0 Hr0 => eq_trans (Hpres_lt r0 Hr0) (Hag_t r0 Hr0))
-                                           Hst_np_s Hst_np_t Hrel_next).
-                 * (* Loop exits *)
-                   pose proof (bool_eqb_swap_inv _ _ false Econt) as Ecbit_exit.
-                   replace (Bool.eqb false (nls_latch_on_true s_s)) with (negb (nls_latch_on_true s_s)) in Ecbit_exit
-                     by (destruct (nls_latch_on_true s_s); reflexivity).
-                   pose proof (extract_branch_cond_assumptions_sound penv_cut dummy_freeze_oracle
-                                 (negb (nls_latch_on_true s_s)) (nls_ce_cond s_s) cbit_s ctx_hdr
-                                 Hwt_cs Hlf_cs Hev_cond_s Ecbit_exit Hctx_hdr) as Hctx_exit0;
-                     fold ctx_exit_0 in Hctx_exit0.
-                   destruct (Hexit_s eq_refl)
-                     as [[Hub_xs _] | (env_exit_s & dv_ret_s & Hret_exit_s & Hev_ret_s & _ & Hret_st_s)].
-                   -- eapply paco2_mon; [exact (cfg_steps_ub_det_ref dvalue_refines sigma_tgt _ _ _ (Hub_xs sigma_tgt)) | intros ? ? []].
-                   -- assert (Hret_hx_s : Forall (fun ce => exists dv, eval_closed_cert_expr penv_cut dummy_freeze_oracle ce = raise_ret dv)
-                                            (nls_evals_hdr s_s ++ nls_evals_exit s_s))
-                        by (apply Forall_app; split; assumption).
-                      assert (Hwf_hx_s : Forall (wf_pure_eval_entry cut_allowed) (nls_evals_hdr s_s ++ nls_evals_exit s_s))
-                        by (apply Forall_app; split; assumption).
-                      pose proof (fold_ub_assumptions_sound _ cut_allowed
-                                    (nls_evals_hdr s_s ++ nls_evals_exit s_s) [nls_ce_cond s_s]
-                                    ctx_exit_0 ctx_exit penv_cut dummy_freeze_oracle Hpenv_cut
-                                    (forall_wf_pure_in _ _ Hwf_hx_s)
-                                    (forall_ret_in _ _ _ Hret_hx_s)
-                                    Hbr_hdr_s Hctx_exit0 Ef_exit) as Hctx_exit.
-                      destruct (Hexit_t Epol_eq)
-                        as [[_ (ce_xt & msg_xt & Hin_xt & Hev_xt)]
-                           | (env_exit_t & dv_ret_t & _ & Hev_ret_t & _ & Hret_st_t)].
-                      ++ exfalso; exact (exprs_safe_under_src_sound (nls_ce_ret s_t :: nls_evals_exit s_t)
-                                           cut_allowed ctx_exit (nls_evals_hdr s_s ++ nls_evals_exit s_s)
-                                           penv_cut Hpenv_cut Hctx_exit
-                                           (forall_ret_in _ _ _ Hret_hx_s)
-                                           (Forall_cons _ Hwf_ret_t Hfa_exit_t) Hsafe_exit_t
-                                           ce_xt msg_xt Hin_xt Hev_xt).
-                      ++ destruct Hwf_ret_s as (_ & _ & Hfv_ret_s).
-                         destruct Hwf_ret_t as (_ & _ & Hfv_ret_t).
-                         pose proof (check_expr_refines_with_lrat_sound ctx_exit (nls_ce_ret s_s) (nls_ce_ret s_t)
-                                       opt_pf penv_cut dummy_freeze_oracle Href_ret
-                                       (fun n w0 H => Hpenv_cut n w0 (Hfv_ret_s (n, w0) H))
-                                       (fun n w0 H => Hpenv_cut n w0 (Hfv_ret_t (n, w0) H))
-                                       Hctx_exit) as Hdv_ret.
-                         rewrite Hev_ret_s, Hev_ret_t in Hdv_ret; cbn [refine_eou_dvalue] in Hdv_ret.
-                         eapply paco2_mon;
-                           [exact (cfg_steps_ret_det_ref dvalue_refines
-                                     sigma_tgt env_prev_s _ sigma_tgt env_exit_s dv_ret_s
-                                     sigma_tgt env_prev_t _ sigma_tgt env_exit_t dv_ret_t
-                                     (pure_cfg_to_cfg_ret sigma_tgt _ _ _ _ Hret_st_s)
-                                     (pure_cfg_to_cfg_ret sigma_tgt _ _ _ _ Hret_st_t)
-                                     Hdv_ret)
-                           | intros ? ? []]. }
            pstep; eapply pure_cfg_steps_to_tau_sync; [exact Htau_ent_s | exact Htau_ent_t | left].
-           exact (Hloop (init src_cfg) (init tgt_cfg) env_entry_s env_entry_t dvs0_s dvs0_t
-                        (fun _ _ => eq_refl) (fun _ _ => eq_refl) Hst_ip_s Hst_ip_t Hrel0).
+           exact (check_loop_cutpoint_cfg_loop_bisim allowed cut_allowed opt_pf pspecs
+                    src_cfg tgt_cfg (lci_src_header lci) (lci_tgt_header lci)
+                    hspecs_s hspecs_t s_s s_t b_ent_s b_ent_t b_hdr_s b_hdr_t
+                    ctx_ent ctx_hdr ctx_cont ctx_exit src_pnames
+                    (block_uas_for (init src_cfg) (pc_blocks cert) (nls_bid_hdr s_s))
+                    latch_uas
+                    (block_uas_for (init src_cfg) (pc_blocks cert) (nls_bid_exit s_s))
+                    sigma_tgt penv env_entry_s env_entry_t
+                    eq_refl Hnd_cut Hdisj_sp_cut Hall_not_cut Epair Hpenv0 Hctx_ent
+                    Ef_hdr Ef_cont Ef_exit Hsafe_hdr_t Href_eff Hsafe_body_t Hsafe_next_t
+                    Href_next Hsafe_exit_t Href_ret Hpu_s Hpu_t Hwrap_s Hwrap_t Er_s Er_t
+                    Hf_ent_s Hf_ent_t Hf_hdr_s Hf_hdr_t Henv_ent_s Henv_ent_t
+                    (init src_cfg) (init tgt_cfg) env_entry_s env_entry_t dvs0_s dvs0_t
+                    (fun _ _ => eq_refl) (fun _ _ => eq_refl) Hst_ip_s Hst_ip_t Hrel0).
 Qed.
 

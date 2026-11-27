@@ -870,12 +870,19 @@ Proof.
     + rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity.
     + reflexivity.
     + intros [].
-  - pstep; eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity | left; exact IH].
-  - pstep; eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, Ho; cbn; rewrite Hf; reflexivity | left; exact IH].
-  - pstep; eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity | left; exact IH].
-  - pstep; eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity | left].
+  - pstep; eapply NSD_Tau;
+      [rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity | left; exact IH].
+  - pstep; eapply NSD_Tau;
+      [rewrite observe_run_draws, observe_run_cfg_locals, Ho; cbn; rewrite Hf; reflexivity
+      | left; exact IH].
+  - pstep; eapply NSD_Tau;
+      [rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity | left; exact IH].
+  - pstep; eapply NSD_Tau;
+      [rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity | left].
     exact (run_draws_ext_no_stack_det s_sh (shift_draw_strat s) _ Hsh IH).
-  - pstep; eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, Ho; cbn; rewrite Ep, Efn; reflexivity | left; exact IH].
+  - pstep; eapply NSD_Tau;
+      [rewrite observe_run_draws, observe_run_cfg_locals, Ho; cbn; rewrite Ep, Efn; reflexivity
+      | left; exact IH].
 Qed.
 
 Lemma cfg_steps_ret_no_stack_det {Pa : Params} {R : Type} :
@@ -891,12 +898,19 @@ Proof.
     | s env t dt ke s_sh s' env' r Ho Hsh _ IH
     | s env t dt fn args va op w rv ke s' env' r Ho Ep Efn _ IH ].
   - pstep; eapply NSD_Ret; rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity.
-  - pstep; eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity | left; exact IH].
-  - pstep; eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, Ho; cbn; rewrite Hf; reflexivity | left; exact IH].
-  - pstep; eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity | left; exact IH].
-  - pstep; eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity | left].
+  - pstep; eapply NSD_Tau;
+      [rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity | left; exact IH].
+  - pstep; eapply NSD_Tau;
+      [rewrite observe_run_draws, observe_run_cfg_locals, Ho; cbn; rewrite Hf; reflexivity
+      | left; exact IH].
+  - pstep; eapply NSD_Tau;
+      [rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity | left; exact IH].
+  - pstep; eapply NSD_Tau;
+      [rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity | left].
     exact (run_draws_ext_no_stack_det s_sh (shift_draw_strat s) _ Hsh IH).
-  - pstep; eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, Ho; cbn; rewrite Ep, Efn; reflexivity | left; exact IH].
+  - pstep; eapply NSD_Tau;
+      [rewrite observe_run_draws, observe_run_cfg_locals, Ho; cbn; rewrite Ep, Efn; reflexivity
+      | left; exact IH].
 Qed.
 
 Lemma det_vis_both_is_stack {Pa : Params} {R1 R2 : Type}
@@ -968,7 +982,9 @@ Inductive va_cfg_eqF {Pa : Params} {R : Type}
       (VisF (@subevent IntrinsicE (@CFGEtop Pa) _ (@exc Pa + @dvalue Pa) (Intrinsic dt fname args va2)) k2).
 
 Lemma va_cfg_eqF_mon {Pa : Params} {R : Type} :
-  monotone2 (fun (r : rel2 (@CFGtop Pa R) (fun _ => @CFGtop Pa R)) (u1 u2 : @CFGtop Pa R) => @va_cfg_eqF Pa R r (observe u1) (observe u2)).
+  monotone2
+    (fun (r : rel2 (@CFGtop Pa R) (fun _ => @CFGtop Pa R)) (u1 u2 : @CFGtop Pa R) =>
+       @va_cfg_eqF Pa R r (observe u1) (observe u2)).
 Proof.
   intros u1 u2 r r' H Hle; destruct H;
     [exact (VaRet r' x)
@@ -1034,8 +1050,12 @@ Proof.
   assert (Hgen : forall u1 u2 : @CFGtop Pa R,
     (exists m1 m2 : @CFGtop Pa (I + R),
        va_cfg_eq m1 m2 /\
-       observe u1 = observe (ITree.bind m1 (fun lr => match lr with inl l => Tau (ITree.iter f1 l) | inr r0 => Ret r0 end)) /\
-       observe u2 = observe (ITree.bind m2 (fun lr => match lr with inl l => Tau (ITree.iter f2 l) | inr r0 => Ret r0 end))) ->
+       observe u1 =
+         observe (ITree.bind m1
+                    (fun lr => match lr with inl l => Tau (ITree.iter f1 l) | inr r0 => Ret r0 end)) /\
+       observe u2 =
+         observe (ITree.bind m2
+                    (fun lr => match lr with inl l => Tau (ITree.iter f2 l) | inr r0 => Ret r0 end))) ->
     va_cfg_eq u1 u2).
   { pcofix CIH; intros u1 u2 [m1 [m2 [Hm [Ho1 Ho2]]]]; punfold Hm; pstep.
     rewrite Ho1, Ho2, !observe_bind; destruct Hm; cbn [observe].
@@ -1046,10 +1066,12 @@ Proof.
       exact (CIH _ _ (ex_intro _ t1 (ex_intro _ t2 (conj H (conj eq_refl eq_refl))))).
     - apply (VaVisEq _ e _ _); intros x; right.
       exact (CIH _ _ (ex_intro _ (k1 x) (ex_intro _ (k2 x)
-               (conj (match H x with or_introl h => h | or_intror f => match f with end end) (conj eq_refl eq_refl))))).
+               (conj (match H x with or_introl h => h | or_intror f => match f with end end)
+                     (conj eq_refl eq_refl))))).
     - apply (VaVisPureIntr _ dt fname args va1 va2 _ _ H); intros x; right.
       exact (CIH _ _ (ex_intro _ (k1 x) (ex_intro _ (k2 x)
-               (conj (match H0 x with or_introl h => h | or_intror f => match f with end end) (conj eq_refl eq_refl))))). }
+               (conj (match H0 x with or_introl h => h | or_intror f => match f with end end)
+                     (conj eq_refl eq_refl))))). }
   eapply Hgen; exists (f1 i), (f2 i); split; [exact (Hf i) | split; apply observe_iter].
 Qed.
 
@@ -1126,7 +1148,9 @@ Proof.
       [rewrite observe_iter; reflexivity
       | rewrite observe_iter, (Hfeq l); reflexivity].
   - cbn [observe]; reflexivity.
-  - cbn [observe]; right; apply CIH; exists m'; split; reflexivity.
+  - cbn [observe].
+    right; apply CIH; exists m'.
+    split; reflexivity.
   - cbn [observe]; destruct (classify_cfg_event e) as [le | oe].
     + destruct le as [id dv | id].
       * right; apply CIH; exists (k tt); split; reflexivity.
@@ -1134,13 +1158,15 @@ Proof.
         -- right; apply CIH; exists (k dv); split; reflexivity.
         -- right; apply det_vis_both_refl; intros [].
     + destruct (classify_ow_event oe) as [dt | op w args | X' de].
-      * revert k; right; apply CIH; exists (k (sigma 0%nat dt)); split; reflexivity.
+      * revert k; right; apply CIH.
+        exists (k (sigma 0%nat dt)); split; reflexivity.
       * revert k; intros k; destruct (pure_int_intrinsic_fn op w args) as [| | | rv];
           [right; apply det_vis_both_refl; intros []
           | right; apply det_vis_both_refl; intros []
           | right; apply det_vis_both_refl; intros []
           | right; apply CIH; exists (k rv); split; reflexivity].
-      * right; apply det_vis_both_refl; intros x; right; apply CIH; exists (k x); split; reflexivity.
+      * right; apply det_vis_both_refl; intros x.
+        right; apply CIH; exists (k x); split; reflexivity.
 Qed.
 
 Lemma pure_cfg_steps_to_tau_no_stack_det_ {Pa : Params} {R : Type}
@@ -1158,7 +1184,9 @@ Proof.
     | env t id dv ke env' m Ho _ IH ].
   - pstep; eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity | exact Hr].
   - pstep; eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity | left; exact (IH Hr)].
-  - pstep; eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, Ho; cbn; rewrite Hf; reflexivity | left; exact (IH Hr)].
+  - pstep; eapply NSD_Tau;
+      [rewrite observe_run_draws, observe_run_cfg_locals, Ho; cbn; rewrite Hf; reflexivity
+      | left; exact (IH Hr)].
   - pstep; eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, Ho; reflexivity | left; exact (IH Hr)].
 Qed.
 
@@ -1316,7 +1344,9 @@ Proof.
           as (Hos_eq & _ & Hms_eq & _).
         rewrite <- Hos_eq in Hlm_hdr0_s.
         assert (Hmap_dvs_s : List.map fst dvs_s = List.map fst hspecs_s).
-        { rewrite Hms_eq; clear -Hrel; induction Hrel; cbn; [reflexivity | f_equal; assumption]. }
+        { rewrite Hms_eq; clear -Hrel; induction Hrel; cbn.
+          - reflexivity.
+          - f_equal; assumption. }
         destruct (Hstep_hdr_s Pa None penv_cut bid_prev_s env_prev_s dvs_s
                     Hmap_dvs_s Hphis_s Hlm_hdr0_s)
           as [[Hub_hs _] | (cbit_s & _ & _ & Hcont_s & Hexit_s)].
@@ -1397,7 +1427,8 @@ Proof.
     end) Ho') as Hs.
   destruct (match Hs in (_ = z)
             return exists Hc : X = projT1 z,
-              eq_rect X (fun T : Type => (@Det_OW_E Pa T * (T -> itree (@Det_OW_E Pa) R))%type) (e, k) (projT1 z) Hc = projT2 z
+              eq_rect X (fun T : Type => (@Det_OW_E Pa T * (T -> itree (@Det_OW_E Pa) R))%type)
+                (e, k) (projT1 z) Hc = projT2 z
             with
             | eq_refl => ex_intro _ eq_refl eq_refl
             end) as [Hc Hpair].
@@ -1452,24 +1483,31 @@ Proof.
       * eapply paco2_mon; [apply det_ref_refl; intros; reflexivity | intros ? ? []].
     + pstep; apply DR_Step; unfold det_step_body.
       rewrite !observe_run_draws, !observe_run_cfg_locals, Ho1, Ho2, !observe_bind, Hom; cbn [observe].
-      right; apply CIH; right; exists m'; split; reflexivity.
+      right; apply CIH; right.
+      exists m'; split; reflexivity.
     + pstep; apply DR_Step; unfold det_step_body.
       rewrite !observe_run_draws, !observe_run_cfg_locals, Ho1, Ho2, !observe_bind, Hom; cbn [observe].
       destruct (classify_cfg_event e) as [le | oe].
       * destruct le as [id dv | id].
-        -- right; apply CIH; right; exists (k tt); split; reflexivity.
+        -- right; apply CIH; right.
+           exists (k tt); split; reflexivity.
         -- destruct (RM.find id env) as [dv |].
-           ++ right; apply CIH; right; exists (k dv); split; reflexivity.
+           ++ right; apply CIH; right.
+              exists (k dv); split; reflexivity.
            ++ right; apply det_vis_both_refl; intros [].
       * destruct (classify_ow_event oe) as [dt | op w args | X' de].
-        -- clear Hom e oe; revert k; right; apply CIH; right; exists (k (sigma 0%nat dt)); split; reflexivity.
+        -- clear Hom e oe; revert k; right; apply CIH; right.
+           exists (k (sigma 0%nat dt)); split; reflexivity.
         -- clear Hom e oe; revert k; intros k.
            destruct (pure_int_intrinsic_fn op w args) as [| | | rv];
              [right; apply det_vis_both_refl; intros []
              | right; apply det_vis_both_refl; intros []
              | right; apply det_vis_both_refl; intros []
-             | right; apply CIH; right; exists (k rv); split; reflexivity].
-        -- right; apply det_vis_both_refl; intros x; right; apply CIH; right; exists (k x); split; reflexivity.
+             | right; apply CIH; right;
+               exists (k rv); split; reflexivity].
+        -- right; apply det_vis_both_refl; intros x.
+           right; apply CIH; right.
+           exists (k x); split; reflexivity.
 Qed.
 
 Lemma iter_bind_pointwise_no_stack_det {Pa : Params} {I R S : Type}
@@ -1516,7 +1554,8 @@ Proof.
         | intros ? []].
     + assert (Ho_t2 : observe (run_draws sigma (run_cfg_locals env u2)) =
                       TauF (run_draws sigma (run_cfg_locals env
-                        (ITree.bind (ITree.bind m' (fun lr => match lr with inl l => Tau (ITree.iter f2 l) | inr r0 => Ret r0 end)) g))))
+                        (ITree.bind (ITree.bind m'
+                           (fun lr => match lr with inl l => Tau (ITree.iter f2 l) | inr r0 => Ret r0 end)) g))))
         by (rewrite observe_run_draws, observe_run_cfg_locals, Ho2, !observe_bind, Hom; reflexivity).
       pose proof (no_stack_det_inv_tau _ _ Ho_t2 Hns2) as Hns2'.
       pstep; eapply NSD_Tau;
@@ -1526,64 +1565,86 @@ Proof.
       * destruct le as [id dv | id].
         -- assert (Ho_t2 : observe (run_draws sigma (run_cfg_locals env u2)) =
                            TauF (run_draws sigma (run_cfg_locals (RM.add id dv env)
-                             (ITree.bind (ITree.bind (k tt) (fun lr => match lr with inl l => Tau (ITree.iter f2 l) | inr r0 => Ret r0 end)) g))))
-             by (rewrite observe_run_draws, observe_run_cfg_locals, Ho2, !observe_bind, Hom; cbn [observe]; rewrite Ece; reflexivity).
+                             (ITree.bind (ITree.bind (k tt)
+                                (fun lr => match lr with inl l => Tau (ITree.iter f2 l) | inr r0 => Ret r0 end)) g))))
+             by (rewrite observe_run_draws, observe_run_cfg_locals, Ho2, !observe_bind, Hom;
+                 cbn [observe]; rewrite Ece; reflexivity).
            pose proof (no_stack_det_inv_tau _ _ Ho_t2 Hns2) as Hns2'.
            pstep; eapply NSD_Tau;
-             [rewrite observe_run_draws, observe_run_cfg_locals, Ho1, !observe_bind, Hom; cbn [observe]; rewrite Ece; reflexivity | right].
+             [rewrite observe_run_draws, observe_run_cfg_locals, Ho1, !observe_bind, Hom;
+              cbn [observe]; rewrite Ece; reflexivity | right].
            eapply CIH; [right; exists (k tt); split; reflexivity | exact Hns2'].
         -- destruct (RM.find id env) as [dv |] eqn:Ef.
            ++ assert (Ho_t2 : observe (run_draws sigma (run_cfg_locals env u2)) =
                               TauF (run_draws sigma (run_cfg_locals env
-                                (ITree.bind (ITree.bind (k dv) (fun lr => match lr with inl l => Tau (ITree.iter f2 l) | inr r0 => Ret r0 end)) g))))
-                by (rewrite observe_run_draws, observe_run_cfg_locals, Ho2, !observe_bind, Hom; cbn [observe]; rewrite Ece, Ef; reflexivity).
+                                (ITree.bind (ITree.bind (k dv)
+                                   (fun lr =>
+                                      match lr with inl l => Tau (ITree.iter f2 l) | inr r0 => Ret r0 end)) g))))
+                by (rewrite observe_run_draws, observe_run_cfg_locals, Ho2, !observe_bind, Hom;
+                    cbn [observe]; rewrite Ece, Ef; reflexivity).
               pose proof (no_stack_det_inv_tau _ _ Ho_t2 Hns2) as Hns2'.
               pstep; eapply NSD_Tau;
-                [rewrite observe_run_draws, observe_run_cfg_locals, Ho1, !observe_bind, Hom; cbn [observe]; rewrite Ece, Ef; reflexivity | right].
+                [rewrite observe_run_draws, observe_run_cfg_locals, Ho1, !observe_bind, Hom;
+                 cbn [observe]; rewrite Ece, Ef; reflexivity | right].
               eapply CIH; [right; exists (k dv); split; reflexivity | exact Hns2'].
            ++ assert (Ho_v : observe (run_draws sigma (run_cfg_locals env u2)) =
                              observe (run_draws sigma (run_cfg_locals env u1)))
-                by (rewrite !observe_run_draws, !observe_run_cfg_locals, Ho1, Ho2, !observe_bind, Hom; cbn [observe]; rewrite Ece, Ef; reflexivity).
+                by (rewrite !observe_run_draws, !observe_run_cfg_locals, Ho1, Ho2, !observe_bind, Hom;
+                    cbn [observe]; rewrite Ece, Ef; reflexivity).
               eapply paco1_mon; [exact (no_stack_det_obs_eq _ _ Ho_v Hns2) | intros ? []].
       * destruct (classify_ow_event oe) as [dt | op w args | X' de] eqn:Eoe.
         -- assert (Ho_t2 : observe (run_draws sigma (run_cfg_locals env u2)) =
                            TauF (run_draws (shift_draw_strat sigma) (run_cfg_locals env
-                             (ITree.bind (ITree.bind (k (sigma 0%nat dt)) (fun lr => match lr with inl l => Tau (ITree.iter f2 l) | inr r0 => Ret r0 end)) g))))
-             by (rewrite observe_run_draws, observe_run_cfg_locals, Ho2, !observe_bind, Hom; cbn [observe]; rewrite Ece, Eoe; reflexivity).
+                             (ITree.bind (ITree.bind (k (sigma 0%nat dt))
+                                (fun lr => match lr with inl l => Tau (ITree.iter f2 l) | inr r0 => Ret r0 end)) g))))
+             by (rewrite observe_run_draws, observe_run_cfg_locals, Ho2, !observe_bind, Hom;
+                 cbn [observe]; rewrite Ece, Eoe; reflexivity).
            pose proof (no_stack_det_inv_tau _ _ Ho_t2 Hns2) as Hns2'.
            pstep; eapply NSD_Tau;
-             [rewrite observe_run_draws, observe_run_cfg_locals, Ho1, !observe_bind, Hom; cbn [observe]; rewrite Ece, Eoe; reflexivity | right].
+             [rewrite observe_run_draws, observe_run_cfg_locals, Ho1, !observe_bind, Hom;
+              cbn [observe]; rewrite Ece, Eoe; reflexivity | right].
            eapply CIH; [right; exists (k (sigma 0%nat dt)); split; reflexivity | exact Hns2'].
         -- destruct (pure_int_intrinsic_fn op w args) as [| | | rv] eqn:Epi.
            ++ assert (Ho_v : observe (run_draws sigma (run_cfg_locals env u2)) =
                              observe (run_draws sigma (run_cfg_locals env u1)))
-                by (rewrite !observe_run_draws, !observe_run_cfg_locals, Ho1, Ho2, !observe_bind, Hom; cbn [observe]; rewrite Ece, Eoe, Epi; reflexivity).
+                by (rewrite !observe_run_draws, !observe_run_cfg_locals, Ho1, Ho2, !observe_bind, Hom;
+                    cbn [observe]; rewrite Ece, Eoe, Epi; reflexivity).
               eapply paco1_mon; [exact (no_stack_det_obs_eq _ _ Ho_v Hns2) | intros ? []].
            ++ assert (Ho_v : observe (run_draws sigma (run_cfg_locals env u2)) =
                              observe (run_draws sigma (run_cfg_locals env u1)))
-                by (rewrite !observe_run_draws, !observe_run_cfg_locals, Ho1, Ho2, !observe_bind, Hom; cbn [observe]; rewrite Ece, Eoe, Epi; reflexivity).
+                by (rewrite !observe_run_draws, !observe_run_cfg_locals, Ho1, Ho2, !observe_bind, Hom;
+                    cbn [observe]; rewrite Ece, Eoe, Epi; reflexivity).
               eapply paco1_mon; [exact (no_stack_det_obs_eq _ _ Ho_v Hns2) | intros ? []].
            ++ assert (Ho_v : observe (run_draws sigma (run_cfg_locals env u2)) =
                              observe (run_draws sigma (run_cfg_locals env u1)))
-                by (rewrite !observe_run_draws, !observe_run_cfg_locals, Ho1, Ho2, !observe_bind, Hom; cbn [observe]; rewrite Ece, Eoe, Epi; reflexivity).
+                by (rewrite !observe_run_draws, !observe_run_cfg_locals, Ho1, Ho2, !observe_bind, Hom;
+                    cbn [observe]; rewrite Ece, Eoe, Epi; reflexivity).
               eapply paco1_mon; [exact (no_stack_det_obs_eq _ _ Ho_v Hns2) | intros ? []].
            ++ assert (Ho_t2 : observe (run_draws sigma (run_cfg_locals env u2)) =
                               TauF (run_draws sigma (run_cfg_locals env
-                                (ITree.bind (ITree.bind (k rv) (fun lr => match lr with inl l => Tau (ITree.iter f2 l) | inr r0 => Ret r0 end)) g))))
-                by (rewrite observe_run_draws, observe_run_cfg_locals, Ho2, !observe_bind, Hom; cbn [observe]; rewrite Ece, Eoe, Epi; reflexivity).
+                                (ITree.bind (ITree.bind (k rv)
+                                   (fun lr =>
+                                      match lr with inl l => Tau (ITree.iter f2 l) | inr r0 => Ret r0 end)) g))))
+                by (rewrite observe_run_draws, observe_run_cfg_locals, Ho2, !observe_bind, Hom;
+                    cbn [observe]; rewrite Ece, Eoe, Epi; reflexivity).
               pose proof (no_stack_det_inv_tau _ _ Ho_t2 Hns2) as Hns2'.
               pstep; eapply NSD_Tau;
-                [rewrite observe_run_draws, observe_run_cfg_locals, Ho1, !observe_bind, Hom; cbn [observe]; rewrite Ece, Eoe, Epi; reflexivity | right].
+                [rewrite observe_run_draws, observe_run_cfg_locals, Ho1, !observe_bind, Hom;
+                 cbn [observe]; rewrite Ece, Eoe, Epi; reflexivity | right].
               eapply CIH; [right; exists (k rv); split; reflexivity | exact Hns2'].
         -- assert (Ho_v2 : observe (run_draws sigma (run_cfg_locals env u2)) =
                            VisF de (fun x => run_draws sigma (run_cfg_locals env
-                             (ITree.bind (ITree.bind (k x) (fun lr => match lr with inl l => Tau (ITree.iter f2 l) | inr r0 => Ret r0 end)) g))))
-             by (rewrite observe_run_draws, observe_run_cfg_locals, Ho2, !observe_bind, Hom; cbn [observe]; rewrite Ece, Eoe; reflexivity).
+                             (ITree.bind (ITree.bind (k x)
+                                (fun lr => match lr with inl l => Tau (ITree.iter f2 l) | inr r0 => Ret r0 end)) g))))
+             by (rewrite observe_run_draws, observe_run_cfg_locals, Ho2, !observe_bind, Hom;
+                 cbn [observe]; rewrite Ece, Eoe; reflexivity).
            destruct (no_stack_det_inv_vis _ _ _ Ho_v2 Hns2) as [Hns_de Hk_ns].
            pstep; eapply NSD_Vis;
-             [rewrite observe_run_draws, observe_run_cfg_locals, Ho1, !observe_bind, Hom; cbn [observe]; rewrite Ece, Eoe; reflexivity
+             [rewrite observe_run_draws, observe_run_cfg_locals, Ho1, !observe_bind, Hom;
+              cbn [observe]; rewrite Ece, Eoe; reflexivity
              | exact Hns_de
-             | intros x; right; eapply CIH; [right; exists (k x); split; reflexivity | exact (Hk_ns x)]].
+             | intros x; right; eapply CIH;
+               [right; exists (k x); split; reflexivity | exact (Hk_ns x)]].
 Qed.
 
 Definition ocfg_step_va_rel {Pa : Params}
@@ -1624,7 +1685,8 @@ Lemma va_cfg_eq_det_ref {Pa : Params} {R : Type} :
       (run_draws sigma (run_cfg_locals env u1))
       (run_draws sigma (run_cfg_locals env u2)).
 Proof.
-  pcofix CIH; intros sigma env u1 u2 Hva; punfold Hva; pstep; apply DR_Step; unfold det_step_body.
+  pcofix CIH; intros sigma env u1 u2 Hva; punfold Hva; pstep.
+  apply DR_Step; unfold det_step_body.
   rewrite !observe_run_draws, !observe_run_cfg_locals.
   destruct Hva.
   - reflexivity.
@@ -1642,7 +1704,8 @@ Proof.
         -- right; apply det_vis_both_refl; intros [].
         -- right; apply det_vis_both_refl; intros [].
         -- pclearbot; right; apply CIH; exact (H rv).
-      * right; apply det_vis_both_refl; intros x; pclearbot; right; apply CIH; exact (H x).
+      * right; apply det_vis_both_refl; intros x.
+        pclearbot; right; apply CIH; exact (H x).
   - cbn - [parse_pure_int_intrinsic pure_int_intrinsic_fn run_draws run_cfg_locals].
     destruct (parse_pure_int_intrinsic fname) as [[op w] |] eqn:Ep; [| exfalso; exact (H eq_refl)].
     destruct (pure_int_intrinsic_fn op w args) as [| | | rv].
@@ -1661,58 +1724,98 @@ Proof.
   pcofix CIH; intros sigma env u1 u2 Hva Hns2; punfold Hva; punfold Hns2; pstep.
   remember (observe u1) as o1 eqn:Ho_u1; remember (observe u2) as o2 eqn:Ho_u2.
   destruct Hva as [x | ta tb Htau | X e ka kb Hk | dt fname args va1 va2 ka kb Hp Hk].
-  - destruct Hns2 as [x' Ho2 | m2 Ho2 _ | X2 e2 k2 Ho2 _ _]; rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u2 in Ho2; try discriminate Ho2.
+  - destruct Hns2 as [x' Ho2 | m2 Ho2 _ | X2 e2 k2 Ho2 _ _];
+      rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u2 in Ho2; try discriminate Ho2.
     injection Ho2 as <-; eapply NSD_Ret; rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; reflexivity.
-  - pclearbot; assert (Ho2 : observe (run_draws sigma (run_cfg_locals env u2)) = TauF (run_draws sigma (run_cfg_locals env tb)))
+  - pclearbot.
+    assert (Ho2 : observe (run_draws sigma (run_cfg_locals env u2)) =
+                  TauF (run_draws sigma (run_cfg_locals env tb)))
       by (rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u2; reflexivity).
     destruct Hns2 as [x' Ho2' | m2 Ho2' Hm2 | X2 e2 k2 Ho2' _ _]; rewrite Ho2 in Ho2'; try discriminate Ho2'.
-    injection Ho2' as <-; pclearbot; eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; reflexivity | right; exact (CIH sigma env ta tb Htau Hm2)].
+    injection Ho2' as <-; pclearbot; eapply NSD_Tau;
+      [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; reflexivity
+      | right; exact (CIH sigma env ta tb Htau Hm2)].
   - destruct (classify_cfg_event e) as [le | oe] eqn:Ece.
     + destruct le as [id dv | id].
-      * assert (Ho2 : observe (run_draws sigma (run_cfg_locals env u2)) = TauF (run_draws sigma (run_cfg_locals (RM.add id dv env) (kb tt))))
+      * assert (Ho2 : observe (run_draws sigma (run_cfg_locals env u2)) =
+                      TauF (run_draws sigma (run_cfg_locals (RM.add id dv env) (kb tt))))
           by (rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u2; cbn; rewrite Ece; reflexivity).
         destruct Hns2 as [x' Ho2' | m2 Ho2' Hm2 | X2 e2 k2 Ho2' _ _]; rewrite Ho2 in Ho2'; try discriminate Ho2'.
         injection Ho2' as <-; pclearbot.
-        eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ece; reflexivity | right; exact (CIH sigma (RM.add id dv env) (ka tt) (kb tt) (Hk tt) Hm2)].
+        eapply NSD_Tau;
+          [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ece; reflexivity
+          | right; exact (CIH sigma (RM.add id dv env) (ka tt) (kb tt) (Hk tt) Hm2)].
       * destruct (RM.find id env) as [dv |] eqn:Ef.
-        -- assert (Ho2 : observe (run_draws sigma (run_cfg_locals env u2)) = TauF (run_draws sigma (run_cfg_locals env (kb dv))))
+        -- assert (Ho2 : observe (run_draws sigma (run_cfg_locals env u2)) =
+                         TauF (run_draws sigma (run_cfg_locals env (kb dv))))
              by (rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u2; cbn; rewrite Ece, Ef; reflexivity).
            destruct Hns2 as [x' Ho2' | m2 Ho2' Hm2 | X2 e2 k2 Ho2' _ _]; rewrite Ho2 in Ho2'; try discriminate Ho2'.
            injection Ho2' as <-; pclearbot.
-           eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ece, Ef; reflexivity | right; exact (CIH sigma env (ka dv) (kb dv) (Hk dv) Hm2)].
-        -- eapply NSD_Vis; [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ece, Ef; reflexivity | reflexivity | intros []].
+           eapply NSD_Tau;
+             [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ece, Ef; reflexivity
+             | right; exact (CIH sigma env (ka dv) (kb dv) (Hk dv) Hm2)].
+        -- eapply NSD_Vis;
+             [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ece, Ef; reflexivity
+             | reflexivity | intros []].
     + destruct (classify_ow_event oe) as [dt | op w args | X' de] eqn:Eoe.
-      * assert (Ho2 : observe (run_draws sigma (run_cfg_locals env u2)) = TauF (run_draws (shift_draw_strat sigma) (run_cfg_locals env (kb (sigma 0%nat dt)))))
+      * assert (Ho2 : observe (run_draws sigma (run_cfg_locals env u2)) =
+                      TauF (run_draws (shift_draw_strat sigma) (run_cfg_locals env (kb (sigma 0%nat dt)))))
           by (rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u2; cbn; rewrite Ece, Eoe; reflexivity).
         destruct Hns2 as [x' Ho2' | m2 Ho2' Hm2 | X2 e2 k2 Ho2' _ _]; rewrite Ho2 in Ho2'; try discriminate Ho2'.
         injection Ho2' as <-; pclearbot.
-        eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ece, Eoe; reflexivity | right; exact (CIH _ env _ _ (Hk _) Hm2)].
+        eapply NSD_Tau;
+          [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ece, Eoe; reflexivity
+          | right; exact (CIH _ env _ _ (Hk _) Hm2)].
       * destruct (pure_int_intrinsic_fn op w args) as [| | | rv] eqn:Epi;
-          [ eapply NSD_Vis; [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ece, Eoe, Epi; reflexivity | reflexivity | intros []]
-          | eapply NSD_Vis; [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ece, Eoe, Epi; reflexivity | reflexivity | intros []]
-          | eapply NSD_Vis; [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ece, Eoe, Epi; reflexivity | reflexivity | intros []]
+          [ eapply NSD_Vis;
+              [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1;
+               cbn; rewrite Ece, Eoe, Epi; reflexivity
+              | reflexivity | intros []]
+          | eapply NSD_Vis;
+              [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1;
+               cbn; rewrite Ece, Eoe, Epi; reflexivity
+              | reflexivity | intros []]
+          | eapply NSD_Vis;
+              [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1;
+               cbn; rewrite Ece, Eoe, Epi; reflexivity
+              | reflexivity | intros []]
           |].
-        assert (Ho2 : observe (run_draws sigma (run_cfg_locals env u2)) = TauF (run_draws sigma (run_cfg_locals env (kb rv))))
+        assert (Ho2 : observe (run_draws sigma (run_cfg_locals env u2)) =
+                      TauF (run_draws sigma (run_cfg_locals env (kb rv))))
           by (rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u2; cbn; rewrite Ece, Eoe, Epi; reflexivity).
         destruct Hns2 as [x' Ho2' | m2 Ho2' Hm2 | X2 e2 k2 Ho2' _ _]; rewrite Ho2 in Ho2'; try discriminate Ho2'.
         injection Ho2' as <-; pclearbot.
-        eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ece, Eoe, Epi; reflexivity | right; exact (CIH sigma env (ka rv) (kb rv) (Hk rv) Hm2)].
-      * assert (Ho2 : observe (run_draws sigma (run_cfg_locals env u2)) = VisF de (fun x => run_draws sigma (run_cfg_locals env (kb x))))
+        eapply NSD_Tau;
+          [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ece, Eoe, Epi; reflexivity
+          | right; exact (CIH sigma env (ka rv) (kb rv) (Hk rv) Hm2)].
+      * assert (Ho2 : observe (run_draws sigma (run_cfg_locals env u2)) =
+                      VisF de (fun x => run_draws sigma (run_cfg_locals env (kb x))))
           by (rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u2; cbn; rewrite Ece, Eoe; reflexivity).
         destruct (no_stack_det_inv_vis _ _ _ Ho2 (ltac:(pstep; exact Hns2))) as [Hns_de Hk_ns].
-        eapply NSD_Vis; [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ece, Eoe; reflexivity | exact Hns_de |].
+        eapply NSD_Vis;
+          [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ece, Eoe; reflexivity
+          | exact Hns_de |].
         intros x; pclearbot; right; exact (CIH sigma env (ka x) (kb x) (Hk x) (Hk_ns x)).
   - destruct (parse_pure_int_intrinsic fname) as [[op w] |] eqn:Ep; [| exfalso; exact (Hp eq_refl)].
     destruct (pure_int_intrinsic_fn op w args) as [| | | rv] eqn:Epi;
-      [ eapply NSD_Vis; [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ep, Epi; reflexivity | reflexivity | intros []]
-      | eapply NSD_Vis; [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ep, Epi; reflexivity | reflexivity | intros []]
-      | eapply NSD_Vis; [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ep, Epi; reflexivity | reflexivity | intros []]
+      [ eapply NSD_Vis;
+          [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ep, Epi; reflexivity
+          | reflexivity | intros []]
+      | eapply NSD_Vis;
+          [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ep, Epi; reflexivity
+          | reflexivity | intros []]
+      | eapply NSD_Vis;
+          [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ep, Epi; reflexivity
+          | reflexivity | intros []]
       |].
-    assert (Ho2 : observe (run_draws sigma (run_cfg_locals env u2)) = TauF (run_draws sigma (run_cfg_locals env (kb rv))))
+    assert (Ho2 : observe (run_draws sigma (run_cfg_locals env u2)) =
+                  TauF (run_draws sigma (run_cfg_locals env (kb rv))))
       by (rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u2; cbn; rewrite Ep, Epi; reflexivity).
     destruct Hns2 as [x' Ho2' | m2 Ho2' Hm2 | X2 e2 k2 Ho2' _ _]; rewrite Ho2 in Ho2'; try discriminate Ho2'.
     injection Ho2' as <-; pclearbot.
-    eapply NSD_Tau; [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ep, Epi; reflexivity | right; exact (CIH sigma env (ka rv) (kb rv) (Hk rv) Hm2)].
+    eapply NSD_Tau;
+      [rewrite observe_run_draws, observe_run_cfg_locals, <- Ho_u1; cbn; rewrite Ep, Epi; reflexivity
+      | right; exact (CIH sigma env (ka rv) (kb rv) (Hk rv) Hm2)].
 Qed.
 
 Lemma denote_cfg_varargs_det_ref {Pa : Params} :
@@ -1888,15 +1991,19 @@ Proof.
       | unfold dst; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc_k; reflexivity].
   - right; exists (run_draws s (run_fn_frames env stk exc_slot (ITree.bind (run_exc_k (k dv)) kf))).
     split;
-      [unfold src; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; cbn; rewrite Ef; reflexivity
+      [unfold src; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou;
+       cbn; rewrite Ef; reflexivity
       | unfold dst; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc_k; reflexivity].
-  - right; exists (run_draws (shift_draw_strat s) (run_fn_frames env stk exc_slot (ITree.bind (run_exc_k (k (s 0%nat dt))) kf))).
+  - right;
+      exists (run_draws (shift_draw_strat s)
+                (run_fn_frames env stk exc_slot (ITree.bind (run_exc_k (k (s 0%nat dt))) kf))).
     split;
       [unfold src; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity
       | unfold dst; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc_k; reflexivity].
   - right; exists (run_draws s (run_fn_frames env stk exc_slot (ITree.bind (run_exc_k (k rv)) kf))).
     split;
-      [unfold src; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; cbn; rewrite Hpi, Hfn; reflexivity
+      [unfold src; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou;
+       cbn; rewrite Hpi, Hfn; reflexivity
       | unfold dst; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc_k; reflexivity].
 Qed.
 
@@ -1958,7 +2065,9 @@ Proof.
   - apply DR_Step; unfold det_step_body; rewrite Ho1, Ho2; exact Hself.
   - eapply DR_TauR; [exact Ho2a | apply DR_Step; unfold det_step_body; rewrite Ho1, Ho2b; exact Hself].
   - eapply DR_TauL; [exact Ho1a | apply DR_Step; unfold det_step_body; rewrite Ho1b, Ho2; exact Hself].
-  - eapply DR_TauL; [exact Ho1a | eapply DR_TauR; [exact Ho2a | apply DR_Step; unfold det_step_body; rewrite Ho1b, Ho2b; exact Hself]].
+  - eapply DR_TauL;
+      [exact Ho1a
+      | eapply DR_TauR; [exact Ho2a | apply DR_Step; unfold det_step_body; rewrite Ho1b, Ho2b; exact Hself]].
 Qed.
 
 Definition opt_llvmexc_det_event {Pa : Params} {X : Type} (e : @Det_OW_E Pa X) : option (@exc Pa) :=
@@ -2011,7 +2120,8 @@ Proof.
              [destruct e2 as [x2 | e2];
               [first
                  [ cbn; intros H1 _; discriminate H1
-                 | destruct x1 as [u1], x2 as [u2]; destruct u1, u2; cbn; intros _ _; split; [reflexivity | intros []] ]
+                 | destruct x1 as [u1], x2 as [u2]; destruct u1, u2; cbn;
+                   intros _ _; split; [reflexivity | intros []] ]
               | intros H1 H2; cbn in H1, H2; first [discriminate H1 | discriminate H2]]
              | destruct e2 as [x2 | e2]; [intros H1 H2; cbn in H1, H2; first [discriminate H1 | discriminate H2] |]]
          end.
@@ -2096,7 +2206,8 @@ Proof.
              destruct e1 as [? | e1]; [cbn; intros H; discriminate H |];
              destruct e2 as [? | e2]; [cbn; intros _ H; discriminate H |]
          end.
-  intros _ _; destruct e1 as [u1], e2 as [u2]; destruct u1, u2; cbn; split; [reflexivity | intros []].
+  intros _ _; destruct e1 as [u1], e2 as [u2]; destruct u1, u2; cbn.
+  split; [reflexivity | intros []].
 Qed.
 
 Lemma det_vis_both_fmap {Pa : Params} {A1 A2 R1 R2 S1 S2 : Type}
@@ -2123,7 +2234,8 @@ Proof.
          end;
     cbn;
     try (destruct x1, x2; cbn; try (intros; contradiction);
-         intros H; intuition (try apply Hfg; try apply HP1; rewrite <- ?Hk1, <- ?Hk2; auto));
+         intros H;
+         intuition (try apply Hfg; try apply HP1; rewrite <- ?Hk1, <- ?Hk2; auto));
     destruct e1, e2; cbn; intros H;
     intuition (try apply Hfg; try apply HP1; rewrite <- ?Hk1, <- ?Hk2; auto).
 Qed.
@@ -2190,58 +2302,73 @@ Proof.
   destruct e as [c | [ec | [ic | [ge | [[le | se] | [me | [de_dr | [oe | [xe | [ue | [dbe | fe]]]]]]]]]]].
   - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde Hk]]; destruct Hc; cbn in Hde, Hk; subst de.
     apply CLVC_Other with (ku := ku); [reflexivity | intros x; exact (eq_sym (Hk x)) |].
-    intros B stk exc_slot kf; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
+    intros B stk exc_slot kf;
+      rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
   - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde Hk]]; destruct Hc; cbn in Hde, Hk; subst de.
     apply CLVC_Other with (ku := ku); [reflexivity | intros x; exact (eq_sym (Hk x)) |].
-    intros B stk exc_slot kf; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
+    intros B stk exc_slot kf;
+      rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
   - destruct ic as [dt fname args va]; cbn in Ho.
     destruct (parse_pure_int_intrinsic fname) as [[op w] |] eqn:Hpi.
     + destruct (pure_int_intrinsic_fn op w args) as [err_s | oom_s | ub_s | rv] eqn:Hfn; try discriminate Ho.
       * destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde _]]; destruct Hc; cbn in Hde; subst de.
         apply CLVC_ReadFail; [reflexivity | reflexivity | reflexivity |].
         intros B stk exc_slot kf; eexists.
-        rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; cbn; rewrite Hpi, Hfn; reflexivity.
+        rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou;
+          cbn; rewrite Hpi, Hfn; reflexivity.
       * destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde _]]; destruct Hc; cbn in Hde; subst de.
         apply CLVC_OOM; [reflexivity | reflexivity | reflexivity | reflexivity |].
         intros B stk exc_slot kf; eexists.
-        rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; cbn; rewrite Hpi, Hfn; reflexivity.
+        rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou;
+          cbn; rewrite Hpi, Hfn; reflexivity.
       * destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde _]]; destruct Hc; cbn in Hde; subst de.
         apply CLVC_UB; [reflexivity | reflexivity | reflexivity | reflexivity |].
         intros B stk exc_slot kf; eexists.
-        rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; cbn; rewrite Hpi, Hfn; reflexivity.
+        rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou;
+          cbn; rewrite Hpi, Hfn; reflexivity.
     + destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde Hk]]; destruct Hc; cbn in Hde, Hk; subst de.
       apply CLVC_Other with (ku := ku); [reflexivity | intros x; exact (eq_sym (Hk x)) |].
-      intros B stk exc_slot kf; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; cbn; rewrite Hpi; reflexivity.
+      intros B stk exc_slot kf;
+        rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou;
+        cbn; rewrite Hpi; reflexivity.
   - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde Hk]]; destruct Hc; cbn in Hde, Hk; subst de.
     apply CLVC_Other with (ku := ku); [reflexivity | intros x; exact (eq_sym (Hk x)) |].
-    intros B stk exc_slot kf; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
+    intros B stk exc_slot kf;
+      rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
   - destruct le as [id dv | id]; cbn in Ho; [discriminate Ho |].
     destruct (RM.find id env) as [dv |] eqn:Ef; [discriminate Ho |].
     destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde _]]; destruct Hc; cbn in Hde; subst de.
     apply CLVC_ReadFail; [reflexivity | reflexivity | reflexivity |].
     intros B stk exc_slot kf; eexists.
-    rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; cbn; rewrite Ef; cbn; reflexivity.
+    rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou;
+      cbn; rewrite Ef; cbn; reflexivity.
   - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde _]]; destruct Hc; cbn in Hde; subst de.
     apply CLVC_Stack; reflexivity.
   - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde Hk]]; destruct Hc; cbn in Hde, Hk; subst de.
     apply CLVC_Other with (ku := ku); [reflexivity | intros x; exact (eq_sym (Hk x)) |].
-    intros B stk exc_slot kf; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
+    intros B stk exc_slot kf;
+      rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
   - destruct de_dr; cbn in Ho; discriminate Ho.
   - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde Hk]]; destruct Hc; cbn in Hde, Hk; subst de.
     apply CLVC_Other with (ku := ku); [reflexivity | intros x; exact (eq_sym (Hk x)) |].
-    intros B stk exc_slot kf; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
-  - destruct xe as [ex]; cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde _]]; destruct Hc; cbn in Hde; subst de.
+    intros B stk exc_slot kf;
+      rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
+  - destruct xe as [ex]; cbn in Ho;
+      destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde _]]; destruct Hc; cbn in Hde; subst de.
     apply (CLVC_Exc s env u _ kd ex); [reflexivity | reflexivity | reflexivity |].
     rewrite observe_run_exc, Hou; reflexivity.
   - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde Hk]]; destruct Hc; cbn in Hde, Hk; subst de.
     apply CLVC_Other with (ku := ku); [reflexivity | intros x; exact (eq_sym (Hk x)) |].
-    intros B stk exc_slot kf; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
+    intros B stk exc_slot kf;
+      rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
   - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde Hk]]; destruct Hc; cbn in Hde, Hk; subst de.
     apply CLVC_Other with (ku := ku); [reflexivity | intros x; exact (eq_sym (Hk x)) |].
-    intros B stk exc_slot kf; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
+    intros B stk exc_slot kf;
+      rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
   - cbn in Ho; destruct (visf_eq_inv _ _ _ _ Ho) as [Hc [Hde Hk]]; destruct Hc; cbn in Hde, Hk; subst de.
     apply CLVC_Other with (ku := ku); [reflexivity | intros x; exact (eq_sym (Hk x)) |].
-    intros B stk exc_slot kf; rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
+    intros B stk exc_slot kf;
+      rewrite observe_run_draws, observe_run_fn_frames, observe_bind, observe_run_exc, Hou; reflexivity.
 Qed.
 
 Lemma inv_cfg_locals_ret {Pa : Params} {A : Type} :
@@ -2256,7 +2383,8 @@ Proof.
   destruct e as [c | [ec | [ic | [ge | [[le | se] | [me | [de_dr | rest]]]]]]];
     try (cbn in Ho; discriminate Ho).
   - destruct ic as [dt fname args va]; cbn in Ho.
-    destruct (parse_pure_int_intrinsic fname) as [[op w] |]; [destruct (pure_int_intrinsic_fn op w args) |]; discriminate Ho.
+    destruct (parse_pure_int_intrinsic fname) as [[op w] |];
+      [destruct (pure_int_intrinsic_fn op w args) |]; discriminate Ho.
   - destruct le as [id dv | id]; cbn in Ho; [discriminate Ho | destruct (RM.find id env); discriminate Ho].
   - destruct de_dr; cbn in Ho; discriminate Ho.
 Qed.
@@ -2319,7 +2447,8 @@ Proof.
           (t2 := run_draws s2_ (run_fn_frames env2_ stk exc_slot (kf2 (inr x2)))).
         * apply obs_eq_fn_frames_draws; rewrite observe_bind, observe_run_exc, Hou1; reflexivity.
         * apply obs_eq_fn_frames_draws; rewrite observe_bind, observe_run_exc, Hou2; reflexivity.
-        * eapply det_ref__mon; [exact Hk_ref | intros a b [Hab | []]; left; eapply paco2_mon; [exact Hab | intros ? ? []]].
+        * eapply det_ref__mon;
+            [exact Hk_ref | intros a b [Hab | []]; left; eapply paco2_mon; [exact Hab | intros ? ? []]].
       + destruct (observe (run_draws s2_ (run_cfg_locals env2_ u2_))) as [| m2 | ] eqn:Ho2; try contradiction.
         destruct Hs as [Hs | []].
         destruct (inv_cfg_locals_tau s1_ env1_ u1_ m1 Ho1) as (s1' & env1' & u1' & Hst1 & ->).
@@ -2343,19 +2472,26 @@ Proof.
           pose proof (det_vis_both_is_oom _ de1 kd1 de2 kd2 Hvb) as Hoom_eq.
           pose proof (det_vis_both_is_ub _ de1 kd1 de2 kd2 Hvb) as Hub_eq.
           pose proof (inv_cfg_locals_vis s2_ env2_ u2_ de2 kd2 Ho2) as Hvc2.
-          destruct Hvc1 as [Hfl1 _ Hne1 Hof1 | Hst1 _ | ex1 Hex1 Hub1_f Hfl1_f Hou1_exc | Hoom1 _ Hfl1_f Hne1 Hof1 | Hub1_ub _ _ _ Hofub1 | ku1 Hne1 Hkd1 Hofn1].
+          destruct Hvc1 as
+            [Hfl1 _ Hne1 Hof1 | Hst1 _ | ex1 Hex1 Hub1_f Hfl1_f Hou1_exc
+            | Hoom1 _ Hfl1_f Hne1 Hof1 | Hub1_ub _ _ _ Hofub1 | ku1 Hne1 Hkd1 Hofn1].
           -- rewrite Hfl1 in Hfl_eq; symmetry in Hfl_eq.
              destruct (Hof1 R1 stk exc_slot kf1) as [kv1 Ho_fn1].
-             destruct Hvc2 as [_ _ _ Hof2 | Hst2 _ | ex2 _ _ Hfl2_f _ | _ _ Hfl2_f _ _ | _ Hfl2_f _ _ _ | ku2 _ _ Hofn2];
+             destruct Hvc2 as
+               [_ _ _ Hof2 | Hst2 _ | ex2 _ _ Hfl2_f _
+               | _ _ Hfl2_f _ _ | _ Hfl2_f _ _ _ | ku2 _ _ Hofn2];
                try (rewrite Hst2 in Hst_eq; discriminate Hst_eq);
                try (rewrite Hfl2_f in Hfl_eq; discriminate Hfl_eq).
              ++ destruct (Hof2 R2 stk exc_slot kf2) as [kv2 Ho_fn2].
-                apply DR_Step; unfold det_step_body; rewrite Ho_fn1, Ho_fn2; right; apply det_vis_both_refl; intros [].
+                apply DR_Step; unfold det_step_body; rewrite Ho_fn1, Ho_fn2;
+                  right; apply det_vis_both_refl; intros [].
              ++ apply DR_Step; unfold det_step_body; rewrite Ho_fn1, (Hofn2 R2 stk exc_slot kf2).
                 right; apply det_vis_both_failure; [reflexivity | exact Hfl_eq].
           -- rewrite Hst1 in Hns_de1; discriminate Hns_de1.
           -- rewrite Hex1 in Hexc_eq; symmetry in Hexc_eq.
-             destruct Hvc2 as [_ _ Hne2 _ | Hst2 _ | ex2 Hex2 _ _ Hou2_exc | _ _ _ Hne2 _ | _ _ _ Hne2 _ | ku2 Hne2 _ _];
+             destruct Hvc2 as
+               [_ _ Hne2 _ | Hst2 _ | ex2 Hex2 _ _ Hou2_exc
+               | _ _ _ Hne2 _ | _ _ _ Hne2 _ | ku2 Hne2 _ _];
                try (rewrite Hne2 in Hexc_eq; discriminate Hexc_eq);
                try (rewrite Hst2 in Hst_eq; discriminate Hst_eq).
              rewrite Hex2 in Hexc_eq; injection Hexc_eq as ->.
@@ -2366,22 +2502,29 @@ Proof.
                (t2 := run_draws s2_ (run_fn_frames env2_ stk exc_slot (kf2 (inl ex1)))).
              ++ apply obs_eq_fn_frames_draws; rewrite observe_bind, Hou1_exc; reflexivity.
              ++ apply obs_eq_fn_frames_draws; rewrite observe_bind, Hou2_exc; reflexivity.
-             ++ eapply det_ref__mon; [exact Hk_ref | intros a b [Hab | []]; left; eapply paco2_mon; [exact Hab | intros ? ? []]].
+             ++ eapply det_ref__mon;
+                  [exact Hk_ref | intros a b [Hab | []]; left; eapply paco2_mon; [exact Hab | intros ? ? []]].
           -- rewrite Hoom1 in Hoom_eq; symmetry in Hoom_eq.
-             destruct Hvc2 as [Hfl2 _ _ _ | Hst2 _ | ex2 Hex2 _ _ _ | Hoom2 _ _ _ Hof2 | _ _ Hoom2_f _ _ | ku2 _ _ Hofn2];
+             destruct Hvc2 as
+               [Hfl2 _ _ _ | Hst2 _ | ex2 Hex2 _ _ _
+               | Hoom2 _ _ _ Hof2 | _ _ Hoom2_f _ _ | ku2 _ _ Hofn2];
                try (rewrite Hst2 in Hst_eq; discriminate Hst_eq);
                try (rewrite Hoom2_f in Hoom_eq; discriminate Hoom_eq).
              ++ rewrite Hfl1_f, Hfl2 in Hfl_eq; discriminate Hfl_eq.
              ++ rewrite Hex2 in Hexc_eq; rewrite Hne1 in Hexc_eq; discriminate Hexc_eq.
-             ++ destruct (Hof1 R1 stk exc_slot kf1) as [kv1 Ho_fn1]; destruct (Hof2 R2 stk exc_slot kf2) as [kv2 Ho_fn2].
-                apply DR_Step; unfold det_step_body; rewrite Ho_fn1, Ho_fn2; right; apply det_vis_both_refl; intros [].
+             ++ destruct (Hof1 R1 stk exc_slot kf1) as [kv1 Ho_fn1];
+                  destruct (Hof2 R2 stk exc_slot kf2) as [kv2 Ho_fn2].
+                apply DR_Step; unfold det_step_body; rewrite Ho_fn1, Ho_fn2;
+                  right; apply det_vis_both_refl; intros [].
              ++ destruct (Hof1 R1 stk exc_slot kf1) as [kv1 Ho_fn1].
                 apply DR_Step; unfold det_step_body; rewrite Ho_fn1, (Hofn2 R2 stk exc_slot kf2).
                 right; apply det_vis_both_oom; [reflexivity | exact Hoom_eq].
           -- destruct (Hofub1 R1 stk exc_slot kf1) as [kv1 Ho_fn1].
              apply DR_Step; unfold det_step_body; rewrite Ho_fn1; left; reflexivity.
           -- rewrite Hne1 in Hexc_eq; symmetry in Hexc_eq.
-             destruct Hvc2 as [Hfl2 _ _ Hof2 | Hst2 _ | ex2 Hex2 _ _ _ | Hoom2 _ _ _ Hof2 | Hub2_ub _ _ _ _ | ku2 _ Hkd2 Hofn2].
+             destruct Hvc2 as
+               [Hfl2 _ _ Hof2 | Hst2 _ | ex2 Hex2 _ _ _
+               | Hoom2 _ _ _ Hof2 | Hub2_ub _ _ _ _ | ku2 _ Hkd2 Hofn2].
              ++ rewrite Hfl2 in Hfl_eq.
                 destruct (Hof2 R2 stk exc_slot kf2) as [kv2 Ho_fn2].
                 apply DR_Step; unfold det_step_body; rewrite (Hofn1 R1 stk exc_slot kf1), Ho_fn2.
@@ -2520,8 +2663,12 @@ Proof.
     + eapply fn_frames_trigger_mem_step with
         (me := Load (DTYPE_Array false (Z.to_N (denote_int_syntax n1)) (DTYPE_B 8)) (DVALUE_Base (DVALUE_Pointer p)))
         (k1 := fun _ => k1 tt) (k2 := fun _ => k2 tt);
-        [unfold load, trigger; cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; rewrite !observe_bind; reflexivity
-        | unfold load, trigger; cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; rewrite !observe_bind; reflexivity
+        [unfold load, trigger;
+         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+         rewrite !observe_bind; reflexivity
+        | unfold load, trigger;
+          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+          rewrite !observe_bind; reflexivity
         | intros dv; rewrite ?observe_bind; reflexivity
         | intros dv; rewrite ?observe_bind; reflexivity
         | intros dv; exact Hk].
@@ -2741,14 +2888,18 @@ Proof.
   set (dt0 := DTYPE_Struct true (@nil dtyp)).
   eapply det_ref_obs_eq with
     (t1 := run_draws s1 (run_fn_frames cenv cstk exc_slot
-             (ITree.bind (mem_push ;; stack_push bs_s ;; varargs <- alloca dt0 1 None ;;
+             (ITree.bind (mem_push ;;
+                          stack_push bs_s ;;
+                          varargs <- alloca dt0 1 None ;;
                           store dt0 varargs (DVALUE_Struct true []) ;;
                           match varargs with
                           | DVALUE_Base (DVALUE_Pointer varg) => ret varg
                           | _ => raise "Non-address returned from alloca of varargs"
                           end) k1)))
     (t2 := run_draws s2 (run_fn_frames cenv cstk exc_slot
-             (ITree.bind (mem_push ;; stack_push bs_t ;; varargs <- alloca dt0 1 None ;;
+             (ITree.bind (mem_push ;;
+                          stack_push bs_t ;;
+                          varargs <- alloca dt0 1 None ;;
                           store dt0 varargs (DVALUE_Struct true []) ;;
                           match varargs with
                           | DVALUE_Base (DVALUE_Pointer varg) => ret varg
@@ -2952,10 +3103,12 @@ Proof.
                    (ITree.bind (apply_attrs t_ret (fname_t ++ " return value violates noundef.")%string dv2)
                      (fun v' => ret (inr v'))))).
         -- apply obs_eq_fn_frames_draws; symmetry;
-             cbn [EOU_to_itree value_metadata_range ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree EOU_monad];
+             cbn [EOU_to_itree value_metadata_range ExtLib.Structures.Monad.bind
+                  ExtLib.Structures.Monad.ret Monad_itree EOU_monad];
              rewrite !observe_bind; cbn [observe]; cbn iota beta; reflexivity.
         -- apply obs_eq_fn_frames_draws; symmetry;
-             cbn [EOU_to_itree value_metadata_range ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree EOU_monad];
+             cbn [EOU_to_itree value_metadata_range ExtLib.Structures.Monad.bind
+                  ExtLib.Structures.Monad.ret Monad_itree EOU_monad];
              rewrite !observe_bind; cbn [observe]; cbn iota beta; reflexivity.
         -- destruct Hrv as [Hps1 | <-].
            ++ assert (Edv1 : dv1 = DVALUE_Base DVALUE_Poison)

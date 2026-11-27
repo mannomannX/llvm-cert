@@ -286,9 +286,12 @@ Lemma freeze_key_in_spec : forall k ks,
 Proof.
   intros k ks; induction ks as [| x rx IH]; cbn; [split; [discriminate | contradiction] |].
   destruct (freeze_key_eqb k x) eqn:E.
-  - apply freeze_key_eqb_eq in E; subst; split; [intros _; left; reflexivity | intros _; reflexivity].
-  - rewrite IH; split; [intros H; right; exact H | intros [-> | H];
-      [rewrite freeze_key_eqb_refl in E; discriminate | exact H]].
+  - apply freeze_key_eqb_eq in E; subst; split.
+    + intros _; left; reflexivity.
+    + intros _; reflexivity.
+  - rewrite IH; split.
+    + intros H; right; exact H.
+    + intros [-> | H]; [rewrite freeze_key_eqb_refl in E; discriminate | exact H].
 Qed.
 
 Fixpoint collect_freeze_keys (e : cert_expr) : list freeze_key :=
@@ -371,8 +374,12 @@ Proof.
   - rewrite (IHo penv fo1 fo2 Hlf Hag); reflexivity.
   - rewrite !andb_true_iff in Hlf; destruct Hlf as ([Hc Ht] & Hf).
     rewrite (IHc penv fo1 fo2 Hc (fun kw ko H => Hag kw ko (proj2 (in_app_iff _ _ _) (or_introl H)))).
-    rewrite (IHt penv fo1 fo2 Ht (fun kw ko H => Hag kw ko (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_introl H)))))).
-    rewrite (IHf penv fo1 fo2 Hf (fun kw ko H => Hag kw ko (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_intror H)))))).
+    rewrite (IHt penv fo1 fo2 Ht
+               (fun kw ko H =>
+                  Hag kw ko (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_introl H)))))).
+    rewrite (IHf penv fo1 fo2 Hf
+               (fun kw ko H =>
+                  Hag kw ko (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_intror H)))))).
     reflexivity.
   - rewrite (IHo penv fo1 fo2 Hlf (fun kw ko H => Hag kw ko (or_intror H))).
     cbn [let_val_exprs List.map]; rewrite (expand_lets_let_free o Hlf).
@@ -861,14 +868,16 @@ Proof.
     pose proof (wf_smap_entries_seen_mono allowed defs seen0 seen1 uf smap Hinc01 Hsmap) as Hsmap1.
     destruct (IH1 uf params src_pnames defs allowed smap seen1 (Some (DTYPE_Base (DTYPE_I w))) wa ce1 seen2
                 Hsmap1
-                (fun idx w0 pnm Hin => Hpu idx w0 pnm (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_introl Hin)))))
+                (fun idx w0 pnm Hin =>
+                   Hpu idx w0 pnm (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_introl Hin)))))
                 Hr1)
       as (Hcwa & Hwt1 & Hbw1 & Hlf1 & Hfv1 & Hinc12 & Hfk1).
     apply check_opt_int_width_some_inv in Hcwa; subst wa.
     pose proof (wf_smap_entries_seen_mono allowed defs seen1 seen2 uf smap Hinc12 Hsmap1) as Hsmap2.
     destruct (IH2 uf params src_pnames defs allowed smap seen2 (Some (DTYPE_Base (DTYPE_I w))) wb ce2 seen3
                 Hsmap2
-                (fun idx w0 pnm Hin => Hpu idx w0 pnm (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_intror Hin)))))
+                (fun idx w0 pnm Hin =>
+                   Hpu idx w0 pnm (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_intror Hin)))))
                 Hr2)
       as (Hcwb & Hwt2 & Hbw2 & Hlf2 & Hfv2 & Hinc23 & Hfk2).
     apply check_opt_int_width_some_inv in Hcwb; subst wb.
@@ -1152,6 +1161,715 @@ Proof.
   intros sigma env id dv; eapply CSR_LocalWrite; [reflexivity | apply CSR_Ret; reflexivity].
 Qed.
 
+Local Lemma eval_reified_exp_src_ibinop {Pa : Params} :
+  forall iop dt e1 e2,
+    (forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+            (foracle : freeze_oracle) smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0, In (idx, dt0) (exp_param_uses params defs top e1) -> nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_smap_entries allowed defs seen0 false smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) foracle smap env ->
+      reify_exp false params src_pnames defs smap seen0 top e1 = Some (w, ce, seen1) ->
+      exists draws : list (dtyp * @dvalue Pa),
+        Forall (fun '(dt0, v) => valid_draw_value dt0 v) draws /\
+        (((forall tail_s, mcfg_steps_to_ub (chain_draws draws tail_s) env (denote_exp top e1)) /\
+          (exists msg, eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ub msg)) \/
+         (exists dv,
+            eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            (forall tail_s, mcfg_steps_to_ret (chain_draws draws tail_s) env (denote_exp top e1) tail_s env dv)))) ->
+    (forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+            (foracle : freeze_oracle) smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0, In (idx, dt0) (exp_param_uses params defs top e2) -> nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_smap_entries allowed defs seen0 false smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) foracle smap env ->
+      reify_exp false params src_pnames defs smap seen0 top e2 = Some (w, ce, seen1) ->
+      exists draws : list (dtyp * @dvalue Pa),
+        Forall (fun '(dt0, v) => valid_draw_value dt0 v) draws /\
+        (((forall tail_s, mcfg_steps_to_ub (chain_draws draws tail_s) env (denote_exp top e2)) /\
+          (exists msg, eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ub msg)) \/
+         (exists dv,
+            eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            (forall tail_s, mcfg_steps_to_ret (chain_draws draws tail_s) env (denote_exp top e2) tail_s env dv)))) ->
+    forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+           (foracle : freeze_oracle) smap (env : rmap (@dvalue Pa)) seen0 top w ce seen2,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0,
+        In (idx, dt0) (exp_param_uses params defs top (OP_IBinop iop dt e1 e2)) ->
+        nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_smap_entries allowed defs seen0 false smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) foracle smap env ->
+      reify_exp false params src_pnames defs smap seen0 top (OP_IBinop iop dt e1 e2) = Some (w, ce, seen2) ->
+      exists draws : list (dtyp * @dvalue Pa),
+        Forall (fun '(dt0, v) => valid_draw_value dt0 v) draws /\
+        (((forall tail_s,
+             mcfg_steps_to_ub (chain_draws draws tail_s) env (denote_exp top (OP_IBinop iop dt e1 e2))) /\
+          (exists msg, eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ub msg)) \/
+         (exists dv,
+            eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            (forall tail_s,
+               mcfg_steps_to_ret (chain_draws draws tail_s) env
+                 (denote_exp top (OP_IBinop iop dt e1 e2)) tail_s env dv))).
+Proof.
+  intros iop dt e1 e2 IH1 IH2 params src_pnames defs allowed arg_dtys vs foracle smap env seen0 top w ce seen2
+    Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr.
+  cbn [reify_exp] in Hr.
+  destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
+  destruct (check_opt_int_width top wb) eqn:Hcw; [| discriminate].
+  destruct (reify_exp false params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) e1)
+    as [[[w1 ce1] seen1] |] eqn:Hr1; [| discriminate].
+  destruct (reify_exp false params src_pnames defs smap seen1 (Some (DTYPE_Base (DTYPE_I wb))) e2)
+    as [[[w2 ce2] seen2'] |] eqn:Hr2; [| discriminate].
+  destruct (ibinop_to_cert iop) as [cop cfl] eqn:Hiop.
+  inversion Hr; subst wb ce seen2'; clear Hr.
+  destruct (ibinop_to_cert_roundtrip iop cop cfl Hiop) as [Heq_iop _].
+  pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
+  pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr2)) as ->.
+  destruct (IH1 params src_pnames defs allowed arg_dtys vs foracle smap env seen0
+              (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen1
+              Hnd Hlp Hls Hla Hvs
+              (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_introl Hin)))
+              Hpe Hwfs Henv Hr1)
+    as (draws1 & Hfa1 & [[Hub1 [msg1 Hev1]] | [dv1 [Hev1 [Hsc1 Hst1]]]]).
+  - exists draws1; split; [exact Hfa1 | left; split].
+    + intros tail_s; cbn [denote_exp]; apply mcfg_steps_to_ub_bind_l; exact (Hub1 tail_s).
+    + exists msg1; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
+  - pose proof (wf_smap_entries_false_seen allowed defs seen0 seen1 smap Hwfs) as Hwfs1.
+    destruct (IH2 params src_pnames defs allowed arg_dtys vs foracle smap env seen1
+                (Some (DTYPE_Base (DTYPE_I w))) w ce2 seen2
+                Hnd Hlp Hls Hla Hvs
+                (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_intror Hin)))
+                Hpe Hwfs1 Henv Hr2)
+      as (draws2 & Hfa2 & [[Hub2 [msg2 Hev2]] | [dv2 [Hev2 [Hsc2 Hst2]]]]).
+    + exists (draws1 ++ draws2); split;
+        [apply Forall_app; split; assumption | left; split].
+      * intros tail_s; rewrite chain_draws_app; cbn [denote_exp].
+        eapply mcfg_steps_to_ub_bind_r;
+          [exact (Hst1 (chain_draws draws2 tail_s))
+          | apply mcfg_steps_to_ub_bind_l; exact (Hub2 tail_s)].
+      * exists msg2; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
+          rewrite Hev1, Hev2; reflexivity.
+    + destruct (eval_iop_wf_scalar cop cfl w dv1 dv2 Hsc1 Hsc2)
+        as [[msg_op Hev_op] | [vout [Hev_op Hsc_out]]].
+      * exists (draws1 ++ draws2); split;
+          [apply Forall_app; split; assumption | left; split].
+        -- intros tail_s; rewrite chain_draws_app; cbn [denote_exp].
+           eapply mcfg_steps_to_ub_bind_r; [exact (Hst1 (chain_draws draws2 tail_s)) |].
+           eapply mcfg_steps_to_ub_bind_r; [exact (Hst2 tail_s) |].
+           rewrite <- Heq_iop, Hev_op; apply mcfg_steps_eou_ub.
+        -- exists msg_op; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
+             rewrite Hev1, Hev2; cbn [eou_bind]; exact Hev_op.
+      * exists (draws1 ++ draws2); split;
+          [apply Forall_app; split; assumption | right].
+        exists vout; split; [| split; [exact Hsc_out |]].
+        -- unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
+             rewrite Hev1, Hev2; cbn [eou_bind]; exact Hev_op.
+        -- intros tail_s; rewrite chain_draws_app; cbn [denote_exp].
+           eapply mcfg_steps_to_ret_bind; [exact (Hst1 (chain_draws draws2 tail_s)) |].
+           eapply mcfg_steps_to_ret_bind; [exact (Hst2 tail_s) |].
+           rewrite <- Heq_iop, Hev_op; apply mcfg_steps_eou_ret.
+Qed.
+
+Local Lemma eval_reified_exp_src_icmp {Pa : Params} :
+  forall ss cmp dt e1 e2,
+    (forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+            (foracle : freeze_oracle) smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0, In (idx, dt0) (exp_param_uses params defs top e1) -> nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_smap_entries allowed defs seen0 false smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) foracle smap env ->
+      reify_exp false params src_pnames defs smap seen0 top e1 = Some (w, ce, seen1) ->
+      exists draws : list (dtyp * @dvalue Pa),
+        Forall (fun '(dt0, v) => valid_draw_value dt0 v) draws /\
+        (((forall tail_s, mcfg_steps_to_ub (chain_draws draws tail_s) env (denote_exp top e1)) /\
+          (exists msg, eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ub msg)) \/
+         (exists dv,
+            eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            (forall tail_s, mcfg_steps_to_ret (chain_draws draws tail_s) env (denote_exp top e1) tail_s env dv)))) ->
+    (forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+            (foracle : freeze_oracle) smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0, In (idx, dt0) (exp_param_uses params defs top e2) -> nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_smap_entries allowed defs seen0 false smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) foracle smap env ->
+      reify_exp false params src_pnames defs smap seen0 top e2 = Some (w, ce, seen1) ->
+      exists draws : list (dtyp * @dvalue Pa),
+        Forall (fun '(dt0, v) => valid_draw_value dt0 v) draws /\
+        (((forall tail_s, mcfg_steps_to_ub (chain_draws draws tail_s) env (denote_exp top e2)) /\
+          (exists msg, eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ub msg)) \/
+         (exists dv,
+            eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            (forall tail_s, mcfg_steps_to_ret (chain_draws draws tail_s) env (denote_exp top e2) tail_s env dv)))) ->
+    forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+           (foracle : freeze_oracle) smap (env : rmap (@dvalue Pa)) seen0 top w ce seen2,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0,
+        In (idx, dt0) (exp_param_uses params defs top (OP_ICmp ss cmp dt e1 e2)) ->
+        nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_smap_entries allowed defs seen0 false smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) foracle smap env ->
+      reify_exp false params src_pnames defs smap seen0 top (OP_ICmp ss cmp dt e1 e2) = Some (w, ce, seen2) ->
+      exists draws : list (dtyp * @dvalue Pa),
+        Forall (fun '(dt0, v) => valid_draw_value dt0 v) draws /\
+        (((forall tail_s,
+             mcfg_steps_to_ub (chain_draws draws tail_s) env (denote_exp top (OP_ICmp ss cmp dt e1 e2))) /\
+          (exists msg, eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ub msg)) \/
+         (exists dv,
+            eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            (forall tail_s,
+               mcfg_steps_to_ret (chain_draws draws tail_s) env
+                 (denote_exp top (OP_ICmp ss cmp dt e1 e2)) tail_s env dv))).
+Proof.
+  intros ss cmp dt e1 e2 IH1 IH2 params src_pnames defs allowed arg_dtys vs foracle smap env seen0 top w ce seen2
+    Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr.
+  cbn [reify_exp] in Hr.
+  destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
+  destruct (check_opt_int_width top 1%positive) eqn:Hcw; [| discriminate].
+  destruct (reify_exp false params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) e1)
+    as [[[w1 ce1] seen1] |] eqn:Hr1; [| discriminate].
+  destruct (reify_exp false params src_pnames defs smap seen1 (Some (DTYPE_Base (DTYPE_I wb))) e2)
+    as [[[w2 ce2] seen2'] |] eqn:Hr2; [| discriminate].
+  inversion Hr; subst w ce seen2'; clear Hr.
+  pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
+  pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr2)) as ->.
+  destruct (IH1 params src_pnames defs allowed arg_dtys vs foracle smap env seen0
+              (Some (DTYPE_Base (DTYPE_I wb))) wb ce1 seen1
+              Hnd Hlp Hls Hla Hvs
+              (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_introl Hin)))
+              Hpe Hwfs Henv Hr1)
+    as (draws1 & Hfa1 & [[Hub1 [msg1 Hev1]] | [dv1 [Hev1 [Hsc1 Hst1]]]]).
+  - exists draws1; split; [exact Hfa1 | left; split].
+    + intros tail_s; cbn [denote_exp]; apply mcfg_steps_to_ub_bind_l; exact (Hub1 tail_s).
+    + exists msg1; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
+  - pose proof (wf_smap_entries_false_seen allowed defs seen0 seen1 smap Hwfs) as Hwfs1.
+    destruct (IH2 params src_pnames defs allowed arg_dtys vs foracle smap env seen1
+                (Some (DTYPE_Base (DTYPE_I wb))) wb ce2 seen2
+                Hnd Hlp Hls Hla Hvs
+                (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_intror Hin)))
+                Hpe Hwfs1 Henv Hr2)
+      as (draws2 & Hfa2 & [[Hub2 [msg2 Hev2]] | [dv2 [Hev2 [Hsc2 Hst2]]]]).
+    + exists (draws1 ++ draws2); split;
+        [apply Forall_app; split; assumption | left; split].
+      * intros tail_s; rewrite chain_draws_app; cbn [denote_exp].
+        eapply mcfg_steps_to_ub_bind_r;
+          [exact (Hst1 (chain_draws draws2 tail_s))
+          | apply mcfg_steps_to_ub_bind_l; exact (Hub2 tail_s)].
+      * exists msg2; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
+          rewrite Hev1, Hev2; reflexivity.
+    + destruct (eval_icmp_wf_scalar ss (icmp_to_cert cmp) wb dv1 dv2 Hsc1 Hsc2)
+        as [vout [Hev_cmp Hsc_out]].
+      exists (draws1 ++ draws2); split;
+        [apply Forall_app; split; assumption | right].
+      exists vout; split; [| split; [exact Hsc_out |]].
+      * unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
+          rewrite Hev1, Hev2; cbn [eou_bind]; exact Hev_cmp.
+      * intros tail_s; rewrite chain_draws_app; cbn [denote_exp].
+        eapply mcfg_steps_to_ret_bind; [exact (Hst1 (chain_draws draws2 tail_s)) |].
+        eapply mcfg_steps_to_ret_bind; [exact (Hst2 tail_s) |].
+        rewrite <- (icmp_to_cert_roundtrip cmp), Hev_cmp; apply mcfg_steps_eou_ret.
+Qed.
+
+Local Lemma eval_reified_exp_src_conv {Pa : Params} :
+  forall ct dtf e1 dtt,
+    (forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+            (foracle : freeze_oracle) smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0, In (idx, dt0) (exp_param_uses params defs top e1) -> nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_smap_entries allowed defs seen0 false smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) foracle smap env ->
+      reify_exp false params src_pnames defs smap seen0 top e1 = Some (w, ce, seen1) ->
+      exists draws : list (dtyp * @dvalue Pa),
+        Forall (fun '(dt0, v) => valid_draw_value dt0 v) draws /\
+        (((forall tail_s, mcfg_steps_to_ub (chain_draws draws tail_s) env (denote_exp top e1)) /\
+          (exists msg, eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ub msg)) \/
+         (exists dv,
+            eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            (forall tail_s, mcfg_steps_to_ret (chain_draws draws tail_s) env (denote_exp top e1) tail_s env dv)))) ->
+    forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+           (foracle : freeze_oracle) smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0,
+        In (idx, dt0) (exp_param_uses params defs top (OP_Conversion ct dtf e1 dtt)) ->
+        nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_smap_entries allowed defs seen0 false smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) foracle smap env ->
+      reify_exp false params src_pnames defs smap seen0 top (OP_Conversion ct dtf e1 dtt) = Some (w, ce, seen1) ->
+      exists draws : list (dtyp * @dvalue Pa),
+        Forall (fun '(dt0, v) => valid_draw_value dt0 v) draws /\
+        (((forall tail_s,
+             mcfg_steps_to_ub (chain_draws draws tail_s) env (denote_exp top (OP_Conversion ct dtf e1 dtt))) /\
+          (exists msg, eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ub msg)) \/
+         (exists dv,
+            eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            (forall tail_s,
+               mcfg_steps_to_ret (chain_draws draws tail_s) env
+                 (denote_exp top (OP_Conversion ct dtf e1 dtt)) tail_s env dv))).
+Proof.
+  intros ct dtf e1 dtt IH1 params src_pnames defs allowed arg_dtys vs foracle smap env seen0 top w ce seen1
+    Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr.
+  cbn [reify_exp] in Hr.
+  destruct ct as [| pc | ic]; try discriminate.
+  destruct dtf as [tbf | |]; try discriminate; destruct tbf as [fw | | | | | | | | | |]; try discriminate.
+  destruct dtt as [tbt | |]; try discriminate; destruct tbt as [tw | | | | | | | | | |]; try discriminate.
+  destruct (check_opt_int_width top tw) eqn:Hcw; [| discriminate].
+  destruct (pure_conv_to_cert pc) as [[ck cfl] |] eqn:Hpc; [| discriminate].
+  set (w_ok :=
+    match ck with
+    | CCK_ZExt => (fw <? tw)%positive && negb (ccf_nuw cfl) && negb (ccf_nsw cfl)
+    | CCK_SExt => (fw <? tw)%positive && negb (ccf_nneg cfl) && negb (ccf_nuw cfl) && negb (ccf_nsw cfl)
+    | CCK_Trunc => (tw <? fw)%positive && negb (ccf_nneg cfl)
+    end) in *.
+  destruct w_ok eqn:Hwok; [| discriminate].
+  destruct (reify_exp false params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I fw))) e1)
+    as [[[w1 ce1] seen1'] |] eqn:Hr1; [| discriminate].
+  inversion Hr; subst w ce seen1'; clear Hr.
+  pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
+  pose proof (pure_conv_to_cert_roundtrip pc ck cfl Hpc) as Heq_pc.
+  destruct (IH1 params src_pnames defs allowed arg_dtys vs foracle smap env seen0
+              (Some (DTYPE_Base (DTYPE_I fw))) fw ce1 seen1
+              Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr1)
+    as (draws1 & Hfa1 & [[Hub1 [msg1 Hev1]] | [dv1 [Hev1 [Hsc1 Hst1]]]]).
+  - exists draws1; split; [exact Hfa1 | left; split].
+    + intros tail_s; cbn [denote_exp]; apply mcfg_steps_to_ub_bind_l; exact (Hub1 tail_s).
+    + exists msg1; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
+  - unfold w_ok in Hwok.
+    destruct (eval_cast_wf_scalar ck fw tw cfl dv1 Hwok Hsc1) as [vout [Hev_cast Hsc_out]].
+    exists draws1; split; [exact Hfa1 | right].
+    exists vout; split; [| split; [exact Hsc_out |]].
+    + unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; cbn [eou_bind]; exact Hev_cast.
+    + intros tail_s; cbn [denote_exp convert].
+      eapply mcfg_steps_to_ret_bind; [exact (Hst1 tail_s) |].
+      rewrite <- Heq_pc, Hev_cast; apply mcfg_steps_eou_ret.
+Qed.
+
+Local Lemma eval_reified_exp_src_select {Pa : Params} :
+  forall fm dtc ec dt1 e1 dt2 e2,
+    (forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+            (foracle : freeze_oracle) smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0, In (idx, dt0) (exp_param_uses params defs top ec) -> nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_smap_entries allowed defs seen0 false smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) foracle smap env ->
+      reify_exp false params src_pnames defs smap seen0 top ec = Some (w, ce, seen1) ->
+      exists draws : list (dtyp * @dvalue Pa),
+        Forall (fun '(dt0, v) => valid_draw_value dt0 v) draws /\
+        (((forall tail_s, mcfg_steps_to_ub (chain_draws draws tail_s) env (denote_exp top ec)) /\
+          (exists msg, eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ub msg)) \/
+         (exists dv,
+            eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            (forall tail_s, mcfg_steps_to_ret (chain_draws draws tail_s) env (denote_exp top ec) tail_s env dv)))) ->
+    (forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+            (foracle : freeze_oracle) smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0, In (idx, dt0) (exp_param_uses params defs top e1) -> nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_smap_entries allowed defs seen0 false smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) foracle smap env ->
+      reify_exp false params src_pnames defs smap seen0 top e1 = Some (w, ce, seen1) ->
+      exists draws : list (dtyp * @dvalue Pa),
+        Forall (fun '(dt0, v) => valid_draw_value dt0 v) draws /\
+        (((forall tail_s, mcfg_steps_to_ub (chain_draws draws tail_s) env (denote_exp top e1)) /\
+          (exists msg, eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ub msg)) \/
+         (exists dv,
+            eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            (forall tail_s, mcfg_steps_to_ret (chain_draws draws tail_s) env (denote_exp top e1) tail_s env dv)))) ->
+    (forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+            (foracle : freeze_oracle) smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0, In (idx, dt0) (exp_param_uses params defs top e2) -> nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_smap_entries allowed defs seen0 false smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) foracle smap env ->
+      reify_exp false params src_pnames defs smap seen0 top e2 = Some (w, ce, seen1) ->
+      exists draws : list (dtyp * @dvalue Pa),
+        Forall (fun '(dt0, v) => valid_draw_value dt0 v) draws /\
+        (((forall tail_s, mcfg_steps_to_ub (chain_draws draws tail_s) env (denote_exp top e2)) /\
+          (exists msg, eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ub msg)) \/
+         (exists dv,
+            eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            (forall tail_s, mcfg_steps_to_ret (chain_draws draws tail_s) env (denote_exp top e2) tail_s env dv)))) ->
+    forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+           (foracle : freeze_oracle) smap (env : rmap (@dvalue Pa)) seen0 top w ce seen3,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0,
+        In (idx, dt0) (exp_param_uses params defs top (OP_Select fm (dtc, ec) (dt1, e1) (dt2, e2))) ->
+        nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_smap_entries allowed defs seen0 false smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) foracle smap env ->
+      reify_exp false params src_pnames defs smap seen0 top (OP_Select fm (dtc, ec) (dt1, e1) (dt2, e2)) =
+        Some (w, ce, seen3) ->
+      exists draws : list (dtyp * @dvalue Pa),
+        Forall (fun '(dt0, v) => valid_draw_value dt0 v) draws /\
+        (((forall tail_s,
+             mcfg_steps_to_ub (chain_draws draws tail_s) env
+               (denote_exp top (OP_Select fm (dtc, ec) (dt1, e1) (dt2, e2)))) /\
+          (exists msg, eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ub msg)) \/
+         (exists dv,
+            eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            (forall tail_s,
+               mcfg_steps_to_ret (chain_draws draws tail_s) env
+                 (denote_exp top (OP_Select fm (dtc, ec) (dt1, e1) (dt2, e2))) tail_s env dv))).
+Proof.
+  intros fm dtc ec dt1 e1 dt2 e2 IHc IH1 IH2 params src_pnames defs allowed arg_dtys vs foracle smap env
+    seen0 top w ce seen3 Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr.
+  cbn [reify_exp] in Hr.
+  destruct dtc as [tbc | |]; try discriminate; destruct tbc as [wc | | | | | | | | | |]; try discriminate.
+  destruct wc as [| |]; try discriminate.
+  destruct dt1 as [tb1 | |]; try discriminate; destruct tb1 as [w1 | | | | | | | | | |]; try discriminate.
+  destruct dt2 as [tb2 | |]; try discriminate; destruct tb2 as [w2 | | | | | | | | | |]; try discriminate.
+  destruct (Pos.eqb w1 w2 && check_opt_int_width top w1) eqn:Hcw; [| discriminate].
+  apply andb_true_iff in Hcw as [Hw12 Hcw]; apply Pos.eqb_eq in Hw12; subst w2.
+  destruct (reify_exp false params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I 1%positive))) ec)
+    as [[[wc' cec] seen1] |] eqn:Hrc; [| discriminate].
+  destruct (reify_exp false params src_pnames defs smap seen1 (Some (DTYPE_Base (DTYPE_I w1))) e1)
+    as [[[wa ce1] seen2] |] eqn:Hr1; [| discriminate].
+  destruct (reify_exp false params src_pnames defs smap seen2 (Some (DTYPE_Base (DTYPE_I w1))) e2)
+    as [[[wb ce2] seen3'] |] eqn:Hr2; [| discriminate].
+  inversion Hr; subst w1 ce seen3'; clear Hr.
+  pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hrc)) as ->.
+  pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
+  pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr2)) as ->.
+  destruct (IHc params src_pnames defs allowed arg_dtys vs foracle smap env seen0
+              (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive cec seen1
+              Hnd Hlp Hls Hla Hvs
+              (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_introl Hin)))
+              Hpe Hwfs Henv Hrc)
+    as (drawsc & Hfac & [[Hubc [msgc Hevc]] | [dvc [Hevc [Hscc Hstc]]]]).
+  - exists drawsc; split; [exact Hfac | left; split].
+    + intros tail_s; cbn [denote_exp]; apply mcfg_steps_to_ub_bind_l; exact (Hubc tail_s).
+    + exists msgc; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hevc; reflexivity.
+  - pose proof (wf_smap_entries_false_seen allowed defs seen0 seen1 smap Hwfs) as Hwfs1.
+    destruct (IH1 params src_pnames defs allowed arg_dtys vs foracle smap env seen1
+                (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen2
+                Hnd Hlp Hls Hla Hvs
+                (fun idx d Hin =>
+                   Hpu idx d (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_introl Hin)))))
+                Hpe Hwfs1 Henv Hr1)
+      as (draws1 & Hfa1 & [[Hub1 [msg1 Hev1]] | [dv1 [Hev1 [Hsc1 Hst1]]]]).
+    + exists (drawsc ++ draws1); split;
+        [apply Forall_app; split; assumption | left; split].
+      * intros tail_s; rewrite chain_draws_app; cbn [denote_exp].
+        eapply mcfg_steps_to_ub_bind_r;
+          [exact (Hstc (chain_draws draws1 tail_s))
+          | apply mcfg_steps_to_ub_bind_l; exact (Hub1 tail_s)].
+      * exists msg1; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
+          rewrite Hevc, Hev1; reflexivity.
+    + pose proof (wf_smap_entries_false_seen allowed defs seen0 seen2 smap Hwfs) as Hwfs2.
+      destruct (IH2 params src_pnames defs allowed arg_dtys vs foracle smap env seen2
+                  (Some (DTYPE_Base (DTYPE_I w))) w ce2 seen3
+                  Hnd Hlp Hls Hla Hvs
+                  (fun idx d Hin =>
+                     Hpu idx d (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_intror Hin)))))
+                  Hpe Hwfs2 Henv Hr2)
+        as (draws2 & Hfa2 & [[Hub2 [msg2 Hev2]] | [dv2 [Hev2 [Hsc2 Hst2]]]]).
+      * exists (drawsc ++ draws1 ++ draws2); split.
+        -- apply Forall_app; split; [exact Hfac | apply Forall_app; split; assumption].
+        -- left; split.
+           ++ intros tail_s; rewrite !chain_draws_app; cbn [denote_exp].
+              eapply mcfg_steps_to_ub_bind_r; [exact (Hstc (chain_draws draws1 (chain_draws draws2 tail_s))) |].
+              eapply mcfg_steps_to_ub_bind_r; [exact (Hst1 (chain_draws draws2 tail_s)) |].
+              apply mcfg_steps_to_ub_bind_l; exact (Hub2 tail_s).
+           ++ exists msg2; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
+                rewrite Hevc, Hev1, Hev2; reflexivity.
+      * destruct (eval_select_wf_scalar w dvc dv1 dv2 Hscc Hsc1 Hsc2)
+          as [vout [Hev_sel Hsc_out]].
+        exists (drawsc ++ draws1 ++ draws2); split.
+        -- apply Forall_app; split; [exact Hfac | apply Forall_app; split; assumption].
+        -- right; exists vout; split; [| split; [exact Hsc_out |]].
+           ++ unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
+                rewrite Hevc, Hev1, Hev2; cbn [eou_bind]; exact Hev_sel.
+           ++ intros tail_s; rewrite !chain_draws_app; cbn [denote_exp].
+              eapply mcfg_steps_to_ret_bind; [exact (Hstc (chain_draws draws1 (chain_draws draws2 tail_s))) |].
+              eapply mcfg_steps_to_ret_bind; [exact (Hst1 (chain_draws draws2 tail_s)) |].
+              eapply mcfg_steps_to_ret_bind; [exact (Hst2 tail_s) |].
+              rewrite Hev_sel; apply mcfg_steps_eou_ret.
+Qed.
+
+Local Lemma eval_reified_exp_src_freeze {Pa : Params} :
+  forall dt e1,
+    (forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+            (foracle : freeze_oracle) smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0, In (idx, dt0) (exp_param_uses params defs top e1) -> nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_smap_entries allowed defs seen0 false smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) foracle smap env ->
+      reify_exp false params src_pnames defs smap seen0 top e1 = Some (w, ce, seen1) ->
+      exists draws : list (dtyp * @dvalue Pa),
+        Forall (fun '(dt0, v) => valid_draw_value dt0 v) draws /\
+        (((forall tail_s, mcfg_steps_to_ub (chain_draws draws tail_s) env (denote_exp top e1)) /\
+          (exists msg, eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ub msg)) \/
+         (exists dv,
+            eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            (forall tail_s, mcfg_steps_to_ret (chain_draws draws tail_s) env (denote_exp top e1) tail_s env dv)))) ->
+    forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+           (foracle : freeze_oracle) smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0,
+        In (idx, dt0) (exp_param_uses params defs top (OP_Freeze (dt, e1))) ->
+        nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_smap_entries allowed defs seen0 false smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) foracle smap env ->
+      reify_exp false params src_pnames defs smap seen0 top (OP_Freeze (dt, e1)) = Some (w, ce, seen1) ->
+      exists draws : list (dtyp * @dvalue Pa),
+        Forall (fun '(dt0, v) => valid_draw_value dt0 v) draws /\
+        (((forall tail_s,
+             mcfg_steps_to_ub (chain_draws draws tail_s) env (denote_exp top (OP_Freeze (dt, e1)))) /\
+          (exists msg, eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ub msg)) \/
+         (exists dv,
+            eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            (forall tail_s,
+               mcfg_steps_to_ret (chain_draws draws tail_s) env
+                 (denote_exp top (OP_Freeze (dt, e1))) tail_s env dv))).
+Proof.
+  intros dt e1 IH1 params src_pnames defs allowed arg_dtys vs foracle smap env seen0 top w ce seen1
+    Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr.
+  cbn [reify_exp] in Hr.
+  destruct dt as [tb | |]; try discriminate; destruct tb as [wb | | | | | | | | | |]; try discriminate.
+  destruct (check_opt_int_width top wb) eqn:Hcw; [| discriminate].
+  destruct (reify_exp false params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) e1)
+    as [[[w1 ce1] seen_mid] |] eqn:Hr1; [| discriminate].
+  inversion Hr; subst wb ce seen1; clear Hr.
+  pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
+  destruct (reify_exp_freeze_props e1 false params src_pnames defs allowed smap seen0
+              (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen_mid Hwfs Hr1)
+    as (Hlf1 & _ & _).
+  destruct (IH1 params src_pnames defs allowed arg_dtys vs foracle smap env seen0
+              (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen_mid
+              Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr1)
+    as (draws1 & Hfa1 & [[Hub1 [msg1 Hev1]] | [dv1 [Hev1 [Hsc1 Hst1]]]]).
+  - exists draws1; split; [exact Hfa1 | left; split].
+    + intros tail_s; cbn [denote_exp]; apply mcfg_steps_to_ub_bind_l; exact (Hub1 tail_s).
+    + exists msg1; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
+  - destruct Hsc1 as [-> | [iv ->]].
+    + set (fv := DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (foracle w ce1)))).
+      exists (draws1 ++ [(DTYPE_Base (DTYPE_I w), fv)]).
+      split.
+      * apply Forall_app; split; [exact Hfa1 |].
+        constructor; [apply valid_draw_i_iff; eexists; reflexivity | constructor].
+      * right; exists fv; split.
+        -- unfold eval_closed_cert_expr in *; cbn [eval_cert_expr let_val_exprs List.map].
+           rewrite Hev1, (expand_lets_let_free ce1 Hlf1); reflexivity.
+        -- split; [right; eexists; reflexivity |].
+           intros tail_s; rewrite chain_draws_app; cbn [chain_draws denote_exp].
+           eapply mcfg_steps_to_ret_bind;
+             [exact (Hst1 (prepend_draws [(DTYPE_Base (DTYPE_I w), fv)] tail_s)) |].
+           eapply MSR_Draw; [reflexivity | intros n d; reflexivity |].
+           cbn [prepend_draws].
+           destruct (dtyp_eq_dec (DTYPE_Base (DTYPE_I w)) (DTYPE_Base (DTYPE_I w))) as [_ | Hneq];
+             [apply MSR_Ret; reflexivity | exfalso; exact (Hneq eq_refl)].
+    + exists draws1; split; [exact Hfa1 | right].
+      exists (DVALUE_Base (@DVALUE_I Pa w iv)).
+      split; [| split; [right; exists iv; reflexivity |]].
+      * unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
+      * intros tail_s; cbn [denote_exp].
+        eapply mcfg_steps_to_ret_bind; [exact (Hst1 tail_s) | apply MSR_Ret; reflexivity].
+Qed.
+
+Local Lemma eval_reified_exp_src_base {Pa : Params} :
+  forall o : exp dtyp,
+    match o with
+    | OP_IBinop _ _ _ _ | OP_ICmp _ _ _ _ _ | OP_Conversion _ _ _ _
+    | OP_Select _ _ _ _ | OP_Freeze _ => True
+    | _ =>
+        forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+               (foracle : freeze_oracle) smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+          NoDup src_pnames ->
+          List.length params = List.length vs ->
+          List.length src_pnames = List.length vs ->
+          List.length arg_dtys = List.length params ->
+          Forall2 dvalue_has_dtyp vs arg_dtys ->
+          (forall idx dt, In (idx, dt) (exp_param_uses params defs top o) -> nth_error arg_dtys idx = Some dt) ->
+          (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+            exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+          wf_smap_entries allowed defs seen0 false smap ->
+          env_matches_smap defs (build_param_env src_pnames vs) foracle smap env ->
+          reify_exp false params src_pnames defs smap seen0 top o = Some (w, ce, seen1) ->
+          exists draws : list (dtyp * @dvalue Pa),
+            Forall (fun '(dt, v) => valid_draw_value dt v) draws /\
+            (((forall tail_s, mcfg_steps_to_ub (chain_draws draws tail_s) env (denote_exp top o)) /\
+              (exists msg, eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ub msg)) \/
+             (exists dv,
+                eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ret dv /\
+                wf_scalar_dvalue w dv /\
+                (forall tail_s, mcfg_steps_to_ret (chain_draws draws tail_s) env (denote_exp top o) tail_s env dv)))
+    end.
+Proof.
+  intros o; destruct o; try exact I;
+    intros params src_pnames defs allowed arg_dtys vs foracle smap env seen0 top w ce seen1
+           Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr;
+    cbn [reify_exp] in Hr; try discriminate.
+  - (* EXP_Ident *)
+    destruct id as [| r]; [discriminate |].
+    destruct (RM.find r smap) as [[wr cer] |] eqn:Hfind.
+    + destruct (check_opt_int_width top wr) eqn:Hcw; [| discriminate].
+      inversion Hr; subst wr ce seen1; clear Hr.
+      destruct (Henv r w cer Hfind) as [_ [dv [Hfe [Hev Hsc]]]].
+      exists []; split; [constructor |].
+      right; exists dv; split; [exact Hev |].
+      split; [exact Hsc |].
+      intros tail_s; cbn [chain_draws denote_exp lookup_id].
+      eapply MSR_LocalRead; [reflexivity | exact Hfe | apply MSR_Ret; reflexivity].
+    + destruct (raw_id_in_list r defs) eqn:Hrd; [discriminate |].
+      destruct top as [dt |]; [| discriminate].
+      destruct dt as [tb | |]; try discriminate; destruct tb as [wt | | | | | | | | | |]; try discriminate.
+      destruct (find_raw_id_index r params) as [idx |] eqn:Hidx; [| discriminate].
+      destruct (nth_error src_pnames idx) as [pnm |] eqn:Hpnm; [| discriminate].
+      destruct (starts_with_dollar pnm) eqn:Hdl; [discriminate |].
+      inversion Hr; subst wt ce seen1; clear Hr.
+      assert (Hnin : ~ In r defs)
+        by (intros Hin; apply raw_id_in_list_spec in Hin; congruence).
+      pose proof (find_raw_id_index_nth_error params r idx Hidx) as Hnth_p.
+      destruct (Hpe idx r Hnth_p Hnin) as [dv [Hnth_v Hfe]].
+      assert (Hnth_dt : nth_error arg_dtys idx = Some (DTYPE_Base (DTYPE_I w))).
+      { apply Hpu; cbn [exp_param_uses]; rewrite Hrd, Hidx; left; reflexivity. }
+      pose proof (Forall2_nth_error_l dvalue_has_dtyp vs arg_dtys Hvs idx dv
+                    (DTYPE_Base (DTYPE_I w)) Hnth_v Hnth_dt) as Hsc.
+      apply dvalue_has_dtyp_i_iff_wf_scalar in Hsc.
+      destruct (build_param_env_nth src_pnames vs idx pnm Hnd Hls Hpnm) as [dv' [Hnth_v' Hbp]].
+      assert (Heq_dv : dv' = dv) by congruence; subst dv'.
+      exists []; split; [constructor |].
+      right; exists dv; split.
+      * unfold eval_closed_cert_expr; cbn [eval_cert_expr lookup_let_val].
+        rewrite Hbp; exact (check_scalar_width_ok w dv Hsc).
+      * split; [exact Hsc |].
+        intros tail_s; cbn [chain_draws denote_exp lookup_id].
+        eapply MSR_LocalRead; [reflexivity | exact Hfe | apply MSR_Ret; reflexivity].
+  - (* EXP_Integer *)
+    destruct top as [dt |]; [| discriminate].
+    destruct dt as [tb | |]; try discriminate; destruct tb as [wt | | | | | | | | | |]; try discriminate.
+    inversion Hr; subst wt ce seen1; clear Hr.
+    exists []; split; [constructor | right].
+    exists (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N (reify_int_const w (denote_int_syntax x)))))).
+    split; [reflexivity | split; [right; eexists; reflexivity |]].
+    intros tail_s; cbn [chain_draws denote_exp]; rewrite repr_reify_int_const.
+    apply MSR_Ret; reflexivity.
+  - (* EXP_Bool *)
+    destruct (check_opt_int_width top 1%positive) eqn:Hcw; [| discriminate].
+    inversion Hr; subst w ce seen1; clear Hr.
+    exists []; split; [constructor | right].
+    destruct b.
+    + exists (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.repr 1%positive (Z.of_N 1%N)))).
+      split; [reflexivity | split; [right; eexists; reflexivity |]].
+      intros tail_s; cbn [chain_draws denote_exp]; rewrite repr_one_N.
+      apply MSR_Ret; reflexivity.
+    + exists (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.repr 1%positive (Z.of_N 0%N)))).
+      split; [reflexivity | split; [right; eexists; reflexivity |]].
+      intros tail_s; cbn [chain_draws denote_exp]; rewrite repr_zero_N.
+      apply MSR_Ret; reflexivity.
+  - (* EXP_Undef *)
+    destruct top as [dt |]; [| discriminate].
+    destruct dt as [tb | |]; try discriminate; destruct tb as [wt | | | | | | | | | |]; try discriminate.
+    inversion Hr; subst wt ce seen1; clear Hr.
+    exists []; split; [constructor | right].
+    exists (DVALUE_Base DVALUE_Poison).
+    split; [reflexivity |].
+    split; [left; reflexivity | intros tail_s; apply MSR_Ret; reflexivity].
+  - (* EXP_Poison *)
+    destruct top as [dt |]; [| discriminate].
+    destruct dt as [tb | |]; try discriminate; destruct tb as [wt | | | | | | | | | |]; try discriminate.
+    inversion Hr; subst wt ce seen1; clear Hr.
+    exists []; split; [constructor | right].
+    exists (DVALUE_Base DVALUE_Poison).
+    split; [reflexivity |].
+    split; [left; reflexivity | intros tail_s; apply MSR_Ret; reflexivity].
+Qed.
+
 Lemma eval_reified_exp_src {Pa : Params} :
   forall (o : exp dtyp) params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
          (foracle : freeze_oracle) smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
@@ -1197,328 +1915,893 @@ Proof.
             eval_closed_cert_expr (build_param_env src_pnames vs) foracle ce = raise_ret dv /\
             wf_scalar_dvalue w dv /\
             (forall tail_s, mcfg_steps_to_ret (chain_draws draws tail_s) env (denote_exp top o) tail_s env dv))))).
-  - (* OP_IBinop *)
-    intros iop dt e1 e2 IH1 IH2 params src_pnames defs allowed arg_dtys vs foracle smap env seen0 top w ce seen2
-      Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr.
-    cbn [reify_exp] in Hr.
-    destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
-    destruct (check_opt_int_width top wb) eqn:Hcw; [| discriminate].
-    destruct (reify_exp false params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) e1)
-      as [[[w1 ce1] seen1] |] eqn:Hr1; [| discriminate].
-    destruct (reify_exp false params src_pnames defs smap seen1 (Some (DTYPE_Base (DTYPE_I wb))) e2)
-      as [[[w2 ce2] seen2'] |] eqn:Hr2; [| discriminate].
-    destruct (ibinop_to_cert iop) as [cop cfl] eqn:Hiop.
-    inversion Hr; subst wb ce seen2'; clear Hr.
-    destruct (ibinop_to_cert_roundtrip iop cop cfl Hiop) as [Heq_iop _].
-    pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
-    pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr2)) as ->.
-    destruct (IH1 params src_pnames defs allowed arg_dtys vs foracle smap env seen0
-                (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen1
+  - exact (@eval_reified_exp_src_ibinop Pa).
+  - exact (@eval_reified_exp_src_icmp Pa).
+  - exact (@eval_reified_exp_src_conv Pa).
+  - exact (@eval_reified_exp_src_select Pa).
+  - exact (@eval_reified_exp_src_freeze Pa).
+  - exact (@eval_reified_exp_src_base Pa).
+Qed.
+
+Local Lemma eval_reified_exp_tgt_ibinop {Pa : Params} :
+  forall iop dt e1 e2,
+    (forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+            (sigma0 : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+            smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0, In (idx, dt0) (exp_param_uses params defs top e1) -> nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_draw_strat sigma0 ->
+      wf_smap_entries allowed defs seen0 true smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap0) smap env ->
+      reify_exp true params src_pnames defs smap seen0 top e1 = Some (w, ce, seen1) ->
+      exists added : list (freeze_key * Z),
+        (forall k z, In (k, z) added -> In k seen1 /\ ~ In k seen0) /\
+        ((exists msg,
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ub msg) \/
+         (exists sigma1 dv,
+            wf_draw_strat sigma1 /\
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            mcfg_steps_to_ret sigma0 env (denote_exp top e1) sigma1 env dv))) ->
+    (forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+            (sigma0 : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+            smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0, In (idx, dt0) (exp_param_uses params defs top e2) -> nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_draw_strat sigma0 ->
+      wf_smap_entries allowed defs seen0 true smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap0) smap env ->
+      reify_exp true params src_pnames defs smap seen0 top e2 = Some (w, ce, seen1) ->
+      exists added : list (freeze_key * Z),
+        (forall k z, In (k, z) added -> In k seen1 /\ ~ In k seen0) /\
+        ((exists msg,
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ub msg) \/
+         (exists sigma1 dv,
+            wf_draw_strat sigma1 /\
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            mcfg_steps_to_ret sigma0 env (denote_exp top e2) sigma1 env dv))) ->
+    forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+           (sigma0 : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+           smap (env : rmap (@dvalue Pa)) seen0 top w ce seen2,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0,
+        In (idx, dt0) (exp_param_uses params defs top (OP_IBinop iop dt e1 e2)) ->
+        nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_draw_strat sigma0 ->
+      wf_smap_entries allowed defs seen0 true smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap0) smap env ->
+      reify_exp true params src_pnames defs smap seen0 top (OP_IBinop iop dt e1 e2) = Some (w, ce, seen2) ->
+      exists added : list (freeze_key * Z),
+        (forall k z, In (k, z) added -> In k seen2 /\ ~ In k seen0) /\
+        ((exists msg,
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ub msg) \/
+         (exists sigma1 dv,
+            wf_draw_strat sigma1 /\
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            mcfg_steps_to_ret sigma0 env (denote_exp top (OP_IBinop iop dt e1 e2)) sigma1 env dv)).
+Proof.
+  intros iop dt e1 e2 IH1 IH2 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0 top w ce seen2
+    Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hr.
+  cbn [reify_exp] in Hr.
+  destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
+  destruct (check_opt_int_width top wb) eqn:Hcw; [| discriminate].
+  destruct (reify_exp true params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) e1)
+    as [[[w1 ce1] seen1] |] eqn:Hr1; [| discriminate].
+  destruct (reify_exp true params src_pnames defs smap seen1 (Some (DTYPE_Base (DTYPE_I wb))) e2)
+    as [[[w2 ce2] seen2'] |] eqn:Hr2; [| discriminate].
+  destruct (ibinop_to_cert iop) as [cop cfl] eqn:Hiop.
+  inversion Hr; subst wb ce seen2'; clear Hr.
+  destruct (ibinop_to_cert_roundtrip iop cop cfl Hiop) as [Heq_iop _].
+  pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
+  pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr2)) as ->.
+  destruct (reify_exp_freeze_props e1 true params src_pnames defs allowed smap seen0
+              (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen1 Hwfs0 Hr1)
+    as (Hlf1 & Hinc01 & Hfk1).
+  pose proof (wf_smap_entries_seen_mono allowed defs seen0 seen1 true smap Hinc01 Hwfs0) as Hwfs1.
+  destruct (reify_exp_freeze_props e2 true params src_pnames defs allowed smap seen1
+              (Some (DTYPE_Base (DTYPE_I w))) w ce2 seen2 Hwfs1 Hr2)
+    as (_ & Hinc12 & _).
+  destruct (IH1 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0
+              (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen1
+              Hnd Hlp Hls Hla Hvs
+              (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_introl Hin)))
+              Hpe Hwfd0 Hwfs0 Henv0 Hr1)
+    as (added1 & Had1 & [[msg1 Hev1] | (sigma1 & dv1 & Hwfd1 & Hev1 & Hsc1 & Hst1)]).
+  - exists added1; split.
+    + intros k z Hkz; destruct (Had1 k z Hkz) as [Hm Hn0]; split; [exact (Hinc12 k Hm) | exact Hn0].
+    + left; exists msg1.
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
+  - pose proof (env_matches_smap_oracle_prepend allowed defs seen0 added1 fmap0
+                  (build_param_env src_pnames vs) smap env Hwfs0
+                  (fun k z H => proj2 (Had1 k z H)) Henv0) as Henv1.
+    destruct (IH2 params src_pnames defs allowed arg_dtys vs sigma1 (added1 ++ fmap0) smap env seen1
+                (Some (DTYPE_Base (DTYPE_I w))) w ce2 seen2
                 Hnd Hlp Hls Hla Hvs
-                (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_introl Hin)))
-                Hpe Hwfs Henv Hr1)
-      as (draws1 & Hfa1 & [[Hub1 [msg1 Hev1]] | [dv1 [Hev1 [Hsc1 Hst1]]]]).
-    + exists draws1; split; [exact Hfa1 | left; split].
-      * intros tail_s; cbn [denote_exp]; apply mcfg_steps_to_ub_bind_l; exact (Hub1 tail_s).
-      * exists msg1; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
-    + pose proof (wf_smap_entries_false_seen allowed defs seen0 seen1 smap Hwfs) as Hwfs1.
-      destruct (IH2 params src_pnames defs allowed arg_dtys vs foracle smap env seen1
-                  (Some (DTYPE_Base (DTYPE_I w))) w ce2 seen2
-                  Hnd Hlp Hls Hla Hvs
-                  (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_intror Hin)))
-                  Hpe Hwfs1 Henv Hr2)
-        as (draws2 & Hfa2 & [[Hub2 [msg2 Hev2]] | [dv2 [Hev2 [Hsc2 Hst2]]]]).
-      * exists (draws1 ++ draws2); split; [apply Forall_app; split; assumption | left; split].
-        -- intros tail_s; rewrite chain_draws_app; cbn [denote_exp].
-           eapply mcfg_steps_to_ub_bind_r;
-             [exact (Hst1 (chain_draws draws2 tail_s))
-             | apply mcfg_steps_to_ub_bind_l; exact (Hub2 tail_s)].
-        -- exists msg2; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
-             rewrite Hev1, Hev2; reflexivity.
-      * destruct (eval_iop_wf_scalar cop cfl w dv1 dv2 Hsc1 Hsc2)
-          as [[msg_op Hev_op] | [vout [Hev_op Hsc_out]]].
-        -- exists (draws1 ++ draws2); split; [apply Forall_app; split; assumption | left; split].
-           ++ intros tail_s; rewrite chain_draws_app; cbn [denote_exp].
-              eapply mcfg_steps_to_ub_bind_r; [exact (Hst1 (chain_draws draws2 tail_s)) |].
-              eapply mcfg_steps_to_ub_bind_r; [exact (Hst2 tail_s) |].
-              rewrite <- Heq_iop, Hev_op; apply mcfg_steps_eou_ub.
-           ++ exists msg_op; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
-                rewrite Hev1, Hev2; cbn [eou_bind]; exact Hev_op.
-        -- exists (draws1 ++ draws2); split; [apply Forall_app; split; assumption | right].
-           exists vout; split; [| split; [exact Hsc_out |]].
-           ++ unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
-                rewrite Hev1, Hev2; cbn [eou_bind]; exact Hev_op.
-           ++ intros tail_s; rewrite chain_draws_app; cbn [denote_exp].
-              eapply mcfg_steps_to_ret_bind; [exact (Hst1 (chain_draws draws2 tail_s)) |].
-              eapply mcfg_steps_to_ret_bind; [exact (Hst2 tail_s) |].
-              rewrite <- Heq_iop, Hev_op; apply mcfg_steps_eou_ret.
-  - (* OP_ICmp *)
-    intros ss cmp dt e1 e2 IH1 IH2 params src_pnames defs allowed arg_dtys vs foracle smap env seen0 top w ce seen2
-      Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr.
-    cbn [reify_exp] in Hr.
-    destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
-    destruct (check_opt_int_width top 1%positive) eqn:Hcw; [| discriminate].
-    destruct (reify_exp false params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) e1)
-      as [[[w1 ce1] seen1] |] eqn:Hr1; [| discriminate].
-    destruct (reify_exp false params src_pnames defs smap seen1 (Some (DTYPE_Base (DTYPE_I wb))) e2)
-      as [[[w2 ce2] seen2'] |] eqn:Hr2; [| discriminate].
-    inversion Hr; subst w ce seen2'; clear Hr.
-    pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
-    pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr2)) as ->.
-    destruct (IH1 params src_pnames defs allowed arg_dtys vs foracle smap env seen0
-                (Some (DTYPE_Base (DTYPE_I wb))) wb ce1 seen1
-                Hnd Hlp Hls Hla Hvs
-                (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_introl Hin)))
-                Hpe Hwfs Henv Hr1)
-      as (draws1 & Hfa1 & [[Hub1 [msg1 Hev1]] | [dv1 [Hev1 [Hsc1 Hst1]]]]).
-    + exists draws1; split; [exact Hfa1 | left; split].
-      * intros tail_s; cbn [denote_exp]; apply mcfg_steps_to_ub_bind_l; exact (Hub1 tail_s).
-      * exists msg1; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
-    + pose proof (wf_smap_entries_false_seen allowed defs seen0 seen1 smap Hwfs) as Hwfs1.
-      destruct (IH2 params src_pnames defs allowed arg_dtys vs foracle smap env seen1
-                  (Some (DTYPE_Base (DTYPE_I wb))) wb ce2 seen2
-                  Hnd Hlp Hls Hla Hvs
-                  (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_intror Hin)))
-                  Hpe Hwfs1 Henv Hr2)
-        as (draws2 & Hfa2 & [[Hub2 [msg2 Hev2]] | [dv2 [Hev2 [Hsc2 Hst2]]]]).
-      * exists (draws1 ++ draws2); split; [apply Forall_app; split; assumption | left; split].
-        -- intros tail_s; rewrite chain_draws_app; cbn [denote_exp].
-           eapply mcfg_steps_to_ub_bind_r;
-             [exact (Hst1 (chain_draws draws2 tail_s))
-             | apply mcfg_steps_to_ub_bind_l; exact (Hub2 tail_s)].
-        -- exists msg2; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
-             rewrite Hev1, Hev2; reflexivity.
-      * destruct (eval_icmp_wf_scalar ss (icmp_to_cert cmp) wb dv1 dv2 Hsc1 Hsc2)
-          as [vout [Hev_cmp Hsc_out]].
-        exists (draws1 ++ draws2); split; [apply Forall_app; split; assumption | right].
-        exists vout; split; [| split; [exact Hsc_out |]].
-        -- unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
-             rewrite Hev1, Hev2; cbn [eou_bind]; exact Hev_cmp.
-        -- intros tail_s; rewrite chain_draws_app; cbn [denote_exp].
-           eapply mcfg_steps_to_ret_bind; [exact (Hst1 (chain_draws draws2 tail_s)) |].
-           eapply mcfg_steps_to_ret_bind; [exact (Hst2 tail_s) |].
-           rewrite <- (icmp_to_cert_roundtrip cmp), Hev_cmp; apply mcfg_steps_eou_ret.
-  - (* OP_Conversion *)
-    intros ct dtf e1 dtt IH1 params src_pnames defs allowed arg_dtys vs foracle smap env seen0 top w ce seen1
-      Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr.
-    cbn [reify_exp] in Hr.
-    destruct ct as [| pc | ic]; try discriminate.
-    destruct dtf as [tbf | |]; try discriminate; destruct tbf as [fw | | | | | | | | | |]; try discriminate.
-    destruct dtt as [tbt | |]; try discriminate; destruct tbt as [tw | | | | | | | | | |]; try discriminate.
-    destruct (check_opt_int_width top tw) eqn:Hcw; [| discriminate].
-    destruct (pure_conv_to_cert pc) as [[ck cfl] |] eqn:Hpc; [| discriminate].
-    set (w_ok :=
-      match ck with
-      | CCK_ZExt => (fw <? tw)%positive && negb (ccf_nuw cfl) && negb (ccf_nsw cfl)
-      | CCK_SExt => (fw <? tw)%positive && negb (ccf_nneg cfl) && negb (ccf_nuw cfl) && negb (ccf_nsw cfl)
-      | CCK_Trunc => (tw <? fw)%positive && negb (ccf_nneg cfl)
-      end) in *.
-    destruct w_ok eqn:Hwok; [| discriminate].
-    destruct (reify_exp false params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I fw))) e1)
-      as [[[w1 ce1] seen1'] |] eqn:Hr1; [| discriminate].
-    inversion Hr; subst w ce seen1'; clear Hr.
-    pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
-    pose proof (pure_conv_to_cert_roundtrip pc ck cfl Hpc) as Heq_pc.
-    destruct (IH1 params src_pnames defs allowed arg_dtys vs foracle smap env seen0
-                (Some (DTYPE_Base (DTYPE_I fw))) fw ce1 seen1
-                Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr1)
-      as (draws1 & Hfa1 & [[Hub1 [msg1 Hev1]] | [dv1 [Hev1 [Hsc1 Hst1]]]]).
-    + exists draws1; split; [exact Hfa1 | left; split].
-      * intros tail_s; cbn [denote_exp]; apply mcfg_steps_to_ub_bind_l; exact (Hub1 tail_s).
-      * exists msg1; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
-    + unfold w_ok in Hwok.
-      destruct (eval_cast_wf_scalar ck fw tw cfl dv1 Hwok Hsc1) as [vout [Hev_cast Hsc_out]].
-      exists draws1; split; [exact Hfa1 | right].
-      exists vout; split; [| split; [exact Hsc_out |]].
-      * unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; cbn [eou_bind]; exact Hev_cast.
-      * intros tail_s; cbn [denote_exp convert].
-        eapply mcfg_steps_to_ret_bind; [exact (Hst1 tail_s) |].
-        rewrite <- Heq_pc, Hev_cast; apply mcfg_steps_eou_ret.
-  - (* OP_Select *)
-    intros fm dtc ec dt1 e1 dt2 e2 IHc IH1 IH2 params src_pnames defs allowed arg_dtys vs foracle smap env seen0 top w ce seen3
-      Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr.
-    cbn [reify_exp] in Hr.
-    destruct dtc as [tbc | |]; try discriminate; destruct tbc as [wc | | | | | | | | | |]; try discriminate.
-    destruct wc as [| |]; try discriminate.
-    destruct dt1 as [tb1 | |]; try discriminate; destruct tb1 as [w1 | | | | | | | | | |]; try discriminate.
-    destruct dt2 as [tb2 | |]; try discriminate; destruct tb2 as [w2 | | | | | | | | | |]; try discriminate.
-    destruct (Pos.eqb w1 w2 && check_opt_int_width top w1) eqn:Hcw; [| discriminate].
-    apply andb_true_iff in Hcw as [Hw12 Hcw]; apply Pos.eqb_eq in Hw12; subst w2.
-    destruct (reify_exp false params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I 1%positive))) ec)
-      as [[[wc' cec] seen1] |] eqn:Hrc; [| discriminate].
-    destruct (reify_exp false params src_pnames defs smap seen1 (Some (DTYPE_Base (DTYPE_I w1))) e1)
-      as [[[wa ce1] seen2] |] eqn:Hr1; [| discriminate].
-    destruct (reify_exp false params src_pnames defs smap seen2 (Some (DTYPE_Base (DTYPE_I w1))) e2)
-      as [[[wb ce2] seen3'] |] eqn:Hr2; [| discriminate].
-    inversion Hr; subst w1 ce seen3'; clear Hr.
-    pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hrc)) as ->.
-    pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
-    pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr2)) as ->.
-    destruct (IHc params src_pnames defs allowed arg_dtys vs foracle smap env seen0
-                (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive cec seen1
-                Hnd Hlp Hls Hla Hvs
-                (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_introl Hin)))
-                Hpe Hwfs Henv Hrc)
-      as (drawsc & Hfac & [[Hubc [msgc Hevc]] | [dvc [Hevc [Hscc Hstc]]]]).
-    + exists drawsc; split; [exact Hfac | left; split].
-      * intros tail_s; cbn [denote_exp]; apply mcfg_steps_to_ub_bind_l; exact (Hubc tail_s).
-      * exists msgc; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hevc; reflexivity.
-    + pose proof (wf_smap_entries_false_seen allowed defs seen0 seen1 smap Hwfs) as Hwfs1.
-      destruct (IH1 params src_pnames defs allowed arg_dtys vs foracle smap env seen1
-                  (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen2
-                  Hnd Hlp Hls Hla Hvs
-                  (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_introl Hin)))))
-                  Hpe Hwfs1 Henv Hr1)
-        as (draws1 & Hfa1 & [[Hub1 [msg1 Hev1]] | [dv1 [Hev1 [Hsc1 Hst1]]]]).
-      * exists (drawsc ++ draws1); split; [apply Forall_app; split; assumption | left; split].
-        -- intros tail_s; rewrite chain_draws_app; cbn [denote_exp].
-           eapply mcfg_steps_to_ub_bind_r;
-             [exact (Hstc (chain_draws draws1 tail_s))
-             | apply mcfg_steps_to_ub_bind_l; exact (Hub1 tail_s)].
-        -- exists msg1; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
-             rewrite Hevc, Hev1; reflexivity.
-      * pose proof (wf_smap_entries_false_seen allowed defs seen0 seen2 smap Hwfs) as Hwfs2.
-        destruct (IH2 params src_pnames defs allowed arg_dtys vs foracle smap env seen2
-                    (Some (DTYPE_Base (DTYPE_I w))) w ce2 seen3
-                    Hnd Hlp Hls Hla Hvs
-                    (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_intror Hin)))))
-                    Hpe Hwfs2 Henv Hr2)
-          as (draws2 & Hfa2 & [[Hub2 [msg2 Hev2]] | [dv2 [Hev2 [Hsc2 Hst2]]]]).
-        -- exists (drawsc ++ draws1 ++ draws2); split;
-             [apply Forall_app; split; [exact Hfac | apply Forall_app; split; assumption] | left; split].
-           ++ intros tail_s; rewrite !chain_draws_app; cbn [denote_exp].
-              eapply mcfg_steps_to_ub_bind_r; [exact (Hstc (chain_draws draws1 (chain_draws draws2 tail_s))) |].
-              eapply mcfg_steps_to_ub_bind_r; [exact (Hst1 (chain_draws draws2 tail_s)) |].
-              apply mcfg_steps_to_ub_bind_l; exact (Hub2 tail_s).
-           ++ exists msg2; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
-                rewrite Hevc, Hev1, Hev2; reflexivity.
-        -- destruct (eval_select_wf_scalar w dvc dv1 dv2 Hscc Hsc1 Hsc2)
-             as [vout [Hev_sel Hsc_out]].
-           exists (drawsc ++ draws1 ++ draws2); split;
-             [apply Forall_app; split; [exact Hfac | apply Forall_app; split; assumption] | right].
-           exists vout; split; [| split; [exact Hsc_out |]].
-           ++ unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
-                rewrite Hevc, Hev1, Hev2; cbn [eou_bind]; exact Hev_sel.
-           ++ intros tail_s; rewrite !chain_draws_app; cbn [denote_exp].
-              eapply mcfg_steps_to_ret_bind; [exact (Hstc (chain_draws draws1 (chain_draws draws2 tail_s))) |].
-              eapply mcfg_steps_to_ret_bind; [exact (Hst1 (chain_draws draws2 tail_s)) |].
-              eapply mcfg_steps_to_ret_bind; [exact (Hst2 tail_s) |].
-              rewrite Hev_sel; apply mcfg_steps_eou_ret.
-  - (* OP_Freeze *)
-    intros dt e1 IH1 params src_pnames defs allowed arg_dtys vs foracle smap env seen0 top w ce seen1
-      Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr.
-    cbn [reify_exp] in Hr.
-    destruct dt as [tb | |]; try discriminate; destruct tb as [wb | | | | | | | | | |]; try discriminate.
-    destruct (check_opt_int_width top wb) eqn:Hcw; [| discriminate].
-    destruct (reify_exp false params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) e1)
-      as [[[w1 ce1] seen_mid] |] eqn:Hr1; [| discriminate].
-    inversion Hr; subst wb ce seen1; clear Hr.
-    pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
-    destruct (reify_exp_freeze_props e1 false params src_pnames defs allowed smap seen0
-                (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen_mid Hwfs Hr1)
-      as (Hlf1 & _ & _).
-    destruct (IH1 params src_pnames defs allowed arg_dtys vs foracle smap env seen0
-                (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen_mid
-                Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr1)
-      as (draws1 & Hfa1 & [[Hub1 [msg1 Hev1]] | [dv1 [Hev1 [Hsc1 Hst1]]]]).
-    + exists draws1; split; [exact Hfa1 | left; split].
-      * intros tail_s; cbn [denote_exp]; apply mcfg_steps_to_ub_bind_l; exact (Hub1 tail_s).
-      * exists msg1; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
-    + destruct Hsc1 as [-> | [iv ->]].
-      * set (fv := DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (foracle w ce1)))).
-        exists (draws1 ++ [(DTYPE_Base (DTYPE_I w), fv)]).
+                (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_intror Hin)))
+                Hpe Hwfd1 Hwfs1 Henv1 Hr2)
+      as (added2 & Had2 & [[msg2 Hev2] | (sigma2 & dv2 & Hwfd2 & Hev2 & Hsc2 & Hst2)]).
+    + exists (added2 ++ added1).
+      assert (Had12 : forall k z, In (k, z) (added2 ++ added1) -> In k seen2 /\ ~ In k seen0).
+      { intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk1].
+        - destruct (Had2 k z Hk2) as [Hs2 Hns1]; split; [exact Hs2 | intros Hs0; exact (Hns1 (Hinc01 k Hs0))].
+        - destruct (Had1 k z Hk1) as [Hs1 Hns0]; split; [exact (Hinc12 k Hs1) | exact Hns0]. }
+      split; [exact Had12 | left; exists msg2].
+      rewrite <- app_assoc.
+      pose proof (eval_let_free_prepend_fmap ce1 (build_param_env src_pnames vs)
+                    added2 (added1 ++ fmap0) seen1 Hlf1 (Hfk1 eq_refl)
+                    (fun k z H => proj2 (Had2 k z H))) as Hev1'.
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1', Hev1, Hev2; reflexivity.
+    + exists (added2 ++ added1).
+      assert (Had12 : forall k z, In (k, z) (added2 ++ added1) -> In k seen2 /\ ~ In k seen0).
+      { intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk1].
+        - destruct (Had2 k z Hk2) as [Hs2 Hns1]; split; [exact Hs2 | intros Hs0; exact (Hns1 (Hinc01 k Hs0))].
+        - destruct (Had1 k z Hk1) as [Hs1 Hns0]; split; [exact (Hinc12 k Hs1) | exact Hns0]. }
+      split; [exact Had12 |].
+      rewrite <- app_assoc.
+      pose proof (eval_let_free_prepend_fmap ce1 (build_param_env src_pnames vs)
+                    added2 (added1 ++ fmap0) seen1 Hlf1 (Hfk1 eq_refl)
+                    (fun k z H => proj2 (Had2 k z H))) as Hev1'.
+      destruct (eval_iop_wf_scalar cop cfl w dv1 dv2 Hsc1 Hsc2)
+        as [[msg_op Hev_op] | [vout [Hev_op Hsc_out]]].
+      * left; exists msg_op; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
+          rewrite Hev1', Hev1, Hev2; cbn [eou_bind]; exact Hev_op.
+      * right; exists sigma2, vout; split; [exact Hwfd2 |].
         split.
-        -- apply Forall_app; split; [exact Hfa1 |].
-           constructor; [apply valid_draw_i_iff; eexists; reflexivity | constructor].
-        -- right; exists fv; split; [| split; [right; eexists; reflexivity |]].
-           ++ unfold eval_closed_cert_expr in *; cbn [eval_cert_expr let_val_exprs List.map].
-              rewrite Hev1, (expand_lets_let_free ce1 Hlf1); reflexivity.
-           ++ intros tail_s; rewrite chain_draws_app; cbn [chain_draws denote_exp].
-              eapply mcfg_steps_to_ret_bind;
-                [exact (Hst1 (prepend_draws [(DTYPE_Base (DTYPE_I w), fv)] tail_s)) |].
-              eapply MSR_Draw; [reflexivity | intros n d; reflexivity |].
-              cbn [prepend_draws].
-              destruct (dtyp_eq_dec (DTYPE_Base (DTYPE_I w)) (DTYPE_Base (DTYPE_I w))) as [_ | Hneq];
-                [apply MSR_Ret; reflexivity | exfalso; exact (Hneq eq_refl)].
-      * exists draws1; split; [exact Hfa1 | right].
-        exists (DVALUE_Base (@DVALUE_I Pa w iv)).
-        split; [| split; [right; exists iv; reflexivity |]].
+        -- unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
+             rewrite Hev1', Hev1, Hev2; cbn [eou_bind]; exact Hev_op.
+        -- split; [exact Hsc_out |].
+           cbn [denote_exp]; eapply mcfg_steps_to_ret_bind; [exact Hst1 |].
+           eapply mcfg_steps_to_ret_bind; [exact Hst2 |].
+           rewrite <- Heq_iop, Hev_op; apply mcfg_steps_eou_ret.
+Qed.
+
+Local Lemma eval_reified_exp_tgt_icmp {Pa : Params} :
+  forall ss cmp dt e1 e2,
+    (forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+            (sigma0 : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+            smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0, In (idx, dt0) (exp_param_uses params defs top e1) -> nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_draw_strat sigma0 ->
+      wf_smap_entries allowed defs seen0 true smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap0) smap env ->
+      reify_exp true params src_pnames defs smap seen0 top e1 = Some (w, ce, seen1) ->
+      exists added : list (freeze_key * Z),
+        (forall k z, In (k, z) added -> In k seen1 /\ ~ In k seen0) /\
+        ((exists msg,
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ub msg) \/
+         (exists sigma1 dv,
+            wf_draw_strat sigma1 /\
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            mcfg_steps_to_ret sigma0 env (denote_exp top e1) sigma1 env dv))) ->
+    (forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+            (sigma0 : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+            smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0, In (idx, dt0) (exp_param_uses params defs top e2) -> nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_draw_strat sigma0 ->
+      wf_smap_entries allowed defs seen0 true smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap0) smap env ->
+      reify_exp true params src_pnames defs smap seen0 top e2 = Some (w, ce, seen1) ->
+      exists added : list (freeze_key * Z),
+        (forall k z, In (k, z) added -> In k seen1 /\ ~ In k seen0) /\
+        ((exists msg,
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ub msg) \/
+         (exists sigma1 dv,
+            wf_draw_strat sigma1 /\
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            mcfg_steps_to_ret sigma0 env (denote_exp top e2) sigma1 env dv))) ->
+    forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+           (sigma0 : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+           smap (env : rmap (@dvalue Pa)) seen0 top w ce seen2,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0,
+        In (idx, dt0) (exp_param_uses params defs top (OP_ICmp ss cmp dt e1 e2)) ->
+        nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_draw_strat sigma0 ->
+      wf_smap_entries allowed defs seen0 true smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap0) smap env ->
+      reify_exp true params src_pnames defs smap seen0 top (OP_ICmp ss cmp dt e1 e2) = Some (w, ce, seen2) ->
+      exists added : list (freeze_key * Z),
+        (forall k z, In (k, z) added -> In k seen2 /\ ~ In k seen0) /\
+        ((exists msg,
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ub msg) \/
+         (exists sigma1 dv,
+            wf_draw_strat sigma1 /\
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            mcfg_steps_to_ret sigma0 env (denote_exp top (OP_ICmp ss cmp dt e1 e2)) sigma1 env dv)).
+Proof.
+  intros ss cmp dt e1 e2 IH1 IH2 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0 top w ce seen2
+    Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hr.
+  cbn [reify_exp] in Hr.
+  destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
+  destruct (check_opt_int_width top 1%positive) eqn:Hcw; [| discriminate].
+  destruct (reify_exp true params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) e1)
+    as [[[w1 ce1] seen1] |] eqn:Hr1; [| discriminate].
+  destruct (reify_exp true params src_pnames defs smap seen1 (Some (DTYPE_Base (DTYPE_I wb))) e2)
+    as [[[w2 ce2] seen2'] |] eqn:Hr2; [| discriminate].
+  inversion Hr; subst w ce seen2'; clear Hr.
+  pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
+  pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr2)) as ->.
+  destruct (reify_exp_freeze_props e1 true params src_pnames defs allowed smap seen0
+              (Some (DTYPE_Base (DTYPE_I wb))) wb ce1 seen1 Hwfs0 Hr1)
+    as (Hlf1 & Hinc01 & Hfk1).
+  pose proof (wf_smap_entries_seen_mono allowed defs seen0 seen1 true smap Hinc01 Hwfs0) as Hwfs1.
+  destruct (reify_exp_freeze_props e2 true params src_pnames defs allowed smap seen1
+              (Some (DTYPE_Base (DTYPE_I wb))) wb ce2 seen2 Hwfs1 Hr2)
+    as (_ & Hinc12 & _).
+  destruct (IH1 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0
+              (Some (DTYPE_Base (DTYPE_I wb))) wb ce1 seen1
+              Hnd Hlp Hls Hla Hvs
+              (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_introl Hin)))
+              Hpe Hwfd0 Hwfs0 Henv0 Hr1)
+    as (added1 & Had1 & [[msg1 Hev1] | (sigma1 & dv1 & Hwfd1 & Hev1 & Hsc1 & Hst1)]).
+  - exists added1; split.
+    + intros k z Hkz; destruct (Had1 k z Hkz) as [Hm Hn0]; split; [exact (Hinc12 k Hm) | exact Hn0].
+    + left; exists msg1.
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
+  - pose proof (env_matches_smap_oracle_prepend allowed defs seen0 added1 fmap0
+                  (build_param_env src_pnames vs) smap env Hwfs0
+                  (fun k z H => proj2 (Had1 k z H)) Henv0) as Henv1.
+    destruct (IH2 params src_pnames defs allowed arg_dtys vs sigma1 (added1 ++ fmap0) smap env seen1
+                (Some (DTYPE_Base (DTYPE_I wb))) wb ce2 seen2
+                Hnd Hlp Hls Hla Hvs
+                (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_intror Hin)))
+                Hpe Hwfd1 Hwfs1 Henv1 Hr2)
+      as (added2 & Had2 & [[msg2 Hev2] | (sigma2 & dv2 & Hwfd2 & Hev2 & Hsc2 & Hst2)]).
+    + exists (added2 ++ added1).
+      assert (Had12 : forall k z, In (k, z) (added2 ++ added1) -> In k seen2 /\ ~ In k seen0).
+      { intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk1].
+        - destruct (Had2 k z Hk2) as [Hs2 Hns1]; split; [exact Hs2 | intros Hs0; exact (Hns1 (Hinc01 k Hs0))].
+        - destruct (Had1 k z Hk1) as [Hs1 Hns0]; split; [exact (Hinc12 k Hs1) | exact Hns0]. }
+      split; [exact Had12 | left; exists msg2].
+      rewrite <- app_assoc.
+      pose proof (eval_let_free_prepend_fmap ce1 (build_param_env src_pnames vs)
+                    added2 (added1 ++ fmap0) seen1 Hlf1 (Hfk1 eq_refl)
+                    (fun k z H => proj2 (Had2 k z H))) as Hev1'.
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1', Hev1, Hev2; reflexivity.
+    + exists (added2 ++ added1).
+      assert (Had12 : forall k z, In (k, z) (added2 ++ added1) -> In k seen2 /\ ~ In k seen0).
+      { intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk1].
+        - destruct (Had2 k z Hk2) as [Hs2 Hns1]; split; [exact Hs2 | intros Hs0; exact (Hns1 (Hinc01 k Hs0))].
+        - destruct (Had1 k z Hk1) as [Hs1 Hns0]; split; [exact (Hinc12 k Hs1) | exact Hns0]. }
+      split; [exact Had12 | right].
+      rewrite <- app_assoc.
+      pose proof (eval_let_free_prepend_fmap ce1 (build_param_env src_pnames vs)
+                    added2 (added1 ++ fmap0) seen1 Hlf1 (Hfk1 eq_refl)
+                    (fun k z H => proj2 (Had2 k z H))) as Hev1'.
+      destruct (eval_icmp_wf_scalar ss (icmp_to_cert cmp) wb dv1 dv2 Hsc1 Hsc2)
+        as [vout [Hev_cmp Hsc_out]].
+      exists sigma2, vout; split; [exact Hwfd2 | split; [| split; [exact Hsc_out |]]].
+      * unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
+          rewrite Hev1', Hev1, Hev2; cbn [eou_bind]; exact Hev_cmp.
+      * cbn [denote_exp]; eapply mcfg_steps_to_ret_bind; [exact Hst1 |].
+        eapply mcfg_steps_to_ret_bind; [exact Hst2 |].
+        rewrite <- (icmp_to_cert_roundtrip cmp), Hev_cmp; apply mcfg_steps_eou_ret.
+Qed.
+
+Local Lemma eval_reified_exp_tgt_conv {Pa : Params} :
+  forall ct dtf e1 dtt,
+    (forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+            (sigma0 : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+            smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0, In (idx, dt0) (exp_param_uses params defs top e1) -> nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_draw_strat sigma0 ->
+      wf_smap_entries allowed defs seen0 true smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap0) smap env ->
+      reify_exp true params src_pnames defs smap seen0 top e1 = Some (w, ce, seen1) ->
+      exists added : list (freeze_key * Z),
+        (forall k z, In (k, z) added -> In k seen1 /\ ~ In k seen0) /\
+        ((exists msg,
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ub msg) \/
+         (exists sigma1 dv,
+            wf_draw_strat sigma1 /\
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            mcfg_steps_to_ret sigma0 env (denote_exp top e1) sigma1 env dv))) ->
+    forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+           (sigma0 : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+           smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0,
+        In (idx, dt0) (exp_param_uses params defs top (OP_Conversion ct dtf e1 dtt)) ->
+        nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_draw_strat sigma0 ->
+      wf_smap_entries allowed defs seen0 true smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap0) smap env ->
+      reify_exp true params src_pnames defs smap seen0 top (OP_Conversion ct dtf e1 dtt) = Some (w, ce, seen1) ->
+      exists added : list (freeze_key * Z),
+        (forall k z, In (k, z) added -> In k seen1 /\ ~ In k seen0) /\
+        ((exists msg,
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ub msg) \/
+         (exists sigma1 dv,
+            wf_draw_strat sigma1 /\
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            mcfg_steps_to_ret sigma0 env (denote_exp top (OP_Conversion ct dtf e1 dtt)) sigma1 env dv)).
+Proof.
+  intros ct dtf e1 dtt IH1 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0 top w ce seen1
+    Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hr.
+  cbn [reify_exp] in Hr.
+  destruct ct as [| pc | ic]; try discriminate.
+  destruct dtf as [tbf | |]; try discriminate; destruct tbf as [fw | | | | | | | | | |]; try discriminate.
+  destruct dtt as [tbt | |]; try discriminate; destruct tbt as [tw | | | | | | | | | |]; try discriminate.
+  destruct (check_opt_int_width top tw) eqn:Hcw; [| discriminate].
+  destruct (pure_conv_to_cert pc) as [[ck cfl] |] eqn:Hpc; [| discriminate].
+  set (w_ok :=
+    match ck with
+    | CCK_ZExt => (fw <? tw)%positive && negb (ccf_nuw cfl) && negb (ccf_nsw cfl)
+    | CCK_SExt => (fw <? tw)%positive && negb (ccf_nneg cfl) && negb (ccf_nuw cfl) && negb (ccf_nsw cfl)
+    | CCK_Trunc => (tw <? fw)%positive && negb (ccf_nneg cfl)
+    end) in *.
+  destruct w_ok eqn:Hwok; [| discriminate].
+  destruct (reify_exp true params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I fw))) e1)
+    as [[[w1 ce1] seen1'] |] eqn:Hr1; [| discriminate].
+  inversion Hr; subst w ce seen1'; clear Hr.
+  pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
+  pose proof (pure_conv_to_cert_roundtrip pc ck cfl Hpc) as Heq_pc.
+  destruct (IH1 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0
+              (Some (DTYPE_Base (DTYPE_I fw))) fw ce1 seen1
+              Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hr1)
+    as (added1 & Had1 & [[msg1 Hev1] | (sigma1 & dv1 & Hwfd1 & Hev1 & Hsc1 & Hst1)]).
+  - exists added1; split; [exact Had1 | left; exists msg1].
+    unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
+  - unfold w_ok in Hwok.
+    destruct (eval_cast_wf_scalar ck fw tw cfl dv1 Hwok Hsc1) as [vout [Hev_cast Hsc_out]].
+    exists added1; split; [exact Had1 | right].
+    exists sigma1, vout; split; [exact Hwfd1 | split; [| split; [exact Hsc_out |]]].
+    + unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; cbn [eou_bind]; exact Hev_cast.
+    + cbn [denote_exp convert]; eapply mcfg_steps_to_ret_bind; [exact Hst1 |].
+      rewrite <- Heq_pc, Hev_cast; apply mcfg_steps_eou_ret.
+Qed.
+
+Local Lemma eval_reified_exp_tgt_select {Pa : Params} :
+  forall fm dtc ec dt1 e1 dt2 e2,
+    (forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+            (sigma0 : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+            smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0, In (idx, dt0) (exp_param_uses params defs top ec) -> nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_draw_strat sigma0 ->
+      wf_smap_entries allowed defs seen0 true smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap0) smap env ->
+      reify_exp true params src_pnames defs smap seen0 top ec = Some (w, ce, seen1) ->
+      exists added : list (freeze_key * Z),
+        (forall k z, In (k, z) added -> In k seen1 /\ ~ In k seen0) /\
+        ((exists msg,
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ub msg) \/
+         (exists sigma1 dv,
+            wf_draw_strat sigma1 /\
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            mcfg_steps_to_ret sigma0 env (denote_exp top ec) sigma1 env dv))) ->
+    (forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+            (sigma0 : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+            smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0, In (idx, dt0) (exp_param_uses params defs top e1) -> nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_draw_strat sigma0 ->
+      wf_smap_entries allowed defs seen0 true smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap0) smap env ->
+      reify_exp true params src_pnames defs smap seen0 top e1 = Some (w, ce, seen1) ->
+      exists added : list (freeze_key * Z),
+        (forall k z, In (k, z) added -> In k seen1 /\ ~ In k seen0) /\
+        ((exists msg,
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ub msg) \/
+         (exists sigma1 dv,
+            wf_draw_strat sigma1 /\
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            mcfg_steps_to_ret sigma0 env (denote_exp top e1) sigma1 env dv))) ->
+    (forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+            (sigma0 : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+            smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0, In (idx, dt0) (exp_param_uses params defs top e2) -> nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_draw_strat sigma0 ->
+      wf_smap_entries allowed defs seen0 true smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap0) smap env ->
+      reify_exp true params src_pnames defs smap seen0 top e2 = Some (w, ce, seen1) ->
+      exists added : list (freeze_key * Z),
+        (forall k z, In (k, z) added -> In k seen1 /\ ~ In k seen0) /\
+        ((exists msg,
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ub msg) \/
+         (exists sigma1 dv,
+            wf_draw_strat sigma1 /\
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            mcfg_steps_to_ret sigma0 env (denote_exp top e2) sigma1 env dv))) ->
+    forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+           (sigma0 : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+           smap (env : rmap (@dvalue Pa)) seen0 top w ce seen3,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0,
+        In (idx, dt0) (exp_param_uses params defs top (OP_Select fm (dtc, ec) (dt1, e1) (dt2, e2))) ->
+        nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_draw_strat sigma0 ->
+      wf_smap_entries allowed defs seen0 true smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap0) smap env ->
+      reify_exp true params src_pnames defs smap seen0 top (OP_Select fm (dtc, ec) (dt1, e1) (dt2, e2)) =
+        Some (w, ce, seen3) ->
+      exists added : list (freeze_key * Z),
+        (forall k z, In (k, z) added -> In k seen3 /\ ~ In k seen0) /\
+        ((exists msg,
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ub msg) \/
+         (exists sigma1 dv,
+            wf_draw_strat sigma1 /\
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            mcfg_steps_to_ret sigma0 env
+              (denote_exp top (OP_Select fm (dtc, ec) (dt1, e1) (dt2, e2))) sigma1 env dv)).
+Proof.
+  intros fm dtc ec dt1 e1 dt2 e2 IHc IH1 IH2 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env
+    seen0 top w ce seen3 Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hr.
+  cbn [reify_exp] in Hr.
+  destruct dtc as [tbc | |]; try discriminate; destruct tbc as [wc | | | | | | | | | |]; try discriminate.
+  destruct wc as [| |]; try discriminate.
+  destruct dt1 as [tb1 | |]; try discriminate; destruct tb1 as [w1 | | | | | | | | | |]; try discriminate.
+  destruct dt2 as [tb2 | |]; try discriminate; destruct tb2 as [w2 | | | | | | | | | |]; try discriminate.
+  destruct (Pos.eqb w1 w2 && check_opt_int_width top w1) eqn:Hcw; [| discriminate].
+  apply andb_true_iff in Hcw as [Hw12 Hcw]; apply Pos.eqb_eq in Hw12; subst w2.
+  destruct (reify_exp true params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I 1%positive))) ec)
+    as [[[wc' cec] seen1] |] eqn:Hrc; [| discriminate].
+  destruct (reify_exp true params src_pnames defs smap seen1 (Some (DTYPE_Base (DTYPE_I w1))) e1)
+    as [[[wa ce1] seen2] |] eqn:Hr1; [| discriminate].
+  destruct (reify_exp true params src_pnames defs smap seen2 (Some (DTYPE_Base (DTYPE_I w1))) e2)
+    as [[[wb ce2] seen3'] |] eqn:Hr2; [| discriminate].
+  inversion Hr; subst w1 ce seen3'; clear Hr.
+  pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hrc)) as ->.
+  pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
+  pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr2)) as ->.
+  destruct (reify_exp_freeze_props ec true params src_pnames defs allowed smap seen0
+              (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive cec seen1 Hwfs0 Hrc)
+    as (Hlfc & Hinc01 & Hfkc).
+  pose proof (wf_smap_entries_seen_mono allowed defs seen0 seen1 true smap Hinc01 Hwfs0) as Hwfs1.
+  destruct (reify_exp_freeze_props e1 true params src_pnames defs allowed smap seen1
+              (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen2 Hwfs1 Hr1)
+    as (Hlf1 & Hinc12 & Hfk1).
+  pose proof (wf_smap_entries_seen_mono allowed defs seen1 seen2 true smap Hinc12 Hwfs1) as Hwfs2.
+  destruct (reify_exp_freeze_props e2 true params src_pnames defs allowed smap seen2
+              (Some (DTYPE_Base (DTYPE_I w))) w ce2 seen3 Hwfs2 Hr2)
+    as (_ & Hinc23 & _).
+  destruct (IHc params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0
+              (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive cec seen1
+              Hnd Hlp Hls Hla Hvs
+              (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_introl Hin)))
+              Hpe Hwfd0 Hwfs0 Henv0 Hrc)
+    as (addedc & Hadc & [[msgc Hevc] | (sigmac & dvc & Hwfdc & Hevc & Hscc & Hstc)]).
+  - exists addedc; split.
+    + intros k z Hkz; destruct (Hadc k z Hkz) as [Hm Hn0]; split; [exact (Hinc23 k (Hinc12 k Hm)) | exact Hn0].
+    + left; exists msgc.
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hevc; reflexivity.
+  - pose proof (env_matches_smap_oracle_prepend allowed defs seen0 addedc fmap0
+                  (build_param_env src_pnames vs) smap env Hwfs0
+                  (fun k z H => proj2 (Hadc k z H)) Henv0) as Henv1.
+    destruct (IH1 params src_pnames defs allowed arg_dtys vs sigmac (addedc ++ fmap0) smap env seen1
+                (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen2
+                Hnd Hlp Hls Hla Hvs
+                (fun idx d Hin =>
+                   Hpu idx d (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_introl Hin)))))
+                Hpe Hwfdc Hwfs1 Henv1 Hr1)
+      as (added1 & Had1 & [[msg1 Hev1] | (sigma1 & dv1 & Hwfd1 & Hev1 & Hsc1 & Hst1)]).
+    + exists (added1 ++ addedc).
+      assert (Had_c1 : forall k z, In (k, z) (added1 ++ addedc) -> In k seen3 /\ ~ In k seen0).
+      { intros k z Hkz; apply in_app_iff in Hkz as [Hk1 | Hkc].
+        - destruct (Had1 k z Hk1) as [Hs2 Hns1];
+            split; [exact (Hinc23 k Hs2) | intros Hs0; exact (Hns1 (Hinc01 k Hs0))].
+        - destruct (Hadc k z Hkc) as [Hs1 Hns0]; split; [exact (Hinc23 k (Hinc12 k Hs1)) | exact Hns0]. }
+      split; [exact Had_c1 | left; exists msg1].
+      rewrite <- app_assoc.
+      pose proof (eval_let_free_prepend_fmap cec (build_param_env src_pnames vs)
+                    added1 (addedc ++ fmap0) seen1 Hlfc (Hfkc eq_refl)
+                    (fun k z H => proj2 (Had1 k z H))) as Hevc'.
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hevc', Hevc, Hev1; reflexivity.
+    + pose proof (env_matches_smap_oracle_prepend allowed defs seen1 added1 (addedc ++ fmap0)
+                    (build_param_env src_pnames vs) smap env Hwfs1
+                    (fun k z H => proj2 (Had1 k z H)) Henv1) as Henv2.
+      destruct (IH2 params src_pnames defs allowed arg_dtys vs sigma1 (added1 ++ (addedc ++ fmap0)) smap env seen2
+                  (Some (DTYPE_Base (DTYPE_I w))) w ce2 seen3
+                  Hnd Hlp Hls Hla Hvs
+                  (fun idx d Hin =>
+                     Hpu idx d (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_intror Hin)))))
+                  Hpe Hwfd1 Hwfs2 Henv2 Hr2)
+        as (added2 & Had2 & [[msg2 Hev2] | (sigma2 & dv2 & Hwfd2 & Hev2 & Hsc2 & Hst2)]).
+      * exists (added2 ++ added1 ++ addedc).
+        assert (Had_all : forall k z, In (k, z) (added2 ++ added1 ++ addedc) -> In k seen3 /\ ~ In k seen0).
+        { intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk1c].
+          - destruct (Had2 k z Hk2) as [Hs3 Hns2];
+              split; [exact Hs3 | intros Hs0; exact (Hns2 (Hinc12 k (Hinc01 k Hs0)))].
+          - apply in_app_iff in Hk1c as [Hk1 | Hkc].
+            + destruct (Had1 k z Hk1) as [Hs2 Hns1];
+                split; [exact (Hinc23 k Hs2) | intros Hs0; exact (Hns1 (Hinc01 k Hs0))].
+            + destruct (Hadc k z Hkc) as [Hs1 Hns0]; split; [exact (Hinc23 k (Hinc12 k Hs1)) | exact Hns0]. }
+        split; [exact Had_all | left; exists msg2].
+        replace ((added2 ++ added1 ++ addedc) ++ fmap0) with (added2 ++ (added1 ++ (addedc ++ fmap0)))
+          by (rewrite !app_assoc; reflexivity).
+        pose proof (eval_let_free_prepend_fmap cec (build_param_env src_pnames vs)
+                      added1 (addedc ++ fmap0) seen1 Hlfc (Hfkc eq_refl)
+                      (fun k z H => proj2 (Had1 k z H))) as Hevc1.
+        pose proof (eval_let_free_prepend_fmap cec (build_param_env src_pnames vs)
+                      added2 (added1 ++ (addedc ++ fmap0)) seen2 Hlfc
+                      (fun u Hu => Hinc12 u (Hfkc eq_refl u Hu))
+                      (fun k z H => proj2 (Had2 k z H))) as Hevc2.
+        pose proof (eval_let_free_prepend_fmap ce1 (build_param_env src_pnames vs)
+                      added2 (added1 ++ (addedc ++ fmap0)) seen2 Hlf1 (Hfk1 eq_refl)
+                      (fun k z H => proj2 (Had2 k z H))) as Hev12.
+        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
+          rewrite Hevc2, Hevc1, Hevc, Hev12, Hev1, Hev2; reflexivity.
+      * exists (added2 ++ added1 ++ addedc).
+        assert (Had_all : forall k z, In (k, z) (added2 ++ added1 ++ addedc) -> In k seen3 /\ ~ In k seen0).
+        { intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk1c].
+          - destruct (Had2 k z Hk2) as [Hs3 Hns2];
+              split; [exact Hs3 | intros Hs0; exact (Hns2 (Hinc12 k (Hinc01 k Hs0)))].
+          - apply in_app_iff in Hk1c as [Hk1 | Hkc].
+            + destruct (Had1 k z Hk1) as [Hs2 Hns1];
+                split; [exact (Hinc23 k Hs2) | intros Hs0; exact (Hns1 (Hinc01 k Hs0))].
+            + destruct (Hadc k z Hkc) as [Hs1 Hns0]; split; [exact (Hinc23 k (Hinc12 k Hs1)) | exact Hns0]. }
+        split; [exact Had_all | right].
+        replace ((added2 ++ added1 ++ addedc) ++ fmap0) with (added2 ++ (added1 ++ (addedc ++ fmap0)))
+          by (rewrite !app_assoc; reflexivity).
+        pose proof (eval_let_free_prepend_fmap cec (build_param_env src_pnames vs)
+                      added1 (addedc ++ fmap0) seen1 Hlfc (Hfkc eq_refl)
+                      (fun k z H => proj2 (Had1 k z H))) as Hevc1.
+        pose proof (eval_let_free_prepend_fmap cec (build_param_env src_pnames vs)
+                      added2 (added1 ++ (addedc ++ fmap0)) seen2 Hlfc
+                      (fun u Hu => Hinc12 u (Hfkc eq_refl u Hu))
+                      (fun k z H => proj2 (Had2 k z H))) as Hevc2.
+        pose proof (eval_let_free_prepend_fmap ce1 (build_param_env src_pnames vs)
+                      added2 (added1 ++ (addedc ++ fmap0)) seen2 Hlf1 (Hfk1 eq_refl)
+                      (fun k z H => proj2 (Had2 k z H))) as Hev12.
+        destruct (eval_select_wf_scalar w dvc dv1 dv2 Hscc Hsc1 Hsc2)
+          as [vout [Hev_sel Hsc_out]].
+        exists sigma2, vout; split; [exact Hwfd2 | split; [| split; [exact Hsc_out |]]].
+        -- unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
+             rewrite Hevc2, Hevc1, Hevc, Hev12, Hev1, Hev2; cbn [eou_bind]; exact Hev_sel.
+        -- cbn [denote_exp]; eapply mcfg_steps_to_ret_bind; [exact Hstc |].
+           eapply mcfg_steps_to_ret_bind; [exact Hst1 |].
+           eapply mcfg_steps_to_ret_bind; [exact Hst2 |].
+           rewrite Hev_sel; apply mcfg_steps_eou_ret.
+Qed.
+
+Local Lemma eval_reified_exp_tgt_freeze {Pa : Params} :
+  forall dt e1,
+    (forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+            (sigma0 : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+            smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0, In (idx, dt0) (exp_param_uses params defs top e1) -> nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_draw_strat sigma0 ->
+      wf_smap_entries allowed defs seen0 true smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap0) smap env ->
+      reify_exp true params src_pnames defs smap seen0 top e1 = Some (w, ce, seen1) ->
+      exists added : list (freeze_key * Z),
+        (forall k z, In (k, z) added -> In k seen1 /\ ~ In k seen0) /\
+        ((exists msg,
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ub msg) \/
+         (exists sigma1 dv,
+            wf_draw_strat sigma1 /\
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            mcfg_steps_to_ret sigma0 env (denote_exp top e1) sigma1 env dv))) ->
+    forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+           (sigma0 : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+           smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+      NoDup src_pnames ->
+      List.length params = List.length vs ->
+      List.length src_pnames = List.length vs ->
+      List.length arg_dtys = List.length params ->
+      Forall2 dvalue_has_dtyp vs arg_dtys ->
+      (forall idx dt0,
+        In (idx, dt0) (exp_param_uses params defs top (OP_Freeze (dt, e1))) ->
+        nth_error arg_dtys idx = Some dt0) ->
+      (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+        exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+      wf_draw_strat sigma0 ->
+      wf_smap_entries allowed defs seen0 true smap ->
+      env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap0) smap env ->
+      reify_exp true params src_pnames defs smap seen0 top (OP_Freeze (dt, e1)) = Some (w, ce, seen1) ->
+      exists added : list (freeze_key * Z),
+        (forall k z, In (k, z) added -> In k seen1 /\ ~ In k seen0) /\
+        ((exists msg,
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ub msg) \/
+         (exists sigma1 dv,
+            wf_draw_strat sigma1 /\
+            eval_closed_cert_expr (build_param_env src_pnames vs)
+              (oracle_of_fmap (added ++ fmap0)) ce = raise_ret dv /\
+            wf_scalar_dvalue w dv /\
+            mcfg_steps_to_ret sigma0 env (denote_exp top (OP_Freeze (dt, e1))) sigma1 env dv)).
+Proof.
+  intros dt e1 IH1 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0 top w ce seen1
+    Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hr.
+  cbn [reify_exp] in Hr.
+  destruct dt as [tb | |]; try discriminate; destruct tb as [wb | | | | | | | | | |]; try discriminate.
+  destruct (check_opt_int_width top wb) eqn:Hcw; [| discriminate].
+  destruct (reify_exp true params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) e1)
+    as [[[w1 ce1] seen_mid] |] eqn:Hr1; [| discriminate].
+  destruct (freeze_key_in (wb, ce1) seen_mid) eqn:Hfk_in; [discriminate |].
+  inversion Hr; subst wb ce seen1; clear Hr.
+  pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
+  assert (Hfnin : ~ In (w, ce1) seen_mid)
+    by (intros Hin; apply freeze_key_in_spec in Hin; congruence).
+  destruct (reify_exp_freeze_props e1 true params src_pnames defs allowed smap seen0
+              (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen_mid Hwfs0 Hr1)
+    as (Hlf1 & Hinc0m & Hfk1).
+  destruct (IH1 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0
+              (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen_mid
+              Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hr1)
+    as (added1 & Had1 & [[msg1 Hev1] | (sigma_m & dv1 & Hwfd_m & Hev1 & Hsc1 & Hst1)]).
+  - exists added1; split.
+    + intros k z Hkz; destruct (Had1 k z Hkz) as [Hm Hn0]; split; [right; exact Hm | exact Hn0].
+    + left; exists msg1.
+      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
+  - destruct Hsc1 as [-> | [iv ->]].
+    + pose proof (Hwfd_m 0%nat (DTYPE_Base (DTYPE_I w)) (inhabited_draw_dtyp_i w)) as Hvd.
+      apply valid_draw_i_iff in Hvd as [idraw Hidraw].
+      set (z_draw := @Integers.unsigned w idraw).
+      exists ([((w, ce1), z_draw)] ++ added1).
+      split.
+      * intros k z [Heq | Hkz].
+        -- inversion Heq; subst k z; split;
+             [left; reflexivity | intros Hs0; exact (Hfnin (Hinc0m _ Hs0))].
+        -- destruct (Had1 k z Hkz) as [Hm Hn0]; split; [right; exact Hm | exact Hn0].
+      * right; exists (shift_draw_strat sigma_m), (DVALUE_Base (@DVALUE_I Pa w idraw)).
+        split; [exact (shift_draw_strat_wf sigma_m Hwfd_m) |].
+        split.
+        -- rewrite <- app_assoc.
+           pose proof (eval_let_free_prepend_fmap ce1 (build_param_env src_pnames vs)
+                         [((w, ce1), z_draw)] (added1 ++ fmap0) seen_mid Hlf1 (Hfk1 eq_refl)
+                         (fun k z H =>
+                            match H with
+                            | or_introl Heq =>
+                                eq_ind_r (fun u => ~ In u seen_mid) Hfnin (eq_sym (f_equal fst Heq))
+                            | or_intror Hfalse => False_ind _ Hfalse
+                            end)) as Hev1'.
+           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr let_val_exprs List.map].
+           match goal with
+           | |- eou_bind _ ?K = _ =>
+               transitivity (eou_bind (raise_ret (DVALUE_Base DVALUE_Poison)) K);
+               [f_equal; exact (eq_trans Hev1' Hev1) |]
+           end.
+           cbn [eou_bind]; rewrite (expand_lets_let_free ce1 Hlf1); cbn [app oracle_of_fmap].
+           rewrite freeze_key_eqb_refl; unfold z_draw; rewrite (@Integers.repr_unsigned w idraw); reflexivity.
+        -- split; [right; eexists; reflexivity |].
+           cbn [denote_exp]; eapply mcfg_steps_to_ret_bind; [exact Hst1 |].
+           eapply MSR_Draw; [reflexivity | intros n d; reflexivity | rewrite Hidraw; apply MSR_Ret; reflexivity].
+    + exists added1; split.
+      * intros k z Hkz; destruct (Had1 k z Hkz) as [Hm Hn0]; split; [right; exact Hm | exact Hn0].
+      * right; exists sigma_m, (DVALUE_Base (@DVALUE_I Pa w iv)).
+        split; [exact Hwfd_m |].
+        split.
         -- unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
-        -- intros tail_s; cbn [denote_exp].
-           eapply mcfg_steps_to_ret_bind; [exact (Hst1 tail_s) | apply MSR_Ret; reflexivity].
-  - (* Non-recursive base cases *)
-    intros o; destruct o; try exact I;
-      intros params src_pnames defs allowed arg_dtys vs foracle smap env seen0 top w ce seen1
-             Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfs Henv Hr;
-      cbn [reify_exp] in Hr; try discriminate.
-    + (* EXP_Ident *)
-      destruct id as [| r]; [discriminate |].
-      destruct (RM.find r smap) as [[wr cer] |] eqn:Hfind.
-      * destruct (check_opt_int_width top wr) eqn:Hcw; [| discriminate].
-        inversion Hr; subst wr ce seen1; clear Hr.
-        destruct (Henv r w cer Hfind) as [_ [dv [Hfe [Hev Hsc]]]].
-        exists []; split; [constructor | right; exists dv; split; [exact Hev | split; [exact Hsc |]]].
-        intros tail_s; cbn [chain_draws denote_exp lookup_id].
-        eapply MSR_LocalRead; [reflexivity | exact Hfe | apply MSR_Ret; reflexivity].
-      * destruct (raw_id_in_list r defs) eqn:Hrd; [discriminate |].
-        destruct top as [dt |]; [| discriminate].
-        destruct dt as [tb | |]; try discriminate; destruct tb as [wt | | | | | | | | | |]; try discriminate.
-        destruct (find_raw_id_index r params) as [idx |] eqn:Hidx; [| discriminate].
-        destruct (nth_error src_pnames idx) as [pnm |] eqn:Hpnm; [| discriminate].
-        destruct (starts_with_dollar pnm) eqn:Hdl; [discriminate |].
-        inversion Hr; subst wt ce seen1; clear Hr.
-        assert (Hnin : ~ In r defs)
-          by (intros Hin; apply raw_id_in_list_spec in Hin; congruence).
-        pose proof (find_raw_id_index_nth_error params r idx Hidx) as Hnth_p.
-        destruct (Hpe idx r Hnth_p Hnin) as [dv [Hnth_v Hfe]].
-        assert (Hnth_dt : nth_error arg_dtys idx = Some (DTYPE_Base (DTYPE_I w))).
-        { apply Hpu; cbn [exp_param_uses]; rewrite Hrd, Hidx; left; reflexivity. }
-        pose proof (Forall2_nth_error_l dvalue_has_dtyp vs arg_dtys Hvs idx dv
-                      (DTYPE_Base (DTYPE_I w)) Hnth_v Hnth_dt) as Hsc.
-        apply dvalue_has_dtyp_i_iff_wf_scalar in Hsc.
-        destruct (build_param_env_nth src_pnames vs idx pnm Hnd Hls Hpnm) as [dv' [Hnth_v' Hbp]].
-        assert (Heq_dv : dv' = dv) by congruence; subst dv'.
-        exists []; split; [constructor | right; exists dv; split; [| split; [exact Hsc |]]].
-        -- unfold eval_closed_cert_expr; cbn [eval_cert_expr lookup_let_val].
-           rewrite Hbp; exact (check_scalar_width_ok w dv Hsc).
-        -- intros tail_s; cbn [chain_draws denote_exp lookup_id].
-           eapply MSR_LocalRead; [reflexivity | exact Hfe | apply MSR_Ret; reflexivity].
-    + (* EXP_Integer *)
+        -- split; [right; exists iv; reflexivity |].
+           cbn [denote_exp]; eapply mcfg_steps_to_ret_bind; [exact Hst1 | apply MSR_Ret; reflexivity].
+Qed.
+
+Local Lemma eval_reified_exp_tgt_base {Pa : Params} :
+  forall o : exp dtyp,
+    match o with
+    | OP_IBinop _ _ _ _ | OP_ICmp _ _ _ _ _ | OP_Conversion _ _ _ _
+    | OP_Select _ _ _ _ | OP_Freeze _ => True
+    | _ =>
+        forall params src_pnames defs allowed arg_dtys (vs : list (@dvalue Pa))
+               (sigma0 : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+               smap (env : rmap (@dvalue Pa)) seen0 top w ce seen1,
+          NoDup src_pnames ->
+          List.length params = List.length vs ->
+          List.length src_pnames = List.length vs ->
+          List.length arg_dtys = List.length params ->
+          Forall2 dvalue_has_dtyp vs arg_dtys ->
+          (forall idx dt, In (idx, dt) (exp_param_uses params defs top o) -> nth_error arg_dtys idx = Some dt) ->
+          (forall idx r, nth_error params idx = Some r -> ~ In r defs ->
+            exists dv, nth_error vs idx = Some dv /\ RM.find r env = Some dv) ->
+          wf_draw_strat sigma0 ->
+          wf_smap_entries allowed defs seen0 true smap ->
+          env_matches_smap defs (build_param_env src_pnames vs) (oracle_of_fmap fmap0) smap env ->
+          reify_exp true params src_pnames defs smap seen0 top o = Some (w, ce, seen1) ->
+          exists added : list (freeze_key * Z),
+            (forall k z, In (k, z) added -> In k seen1 /\ ~ In k seen0) /\
+            ((exists msg,
+                eval_closed_cert_expr (build_param_env src_pnames vs)
+                  (oracle_of_fmap (added ++ fmap0)) ce = raise_ub msg) \/
+             (exists sigma1 dv,
+                wf_draw_strat sigma1 /\
+                eval_closed_cert_expr (build_param_env src_pnames vs)
+                  (oracle_of_fmap (added ++ fmap0)) ce = raise_ret dv /\
+                wf_scalar_dvalue w dv /\
+                mcfg_steps_to_ret sigma0 env (denote_exp top o) sigma1 env dv))
+    end.
+Proof.
+  intros o; destruct o; try exact I;
+    intros params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0 top w ce seen1
+           Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hr;
+    cbn [reify_exp] in Hr; try discriminate.
+  - (* EXP_Ident *)
+    destruct id as [| r]; [discriminate |].
+    destruct (RM.find r smap) as [[wr cer] |] eqn:Hfind.
+    + destruct (check_opt_int_width top wr) eqn:Hcw; [| discriminate].
+      inversion Hr; subst wr ce seen1; clear Hr.
+      destruct (Henv0 r w cer Hfind) as [_ [dv [Hfe [Hev Hsc]]]].
+      exists []; split; [intros _ _ [] | right; exists sigma0, dv].
+      split; [exact Hwfd0 | split; [exact Hev | split; [exact Hsc |]]].
+      cbn [denote_exp lookup_id]; eapply MSR_LocalRead; [reflexivity | exact Hfe | apply MSR_Ret; reflexivity].
+    + destruct (raw_id_in_list r defs) eqn:Hrd; [discriminate |].
       destruct top as [dt |]; [| discriminate].
       destruct dt as [tb | |]; try discriminate; destruct tb as [wt | | | | | | | | | |]; try discriminate.
+      destruct (find_raw_id_index r params) as [idx |] eqn:Hidx; [| discriminate].
+      destruct (nth_error src_pnames idx) as [pnm |] eqn:Hpnm; [| discriminate].
+      destruct (starts_with_dollar pnm) eqn:Hdl; [discriminate |].
       inversion Hr; subst wt ce seen1; clear Hr.
-      exists []; split; [constructor | right].
-      exists (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N (reify_int_const w (denote_int_syntax x)))))).
-      split; [reflexivity | split; [right; eexists; reflexivity |]].
-      intros tail_s; cbn [chain_draws denote_exp]; rewrite repr_reify_int_const.
-      apply MSR_Ret; reflexivity.
-    + (* EXP_Bool *)
-      destruct (check_opt_int_width top 1%positive) eqn:Hcw; [| discriminate].
-      inversion Hr; subst w ce seen1; clear Hr.
-      exists []; split; [constructor | right].
-      destruct b.
-      * exists (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.repr 1%positive (Z.of_N 1%N)))).
-        split; [reflexivity | split; [right; eexists; reflexivity |]].
-        intros tail_s; cbn [chain_draws denote_exp]; rewrite repr_one_N.
-        apply MSR_Ret; reflexivity.
-      * exists (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.repr 1%positive (Z.of_N 0%N)))).
-        split; [reflexivity | split; [right; eexists; reflexivity |]].
-        intros tail_s; cbn [chain_draws denote_exp]; rewrite repr_zero_N.
-        apply MSR_Ret; reflexivity.
-    + (* EXP_Undef *)
-      destruct top as [dt |]; [| discriminate].
-      destruct dt as [tb | |]; try discriminate; destruct tb as [wt | | | | | | | | | |]; try discriminate.
-      inversion Hr; subst wt ce seen1; clear Hr.
-      exists []; split; [constructor | right].
-      exists (DVALUE_Base DVALUE_Poison).
-      split; [reflexivity | split; [left; reflexivity | intros tail_s; apply MSR_Ret; reflexivity]].
-    + (* EXP_Poison *)
-      destruct top as [dt |]; [| discriminate].
-      destruct dt as [tb | |]; try discriminate; destruct tb as [wt | | | | | | | | | |]; try discriminate.
-      inversion Hr; subst wt ce seen1; clear Hr.
-      exists []; split; [constructor | right].
-      exists (DVALUE_Base DVALUE_Poison).
-      split; [reflexivity | split; [left; reflexivity | intros tail_s; apply MSR_Ret; reflexivity]].
+      assert (Hnin : ~ In r defs)
+        by (intros Hin; apply raw_id_in_list_spec in Hin; congruence).
+      pose proof (find_raw_id_index_nth_error params r idx Hidx) as Hnth_p.
+      destruct (Hpe idx r Hnth_p Hnin) as [dv [Hnth_v Hfe]].
+      assert (Hnth_dt : nth_error arg_dtys idx = Some (DTYPE_Base (DTYPE_I w))).
+      { apply Hpu; cbn [exp_param_uses]; rewrite Hrd, Hidx; left; reflexivity. }
+      pose proof (Forall2_nth_error_l dvalue_has_dtyp vs arg_dtys Hvs idx dv
+                    (DTYPE_Base (DTYPE_I w)) Hnth_v Hnth_dt) as Hsc.
+      apply dvalue_has_dtyp_i_iff_wf_scalar in Hsc.
+      destruct (build_param_env_nth src_pnames vs idx pnm Hnd Hls Hpnm) as [dv' [Hnth_v' Hbp]].
+      assert (Heq_dv : dv' = dv) by congruence; subst dv'.
+      exists []; split; [intros _ _ [] | right; exists sigma0, dv].
+      split; [exact Hwfd0 | split; [| split; [exact Hsc |]]].
+      * unfold eval_closed_cert_expr; cbn [eval_cert_expr lookup_let_val].
+        rewrite Hbp; exact (check_scalar_width_ok w dv Hsc).
+      * cbn [denote_exp lookup_id]; eapply MSR_LocalRead; [reflexivity | exact Hfe | apply MSR_Ret; reflexivity].
+  - (* EXP_Integer *)
+    destruct top as [dt |]; [| discriminate].
+    destruct dt as [tb | |]; try discriminate; destruct tb as [wt | | | | | | | | | |]; try discriminate.
+    inversion Hr; subst wt ce seen1; clear Hr.
+    exists []; split; [intros _ _ [] | right].
+    exists sigma0,
+      (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N (reify_int_const w (denote_int_syntax x)))))).
+    split; [exact Hwfd0 |].
+    split; [reflexivity |].
+    split; [right; eexists; reflexivity |].
+    cbn [denote_exp]; rewrite repr_reify_int_const; apply MSR_Ret; reflexivity.
+  - (* EXP_Bool *)
+    destruct (check_opt_int_width top 1%positive) eqn:Hcw; [| discriminate].
+    inversion Hr; subst w ce seen1; clear Hr.
+    exists []; split; [intros _ _ [] | right].
+    destruct b.
+    + exists sigma0, (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.repr 1%positive (Z.of_N 1%N)))).
+      split; [exact Hwfd0 |].
+      split; [reflexivity |].
+      split; [right; eexists; reflexivity |].
+      cbn [denote_exp]; rewrite repr_one_N; apply MSR_Ret; reflexivity.
+    + exists sigma0, (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.repr 1%positive (Z.of_N 0%N)))).
+      split; [exact Hwfd0 |].
+      split; [reflexivity |].
+      split; [right; eexists; reflexivity |].
+      cbn [denote_exp]; rewrite repr_zero_N; apply MSR_Ret; reflexivity.
+  - (* EXP_Undef *)
+    destruct top as [dt |]; [| discriminate].
+    destruct dt as [tb | |]; try discriminate; destruct tb as [wt | | | | | | | | | |]; try discriminate.
+    inversion Hr; subst wt ce seen1; clear Hr.
+    exists []; split; [intros _ _ [] | right].
+    exists sigma0, (DVALUE_Base DVALUE_Poison).
+    split; [exact Hwfd0 |].
+    split; [reflexivity |].
+    split; [left; reflexivity | apply MSR_Ret; reflexivity].
+  - (* EXP_Poison *)
+    destruct top as [dt |]; [| discriminate].
+    destruct dt as [tb | |]; try discriminate; destruct tb as [wt | | | | | | | | | |]; try discriminate.
+    inversion Hr; subst wt ce seen1; clear Hr.
+    exists []; split; [intros _ _ [] | right].
+    exists sigma0, (DVALUE_Base DVALUE_Poison).
+    split; [exact Hwfd0 |].
+    split; [reflexivity |].
+    split; [left; reflexivity | apply MSR_Ret; reflexivity].
 Qed.
 
 Lemma eval_reified_exp_tgt {Pa : Params} :
@@ -1576,427 +2859,12 @@ Proof.
               (oracle_of_fmap (added ++ fmap0)) ce = raise_ret dv /\
             wf_scalar_dvalue w dv /\
             mcfg_steps_to_ret sigma0 env (denote_exp top o) sigma1 env dv)))).
-  - (* OP_IBinop *)
-    intros iop dt e1 e2 IH1 IH2 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0 top w ce seen2
-      Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hr.
-    cbn [reify_exp] in Hr.
-    destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
-    destruct (check_opt_int_width top wb) eqn:Hcw; [| discriminate].
-    destruct (reify_exp true params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) e1)
-      as [[[w1 ce1] seen1] |] eqn:Hr1; [| discriminate].
-    destruct (reify_exp true params src_pnames defs smap seen1 (Some (DTYPE_Base (DTYPE_I wb))) e2)
-      as [[[w2 ce2] seen2'] |] eqn:Hr2; [| discriminate].
-    destruct (ibinop_to_cert iop) as [cop cfl] eqn:Hiop.
-    inversion Hr; subst wb ce seen2'; clear Hr.
-    destruct (ibinop_to_cert_roundtrip iop cop cfl Hiop) as [Heq_iop _].
-    pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
-    pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr2)) as ->.
-    destruct (reify_exp_freeze_props e1 true params src_pnames defs allowed smap seen0
-                (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen1 Hwfs0 Hr1)
-      as (Hlf1 & Hinc01 & Hfk1).
-    pose proof (wf_smap_entries_seen_mono allowed defs seen0 seen1 true smap Hinc01 Hwfs0) as Hwfs1.
-    destruct (reify_exp_freeze_props e2 true params src_pnames defs allowed smap seen1
-                (Some (DTYPE_Base (DTYPE_I w))) w ce2 seen2 Hwfs1 Hr2)
-      as (_ & Hinc12 & _).
-    destruct (IH1 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0
-                (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen1
-                Hnd Hlp Hls Hla Hvs
-                (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_introl Hin)))
-                Hpe Hwfd0 Hwfs0 Henv0 Hr1)
-      as (added1 & Had1 & [[msg1 Hev1] | (sigma1 & dv1 & Hwfd1 & Hev1 & Hsc1 & Hst1)]).
-    + exists added1; split.
-      * intros k z Hkz; destruct (Had1 k z Hkz) as [Hm Hn0]; split; [exact (Hinc12 k Hm) | exact Hn0].
-      * left; exists msg1; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
-    + pose proof (env_matches_smap_oracle_prepend allowed defs seen0 added1 fmap0
-                    (build_param_env src_pnames vs) smap env Hwfs0
-                    (fun k z H => proj2 (Had1 k z H)) Henv0) as Henv1.
-      destruct (IH2 params src_pnames defs allowed arg_dtys vs sigma1 (added1 ++ fmap0) smap env seen1
-                  (Some (DTYPE_Base (DTYPE_I w))) w ce2 seen2
-                  Hnd Hlp Hls Hla Hvs
-                  (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_intror Hin)))
-                  Hpe Hwfd1 Hwfs1 Henv1 Hr2)
-        as (added2 & Had2 & [[msg2 Hev2] | (sigma2 & dv2 & Hwfd2 & Hev2 & Hsc2 & Hst2)]).
-      * exists (added2 ++ added1).
-        assert (Had12 : forall k z, In (k, z) (added2 ++ added1) -> In k seen2 /\ ~ In k seen0).
-        { intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk1].
-          - destruct (Had2 k z Hk2) as [Hs2 Hns1]; split; [exact Hs2 | intros Hs0; exact (Hns1 (Hinc01 k Hs0))].
-          - destruct (Had1 k z Hk1) as [Hs1 Hns0]; split; [exact (Hinc12 k Hs1) | exact Hns0]. }
-        split; [exact Had12 | left; exists msg2].
-        rewrite <- app_assoc.
-        pose proof (eval_let_free_prepend_fmap ce1 (build_param_env src_pnames vs)
-                      added2 (added1 ++ fmap0) seen1 Hlf1 (Hfk1 eq_refl)
-                      (fun k z H => proj2 (Had2 k z H))) as Hev1'.
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1', Hev1, Hev2; reflexivity.
-      * exists (added2 ++ added1).
-        assert (Had12 : forall k z, In (k, z) (added2 ++ added1) -> In k seen2 /\ ~ In k seen0).
-        { intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk1].
-          - destruct (Had2 k z Hk2) as [Hs2 Hns1]; split; [exact Hs2 | intros Hs0; exact (Hns1 (Hinc01 k Hs0))].
-          - destruct (Had1 k z Hk1) as [Hs1 Hns0]; split; [exact (Hinc12 k Hs1) | exact Hns0]. }
-        split; [exact Had12 |].
-        rewrite <- app_assoc.
-        pose proof (eval_let_free_prepend_fmap ce1 (build_param_env src_pnames vs)
-                      added2 (added1 ++ fmap0) seen1 Hlf1 (Hfk1 eq_refl)
-                      (fun k z H => proj2 (Had2 k z H))) as Hev1'.
-        destruct (eval_iop_wf_scalar cop cfl w dv1 dv2 Hsc1 Hsc2)
-          as [[msg_op Hev_op] | [vout [Hev_op Hsc_out]]].
-        -- left; exists msg_op; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
-             rewrite Hev1', Hev1, Hev2; cbn [eou_bind]; exact Hev_op.
-        -- right; exists sigma2, vout; split; [exact Hwfd2 | split; [| split; [exact Hsc_out |]]].
-           ++ unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
-                rewrite Hev1', Hev1, Hev2; cbn [eou_bind]; exact Hev_op.
-           ++ cbn [denote_exp]; eapply mcfg_steps_to_ret_bind; [exact Hst1 |].
-              eapply mcfg_steps_to_ret_bind; [exact Hst2 |].
-              rewrite <- Heq_iop, Hev_op; apply mcfg_steps_eou_ret.
-  - (* OP_ICmp *)
-    intros ss cmp dt e1 e2 IH1 IH2 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0 top w ce seen2
-      Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hr.
-    cbn [reify_exp] in Hr.
-    destruct dt as [tb | |]; [| discriminate | discriminate]; destruct tb as [wb | | | | | | | | | |]; try discriminate.
-    destruct (check_opt_int_width top 1%positive) eqn:Hcw; [| discriminate].
-    destruct (reify_exp true params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) e1)
-      as [[[w1 ce1] seen1] |] eqn:Hr1; [| discriminate].
-    destruct (reify_exp true params src_pnames defs smap seen1 (Some (DTYPE_Base (DTYPE_I wb))) e2)
-      as [[[w2 ce2] seen2'] |] eqn:Hr2; [| discriminate].
-    inversion Hr; subst w ce seen2'; clear Hr.
-    pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
-    pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr2)) as ->.
-    destruct (reify_exp_freeze_props e1 true params src_pnames defs allowed smap seen0
-                (Some (DTYPE_Base (DTYPE_I wb))) wb ce1 seen1 Hwfs0 Hr1)
-      as (Hlf1 & Hinc01 & Hfk1).
-    pose proof (wf_smap_entries_seen_mono allowed defs seen0 seen1 true smap Hinc01 Hwfs0) as Hwfs1.
-    destruct (reify_exp_freeze_props e2 true params src_pnames defs allowed smap seen1
-                (Some (DTYPE_Base (DTYPE_I wb))) wb ce2 seen2 Hwfs1 Hr2)
-      as (_ & Hinc12 & _).
-    destruct (IH1 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0
-                (Some (DTYPE_Base (DTYPE_I wb))) wb ce1 seen1
-                Hnd Hlp Hls Hla Hvs
-                (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_introl Hin)))
-                Hpe Hwfd0 Hwfs0 Henv0 Hr1)
-      as (added1 & Had1 & [[msg1 Hev1] | (sigma1 & dv1 & Hwfd1 & Hev1 & Hsc1 & Hst1)]).
-    + exists added1; split.
-      * intros k z Hkz; destruct (Had1 k z Hkz) as [Hm Hn0]; split; [exact (Hinc12 k Hm) | exact Hn0].
-      * left; exists msg1; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
-    + pose proof (env_matches_smap_oracle_prepend allowed defs seen0 added1 fmap0
-                    (build_param_env src_pnames vs) smap env Hwfs0
-                    (fun k z H => proj2 (Had1 k z H)) Henv0) as Henv1.
-      destruct (IH2 params src_pnames defs allowed arg_dtys vs sigma1 (added1 ++ fmap0) smap env seen1
-                  (Some (DTYPE_Base (DTYPE_I wb))) wb ce2 seen2
-                  Hnd Hlp Hls Hla Hvs
-                  (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_intror Hin)))
-                  Hpe Hwfd1 Hwfs1 Henv1 Hr2)
-        as (added2 & Had2 & [[msg2 Hev2] | (sigma2 & dv2 & Hwfd2 & Hev2 & Hsc2 & Hst2)]).
-      * exists (added2 ++ added1).
-        assert (Had12 : forall k z, In (k, z) (added2 ++ added1) -> In k seen2 /\ ~ In k seen0).
-        { intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk1].
-          - destruct (Had2 k z Hk2) as [Hs2 Hns1]; split; [exact Hs2 | intros Hs0; exact (Hns1 (Hinc01 k Hs0))].
-          - destruct (Had1 k z Hk1) as [Hs1 Hns0]; split; [exact (Hinc12 k Hs1) | exact Hns0]. }
-        split; [exact Had12 | left; exists msg2].
-        rewrite <- app_assoc.
-        pose proof (eval_let_free_prepend_fmap ce1 (build_param_env src_pnames vs)
-                      added2 (added1 ++ fmap0) seen1 Hlf1 (Hfk1 eq_refl)
-                      (fun k z H => proj2 (Had2 k z H))) as Hev1'.
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1', Hev1, Hev2; reflexivity.
-      * exists (added2 ++ added1).
-        assert (Had12 : forall k z, In (k, z) (added2 ++ added1) -> In k seen2 /\ ~ In k seen0).
-        { intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk1].
-          - destruct (Had2 k z Hk2) as [Hs2 Hns1]; split; [exact Hs2 | intros Hs0; exact (Hns1 (Hinc01 k Hs0))].
-          - destruct (Had1 k z Hk1) as [Hs1 Hns0]; split; [exact (Hinc12 k Hs1) | exact Hns0]. }
-        split; [exact Had12 | right].
-        rewrite <- app_assoc.
-        pose proof (eval_let_free_prepend_fmap ce1 (build_param_env src_pnames vs)
-                      added2 (added1 ++ fmap0) seen1 Hlf1 (Hfk1 eq_refl)
-                      (fun k z H => proj2 (Had2 k z H))) as Hev1'.
-        destruct (eval_icmp_wf_scalar ss (icmp_to_cert cmp) wb dv1 dv2 Hsc1 Hsc2)
-          as [vout [Hev_cmp Hsc_out]].
-        exists sigma2, vout; split; [exact Hwfd2 | split; [| split; [exact Hsc_out |]]].
-        -- unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
-             rewrite Hev1', Hev1, Hev2; cbn [eou_bind]; exact Hev_cmp.
-        -- cbn [denote_exp]; eapply mcfg_steps_to_ret_bind; [exact Hst1 |].
-           eapply mcfg_steps_to_ret_bind; [exact Hst2 |].
-           rewrite <- (icmp_to_cert_roundtrip cmp), Hev_cmp; apply mcfg_steps_eou_ret.
-  - (* OP_Conversion *)
-    intros ct dtf e1 dtt IH1 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0 top w ce seen1
-      Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hr.
-    cbn [reify_exp] in Hr.
-    destruct ct as [| pc | ic]; try discriminate.
-    destruct dtf as [tbf | |]; try discriminate; destruct tbf as [fw | | | | | | | | | |]; try discriminate.
-    destruct dtt as [tbt | |]; try discriminate; destruct tbt as [tw | | | | | | | | | |]; try discriminate.
-    destruct (check_opt_int_width top tw) eqn:Hcw; [| discriminate].
-    destruct (pure_conv_to_cert pc) as [[ck cfl] |] eqn:Hpc; [| discriminate].
-    set (w_ok :=
-      match ck with
-      | CCK_ZExt => (fw <? tw)%positive && negb (ccf_nuw cfl) && negb (ccf_nsw cfl)
-      | CCK_SExt => (fw <? tw)%positive && negb (ccf_nneg cfl) && negb (ccf_nuw cfl) && negb (ccf_nsw cfl)
-      | CCK_Trunc => (tw <? fw)%positive && negb (ccf_nneg cfl)
-      end) in *.
-    destruct w_ok eqn:Hwok; [| discriminate].
-    destruct (reify_exp true params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I fw))) e1)
-      as [[[w1 ce1] seen1'] |] eqn:Hr1; [| discriminate].
-    inversion Hr; subst w ce seen1'; clear Hr.
-    pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
-    pose proof (pure_conv_to_cert_roundtrip pc ck cfl Hpc) as Heq_pc.
-    destruct (IH1 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0
-                (Some (DTYPE_Base (DTYPE_I fw))) fw ce1 seen1
-                Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hr1)
-      as (added1 & Had1 & [[msg1 Hev1] | (sigma1 & dv1 & Hwfd1 & Hev1 & Hsc1 & Hst1)]).
-    + exists added1; split; [exact Had1 | left; exists msg1].
-      unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
-    + unfold w_ok in Hwok.
-      destruct (eval_cast_wf_scalar ck fw tw cfl dv1 Hwok Hsc1) as [vout [Hev_cast Hsc_out]].
-      exists added1; split; [exact Had1 | right].
-      exists sigma1, vout; split; [exact Hwfd1 | split; [| split; [exact Hsc_out |]]].
-      * unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; cbn [eou_bind]; exact Hev_cast.
-      * cbn [denote_exp convert]; eapply mcfg_steps_to_ret_bind; [exact Hst1 |].
-        rewrite <- Heq_pc, Hev_cast; apply mcfg_steps_eou_ret.
-  - (* OP_Select *)
-    intros fm dtc ec dt1 e1 dt2 e2 IHc IH1 IH2 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0 top w ce seen3
-      Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hr.
-    cbn [reify_exp] in Hr.
-    destruct dtc as [tbc | |]; try discriminate; destruct tbc as [wc | | | | | | | | | |]; try discriminate.
-    destruct wc as [| |]; try discriminate.
-    destruct dt1 as [tb1 | |]; try discriminate; destruct tb1 as [w1 | | | | | | | | | |]; try discriminate.
-    destruct dt2 as [tb2 | |]; try discriminate; destruct tb2 as [w2 | | | | | | | | | |]; try discriminate.
-    destruct (Pos.eqb w1 w2 && check_opt_int_width top w1) eqn:Hcw; [| discriminate].
-    apply andb_true_iff in Hcw as [Hw12 Hcw]; apply Pos.eqb_eq in Hw12; subst w2.
-    destruct (reify_exp true params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I 1%positive))) ec)
-      as [[[wc' cec] seen1] |] eqn:Hrc; [| discriminate].
-    destruct (reify_exp true params src_pnames defs smap seen1 (Some (DTYPE_Base (DTYPE_I w1))) e1)
-      as [[[wa ce1] seen2] |] eqn:Hr1; [| discriminate].
-    destruct (reify_exp true params src_pnames defs smap seen2 (Some (DTYPE_Base (DTYPE_I w1))) e2)
-      as [[[wb ce2] seen3'] |] eqn:Hr2; [| discriminate].
-    inversion Hr; subst w1 ce seen3'; clear Hr.
-    pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hrc)) as ->.
-    pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
-    pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr2)) as ->.
-    destruct (reify_exp_freeze_props ec true params src_pnames defs allowed smap seen0
-                (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive cec seen1 Hwfs0 Hrc)
-      as (Hlfc & Hinc01 & Hfkc).
-    pose proof (wf_smap_entries_seen_mono allowed defs seen0 seen1 true smap Hinc01 Hwfs0) as Hwfs1.
-    destruct (reify_exp_freeze_props e1 true params src_pnames defs allowed smap seen1
-                (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen2 Hwfs1 Hr1)
-      as (Hlf1 & Hinc12 & Hfk1).
-    pose proof (wf_smap_entries_seen_mono allowed defs seen1 seen2 true smap Hinc12 Hwfs1) as Hwfs2.
-    destruct (reify_exp_freeze_props e2 true params src_pnames defs allowed smap seen2
-                (Some (DTYPE_Base (DTYPE_I w))) w ce2 seen3 Hwfs2 Hr2)
-      as (_ & Hinc23 & _).
-    destruct (IHc params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0
-                (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive cec seen1
-                Hnd Hlp Hls Hla Hvs
-                (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_introl Hin)))
-                Hpe Hwfd0 Hwfs0 Henv0 Hrc)
-      as (addedc & Hadc & [[msgc Hevc] | (sigmac & dvc & Hwfdc & Hevc & Hscc & Hstc)]).
-    + exists addedc; split.
-      * intros k z Hkz; destruct (Hadc k z Hkz) as [Hm Hn0]; split; [exact (Hinc23 k (Hinc12 k Hm)) | exact Hn0].
-      * left; exists msgc; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hevc; reflexivity.
-    + pose proof (env_matches_smap_oracle_prepend allowed defs seen0 addedc fmap0
-                    (build_param_env src_pnames vs) smap env Hwfs0
-                    (fun k z H => proj2 (Hadc k z H)) Henv0) as Henv1.
-      destruct (IH1 params src_pnames defs allowed arg_dtys vs sigmac (addedc ++ fmap0) smap env seen1
-                  (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen2
-                  Hnd Hlp Hls Hla Hvs
-                  (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_introl Hin)))))
-                  Hpe Hwfdc Hwfs1 Henv1 Hr1)
-        as (added1 & Had1 & [[msg1 Hev1] | (sigma1 & dv1 & Hwfd1 & Hev1 & Hsc1 & Hst1)]).
-      * exists (added1 ++ addedc).
-        assert (Had_c1 : forall k z, In (k, z) (added1 ++ addedc) -> In k seen3 /\ ~ In k seen0).
-        { intros k z Hkz; apply in_app_iff in Hkz as [Hk1 | Hkc].
-          - destruct (Had1 k z Hk1) as [Hs2 Hns1]; split; [exact (Hinc23 k Hs2) | intros Hs0; exact (Hns1 (Hinc01 k Hs0))].
-          - destruct (Hadc k z Hkc) as [Hs1 Hns0]; split; [exact (Hinc23 k (Hinc12 k Hs1)) | exact Hns0]. }
-        split; [exact Had_c1 | left; exists msg1].
-        rewrite <- app_assoc.
-        pose proof (eval_let_free_prepend_fmap cec (build_param_env src_pnames vs)
-                      added1 (addedc ++ fmap0) seen1 Hlfc (Hfkc eq_refl)
-                      (fun k z H => proj2 (Had1 k z H))) as Hevc'.
-        unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hevc', Hevc, Hev1; reflexivity.
-      * pose proof (env_matches_smap_oracle_prepend allowed defs seen1 added1 (addedc ++ fmap0)
-                      (build_param_env src_pnames vs) smap env Hwfs1
-                      (fun k z H => proj2 (Had1 k z H)) Henv1) as Henv2.
-        destruct (IH2 params src_pnames defs allowed arg_dtys vs sigma1 (added1 ++ (addedc ++ fmap0)) smap env seen2
-                    (Some (DTYPE_Base (DTYPE_I w))) w ce2 seen3
-                    Hnd Hlp Hls Hla Hvs
-                    (fun idx d Hin => Hpu idx d (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_intror Hin)))))
-                    Hpe Hwfd1 Hwfs2 Henv2 Hr2)
-          as (added2 & Had2 & [[msg2 Hev2] | (sigma2 & dv2 & Hwfd2 & Hev2 & Hsc2 & Hst2)]).
-        -- exists (added2 ++ added1 ++ addedc).
-           assert (Had_all : forall k z, In (k, z) (added2 ++ added1 ++ addedc) -> In k seen3 /\ ~ In k seen0).
-           { intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk1c].
-             - destruct (Had2 k z Hk2) as [Hs3 Hns2]; split; [exact Hs3 | intros Hs0; exact (Hns2 (Hinc12 k (Hinc01 k Hs0)))].
-             - apply in_app_iff in Hk1c as [Hk1 | Hkc].
-               + destruct (Had1 k z Hk1) as [Hs2 Hns1]; split; [exact (Hinc23 k Hs2) | intros Hs0; exact (Hns1 (Hinc01 k Hs0))].
-               + destruct (Hadc k z Hkc) as [Hs1 Hns0]; split; [exact (Hinc23 k (Hinc12 k Hs1)) | exact Hns0]. }
-           split; [exact Had_all | left; exists msg2].
-           replace ((added2 ++ added1 ++ addedc) ++ fmap0) with (added2 ++ (added1 ++ (addedc ++ fmap0)))
-             by (rewrite !app_assoc; reflexivity).
-           pose proof (eval_let_free_prepend_fmap cec (build_param_env src_pnames vs)
-                         added1 (addedc ++ fmap0) seen1 Hlfc (Hfkc eq_refl)
-                         (fun k z H => proj2 (Had1 k z H))) as Hevc1.
-           pose proof (eval_let_free_prepend_fmap cec (build_param_env src_pnames vs)
-                         added2 (added1 ++ (addedc ++ fmap0)) seen2 Hlfc
-                         (fun u Hu => Hinc12 u (Hfkc eq_refl u Hu))
-                         (fun k z H => proj2 (Had2 k z H))) as Hevc2.
-           pose proof (eval_let_free_prepend_fmap ce1 (build_param_env src_pnames vs)
-                         added2 (added1 ++ (addedc ++ fmap0)) seen2 Hlf1 (Hfk1 eq_refl)
-                         (fun k z H => proj2 (Had2 k z H))) as Hev12.
-           unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
-             rewrite Hevc2, Hevc1, Hevc, Hev12, Hev1, Hev2; reflexivity.
-        -- exists (added2 ++ added1 ++ addedc).
-           assert (Had_all : forall k z, In (k, z) (added2 ++ added1 ++ addedc) -> In k seen3 /\ ~ In k seen0).
-           { intros k z Hkz; apply in_app_iff in Hkz as [Hk2 | Hk1c].
-             - destruct (Had2 k z Hk2) as [Hs3 Hns2]; split; [exact Hs3 | intros Hs0; exact (Hns2 (Hinc12 k (Hinc01 k Hs0)))].
-             - apply in_app_iff in Hk1c as [Hk1 | Hkc].
-               + destruct (Had1 k z Hk1) as [Hs2 Hns1]; split; [exact (Hinc23 k Hs2) | intros Hs0; exact (Hns1 (Hinc01 k Hs0))].
-               + destruct (Hadc k z Hkc) as [Hs1 Hns0]; split; [exact (Hinc23 k (Hinc12 k Hs1)) | exact Hns0]. }
-           split; [exact Had_all | right].
-           replace ((added2 ++ added1 ++ addedc) ++ fmap0) with (added2 ++ (added1 ++ (addedc ++ fmap0)))
-             by (rewrite !app_assoc; reflexivity).
-           pose proof (eval_let_free_prepend_fmap cec (build_param_env src_pnames vs)
-                         added1 (addedc ++ fmap0) seen1 Hlfc (Hfkc eq_refl)
-                         (fun k z H => proj2 (Had1 k z H))) as Hevc1.
-           pose proof (eval_let_free_prepend_fmap cec (build_param_env src_pnames vs)
-                         added2 (added1 ++ (addedc ++ fmap0)) seen2 Hlfc
-                         (fun u Hu => Hinc12 u (Hfkc eq_refl u Hu))
-                         (fun k z H => proj2 (Had2 k z H))) as Hevc2.
-           pose proof (eval_let_free_prepend_fmap ce1 (build_param_env src_pnames vs)
-                         added2 (added1 ++ (addedc ++ fmap0)) seen2 Hlf1 (Hfk1 eq_refl)
-                         (fun k z H => proj2 (Had2 k z H))) as Hev12.
-           destruct (eval_select_wf_scalar w dvc dv1 dv2 Hscc Hsc1 Hsc2)
-             as [vout [Hev_sel Hsc_out]].
-           exists sigma2, vout; split; [exact Hwfd2 | split; [| split; [exact Hsc_out |]]].
-           ++ unfold eval_closed_cert_expr in *; cbn [eval_cert_expr];
-                rewrite Hevc2, Hevc1, Hevc, Hev12, Hev1, Hev2; cbn [eou_bind]; exact Hev_sel.
-           ++ cbn [denote_exp]; eapply mcfg_steps_to_ret_bind; [exact Hstc |].
-              eapply mcfg_steps_to_ret_bind; [exact Hst1 |].
-              eapply mcfg_steps_to_ret_bind; [exact Hst2 |].
-              rewrite Hev_sel; apply mcfg_steps_eou_ret.
-  - (* OP_Freeze *)
-    intros dt e1 IH1 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0 top w ce seen1
-      Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hr.
-    cbn [reify_exp] in Hr.
-    destruct dt as [tb | |]; try discriminate; destruct tb as [wb | | | | | | | | | |]; try discriminate.
-    destruct (check_opt_int_width top wb) eqn:Hcw; [| discriminate].
-    destruct (reify_exp true params src_pnames defs smap seen0 (Some (DTYPE_Base (DTYPE_I wb))) e1)
-      as [[[w1 ce1] seen_mid] |] eqn:Hr1; [| discriminate].
-    destruct (freeze_key_in (wb, ce1) seen_mid) eqn:Hfk_in; [discriminate |].
-    inversion Hr; subst wb ce seen1; clear Hr.
-    pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr1)) as ->.
-    assert (Hfnin : ~ In (w, ce1) seen_mid)
-      by (intros Hin; apply freeze_key_in_spec in Hin; congruence).
-    destruct (reify_exp_freeze_props e1 true params src_pnames defs allowed smap seen0
-                (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen_mid Hwfs0 Hr1)
-      as (Hlf1 & Hinc0m & Hfk1).
-    destruct (IH1 params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0
-                (Some (DTYPE_Base (DTYPE_I w))) w ce1 seen_mid
-                Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hr1)
-      as (added1 & Had1 & [[msg1 Hev1] | (sigma_m & dv1 & Hwfd_m & Hev1 & Hsc1 & Hst1)]).
-    + exists added1; split.
-      * intros k z Hkz; destruct (Had1 k z Hkz) as [Hm Hn0]; split; [right; exact Hm | exact Hn0].
-      * left; exists msg1; unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
-    + destruct Hsc1 as [-> | [iv ->]].
-      * pose proof (Hwfd_m 0%nat (DTYPE_Base (DTYPE_I w)) (inhabited_draw_dtyp_i w)) as Hvd.
-        apply valid_draw_i_iff in Hvd as [idraw Hidraw].
-        set (z_draw := @Integers.unsigned w idraw).
-        exists ([((w, ce1), z_draw)] ++ added1).
-        split.
-        -- intros k z [Heq | Hkz].
-           ++ inversion Heq; subst k z; split;
-                [left; reflexivity | intros Hs0; exact (Hfnin (Hinc0m _ Hs0))].
-           ++ destruct (Had1 k z Hkz) as [Hm Hn0]; split; [right; exact Hm | exact Hn0].
-        -- right; exists (shift_draw_strat sigma_m), (DVALUE_Base (@DVALUE_I Pa w idraw)).
-           split; [exact (shift_draw_strat_wf sigma_m Hwfd_m) | split; [| split; [right; exists idraw; reflexivity |]]].
-           ++ rewrite <- app_assoc.
-              pose proof (eval_let_free_prepend_fmap ce1 (build_param_env src_pnames vs)
-                            [((w, ce1), z_draw)] (added1 ++ fmap0) seen_mid Hlf1 (Hfk1 eq_refl)
-                            (fun k z H => match H with
-                                          | or_introl Heq => eq_ind_r (fun u => ~ In u seen_mid) Hfnin (eq_sym (f_equal fst Heq))
-                                          | or_intror Hfalse => False_ind _ Hfalse
-                                          end)) as Hev1'.
-              unfold eval_closed_cert_expr in *; cbn [eval_cert_expr let_val_exprs List.map].
-              match goal with
-              | |- eou_bind _ ?K = _ =>
-                  transitivity (eou_bind (raise_ret (DVALUE_Base DVALUE_Poison)) K);
-                  [f_equal; exact (eq_trans Hev1' Hev1) |]
-              end.
-              cbn [eou_bind]; rewrite (expand_lets_let_free ce1 Hlf1); cbn [app oracle_of_fmap].
-              rewrite freeze_key_eqb_refl; unfold z_draw; rewrite (@Integers.repr_unsigned w idraw); reflexivity.
-           ++ cbn [denote_exp]; eapply mcfg_steps_to_ret_bind; [exact Hst1 |].
-              eapply MSR_Draw; [reflexivity | intros n d; reflexivity | rewrite Hidraw; apply MSR_Ret; reflexivity].
-      * exists added1; split.
-        -- intros k z Hkz; destruct (Had1 k z Hkz) as [Hm Hn0]; split; [right; exact Hm | exact Hn0].
-        -- right; exists sigma_m, (DVALUE_Base (@DVALUE_I Pa w iv)).
-           split; [exact Hwfd_m | split; [| split; [right; exists iv; reflexivity |]]].
-           ++ unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Hev1; reflexivity.
-           ++ cbn [denote_exp]; eapply mcfg_steps_to_ret_bind; [exact Hst1 | apply MSR_Ret; reflexivity].
-  - (* Non-recursive base cases *)
-    intros o; destruct o; try exact I;
-      intros params src_pnames defs allowed arg_dtys vs sigma0 fmap0 smap env seen0 top w ce seen1
-             Hnd Hlp Hls Hla Hvs Hpu Hpe Hwfd0 Hwfs0 Henv0 Hr;
-      cbn [reify_exp] in Hr; try discriminate.
-    + (* EXP_Ident *)
-      destruct id as [| r]; [discriminate |].
-      destruct (RM.find r smap) as [[wr cer] |] eqn:Hfind.
-      * destruct (check_opt_int_width top wr) eqn:Hcw; [| discriminate].
-        inversion Hr; subst wr ce seen1; clear Hr.
-        destruct (Henv0 r w cer Hfind) as [_ [dv [Hfe [Hev Hsc]]]].
-        exists []; split; [intros _ _ [] | right; exists sigma0, dv].
-        split; [exact Hwfd0 | split; [exact Hev | split; [exact Hsc |]]].
-        cbn [denote_exp lookup_id]; eapply MSR_LocalRead; [reflexivity | exact Hfe | apply MSR_Ret; reflexivity].
-      * destruct (raw_id_in_list r defs) eqn:Hrd; [discriminate |].
-        destruct top as [dt |]; [| discriminate].
-        destruct dt as [tb | |]; try discriminate; destruct tb as [wt | | | | | | | | | |]; try discriminate.
-        destruct (find_raw_id_index r params) as [idx |] eqn:Hidx; [| discriminate].
-        destruct (nth_error src_pnames idx) as [pnm |] eqn:Hpnm; [| discriminate].
-        destruct (starts_with_dollar pnm) eqn:Hdl; [discriminate |].
-        inversion Hr; subst wt ce seen1; clear Hr.
-        assert (Hnin : ~ In r defs)
-          by (intros Hin; apply raw_id_in_list_spec in Hin; congruence).
-        pose proof (find_raw_id_index_nth_error params r idx Hidx) as Hnth_p.
-        destruct (Hpe idx r Hnth_p Hnin) as [dv [Hnth_v Hfe]].
-        assert (Hnth_dt : nth_error arg_dtys idx = Some (DTYPE_Base (DTYPE_I w))).
-        { apply Hpu; cbn [exp_param_uses]; rewrite Hrd, Hidx; left; reflexivity. }
-        pose proof (Forall2_nth_error_l dvalue_has_dtyp vs arg_dtys Hvs idx dv
-                      (DTYPE_Base (DTYPE_I w)) Hnth_v Hnth_dt) as Hsc.
-        apply dvalue_has_dtyp_i_iff_wf_scalar in Hsc.
-        destruct (build_param_env_nth src_pnames vs idx pnm Hnd Hls Hpnm) as [dv' [Hnth_v' Hbp]].
-        assert (Heq_dv : dv' = dv) by congruence; subst dv'.
-        exists []; split; [intros _ _ [] | right; exists sigma0, dv].
-        split; [exact Hwfd0 | split; [| split; [exact Hsc |]]].
-        -- unfold eval_closed_cert_expr; cbn [eval_cert_expr lookup_let_val].
-           rewrite Hbp; exact (check_scalar_width_ok w dv Hsc).
-        -- cbn [denote_exp lookup_id]; eapply MSR_LocalRead; [reflexivity | exact Hfe | apply MSR_Ret; reflexivity].
-    + (* EXP_Integer *)
-      destruct top as [dt |]; [| discriminate].
-      destruct dt as [tb | |]; try discriminate; destruct tb as [wt | | | | | | | | | |]; try discriminate.
-      inversion Hr; subst wt ce seen1; clear Hr.
-      exists []; split; [intros _ _ [] | right].
-      exists sigma0,
-        (DVALUE_Base (@DVALUE_I Pa w (@Integers.repr w (Z.of_N (reify_int_const w (denote_int_syntax x)))))).
-      split; [exact Hwfd0 | split; [reflexivity | split; [right; eexists; reflexivity |]]].
-      cbn [denote_exp]; rewrite repr_reify_int_const; apply MSR_Ret; reflexivity.
-    + (* EXP_Bool *)
-      destruct (check_opt_int_width top 1%positive) eqn:Hcw; [| discriminate].
-      inversion Hr; subst w ce seen1; clear Hr.
-      exists []; split; [intros _ _ [] | right].
-      destruct b.
-      * exists sigma0, (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.repr 1%positive (Z.of_N 1%N)))).
-        split; [exact Hwfd0 | split; [reflexivity | split; [right; eexists; reflexivity |]]].
-        cbn [denote_exp]; rewrite repr_one_N; apply MSR_Ret; reflexivity.
-      * exists sigma0, (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.repr 1%positive (Z.of_N 0%N)))).
-        split; [exact Hwfd0 | split; [reflexivity | split; [right; eexists; reflexivity |]]].
-        cbn [denote_exp]; rewrite repr_zero_N; apply MSR_Ret; reflexivity.
-    + (* EXP_Undef *)
-      destruct top as [dt |]; [| discriminate].
-      destruct dt as [tb | |]; try discriminate; destruct tb as [wt | | | | | | | | | |]; try discriminate.
-      inversion Hr; subst wt ce seen1; clear Hr.
-      exists []; split; [intros _ _ [] | right].
-      exists sigma0, (DVALUE_Base DVALUE_Poison).
-      split; [exact Hwfd0 | split; [reflexivity | split; [left; reflexivity | apply MSR_Ret; reflexivity]]].
-    + (* EXP_Poison *)
-      destruct top as [dt |]; [| discriminate].
-      destruct dt as [tb | |]; try discriminate; destruct tb as [wt | | | | | | | | | |]; try discriminate.
-      inversion Hr; subst wt ce seen1; clear Hr.
-      exists []; split; [intros _ _ [] | right].
-      exists sigma0, (DVALUE_Base DVALUE_Poison).
-      split; [exact Hwfd0 | split; [reflexivity | split; [left; reflexivity | apply MSR_Ret; reflexivity]]].
+  - exact (@eval_reified_exp_tgt_ibinop Pa).
+  - exact (@eval_reified_exp_tgt_icmp Pa).
+  - exact (@eval_reified_exp_tgt_conv Pa).
+  - exact (@eval_reified_exp_tgt_select Pa).
+  - exact (@eval_reified_exp_tgt_freeze Pa).
+  - exact (@eval_reified_exp_tgt_base Pa).
 Qed.
 
 
