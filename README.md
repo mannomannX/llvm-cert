@@ -21,6 +21,8 @@ See **[`plan/README.md`](./plan/README.md)** for the full 4-phase architecture r
 | `vellvm/src/rocq/{Syntax,Semantics,Theory,Utils}` | `MIT` | Formal LLVM IR AST, Interaction Trees semantics, memory model, and equational meta-theory |
 | `vellvm/src/rocq/Numeric/` | `LGPL-2.1-or-later` | CompCert machine integer (`Integers.v`, `Zbits.v`) and IEEE-754 float (`Floats.v`) formalizations (`Zbits.v` synced with upstream CompCert commit `04f499c632a7`) |
 | `vellvm/src/ml/{extracted,libvellvm}` | `MIT` / `ISC` | Rocq-to-OCaml extraction, LLVM IR lexer/parser/printer, and clean-room [`Camlcoq.ml`](./vellvm/src/ml/libvellvm/Camlcoq.ml) (`<= 750` handwritten OCaml LOC cap) |
+| [`passes/`](./passes/README.md) | `LLVMCert Dual-License` | Verified LLVM IR Safe-Path optimization passes (`Mem2Reg`, `Inline`, `SCCP`, `SimplifyCFG`, `DCE`, `Pipeline`), MCFG exporter, and `ModuleMerge` (`34` Rocq files) |
+| [`validator/`](./validator/README.md) | `LLVMCert Dual-License` | Fail-closed SAT/LRAT kernel, IR open-world translation validator, ELF64 parser, and RV64IMAC / AArch64 machine-code validator (`55` Rocq files) |
 | `c-quality/` | `LLVMCert Dual-License` | SEI CERT C / MISRA C `.clang-tidy` & `.clang-format` baseline for freestanding runtime shims |
 | `scripts/verify_repo_integrity.py` | `LLVMCert Dual-License` | Fast (< 1s) read-only CI gate verifying licenses, zero `Admitted`/unapproved `Axiom`s, OCaml TCB cap, and `plan/feedback.csv` |
 
