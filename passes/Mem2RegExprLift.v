@@ -112,7 +112,8 @@ Section MemoryAndSerialization.
   Proof using.
     induction xs as [| y ys IH].
     - right; intros [].
-    - destruct (raw_id_eqb x y) eqn:Exy; [apply raw_id_eqb_spec in Exy; subst x | apply raw_id_eqb_neq in Exy; rename Exy into Hne].
+    - destruct (raw_id_eqb x y) eqn:Exy; [apply raw_id_eqb_spec in Exy; subst x | apply raw_id_eqb_neq in Exy; rename
+      Exy into Hne].
       + left; left; reflexivity.
       + destruct IH as [Hin | Hnin].
         * left; right; exact Hin.
@@ -143,9 +144,11 @@ Section MemoryAndSerialization.
     In q xs /\ q <> p.
   Proof using.
     rewrite filter_In, negb_true_iff.
-    destruct (raw_id_eqb q p) eqn:Eqp; [apply raw_id_eqb_spec in Eqp; subst q | apply raw_id_eqb_neq in Eqp; rename Eqp into Hne].
+    destruct (raw_id_eqb q p) eqn:Eqp; [apply raw_id_eqb_spec in Eqp; subst q | apply raw_id_eqb_neq in Eqp; rename Eqp
+      into Hne].
     - split; [intros [_ H]; discriminate H | intros [_ H]; contradiction (H Logic.eq_refl)].
-    - split; [intros [Hq _]; split; [exact Hq | exact Hne] | intros [Hq _]; split; [exact Hq | reflexivity]].
+    - split; [intros [Hq _]; split; [exact Hq | exact Hne] | intros [Hq _];
+      split; [exact Hq | reflexivity]].
   Qed.
 
   Lemma m2r_collect_unique_allocas_inv
@@ -249,7 +252,8 @@ Section MemoryAndSerialization.
     { apply in_map_iff; exists (q, ph, md); split; [reflexivity | exact Hphi]. }
     assert (Hin_al : In q (flat_map (fun '(iid, _, _) => instr_id_defs iid) (blk_code bk0))).
     { apply in_flat_map; exists (IId q, INSTR_Alloca dt0 anns0, md0); split; [exact Him0 | left; reflexivity]. }
-    destruct (raw_id_eqb (blk_id bk) (blk_id bk0)) eqn:Eeq_id; [apply raw_id_eqb_spec in Eeq_id; rename Eeq_id into Heq_id | apply raw_id_eqb_neq in Eeq_id; rename Eeq_id into Hne_id].
+    destruct (raw_id_eqb (blk_id bk) (blk_id bk0)) eqn:Eeq_id; [apply raw_id_eqb_spec in Eeq_id; rename Eeq_id into
+      Heq_id | apply raw_id_eqb_neq in Eeq_id; rename Eeq_id into Hne_id].
     - assert (bk = bk0).
       { clear -Hnd_ids Hbk Hbk0 Heq_id; revert bk bk0 Hbk Hbk0 Heq_id.
         induction bks as [| b bs IH]; intros bk bk0 Hbk Hbk0 Heq_id;
@@ -272,7 +276,8 @@ Section MemoryAndSerialization.
     - assert (Hne_bk : bk <> bk0) by (intros ->; exact (Hne_id Logic.eq_refl)).
       assert (Hdef1 : In q (full_block_defs bk)) by (unfold full_block_defs; apply in_app_iff; left; exact Hin_phi).
       assert (Hdef2 : In q (full_block_defs bk0))
-        by (unfold full_block_defs; apply in_app_iff; right; apply in_app_iff; left; exact Hin_al).
+        by (unfold full_block_defs; apply in_app_iff; right; apply in_app_iff;
+          left; exact Hin_al).
       pose proof (m2r_count_id_in_two_elems full_block_defs bks bk bk0 q Hnd_bks Hbk Hbk0 Hne_bk Hdef1 Hdef2).
       lia.
   Qed.
@@ -290,7 +295,8 @@ Section MemoryAndSerialization.
     pose proof (m2r_nodup_map_inv _ _ Hnd_ids) as Hnd_bks.
     apply m2r_collect_unique_allocas_inv in Hq as (Hcnt & bk0 & dt0 & anns0 & md0 & Hbk0 & Him0).
     rewrite m2r_count_id_app in Hcnt.
-    destruct (raw_id_eqb (blk_id bk) (blk_id bk0)) eqn:Eeq_id; [apply raw_id_eqb_spec in Eeq_id; rename Eeq_id into Heq_id | apply raw_id_eqb_neq in Eeq_id; rename Eeq_id into Hne_id].
+    destruct (raw_id_eqb (blk_id bk) (blk_id bk0)) eqn:Eeq_id; [apply raw_id_eqb_spec in Eeq_id; rename Eeq_id into
+      Heq_id | apply raw_id_eqb_neq in Eeq_id; rename Eeq_id into Hne_id].
     - assert (bk = bk0).
       { clear -Hnd_ids Hbk Hbk0 Heq_id; revert bk bk0 Hbk Hbk0 Heq_id.
         induction bks as [| b bs IH]; intros bk bk0 Hbk Hbk0 Heq_id;
@@ -341,7 +347,8 @@ Section MemoryAndSerialization.
       assert (Hdef1 : In q (full_block_defs bk)).
       { unfold full_block_defs; apply in_app_iff; right; apply in_app_iff; left.
         rewrite Hsplit; apply in_flat_map; exists (IId q, ins, md);
-          split; [apply in_app_iff; right; left; reflexivity | left; reflexivity]. }
+          split; [apply in_app_iff; right; left; reflexivity |
+            left; reflexivity]. }
       assert (Hdef2 : In q (full_block_defs bk0)).
       { unfold full_block_defs; apply in_app_iff; right; apply in_app_iff; left.
         apply in_flat_map; exists (IId q, INSTR_Alloca dt0 anns0, md0); split; [exact Him0 | left; reflexivity]. }
@@ -494,7 +501,8 @@ Section MemoryAndSerialization.
     - eapply TE_Eq; [apply Eqit.bind_tau | apply Eqit.bind_tau |].
       apply TE_Tau; pclearbot; right; apply CIH; [exact Hm | exact Hk].
     - eapply TE_Eq; [apply Eqit.bind_vis | apply Eqit.bind_vis |].
-      apply TE_Vis; intros x; specialize (Hh x); pclearbot; right; apply CIH; [exact Hh | exact Hk].
+      apply TE_Vis; intros x; specialize (Hh x); pclearbot;
+        right; apply CIH; [exact Hh | exact Hk].
     - eapply TE_Eq; [apply Eqit.bind_tau | reflexivity |].
       apply TE_TauL, IH.
   Qed.
@@ -730,7 +738,8 @@ Section MemoryAndSerialization.
     assert (Hmain : forall U0 a1' a2, rel_te_l RR U0 a1' a2 -> refine_prov RR U0 a1' a2).
     { pcofix CIH; intros U0 a1' a2 (a1 & Hae & Har); pstep.
       eapply refine_prov__mon; [exact (refine_prov_prov_te_l_step RR U0 a1 a2 Har a1' Hae) |].
-      intros U1 b1' b2 [Hb | Hb]; [left; eapply paco3_mon; [exact Hb | intros ? ? ? Hrel; apply CIH, Hrel] | right; apply CIH, Hb]. }
+      intros U1 b1' b2 [Hb | Hb]; [left; eapply paco3_mon; [exact Hb | intros ? ? ? Hrel; apply CIH, Hrel] |
+        right; apply CIH, Hb]. }
     apply Hmain; exists t1; split; assumption.
   Qed.
 
@@ -808,7 +817,8 @@ Section MemoryAndSerialization.
     assert (Hmain : forall U0 a1 a2', rel_te_r RR U0 a1 a2' -> refine_prov RR U0 a1 a2').
     { pcofix CIH; intros U0 a1 a2' (a2 & Hae & Har); pstep.
       eapply refine_prov__mon; [exact (refine_prov_prov_te_r_step RR U0 a1 a2 Har a2' Hae) |].
-      intros U1 b1 b2' [Hb | Hb]; [left; eapply paco3_mon; [exact Hb | intros ? ? ? Hrel; apply CIH, Hrel] | right; apply CIH, Hb]. }
+      intros U1 b1 b2' [Hb | Hb]; [left; eapply paco3_mon; [exact Hb | intros ? ? ? Hrel; apply CIH, Hrel] |
+        right; apply CIH, Hb]. }
     apply Hmain; exists t2; split; assumption.
   Qed.
 
@@ -833,7 +843,8 @@ Section MemoryAndSerialization.
     In x (cfg_all_ids c).
   Proof using.
     intros Hbk Hx; unfold cfg_all_ids; right.
-    apply in_app_iff; right; apply in_app_iff; right; apply in_app_iff; left.
+    apply in_app_iff; right; apply in_app_iff; right; apply
+      in_app_iff; left.
     apply in_flat_map; exists bk; split; assumption.
   Qed.
 
@@ -843,7 +854,8 @@ Section MemoryAndSerialization.
     In x (cfg_all_ids c).
   Proof using.
     intros Hbk Hx; unfold cfg_all_ids; right.
-    apply in_app_iff; right; apply in_app_iff; right; apply in_app_iff; right.
+    apply in_app_iff; right; apply in_app_iff; right; apply
+      in_app_iff; right.
     apply in_flat_map; exists bk; split; assumption.
   Qed.
 
@@ -864,7 +876,8 @@ Section MemoryAndSerialization.
     In x (m2r_code_entry_uses im) ->
     In x (full_block_uses bk).
   Proof using.
-    intros Him Hx; unfold full_block_uses; apply in_app_iff; right; apply in_app_iff; left.
+    intros Him Hx; unfold full_block_uses; apply in_app_iff; right; apply
+      in_app_iff; left.
     apply in_flat_map; exists im; split; [exact Him |].
     destruct im as [[iid ins] mds]; exact Hx.
   Qed.
@@ -873,7 +886,8 @@ Section MemoryAndSerialization.
     In x (m2r_term_entry_uses (blk_term bk)) ->
     In x (full_block_uses bk).
   Proof using.
-    intros Hx; unfold full_block_uses; apply in_app_iff; right; apply in_app_iff; right.
+    intros Hx; unfold full_block_uses; apply in_app_iff; right; apply
+      in_app_iff; right.
     destruct (blk_term bk) as [[iid tm] mds]; exact Hx.
   Qed.
 
@@ -1039,7 +1053,8 @@ Section MemoryAndSerialization.
           assert (Hinc1 : incl avoid0 (st_reg :: sv_reg :: avoid))
             by (intros z Hz; right; right; apply Hinc, Hz).
           destruct (IH st_reg (st_reg :: sv_reg :: avoid) rest' end_reg avoid' E Hinc1 Hst) as [Hav Her].
-          split; [intros z Hz; apply Hav; right; right; exact Hz | exact Her].
+          split; [intros z Hz; apply Hav; right;
+            right; exact Hz | exact Her].
         * destruct (rewrite_code_for_slot p dt cur_reg avoid rest) as [[rest' er] av'] eqn:E.
           inversion Hrw; subst; eapply IH; eassumption.
   Qed.
@@ -1231,7 +1246,8 @@ Section MemoryAndSerialization.
         (interp_cfg_model ctx (withCall (map_monad f xs)) s)
         (interp_mcfg_model (map_monad f xs) s).
   Proof using.
-    induction xs as [| a xs' IH]; intros s; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+    induction xs as [| a xs' IH]; intros s; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret
+      Monad_itree].
     - apply tau_expand_cfg_withCall_ret.
     - eapply tau_expand_cfg_withCall_bind; [apply Hf; left; reflexivity |].
       intros s1 b; eapply tau_expand_cfg_withCall_bind.
@@ -1291,7 +1307,8 @@ Section MemoryAndSerialization.
       + unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
           eapply tau_expand_cfg_withCall_bind;
           [apply tau_expand_cfg_withCall_ret | intros ? ?; apply tau_expand_cfg_withCall_ret].
-      + destruct (existsb is_poison_bit bits); cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+      + destruct (existsb is_poison_bit bits); cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret
+        Monad_itree].
         * eapply tau_expand_cfg_withCall_bind.
           -- unfold draw, Subevent.trigger; try unfold trigger_cast; apply tau_expand_cfg_withCall_trigger.
           -- intros s' x; apply tau_expand_cfg_withCall_ret.
@@ -1320,7 +1337,8 @@ Section MemoryAndSerialization.
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply tau_expand_cfg_withCall_bind; [| intros ? ?; apply tau_expand_cfg_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
-        assert (Hfld : ( (fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) fields <= sz)%nat) by lia.
+        assert (Hfld : ( (fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end)
+          fields <= sz)%nat) by lia.
         clear Hle.
         lazymatch goal with
         | |- tau_expand (interp_cfg_model ctx (withCall (?go1 fields dts [])) s)
@@ -1345,7 +1363,8 @@ Section MemoryAndSerialization.
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply tau_expand_cfg_withCall_bind; [| intros ? ?; apply tau_expand_cfg_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
-        assert (Helt : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) elts <= sz)%nat) by lia.
+        assert (Helt : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) elts
+          <= sz)%nat) by lia.
         clear Hle.
         lazymatch goal with
         | |- tau_expand (interp_cfg_model ctx (withCall (?go1 elts [])) s)
@@ -1377,7 +1396,8 @@ Section MemoryAndSerialization.
     - pose proof (m2r_exp_size_pos e); lia.
     - assert (Hlist :
         forall (elts : list (dtyp * exp dtyp)) s0,
-          (S ((fix list_sz l := match l with [] => O | (_, ex) :: r => S (m2r_exp_size ex + list_sz r) end) elts) <= S sz)%nat ->
+          (S ((fix list_sz l := match l with [] => O | (_, ex) :: r => S (m2r_exp_size ex + list_sz r) end) elts) <= S
+            sz)%nat ->
           tau_expand
             (interp_cfg_model ctx (withCall (map_monad (fun '(dt, ex) => denote_exp (Some dt) ex) elts)) s0)
             (interp_mcfg_model (map_monad (fun '(dt, ex) => denote_exp (Some dt) ex) elts) s0)).
@@ -1386,54 +1406,77 @@ Section MemoryAndSerialization.
         apply IH.
         clear -Hin Helts; induction elts as [| [d1 e1] rest IHr]; [contradiction |].
         destruct Hin as [Heq | Hin]; [inversion Heq; subst; lia | apply IHr; [lia | exact Hin]]. }
-      destruct e; cbn [denote_exp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; cbn [m2r_exp_size] in Hle.
+      destruct e; cbn [denote_exp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; cbn
+        [m2r_exp_size] in Hle.
       + destruct id as [gid | lid]; cbn [lookup_id];
           unfold gread, lread, Subevent.trigger; try unfold trigger_cast;
           apply tau_expand_cfg_withCall_trigger.
-      + destruct top as [t |]; [apply tau_expand_cfg_withCall_EOU | apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _)].
-      + destruct top as [t |]; [apply tau_expand_cfg_withCall_EOU | apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _)].
+      + destruct top as [t |]; [apply tau_expand_cfg_withCall_EOU | apply (tau_expand_cfg_withCall_EOU ctx (raise_error
+        _) _)].
+      + destruct top as [t |]; [apply tau_expand_cfg_withCall_EOU | apply (tau_expand_cfg_withCall_EOU ctx (raise_error
+        _) _)].
       + destruct b; apply tau_expand_cfg_withCall_ret.
       + apply tau_expand_cfg_withCall_ret.
-      + destruct top as [t |]; [apply tau_expand_cfg_withCall_EOU | apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _)].
+      + destruct top as [t |]; [apply tau_expand_cfg_withCall_EOU | apply (tau_expand_cfg_withCall_EOU ctx (raise_error
+        _) _)].
       + eapply tau_expand_cfg_withCall_bind; [apply (Hlist elts s Hle) | intros ? ?; apply tau_expand_cfg_withCall_ret].
       + apply tau_expand_cfg_withCall_ret.
       + apply tau_expand_cfg_withCall_ret.
-      + eapply tau_expand_cfg_withCall_bind; [apply (Hlist fields s Hle) | intros ? ?; apply tau_expand_cfg_withCall_ret].
+      + eapply tau_expand_cfg_withCall_bind; [apply (Hlist fields s Hle) | intros ? ?; apply
+        tau_expand_cfg_withCall_ret].
       + eapply tau_expand_cfg_withCall_bind; [apply tau_expand_cfg_withCall_EOU |].
-        intros s1 []; eapply tau_expand_cfg_withCall_bind; [apply (Hlist fields s1 Hle) | intros ? ?; apply tau_expand_cfg_withCall_ret].
+        intros s1 []; eapply tau_expand_cfg_withCall_bind; [apply (Hlist fields s1 Hle) | intros ? ?; apply
+          tau_expand_cfg_withCall_ret].
       + eapply tau_expand_cfg_withCall_bind; [apply (Hlist elts s Hle) | intros ? ?; apply tau_expand_cfg_withCall_ret].
       + eapply tau_expand_cfg_withCall_bind; [apply (Hlist elts s Hle) | intros ? ?; apply tau_expand_cfg_withCall_ret].
-      + eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]].
-      + eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]].
-      + eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]].
-      + destruct v as [dt1 op1]; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU].
-      + eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]].
+      + eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_cfg_withCall_bind; [apply
+        IH; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]].
+      + eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_cfg_withCall_bind; [apply
+        IH; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]].
+      + eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_cfg_withCall_bind; [apply
+        IH; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]].
+      + destruct v as [dt1 op1]; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ?
+        ?; apply tau_expand_cfg_withCall_EOU].
+      + eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_cfg_withCall_bind; [apply
+        IH; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]].
       + eapply tau_expand_cfg_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_cfg_withCall_convert].
       + destruct ptrval as [dt2 ptr_e].
         eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia |].
-        intros s1 vptr; eapply tau_expand_cfg_withCall_bind; [apply Hlist; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU].
+        intros s1 vptr; eapply tau_expand_cfg_withCall_bind; [apply Hlist; cbn in Hle; lia | intros ?
+          ?; apply tau_expand_cfg_withCall_EOU].
       + destruct vec as [dt1 e1], idx as [dt2 e2].
-        eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 v1; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]].
+        eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 v1; eapply
+          tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]].
       + destruct vec as [dt1 e1], elt as [dt2 e2], idx as [dt3 e3].
         eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia |].
         intros s1 v1; eapply tau_expand_cfg_withCall_bind.
-        * eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU].
-        * intros s2 elt_v; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU].
+        * eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply
+          tau_expand_cfg_withCall_EOU].
+        * intros s2 elt_v; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ?
+          ?; apply tau_expand_cfg_withCall_EOU].
       + destruct vec1 as [dt1 e1], vec2 as [dt2 e2], idxmask as [dt3 e3].
-        eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 v1; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros s2 v2; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]]].
-      + destruct vec as [dt1 e1]; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU].
+        eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 v1; eapply
+          tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros s2 v2; eapply
+          tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]]].
+      + destruct vec as [dt1 e1]; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ?
+        ?; apply tau_expand_cfg_withCall_EOU].
       + destruct vec as [dt1 e1], elt as [dt2 e2].
-        eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 v1; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]].
+        eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 v1; eapply
+          tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]].
       + destruct cnd as [dt1 e1], v1 as [dt2 e2], v2 as [dt3 e3].
-        eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 vc; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros s2 vv1; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]]].
-      + destruct v as [dt1 e1]; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_freeze].
+        eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 vc; eapply
+          tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros s2 vv1; eapply
+          tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_EOU]]].
+      + destruct v as [dt1 e1]; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ?
+        ?; apply tau_expand_cfg_withCall_freeze].
       + apply (tau_expand_cfg_withCall_EOU ctx (raise_error _) _).
       + match goal with m0 : metadata _ |- _ => destruct m0 as [| | [dt1 ex1] | | | |] end;
           try apply tau_expand_cfg_withCall_ret.
         apply IH; cbn in Hle; lia.
       + destruct elt as [dt1 e1].
         eapply tau_expand_cfg_withCall_bind; [apply tau_expand_cfg_withCall_EOU |].
-        intros s1 [sz_v t_v]; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_cfg_withCall_ret].
+        intros s1 [sz_v t_v]; eapply tau_expand_cfg_withCall_bind; [apply IH; cbn in Hle; lia | intros ?
+          ?; apply tau_expand_cfg_withCall_ret].
       + unfold gread, Subevent.trigger; try unfold trigger_cast; apply tau_expand_cfg_withCall_trigger.
   Qed.
 
@@ -1537,7 +1580,8 @@ Section MemoryAndSerialization.
         (interp_cfg_exc ctx (withCall (map_monad f xs)) s)
         (mcfg_inr_exc (map_monad f xs) s).
   Proof using.
-    induction xs as [| a xs' IH]; intros s; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+    induction xs as [| a xs' IH]; intros s; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret
+      Monad_itree].
     - apply tau_expand_exc_withCall_ret.
     - eapply tau_expand_exc_withCall_bind; [apply Hf; left; reflexivity |].
       intros s1 b; eapply tau_expand_exc_withCall_bind.
@@ -1599,7 +1643,8 @@ Section MemoryAndSerialization.
       + unfold Functor.fmap, Functor_itree, ITree.map, ExtLib.Structures.Monad.ret, Monad_itree;
           eapply tau_expand_exc_withCall_bind;
           [apply tau_expand_exc_withCall_ret | intros ? ?; apply tau_expand_exc_withCall_ret].
-      + destruct (existsb is_poison_bit bits); cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+      + destruct (existsb is_poison_bit bits); cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret
+        Monad_itree].
         * eapply tau_expand_exc_withCall_bind.
           -- unfold draw, Subevent.trigger; try unfold trigger_cast;
                apply tau_expand_exc_withCall_trigger; reflexivity.
@@ -1629,7 +1674,8 @@ Section MemoryAndSerialization.
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply tau_expand_exc_withCall_bind; [| intros ? ?; apply tau_expand_exc_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
-        assert (Hfld : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) fields <= sz)%nat) by lia.
+        assert (Hfld : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) fields
+          <= sz)%nat) by lia.
         clear Hle.
         lazymatch goal with
         | |- tau_expand (interp_cfg_exc ctx (withCall (?go1 fields dts [])) s)
@@ -1654,7 +1700,8 @@ Section MemoryAndSerialization.
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply tau_expand_exc_withCall_bind; [| intros ? ?; apply tau_expand_exc_withCall_ret].
         cbn [m2r_dvalue_size] in Hle.
-        assert (Helt : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) elts <= sz)%nat) by lia.
+        assert (Helt : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) elts
+          <= sz)%nat) by lia.
         clear Hle.
         lazymatch goal with
         | |- tau_expand (interp_cfg_exc ctx (withCall (?go1 elts [])) s)
@@ -1686,7 +1733,8 @@ Section MemoryAndSerialization.
     - pose proof (m2r_exp_size_pos e); lia.
     - assert (Hlist :
         forall (elts : list (dtyp * exp dtyp)) s0,
-          (S ((fix list_sz l := match l with [] => O | (_, ex) :: r => S (m2r_exp_size ex + list_sz r) end) elts) <= S sz)%nat ->
+          (S ((fix list_sz l := match l with [] => O | (_, ex) :: r => S (m2r_exp_size ex + list_sz r) end) elts) <= S
+            sz)%nat ->
           tau_expand
             (interp_cfg_exc ctx (withCall (map_monad (fun '(dt, ex) => denote_exp (Some dt) ex) elts)) s0)
             (mcfg_inr_exc (map_monad (fun '(dt, ex) => denote_exp (Some dt) ex) elts) s0)).
@@ -1695,54 +1743,77 @@ Section MemoryAndSerialization.
         apply IH.
         clear -Hin Helts; induction elts as [| [d1 e1] rest IHr]; [contradiction |].
         destruct Hin as [Heq | Hin]; [inversion Heq; subst; lia | apply IHr; [lia | exact Hin]]. }
-      destruct e; cbn [denote_exp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; cbn [m2r_exp_size] in Hle.
+      destruct e; cbn [denote_exp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; cbn
+        [m2r_exp_size] in Hle.
       + destruct id as [gid | lid]; cbn [lookup_id];
           unfold gread, lread, Subevent.trigger; try unfold trigger_cast;
           apply tau_expand_exc_withCall_trigger; reflexivity.
-      + destruct top as [t |]; [apply tau_expand_exc_withCall_EOU | apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _)].
-      + destruct top as [t |]; [apply tau_expand_exc_withCall_EOU | apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _)].
+      + destruct top as [t |]; [apply tau_expand_exc_withCall_EOU | apply (tau_expand_exc_withCall_EOU ctx (raise_error
+        _) _)].
+      + destruct top as [t |]; [apply tau_expand_exc_withCall_EOU | apply (tau_expand_exc_withCall_EOU ctx (raise_error
+        _) _)].
       + destruct b; apply tau_expand_exc_withCall_ret.
       + apply tau_expand_exc_withCall_ret.
-      + destruct top as [t |]; [apply tau_expand_exc_withCall_EOU | apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _)].
+      + destruct top as [t |]; [apply tau_expand_exc_withCall_EOU | apply (tau_expand_exc_withCall_EOU ctx (raise_error
+        _) _)].
       + eapply tau_expand_exc_withCall_bind; [apply (Hlist elts s Hle) | intros ? ?; apply tau_expand_exc_withCall_ret].
       + apply tau_expand_exc_withCall_ret.
       + apply tau_expand_exc_withCall_ret.
-      + eapply tau_expand_exc_withCall_bind; [apply (Hlist fields s Hle) | intros ? ?; apply tau_expand_exc_withCall_ret].
+      + eapply tau_expand_exc_withCall_bind; [apply (Hlist fields s Hle) | intros ? ?; apply
+        tau_expand_exc_withCall_ret].
       + eapply tau_expand_exc_withCall_bind; [apply tau_expand_exc_withCall_EOU |].
-        intros s1 []; eapply tau_expand_exc_withCall_bind; [apply (Hlist fields s1 Hle) | intros ? ?; apply tau_expand_exc_withCall_ret].
+        intros s1 []; eapply tau_expand_exc_withCall_bind; [apply (Hlist fields s1 Hle) | intros ? ?; apply
+          tau_expand_exc_withCall_ret].
       + eapply tau_expand_exc_withCall_bind; [apply (Hlist elts s Hle) | intros ? ?; apply tau_expand_exc_withCall_ret].
       + eapply tau_expand_exc_withCall_bind; [apply (Hlist elts s Hle) | intros ? ?; apply tau_expand_exc_withCall_ret].
-      + eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]].
-      + eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]].
-      + eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]].
-      + destruct v as [dt1 op1]; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_EOU].
-      + eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]].
+      + eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_exc_withCall_bind; [apply
+        IH; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]].
+      + eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_exc_withCall_bind; [apply
+        IH; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]].
+      + eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_exc_withCall_bind; [apply
+        IH; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]].
+      + destruct v as [dt1 op1]; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ?
+        ?; apply tau_expand_exc_withCall_EOU].
+      + eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros s1 v1; eapply tau_expand_exc_withCall_bind; [apply
+        IH; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]].
       + eapply tau_expand_exc_withCall_bind; [apply IH; lia | intros ? ?; apply tau_expand_exc_withCall_convert].
       + destruct ptrval as [dt2 ptr_e].
         eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia |].
-        intros s1 vptr; eapply tau_expand_exc_withCall_bind; [apply Hlist; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_EOU].
+        intros s1 vptr; eapply tau_expand_exc_withCall_bind; [apply Hlist; cbn in Hle; lia | intros ?
+          ?; apply tau_expand_exc_withCall_EOU].
       + destruct vec as [dt1 e1], idx as [dt2 e2].
-        eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 v1; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]].
+        eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 v1; eapply
+          tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]].
       + destruct vec as [dt1 e1], elt as [dt2 e2], idx as [dt3 e3].
         eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia |].
         intros s1 v1; eapply tau_expand_exc_withCall_bind.
-        * eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_EOU].
-        * intros s2 elt_v; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_EOU].
+        * eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply
+          tau_expand_exc_withCall_EOU].
+        * intros s2 elt_v; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ?
+          ?; apply tau_expand_exc_withCall_EOU].
       + destruct vec1 as [dt1 e1], vec2 as [dt2 e2], idxmask as [dt3 e3].
-        eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 v1; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros s2 v2; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]]].
-      + destruct vec as [dt1 e1]; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_EOU].
+        eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 v1; eapply
+          tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros s2 v2; eapply
+          tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]]].
+      + destruct vec as [dt1 e1]; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ?
+        ?; apply tau_expand_exc_withCall_EOU].
       + destruct vec as [dt1 e1], elt as [dt2 e2].
-        eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 v1; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]].
+        eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 v1; eapply
+          tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]].
       + destruct cnd as [dt1 e1], v1 as [dt2 e2], v2 as [dt3 e3].
-        eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 vc; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros s2 vv1; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]]].
-      + destruct v as [dt1 e1]; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_freeze].
+        eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros s1 vc; eapply
+          tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros s2 vv1; eapply
+          tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_EOU]]].
+      + destruct v as [dt1 e1]; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ?
+        ?; apply tau_expand_exc_withCall_freeze].
       + apply (tau_expand_exc_withCall_EOU ctx (raise_error _) _).
       + match goal with m0 : metadata _ |- _ => destruct m0 as [| | [dt1 ex1] | | | |] end;
           try apply tau_expand_exc_withCall_ret.
         apply IH; cbn in Hle; lia.
       + destruct elt as [dt1 e1].
         eapply tau_expand_exc_withCall_bind; [apply tau_expand_exc_withCall_EOU |].
-        intros s1 [sz_v t_v]; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ? ?; apply tau_expand_exc_withCall_ret].
+        intros s1 [sz_v t_v]; eapply tau_expand_exc_withCall_bind; [apply IH; cbn in Hle; lia | intros ?
+          ?; apply tau_expand_exc_withCall_ret].
       + unfold gread, Subevent.trigger; try unfold trigger_cast;
           apply tau_expand_exc_withCall_trigger; reflexivity.
   Qed.
@@ -1767,13 +1838,15 @@ Section MemoryAndSerialization.
     cbv zeta; unfold gread, Subevent.trigger; try unfold trigger_cast.
     destruct (Maps.lookup gid g) as [v |] eqn:Elk.
     - assert (H1 : interp_vellvm_prov_h (subevent _ (GlobalRead gid)) (σ1, (ls1, g)) ≅ Ret ((σ1, (ls1, g)), v)).
-      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum
+        ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
         try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
         unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, update_globals_ref;
           cbn - [Maps.lookup Maps.add lift_bot_prov].
         rewrite Elk, !lift_bot_prov_bind_ret, lift_bot_prov_ret, !Eqit.bind_ret_l; reflexivity. }
       assert (H2 : interp_vellvm_prov_h (subevent _ (GlobalRead gid)) (σ2, (ls2, g)) ≅ Ret ((σ2, (ls2, g)), v)).
-      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum
+        ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
         try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
         unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, update_globals_ref;
           cbn - [Maps.lookup Maps.add lift_bot_prov].
@@ -1785,7 +1858,8 @@ Section MemoryAndSerialization.
     - eapply refine_prov_obs_eq.
       + symmetry; apply interp_mcfg_model_non_intr; reflexivity.
       + symmetry; apply interp_mcfg_model_non_intr; reflexivity.
-      + unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+      + unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum
+        ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
         try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
         unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, update_globals_ref;
           cbn - [Maps.lookup Maps.add lift_bot_prov].
@@ -1794,7 +1868,8 @@ Section MemoryAndSerialization.
           cbn - [Maps.lookup Maps.add].
         pstep; apply RP_Step; unfold rp_step_body.
         repeat (rewrite observe_bind || rewrite observe_translate);
-          cbn; try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun; cbn;
+          cbn; try unfold resum; try unfold ReSum_id; try unfold id_; try unfold
+            Id_IFun; cbn;
           right; right; split; [exact I | intros [] [] _].
   Qed.
 
@@ -1818,23 +1893,28 @@ Section MemoryAndSerialization.
     destruct (Maps.lookup lid (stack_vars sf2)) as [v |] eqn:Elk2.
     - assert (Elk1 : Maps.lookup lid (stack_vars sf1) = Some v) by congruence.
       eapply refine_prov_tau_star_l.
-      + eapply tau_star_mcfg_det; [reflexivity | apply (fused_local_prov_read_some lid v (σ1, ((sf1, fstk1), g1)) Elk1)].
+      + eapply tau_star_mcfg_det; [reflexivity | apply (fused_local_prov_read_some lid v (σ1, ((sf1, fstk1), g1))
+        Elk1)].
       + eapply refine_prov_tau_star_r.
-        * eapply tau_star_mcfg_det; [reflexivity | apply (fused_local_prov_read_some lid v (σ2, ((sf2, fstk2), g2)) Elk2)].
+        * eapply tau_star_mcfg_det; [reflexivity | apply (fused_local_prov_read_some lid v (σ2, ((sf2, fstk2), g2))
+          Elk2)].
         * apply refine_prov_ret; repeat split; exact Elk2.
     - assert (Elk1 : Maps.lookup lid (stack_vars sf1) = None) by congruence.
       destruct (fused_local_prov_read_none lid (σ1, ((sf1, fstk1), g1)) Elk1) as (msg1 & k1 & H1).
       destruct (fused_local_prov_read_none lid (σ2, ((sf2, fstk2), g2)) Elk2) as (msg2 & k2 & H2).
       eapply refine_prov_obs_eq.
       + symmetry; etransitivity; [apply interp_mcfg_model_non_intr; reflexivity |].
-        unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+        unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum
+          ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
         try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
         rewrite H1, Eqit.bind_vis; reflexivity.
       + symmetry; etransitivity; [apply interp_mcfg_model_non_intr; reflexivity |].
-        unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+        unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum
+          ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
         try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
         rewrite H2, Eqit.bind_vis; reflexivity.
-      + pstep; apply RP_Step; cbn; try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun; cbn;
+      + pstep; apply RP_Step; cbn; try unfold resum; try unfold
+        ReSum_id; try unfold id_; try unfold Id_IFun; cbn;
           right; right; split; [exact I | intros [] [] _].
   Qed.
 
@@ -1851,38 +1931,46 @@ Section MemoryAndSerialization.
     - eapply refine_prov_obs_eq;
         [symmetry; apply interp_mcfg_model_non_intr; reflexivity
         | symmetry; apply interp_mcfg_model_non_intr; reflexivity |].
-      unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+      unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum
+        ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
       try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
       unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree].
       unfold raise, trigger_cast, ITree.trigger, lift_bot_prov.
       pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate);
-        cbn; try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun; cbn;
+        cbn; try unfold resum; try unfold ReSum_id; try unfold id_; try unfold
+          Id_IFun; cbn;
         right; right; split; [exact I | intros [] [] _].
     - eapply refine_prov_obs_eq;
         [symmetry; apply interp_mcfg_model_non_intr; reflexivity
         | symmetry; apply interp_mcfg_model_non_intr; reflexivity |].
-      unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+      unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum
+        ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
       try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
       unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree].
       unfold raiseOOM, trigger_cast, ITree.trigger, lift_bot_prov.
       pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate);
-        cbn; try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun; cbn; left; reflexivity.
+        cbn; try unfold resum; try unfold ReSum_id; try unfold id_; try unfold
+          Id_IFun; cbn; left; reflexivity.
     - eapply refine_prov_obs_eq;
         [symmetry; apply interp_mcfg_model_non_intr; reflexivity
         | symmetry; apply interp_mcfg_model_non_intr; reflexivity |].
-      unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+      unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum
+        ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
       try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
       unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree].
       unfold raiseUB, trigger_cast, ITree.trigger, lift_bot_prov.
       pstep; apply RP_Step; unfold rp_step_body; repeat (rewrite observe_bind || rewrite observe_translate);
-        cbn; try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun; cbn; left; reflexivity.
+        cbn; try unfold resum; try unfold ReSum_id; try unfold id_; try unfold
+          Id_IFun; cbn; left; reflexivity.
     - assert (Hd1 : interp_vellvm_prov_h (subevent _ (Draw dt)) s1 ≅ Ret (s1, dv)).
-      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum
+        ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
         try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
         unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree ExtLib.Structures.Monad.ret Monad_itree].
         rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity. }
       assert (Hd2 : interp_vellvm_prov_h (subevent _ (Draw dt)) s2 ≅ Ret (s2, dv)).
-      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+      { unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum
+        ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
         try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
         unfold fused_draw_prov, handle_draw; rewrite Edef; cbn [EOU_to_itree ExtLib.Structures.Monad.ret Monad_itree].
         rewrite lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity. }
@@ -1902,7 +1990,8 @@ Section MemoryAndSerialization.
   Proof using.
     unfold convert; destruct ct as [| pct | ict].
     - destruct (dtyp_eqb t_from t_to).
-      + eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret | apply refine_prov_ret; repeat split].
+      + eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret |
+        apply refine_prov_ret; repeat split].
       + match goal with |- context [(?a =? ?b)%N] => destruct (a =? b)%N end.
         * eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split].
         * apply refine_mcfg_raise_both.
@@ -1929,7 +2018,8 @@ Section MemoryAndSerialization.
         refine_prov (fun U' '(s1', r1) '(s2', r2) => U' = U0 /\ s1' = a1 /\ s2' = a2 /\ r1 = r2) U0
           (interp_mcfg_model (Ret x) a1) (interp_mcfg_model (Ret x) a2)).
     { intros A x U0 a1 a2; eapply refine_prov_obs_eq;
-        [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret | apply refine_prov_ret; repeat split]. }
+        [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret | apply refine_prov_ret; repeat
+          split]. }
     assert (Hfmap_ret :
       forall db0 U0 a1 a2,
         refine_prov (fun U' '(s1', r1) '(s2', r2) => U' = U0 /\ s1' = a1 /\ s2' = a2 /\ r1 = r2) U0
@@ -1947,7 +2037,8 @@ Section MemoryAndSerialization.
       destruct bv as [| | bits]; try apply Hfmap_ret.
       destruct (existsb is_poison_bit bits); [| apply Hfmap_ret].
       cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-      eapply refine_mcfg_model_bind; [apply refine_mcfg_draw_sync | intros ? ? ? ? ? _ (-> & -> & -> & ->); apply Hret_sync]. }
+      eapply refine_mcfg_model_bind; [apply refine_mcfg_draw_sync | intros ? ? ? ? ? _ (-> & -> & -> & ->); apply
+        Hret_sync]. }
     remember (m2r_dvalue_size dv) as sz eqn:Esz.
     assert (Hle : (m2r_dvalue_size dv <= sz)%nat) by lia; clear Esz.
     revert dv dt U s1 s2 Hle; induction sz as [| sz IH]; intros dv dt U s1 s2 Hle.
@@ -1957,10 +2048,12 @@ Section MemoryAndSerialization.
       + destruct dt as [| p' dts |];
           [apply refine_mcfg_raise_both | | apply refine_mcfg_raise_both].
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-        eapply refine_mcfg_model_bind with (RA := fun U' '(s1', r1) '(s2', r2) => U' = U /\ s1' = s1 /\ s2' = s2 /\ r1 = r2);
+        eapply refine_mcfg_model_bind with (RA := fun U' '(s1', r1) '(s2', r2) => U' = U /\ s1' = s1 /\ s2' = s2 /\ r1 =
+          r2);
           [| intros ? ? ? ? ? _ (-> & -> & -> & ->); apply Hret_sync].
         cbn [m2r_dvalue_size] in Hle.
-        assert (Hfld : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) fields <= sz)%nat) by lia.
+        assert (Hfld : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) fields
+          <= sz)%nat) by lia.
         clear Hle.
         lazymatch goal with
         | |- refine_prov ?R U (interp_mcfg_model (?go fields dts []) s1)
@@ -1979,10 +2072,12 @@ Section MemoryAndSerialization.
       + destruct dt as [| | v' sz_n t];
           [apply refine_mcfg_raise_both | apply refine_mcfg_raise_both |].
         cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-        eapply refine_mcfg_model_bind with (RA := fun U' '(s1', r1) '(s2', r2) => U' = U /\ s1' = s1 /\ s2' = s2 /\ r1 = r2);
+        eapply refine_mcfg_model_bind with (RA := fun U' '(s1', r1) '(s2', r2) => U' = U /\ s1' = s1 /\ s2' = s2 /\ r1 =
+          r2);
           [| intros ? ? ? ? ? _ (-> & -> & -> & ->); apply Hret_sync].
         cbn [m2r_dvalue_size] in Hle.
-        assert (Helt : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) elts <= sz)%nat) by lia.
+        assert (Helt : ((fix list_sz l := match l with [] => O | v :: r => S (m2r_dvalue_size v + list_sz r) end) elts
+          <= sz)%nat) by lia.
         clear Hle.
         lazymatch goal with
         | |- refine_prov ?R U (interp_mcfg_model (?go elts []) s1)
@@ -2032,7 +2127,8 @@ Section MemoryAndSerialization.
       set (s2 := (σ2, ((sf2, fstk2), g))).
       assert (Hlist :
         forall (elts : list (dtyp * exp dtyp)),
-          (S ((fix list_sz l := match l with [] => O | (_, ex) :: r => S (m2r_exp_size ex + list_sz r) end) elts) <= S sz)%nat ->
+          (S ((fix list_sz l := match l with [] => O | (_, ex) :: r => S (m2r_exp_size ex + list_sz r) end) elts) <= S
+            sz)%nat ->
           (forall x,
              In x ((fix go l := match l with [] => [] | (_, ex) :: r => full_exp_uses ex ++ go r end) elts) ->
              Maps.lookup x (stack_vars sf1) = Maps.lookup x (stack_vars sf2)) ->
@@ -2043,14 +2139,16 @@ Section MemoryAndSerialization.
             (interp_mcfg_model (map_monad (fun '(dt, ex) => denote_exp (Some dt) ex) elts) s2)).
       { induction elts as [| [dt0 ex0] rest IHr]; intros Hsz0 Hv0;
           cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-        - eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret | apply refine_prov_ret; repeat split].
+        - eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret |
+          apply refine_prov_ret; repeat split].
         - eapply refine_mcfg_model_bind.
           + apply IH; [lia | intros x Hx; apply Hv0, in_app_iff; left; exact Hx].
           + intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
             eapply refine_mcfg_model_bind.
             * apply IHr; [lia | intros x Hx; apply Hv0, in_app_iff; right; exact Hx].
             * intros ? ? ? ? ? _ (-> & -> & -> & <-).
-              eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret | apply refine_prov_ret; repeat split]. }
+              eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret
+                | apply refine_prov_ret; repeat split]. }
       assert (Hnosafe :
         forall v : @dvalue (@ParamsV IP IPT),
           m2r_safe_ptr_exp = m2r_safe_ptr_exp ->
@@ -2061,7 +2159,8 @@ Section MemoryAndSerialization.
             m2r_safe_ptr_exp safe_locals e = true ->
             is_safe_ptr_dvalue P_unprom v).
       { intros v _ Hfalse ? safe_locals _ _ Htrue; rewrite (Hfalse safe_locals) in Htrue; discriminate Htrue. }
-      destruct e; cbn [denote_exp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; cbn [m2r_exp_size] in Hle.
+      destruct e; cbn [denote_exp ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; cbn
+        [m2r_exp_size] in Hle.
       + destruct id as [gid | lid]; cbn [lookup_id].
         * eapply refine_prov_weaken; [apply refine_mcfg_gread_same_g |].
           intros U' [s1' v1] [s2' v2] (-> & -> & -> & -> & Hsafe).
@@ -2072,104 +2171,153 @@ Section MemoryAndSerialization.
              repeat split; intros P_unprom safe_locals _ Hloc Hsafe.
              cbn [m2r_safe_ptr_exp] in Hsafe; apply in_raw_ids_spec in Hsafe.
              exact (Hloc lid v2 Hsafe Hlk2).
-      + destruct top as [t |]; [eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split; intros; discriminate] | apply refine_mcfg_raise_both].
-      + destruct top as [t |]; [eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split; intros; discriminate] | apply refine_mcfg_raise_both].
-      + destruct b; eapply refine_prov_obs_eq; try (symmetry; apply interp_mcfg_model_ret); apply refine_prov_ret; repeat split; intros; discriminate.
+      + destruct top as [t |]; [eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split;
+        intros; discriminate] | apply refine_mcfg_raise_both].
+      + destruct top as [t |]; [eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split;
+        intros; discriminate] | apply refine_mcfg_raise_both].
+      + destruct b; eapply refine_prov_obs_eq; try (symmetry; apply interp_mcfg_model_ret); apply
+        refine_prov_ret; repeat split; intros; discriminate.
       + eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret |].
         apply refine_prov_ret; repeat split; intros; apply null_safe_ptr_dvalue.
-      + destruct top as [t |]; [eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split; intros; discriminate] | apply refine_mcfg_raise_both].
-      + eapply refine_mcfg_model_bind; [apply (Hlist elts Hle Hvars) | intros ? ? ? ? ? _ (-> & -> & -> & <-); eapply refine_prov_obs_eq; try (symmetry; apply interp_mcfg_model_ret); apply refine_prov_ret; repeat split; intros; discriminate].
-      + eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret | apply refine_prov_ret; repeat split; intros; discriminate].
+      + destruct top as [t |]; [eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split;
+        intros; discriminate] | apply refine_mcfg_raise_both].
+      + eapply refine_mcfg_model_bind; [apply (Hlist elts Hle Hvars) | intros ? ? ? ? ? _ (-> & -> & -> & <-); eapply
+        refine_prov_obs_eq; try (symmetry; apply interp_mcfg_model_ret); apply refine_prov_ret; repeat
+        split; intros; discriminate].
+      + eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret |
+        apply refine_prov_ret; repeat split; intros; discriminate].
       + eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret |].
         apply refine_prov_ret; repeat split; intros; apply poison_safe_ptr_dvalue.
-      + eapply refine_mcfg_model_bind; [apply (Hlist fields Hle Hvars) | intros ? ? ? ? ? _ (-> & -> & -> & <-); eapply refine_prov_obs_eq; try (symmetry; apply interp_mcfg_model_ret); apply refine_prov_ret; repeat split; intros; discriminate].
-      + eapply refine_mcfg_model_bind with (RA := fun U' '(s1', r1) '(s2', r2) => U' = U /\ s1' = s1 /\ s2' = s2 /\ r1 = r2);
+      + eapply refine_mcfg_model_bind; [apply (Hlist fields Hle Hvars) | intros ? ? ? ? ? _ (-> & -> & -> & <-); eapply
+        refine_prov_obs_eq; try (symmetry; apply interp_mcfg_model_ret); apply refine_prov_ret; repeat
+        split; intros; discriminate].
+      + eapply refine_mcfg_model_bind with (RA := fun U' '(s1', r1) '(s2', r2) => U' = U /\ s1' = s1 /\ s2' = s2 /\ r1 =
+        r2);
           [eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros [] ? <-; repeat split] |].
         intros ? ? [] ? [] _ (-> & -> & -> & _).
-        eapply refine_mcfg_model_bind; [apply (Hlist fields Hle Hvars) | intros ? ? ? ? ? _ (-> & -> & -> & <-); eapply refine_prov_obs_eq; try (symmetry; apply interp_mcfg_model_ret); apply refine_prov_ret; repeat split; intros; discriminate].
-      + eapply refine_mcfg_model_bind; [apply (Hlist elts Hle Hvars) | intros ? ? ? ? ? _ (-> & -> & -> & <-); eapply refine_prov_obs_eq; try (symmetry; apply interp_mcfg_model_ret); apply refine_prov_ret; repeat split; intros; discriminate].
-      + eapply refine_mcfg_model_bind; [apply (Hlist elts Hle Hvars) | intros ? ? ? ? ? _ (-> & -> & -> & <-); eapply refine_prov_obs_eq; try (symmetry; apply interp_mcfg_model_ret); apply refine_prov_ret; repeat split; intros; discriminate].
-      + eapply refine_mcfg_model_bind; [apply IH; [lia | intros x Hx; apply Hvars, in_app_iff; left; exact Hx] |].
+        eapply refine_mcfg_model_bind; [apply (Hlist fields Hle Hvars) | intros ? ? ? ? ? _ (-> & -> & -> & <-); eapply
+          refine_prov_obs_eq; try (symmetry; apply interp_mcfg_model_ret); apply refine_prov_ret; repeat
+          split; intros; discriminate].
+      + eapply refine_mcfg_model_bind; [apply (Hlist elts Hle Hvars) | intros ? ? ? ? ? _ (-> & -> & -> & <-); eapply
+        refine_prov_obs_eq; try (symmetry; apply interp_mcfg_model_ret); apply refine_prov_ret; repeat
+        split; intros; discriminate].
+      + eapply refine_mcfg_model_bind; [apply (Hlist elts Hle Hvars) | intros ? ? ? ? ? _ (-> & -> & -> & <-); eapply
+        refine_prov_obs_eq; try (symmetry; apply interp_mcfg_model_ret); apply refine_prov_ret; repeat
+        split; intros; discriminate].
+      + eapply refine_mcfg_model_bind; [apply IH; [lia | intros x Hx; apply Hvars, in_app_iff;
+        left; exact Hx] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
-        eapply refine_mcfg_model_bind; [apply IH; [lia | intros x Hx; apply Hvars, in_app_iff; right; exact Hx] |].
+        eapply refine_mcfg_model_bind; [apply IH; [lia | intros x Hx; apply Hvars, in_app_iff;
+          right; exact Hx] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
         eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split; intros; discriminate].
-      + eapply refine_mcfg_model_bind; [apply IH; [lia | intros x Hx; apply Hvars, in_app_iff; left; exact Hx] |].
+      + eapply refine_mcfg_model_bind; [apply IH; [lia | intros x Hx; apply Hvars, in_app_iff;
+        left; exact Hx] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
-        eapply refine_mcfg_model_bind; [apply IH; [lia | intros x Hx; apply Hvars, in_app_iff; right; exact Hx] |].
+        eapply refine_mcfg_model_bind; [apply IH; [lia | intros x Hx; apply Hvars, in_app_iff;
+          right; exact Hx] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
         eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split; intros; discriminate].
-      + eapply refine_mcfg_model_bind; [apply IH; [lia | intros x Hx; apply Hvars, in_app_iff; left; exact Hx] |].
+      + eapply refine_mcfg_model_bind; [apply IH; [lia | intros x Hx; apply Hvars, in_app_iff;
+        left; exact Hx] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
-        eapply refine_mcfg_model_bind; [apply IH; [lia | intros x Hx; apply Hvars, in_app_iff; right; exact Hx] |].
+        eapply refine_mcfg_model_bind; [apply IH; [lia | intros x Hx; apply Hvars, in_app_iff;
+          right; exact Hx] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
         eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split; intros; discriminate].
       + destruct v as [dt1 op1]; eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | exact Hvars] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
         eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split; intros; discriminate].
-      + eapply refine_mcfg_model_bind; [apply IH; [lia | intros x Hx; apply Hvars, in_app_iff; left; exact Hx] |].
+      + eapply refine_mcfg_model_bind; [apply IH; [lia | intros x Hx; apply Hvars, in_app_iff;
+        left; exact Hx] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
-        eapply refine_mcfg_model_bind; [apply IH; [lia | intros x Hx; apply Hvars, in_app_iff; right; exact Hx] |].
+        eapply refine_mcfg_model_bind; [apply IH; [lia | intros x Hx; apply Hvars, in_app_iff;
+          right; exact Hx] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
         eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split; intros; discriminate].
       + eapply refine_mcfg_model_bind; [apply IH; [lia | exact Hvars] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
-        eapply refine_prov_weaken; [apply refine_mcfg_convert_sync | intros ? [? ?] [? ?] (-> & -> & -> & ->); repeat split; intros; discriminate].
+        eapply refine_prov_weaken; [apply refine_mcfg_convert_sync | intros ? [? ?] [? ?] (-> & -> & -> & ->); repeat
+          split; intros; discriminate].
       + destruct ptrval as [dt2 ptr_e].
         eapply refine_mcfg_model_bind.
-        * apply IH; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn [full_exp_uses]; apply in_app_iff; left; exact Hx].
+        * apply IH; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn
+          [full_exp_uses]; apply in_app_iff; left; exact Hx].
         * intros ? ? vptr ? ? _ (-> & -> & -> & <- & Hptr_safe).
           eapply refine_mcfg_model_bind.
-          -- apply Hlist; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn [full_exp_uses]; apply in_app_iff; right; exact Hx].
+          -- apply Hlist; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn
+            [full_exp_uses]; apply in_app_iff; right; exact Hx].
           -- intros ? ? vs ? ? _ (-> & -> & -> & <-).
              destruct (eval_gep flags t vptr vs) as [msg | msg | msg | res] eqn:Egep; cbn [EOU_to_itree].
              ++ apply refine_mcfg_raise_both.
              ++ apply refine_mcfg_raiseOOM_l.
              ++ apply refine_mcfg_raiseUB_l.
-             ++ eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret |].
+             ++ eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply
+               interp_mcfg_model_ret |].
                 apply refine_prov_ret; repeat split.
                 intros P_unprom safe_locals Hg Hloc Hsafe; cbn [m2r_safe_ptr_exp] in Hsafe.
                 eapply eval_gep_safe_ptr; [exact (Hptr_safe P_unprom safe_locals Hg Hloc Hsafe) | exact Egep].
       + destruct vec as [dt1 e1], idx as [dt2 e2].
-        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn [full_exp_uses]; apply in_app_iff; left; exact Hx] |].
+        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply
+          Hvars; cbn [full_exp_uses]; apply in_app_iff; left; exact Hx] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
-        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn [full_exp_uses]; apply in_app_iff; right; exact Hx] |].
+        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply
+          Hvars; cbn [full_exp_uses]; apply in_app_iff; right; exact Hx] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
         eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split; intros; discriminate].
       + destruct vec as [dt1 e1], elt as [dt2 e2], idx as [dt3 e3].
-        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn [full_exp_uses]; apply in_app_iff; left; exact Hx] |].
+        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply
+          Hvars; cbn [full_exp_uses]; apply in_app_iff; left; exact Hx] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
-        eapply refine_mcfg_model_bind with (RA := fun U' '(s1', r1) '(s2', r2) => U' = U /\ s1' = s1 /\ s2' = s2 /\ r1 = r2).
+        eapply refine_mcfg_model_bind with (RA := fun U' '(s1', r1) '(s2', r2) => U' = U /\ s1' = s1 /\ s2' = s2 /\ r1 =
+          r2).
         * eapply refine_mcfg_model_bind;
-            [apply IH; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn [full_exp_uses]; apply in_app_iff; right; apply in_app_iff; left; exact Hx]
-            | intros ? ? ? ? ? _ (-> & -> & -> & <- & _); eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split]].
+            [apply IH; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn
+              [full_exp_uses]; apply in_app_iff; right; apply in_app_iff;
+              left; exact Hx]
+            | intros ? ? ? ? ? _ (-> & -> & -> & <- & _); eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ?
+              <-; repeat split]].
         * intros ? ? ? ? ? _ (-> & -> & -> & <-).
-          eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn [full_exp_uses]; apply in_app_iff; right; apply in_app_iff; right; exact Hx] |].
+          eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply
+            Hvars; cbn [full_exp_uses]; apply in_app_iff; right; apply
+            in_app_iff; right; exact Hx] |].
           intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
           eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split; intros; discriminate].
       + destruct vec1 as [dt1 e1], vec2 as [dt2 e2], idxmask as [dt3 e3].
-        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn [full_exp_uses]; apply in_app_iff; left; exact Hx] |].
+        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply
+          Hvars; cbn [full_exp_uses]; apply in_app_iff; left; exact Hx] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
-        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn [full_exp_uses]; apply in_app_iff; right; apply in_app_iff; left; exact Hx] |].
+        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply
+          Hvars; cbn [full_exp_uses]; apply in_app_iff; right; apply
+          in_app_iff; left; exact Hx] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
-        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn [full_exp_uses]; apply in_app_iff; right; apply in_app_iff; right; exact Hx] |].
+        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply
+          Hvars; cbn [full_exp_uses]; apply in_app_iff; right; apply
+          in_app_iff; right; exact Hx] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
         eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split; intros; discriminate].
       + destruct vec as [dt1 e1]; eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | exact Hvars] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
         eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split; intros; discriminate].
       + destruct vec as [dt1 e1], elt as [dt2 e2].
-        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn [full_exp_uses]; apply in_app_iff; left; exact Hx] |].
+        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply
+          Hvars; cbn [full_exp_uses]; apply in_app_iff; left; exact Hx] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
-        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn [full_exp_uses]; apply in_app_iff; right; exact Hx] |].
+        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply
+          Hvars; cbn [full_exp_uses]; apply in_app_iff; right; exact Hx] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
         eapply refine_mcfg_EOU; [apply refine_EOU_refl | intros ? ? <-; repeat split; intros; discriminate].
       + destruct cnd as [dt1 e1], v1 as [dt2 e2], v2 as [dt3 e3].
-        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn [full_exp_uses]; apply in_app_iff; left; exact Hx] |].
+        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply
+          Hvars; cbn [full_exp_uses]; apply in_app_iff; left; exact Hx] |].
         intros ? ? vc ? ? _ (-> & -> & -> & <- & _).
-        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn [full_exp_uses]; apply in_app_iff; right; apply in_app_iff; left; exact Hx] |].
+        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply
+          Hvars; cbn [full_exp_uses]; apply in_app_iff; right; apply
+          in_app_iff; left; exact Hx] |].
         intros ? ? vv1 ? ? _ (-> & -> & -> & <- & Hs1).
-        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply Hvars; cbn [full_exp_uses]; apply in_app_iff; right; apply in_app_iff; right; exact Hx] |].
+        eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | intros x Hx; apply
+          Hvars; cbn [full_exp_uses]; apply in_app_iff; right; apply
+          in_app_iff; right; exact Hx] |].
         intros ? ? vv2 ? ? _ (-> & -> & -> & <- & Hs2).
         destruct (eval_select vc dt2 vv1 vv2) as [msg | msg | msg | res] eqn:Esel; cbn [EOU_to_itree].
         * apply refine_mcfg_raise_both.
@@ -2185,10 +2333,12 @@ Section MemoryAndSerialization.
             | exact Esel].
       + destruct v as [dt1 e1]; eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | exact Hvars] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
-        eapply refine_prov_weaken; [apply refine_mcfg_freeze_sync | intros ? [? ?] [? ?] (-> & -> & -> & ->); repeat split; intros; discriminate].
+        eapply refine_prov_weaken; [apply refine_mcfg_freeze_sync | intros ? [? ?] [? ?] (-> & -> & -> & ->); repeat
+          split; intros; discriminate].
       + apply refine_mcfg_raise_both.
       + match goal with m0 : metadata _ |- _ => destruct m0 as [| | [dt1 ex1] | | | |] end;
-          try (eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret | apply refine_prov_ret; repeat split; intros; discriminate]).
+          try (eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret
+            | apply refine_prov_ret; repeat split; intros; discriminate]).
         eapply refine_prov_weaken; [apply IH; [cbn in Hle; lia | exact Hvars] |].
         intros ? [? ?] [? ?] (-> & -> & -> & -> & _); repeat split; intros; discriminate.
       + destruct elt as [dt1 e1].
@@ -2199,7 +2349,8 @@ Section MemoryAndSerialization.
         intros ? ? [sz_v t_v] ? ? _ (-> & -> & -> & <-).
         eapply refine_mcfg_model_bind; [apply IH; [cbn in Hle; lia | exact Hvars] |].
         intros ? ? ? ? ? _ (-> & -> & -> & <- & _).
-        eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret | apply refine_prov_ret; repeat split; intros; discriminate].
+        eapply refine_prov_obs_eq; [symmetry; apply interp_mcfg_model_ret | symmetry; apply interp_mcfg_model_ret |
+          apply refine_prov_ret; repeat split; intros; discriminate].
       + eapply refine_prov_weaken; [apply refine_mcfg_gread_same_g |].
         intros ? [? ?] [? ?] (-> & -> & -> & -> & _); repeat split; intros; discriminate.
   Qed.
@@ -2287,12 +2438,14 @@ Section MemoryAndSerialization.
       eapply refine_prov_obs_eq;
         [symmetry; apply interp_cfg_model_non_intr; reflexivity
         | symmetry; apply interp_cfg_model_non_intr; reflexivity |].
-      cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+      cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat
+        Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
       unfold fused_trigger_prov, ITree.trigger.
       eapply refine_prov_obs_eq;
         [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
         | symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
-      pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
+      pstep; apply RP_Step; cbn; right;
+        right; split; [exact I | intros [] [] _].
     - intros _ _ [] _ _ _ _.
   Qed.
 
@@ -2387,7 +2540,8 @@ Section MemoryAndSerialization.
     loop_monad f (l1 ++ l2) ≅
     ITree.bind (loop_monad f l1) (fun _ => loop_monad f l2).
   Proof using.
-    induction l1 as [| a l1' IH]; cbn [List.app loop_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+    induction l1 as [| a l1' IH]; cbn [List.app loop_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret
+      Monad_itree].
     - symmetry; rewrite Eqit.bind_ret_l; reflexivity.
     - symmetry; rewrite Eqit.bind_bind.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
@@ -2638,11 +2792,15 @@ Section MemoryAndSerialization.
       intros [Hsafe Hderef].
       destruct (load_metadata_dereferenceable md) eqn:Ed; [discriminate Hderef |].
       right; left; exists id0, t, du, ptr_e, anns, md; repeat split; assumption.
-    - intros _; right; right; right; right; exists (IId id0), syncscope, o, md; reflexivity.
-    - intros _; right; right; right; left; eexists vid0, _, md; reflexivity.
+    - intros _; right; right; right;
+      right; exists (IId id0), syncscope, o, md; reflexivity.
+    - intros _; right; right; right;
+      left; eexists vid0, _, md; reflexivity.
     - destruct val as [dt val_e], ptr as [du ptr_e]; intros Hsafe.
-      right; right; left; exists vid0, dt, val_e, du, ptr_e, anns, md; split; [reflexivity | exact Hsafe].
-    - intros _; right; right; right; right; exists (IVoid vid0), syncscope, o, md; reflexivity.
+      right; right; left; exists vid0, dt, val_e, du, ptr_e, anns, md;
+        split; [reflexivity | exact Hsafe].
+    - intros _; right; right; right;
+      right; exists (IVoid vid0), syncscope, o, md; reflexivity.
   Qed.
 
   (** ** 3H. Fused Environment Steps & Stage 1 Attribute / Call Helpers *)
@@ -2658,7 +2816,8 @@ Section MemoryAndSerialization.
     unfold lwrite, Subevent.trigger; try unfold trigger_cast.
     eapply tau_star_cfg_det; [reflexivity |].
     unfold interp_vellvm_prov_h;
-      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl
+        ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     apply fused_local_prov_write.
   Qed.
 
@@ -2689,7 +2848,8 @@ Section MemoryAndSerialization.
     unfold lread, Subevent.trigger; try unfold trigger_cast.
     eapply tau_star_cfg_det; [reflexivity |].
     unfold interp_vellvm_prov_h;
-      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl
+        ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     exact (fused_local_prov_read_some x v (σ, ((sf, fstk), g)) Hlk).
   Qed.
 
@@ -2722,7 +2882,8 @@ Section MemoryAndSerialization.
     unfold stack_push, Subevent.trigger; try unfold trigger_cast.
     eapply tau_star_cfg_det; [reflexivity |].
     unfold interp_vellvm_prov_h;
-      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl
+        ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
     unfold fused_stack_prov, on_ls_prov, handle_stack;
       cbn - [Maps.lookup Maps.add lift_bot_prov init_local_env].
@@ -2740,7 +2901,8 @@ Section MemoryAndSerialization.
     unfold stack_pop, Subevent.trigger; try unfold trigger_cast.
     eapply tau_star_cfg_det; [reflexivity |].
     unfold interp_vellvm_prov_h;
-      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl
+        ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
     unfold fused_stack_prov, on_ls_prov, handle_stack;
       cbn - [Maps.lookup Maps.add lift_bot_prov init_local_env].
@@ -2757,7 +2919,8 @@ Section MemoryAndSerialization.
     unfold gwrite, Subevent.trigger; try unfold trigger_cast.
     eapply tau_star_mcfg_det; [reflexivity |].
     unfold interp_vellvm_prov_h;
-      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl
+        ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     try unfold resum; try unfold ReSum_id; try unfold id_; try unfold Id_IFun.
     unfold fused_global_prov, on_genv_prov, handle_global_debug, handle_global, update_globals_ref;
       cbn - [Maps.lookup Maps.add Maps.empty lift_bot_prov].
@@ -2902,7 +3065,8 @@ Section MemoryAndSerialization.
                  v1 as [[pt | | | | | | |] | |];
           try (eapply refine_prov_obs_eq;
                [symmetry; apply interp_cfg_model_ret | symmetry; apply interp_cfg_model_ret |];
-               apply refine_prov_ret; exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl))))).
+               apply refine_prov_ret; exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl (conj
+                 Logic.eq_refl Logic.eq_refl))))).
         exact (assert_dereferenceable_stage1_cfg_sim ctx1 ctx2 or_null
                  (Z.to_N (denote_int_syntax n)) (DVALUE_Base (DVALUE_Pointer pt))
                  msg msg U P_unprom G σ1 σ2 rest1 rest2 Hinv).
@@ -2941,7 +3105,8 @@ Section MemoryAndSerialization.
       + unfold assert_attrs_dereferenceable.
         destruct (find_option attr_dereferenceable attrs) as [[or_null n] |],
                  v1 as [[pt | | | | | | |] | |];
-          try (apply refine_cfg_exc_ret; exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl Logic.eq_refl))))).
+          try (apply refine_cfg_exc_ret; exact (conj Logic.eq_refl (conj Logic.eq_refl (conj Logic.eq_refl (conj
+            Logic.eq_refl Logic.eq_refl))))).
         exact (assert_dereferenceable_stage1_exc_sim ctx1 ctx2 RExc or_null
                  (Z.to_N (denote_int_syntax n)) (DVALUE_Base (DVALUE_Pointer pt))
                  msg msg U P_unprom G σ1 σ2 rest1 rest2 Hinv).
@@ -3076,18 +3241,21 @@ Section MemoryAndSerialization.
       (interp_cfg_exc ctx2 (denote_call_args args msg) s2).
   Proof using.
     cbv zeta; unfold denote_call_args.
-    induction args as [| [[t op] attrs] rest IH]; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+    induction args as [| [[t op] attrs] rest IH]; cbn [map_monad ExtLib.Structures.Monad.bind
+      ExtLib.Structures.Monad.ret Monad_itree].
     - apply refine_cfg_exc_ret; repeat split; reflexivity.
     - eapply refine_cfg_exc_bind.
       + eapply refine_cfg_exc_bind.
         * apply denote_exp_cfg_exc_sim.
-          intros x Hx; apply Hvars; cbn [flat_map full_texp_uses snd]; apply in_app_iff; left; exact Hx.
+          intros x Hx; apply Hvars; cbn [flat_map full_texp_uses snd]; apply in_app_iff;
+            left; exact Hx.
         * intros U1 s1' v1 s2' v2 _ (-> & -> & -> & <- & _).
           exact (apply_attrs_stage1_exc_sim ctx1 ctx2 RExc attrs msg v1
                    U P_unprom G σ1 σ2 ((sf1, fstk1), g) ((sf2, fstk2), g) Hinv).
       + intros U1 s1' v' s2' v2' _ (-> & -> & -> & <-).
         eapply refine_cfg_exc_bind.
-        * apply IH; intros x Hx; apply Hvars; cbn [flat_map]; apply in_app_iff; right; exact Hx.
+        * apply IH; intros x Hx; apply Hvars; cbn [flat_map]; apply
+          in_app_iff; right; exact Hx.
         * intros U2 s1'' vs' s2'' vs2' _ (-> & -> & -> & <-).
           apply refine_cfg_exc_ret; repeat split; reflexivity.
   Qed.
@@ -3118,12 +3286,14 @@ Section MemoryAndSerialization.
         eapply refine_prov_obs_eq;
           [symmetry; apply interp_cfg_model_non_intr; reflexivity
           | symmetry; apply interp_cfg_model_non_intr; reflexivity |].
-        cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+        cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat
+          Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
         unfold fused_trigger_prov, ITree.trigger.
         eapply refine_prov_obs_eq;
           [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
           | symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
-        pstep; apply RP_Step; cbn; right; right; split; [reflexivity |].
+        pstep; apply RP_Step; cbn; right;
+          right; split; [reflexivity |].
         intros a1 a2 <-; left.
         eapply refine_prov_obs_eq;
           [symmetry; rewrite !Eqit.bind_ret_l; reflexivity

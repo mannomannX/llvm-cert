@@ -107,7 +107,8 @@ Section InliningSemantics.
   #[local] Ltac try_cfg_raise :=
     lazymatch goal with
     | |- cfg_inline_sim _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) => apply cfg_inline_sim_raise; reflexivity
-    | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) => apply cfg_inline_sim_raise; reflexivity
+    | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) =>
+        apply cfg_inline_sim_raise; reflexivity
     | _ => idtac
     end.
 
@@ -125,14 +126,16 @@ Section InliningSemantics.
     | |- cfg_inline_sim _ _ _ _ _ (@raiseUB _ _ _ _) _ => apply cfg_inline_sim_raiseUB
     | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raiseUB _ _ _ _) _ => apply cfg_inline_sim_raiseUB
     | |- cfg_inline_sim _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) => apply cfg_inline_sim_raise; reflexivity
-    | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) => apply cfg_inline_sim_raise; reflexivity
+    | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) =>
+        apply cfg_inline_sim_raise; reflexivity
     | _ => idtac
     end.
 
   #[local] Ltac try_mcfg_raise :=
     lazymatch goal with
     | |- mcfg_inline_sim _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) => apply mcfg_inline_sim_raise; reflexivity
-    | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) => apply mcfg_inline_sim_raise; reflexivity
+    | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) =>
+        apply mcfg_inline_sim_raise; reflexivity
     | _ => idtac
     end.
 
@@ -415,6 +418,890 @@ Section InliningSemantics.
           (run_exc (call_after_ret_k1 vs (inr dv)))
           (run_exc (tree_at2 (ren_b b_ret) post_bid)).
 
+    Local Lemma caller_loop_sync_step
+      (Hexc_out : forall ea1 ea2 ex, out_rel (IC_Synced stk ea1 ea2) (inl ex) (inl ex)) :
+      forall src1 src2 ic0 u1 u2,
+        src1 <> post_bid ->
+        src2 = remap_pred_id call_bid post_bid src1 ->
+        ic_synced_stk stk ic0 ->
+        cfg_inline_sim opt_c g0 false sync_bd_rel ic0 u1 u2 ->
+        gen_inline_sim_ (@inl_is_ub_cfg IP IPT) inl_sync_cfg EqE_CFG EqA_CFG
+          (@inl_cfg_event_post IP IPT) (@as_local_cfg IP IPT) (@as_stack_cfg IP IPT)
+          opt_c g0 true out_rel r_caller ic0
+          (run_exc (ITree.bind u1 (step_bd_cont (blks caller_cfg) caller_va src1)))
+          (run_exc (ITree.bind u2 (step_bd_cont (blks caller_cfg') caller_va src2))).
+    Proof using.
+      intros src1 src2 ic0 u1 u2 Hsrc1 Hsrc2 Hic0 Hu.
+      eapply (run_exc_bind_step_sync opt_c g0 true stk sync_bd_rel out_rel r_caller
+                (step_bd_cont (blks caller_cfg) caller_va src1)
+                (step_bd_cont (blks caller_cfg') caller_va src2)
+                Hexc_out);
+        [| | exact Hic0 | exact Hu].
+      - intros ic' m1 m2 Hic' Hm; eapply RC_SyncStep; eassumption.
+      - intros ic' bd1 bd2 _ (<- & Hsucc & e1' & e2' & -> & Hag').
+        destruct bd1 as [succ_bid | dv]; cbn [step_bd_cont].
+        + eapply gen_inline_sim__obs_eq;
+            [symmetry; apply run_exc_tau_eq; reflexivity
+            | symmetry; apply run_exc_tau_eq; reflexivity |].
+          apply GIS_Step; cbn [gis_step_body observe].
+          exists (run_exc (tree_at1 src1 succ_bid)),
+                 (run_exc (tree_at2 src2 succ_bid)).
+          split; [apply ITS_Refl | split; [apply ITS_Refl |]].
+          destruct (Hsucc succ_bid Logic.eq_refl) as [Hs_post Hs_bf].
+          apply RC_CallerAt; [exact Hag' | exact Hs_post | exact Hs_bf | right; split; assumption].
+        + eapply gen_inline_sim__obs_eq;
+            [symmetry; apply run_exc_ret_eq; reflexivity
+            | symmetry; apply run_exc_ret_eq; reflexivity |].
+          apply GIS_Step; cbn [gis_step_body observe]; exists e1', e2'; auto.
+    Qed.
+
+    Local Lemma caller_loop_callee_step
+      (Hlen_r : List.length (blks callee_cfg) = List.length ret_tmps)
+      (Hproto_fattrs : forallb is_safe_fn_attr (dc_attrs (df_prototype callee_df)) = true)
+      (Hproto_rattrs : fst (dc_param_attrs (df_prototype callee_df)) = []) :
+      forall ce1 vs varg b_cur bk_cur rtmp_cur ic0 u1 u2,
+        is_ic_inlined ic0 = true ->
+        List.length vs = List.length (df_args callee_df) ->
+        b_cur = blk_id bk_cur ->
+        In (bk_cur, rtmp_cur) bk_rtmps ->
+        cfg_inline_sim opt_c g0 false (callee_bd_rel bk_cur rtmp_cur ce1) ic0 u1 u2 ->
+        gen_inline_sim_ (@inl_is_ub_cfg IP IPT) inl_sync_cfg EqE_CFG EqA_CFG
+          (@inl_cfg_event_post IP IPT) (@as_local_cfg IP IPT) (@as_stack_cfg IP IPT)
+          opt_c g0 true out_rel r_caller ic0
+          (ITree.bind
+             (run_exc (ITree.bind u1 (step_bd_cont (blks callee_cfg) (Some varg) b_cur)))
+             (callee_epilogue_k1 vs))
+          (run_exc (ITree.bind u2 (step_bd_cont (blks caller_cfg') caller_va (ren_b b_cur)))).
+    Proof using.
+      intros ce1 vs varg b_cur bk_cur rtmp_cur ic0 u1 u2 Hic0 Hvs_len Hbcur Hbk_rtmp Hu.
+      eapply (run_exc_bind_step_inlined opt_c g0 true
+                (callee_bd_rel bk_cur rtmp_cur ce1) out_rel r_caller
+                (step_bd_cont (blks callee_cfg) (Some varg) b_cur)
+                (callee_epilogue_k1 vs)
+                (step_bd_cont (blks caller_cfg') caller_va (ren_b b_cur)));
+        [| | exact Hic0 | exact Hu].
+      - intros ic' m1 m2 Hic' Hm; eapply RC_CalleeStep; eassumption.
+      - intros ic' bd1 bd2 _ Hbd.
+        destruct Hbd as [(succ_bid & d_out & e1' & e2' & -> & -> & _ & Hedge & Hdout_dom & -> & Hbound & Hag')
+                        | (dv & e1' & e2' & -> & -> & -> & Hag' & Hret_info)];
+          cbn [step_bd_cont].
+        + eapply gen_inline_sim__obs_eq;
+            [symmetry; erewrite run_exc_tau_eq; [rewrite Eqit.bind_tau; reflexivity | reflexivity]
+            | symmetry; apply run_exc_tau_eq; reflexivity |].
+          apply GIS_Step; cbn [gis_step_body observe].
+          exists (ITree.bind (run_exc (tree_callee1 b_cur succ_bid varg)) (callee_epilogue_k1 vs)),
+                 (run_exc (tree_at2 (ren_b b_cur) (ren_b succ_bid))).
+          split; [apply ITS_Refl | split; [apply ITS_Refl |]].
+          rewrite <- Hbcur in Hedge.
+          apply check_succ_edge_inv in Hedge as (b_succ & Hfb_succ & Hd_succ & Hphis_succ).
+          assert (Hbcur_orig : In b_cur b_origs).
+          { rewrite Hbcur; apply callee_block_ids_blk_id; eapply in_combine_l, Hbk_rtmp. }
+          eapply RC_CalleeAt with (d_in := d_out);
+            [exact Hvs_len | exact Hdout_dom | exact Hd_succ | exact Hbound | exact Hag' |].
+          exists b_succ; split; [exact Hfb_succ | right; auto].
+        + assert (El_pop :
+            ITree.bind (run_exc (Ret dv)) (callee_epilogue_k1 vs) ≅
+            ITree.bind (ITree.trigger (subevent _ StackPop))
+              (fun _ =>
+                 ITree.bind (ITree.trigger (subevent _ MemPop))
+                   (fun _ => Tau (run_exc (call_after_ret_k1 vs (inr dv)))))).
+          { rewrite (run_exc_ret_eq (Ret dv) dv Logic.eq_refl), Eqit.bind_ret_l.
+            unfold callee_epilogue_k1, pop_call_frame, stack_pop, mem_pop.
+            try unfold trigger; norm_subevent.
+            cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+            rewrite Eqit.bind_bind.
+            apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
+            apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
+            rewrite Hproto_rattrs.
+            rewrite (check_call_return_safe_inr_eq _ _ _ _ Hproto_fattrs), Eqit.bind_ret_l.
+            reflexivity. }
+          eapply GIS_StackPopL; [reflexivity | exact El_pop |].
+          eapply GIS_MemPopL; [reflexivity | reflexivity |].
+          eapply gen_inline_sim__obs_eq;
+            [reflexivity | symmetry; apply run_exc_tau_eq; reflexivity |].
+          apply GIS_Step; cbn [gis_step_body observe].
+          exists (run_exc (call_after_ret_k1 vs (inr dv))),
+                 (run_exc (tree_at2 (ren_b b_cur) post_bid)).
+          split; [apply ITS_Refl | split; [apply ITS_Refl |]].
+          eapply RC_PostAt; eassumption.
+    Qed.
+
+    Local Lemma caller_loop_callee_at
+      (Hcaller_nd : NoDup (List.map blk_id (blks caller_cfg)))
+      (Hcallee_nd : NoDup (List.map blk_id (blks callee_cfg)))
+      (Hcallee_leaf_b : forall x, In x (blks callee_cfg) -> is_leaf_block opt_ret_dt x = true)
+      (Hvmap : verify_def_map (df_args callee_df) callee_cfg in_map = true)
+      (Hlen_r : List.length (blks callee_cfg) = List.length ret_tmps)
+      (Hrt_af : forall x, In x ret_tmps -> In x all_fresh)
+      (Hinj_l : forall x1 x2, In x1 l_origs -> In x2 l_origs -> ren_l x1 = ren_l x2 -> x1 = x2)
+      (Hfresh_l : forall x, In x l_origs -> In (ren_l x) all_fresh)
+      (Hinj_b : forall b1 b2, In b1 b_origs -> In b2 b_origs -> ren_b b1 = ren_b b2 -> b1 = b2)
+      (Hcallee_step :
+         forall ce1 vs varg b_cur bk_cur rtmp_cur ic0 u1 u2,
+           is_ic_inlined ic0 = true ->
+           List.length vs = List.length (df_args callee_df) ->
+           b_cur = blk_id bk_cur ->
+           In (bk_cur, rtmp_cur) bk_rtmps ->
+           cfg_inline_sim opt_c g0 false (callee_bd_rel bk_cur rtmp_cur ce1) ic0 u1 u2 ->
+           gen_inline_sim_ (@inl_is_ub_cfg IP IPT) inl_sync_cfg EqE_CFG EqA_CFG
+             (@inl_cfg_event_post IP IPT) (@as_local_cfg IP IPT) (@as_stack_cfg IP IPT)
+             opt_c g0 true out_rel r_caller ic0
+             (ITree.bind
+                (run_exc (ITree.bind u1 (step_bd_cont (blks callee_cfg) (Some varg) b_cur)))
+                (callee_epilogue_k1 vs))
+             (run_exc (ITree.bind u2 (step_bd_cont (blks caller_cfg') caller_va (ren_b b_cur))))) :
+      forall b_from1 b_from2 b_cur d_in ce1 e1_c e2_c vs varg,
+        List.length vs = List.length (df_args callee_df) ->
+        incl d_in l_origs ->
+        incl (lookup_def_set in_map b_cur) d_in ->
+        callee_defs_bound ren_l d_in e1_c e2_c ->
+        env_agree_outside all_fresh ce1 e2_c ->
+        (exists bk_cur,
+           find_block (blks callee_cfg) b_cur = Some bk_cur /\
+           (blk_phis bk_cur = [] \/
+            (b_from2 = ren_b b_from1 /\
+             In b_from1 b_origs /\
+             Forall
+               (fun '(_, Phi _ _ pargs, md) =>
+                  exists op,
+                    assoc b_from1 pargs = Some op /\
+                    incl (full_exp_uses op ++ flat_map full_metadata_uses md) d_in)
+               (blk_phis bk_cur)))) ->
+        gen_inline_sim_ (@inl_is_ub_cfg IP IPT) inl_sync_cfg EqE_CFG EqA_CFG
+          (@inl_cfg_event_post IP IPT) (@as_local_cfg IP IPT) (@as_stack_cfg IP IPT)
+          opt_c g0 true out_rel r_caller (IC_Inlined stk ce1 e1_c e2_c)
+          (ITree.bind (run_exc (tree_callee1 b_from1 b_cur varg)) (callee_epilogue_k1 vs))
+          (run_exc (tree_at2 b_from2 (ren_b b_cur))).
+    Proof using Hcaller_split.
+      intros b_from1 b_from2 b_cur d_in ce1 e1_c e2_c vs varg
+        Hvs_len Hdin_dom Hd0_in Hbound Hagree (bk_cur & Hfb_cur & Hentry_or_pred).
+      pose proof (find_block_has_id _ _ Hfb_cur) as Hbcur_id.
+      pose proof (find_block_In' _ _ Hfb_cur) as Hbk_in.
+      destruct (in_combine_same_length (blks callee_cfg) ret_tmps (eq_sym Hlen_r) bk_cur Hbk_in)
+        as [rtmp_cur Hbk_rtmp].
+      assert (Hrtmp_af : In rtmp_cur all_fresh).
+      { apply Hrt_af; eapply in_combine_r, Hbk_rtmp. }
+      pose proof (find_block_new_callee caller_df callee_df pre_blks post_blks
+                    b_call pre_cd post_cd call_iid ret_dt call_args bk_cur rtmp_cur
+                    Hcaller_nd Hcaller_split Hcallee_nd Hbk_rtmp) as Hfb_new.
+      fold caller_df' caller_cfg' used_ids l_origs b_origs n_loc n_blk n_ret
+           all_fresh post_bid l_fresh b_fresh ret_tmps ren_l ren_b in Hfb_new.
+      rewrite <- Hbcur_id in Hfb_new.
+      assert (El_u :
+        ITree.bind (run_exc (tree_callee1 b_from1 b_cur varg)) (callee_epilogue_k1 vs) ≅
+        ITree.bind
+          (run_exc (ITree.bind (denote_block bk_cur b_from1 (Some varg))
+                      (step_bd_cont (blks callee_cfg) (Some varg) b_cur)))
+          (callee_epilogue_k1 vs)).
+      { apply eq_itree_clo_bind with (UU := Logic.eq); [| intros ? _ <-; reflexivity].
+        apply run_exc_proper; unfold tree_callee1; apply ocfg_bind_finish_some_eq, Hfb_cur. }
+      assert (Er_u :
+        run_exc (tree_at2 b_from2 (ren_b b_cur)) ≅
+        run_exc
+          (ITree.bind
+             (denote_block (transform_callee_block ren_l ren_b post_bid (bk_cur, rtmp_cur))
+                b_from2 caller_va)
+             (step_bd_cont (blks caller_cfg') caller_va (ren_b b_cur)))).
+      { apply run_exc_proper; unfold tree_at2; apply ocfg_bind_finish_some_eq, Hfb_new. }
+      eapply gen_inline_sim__obs_eq; [symmetry; exact El_u | symmetry; exact Er_u |].
+      eapply (Hcallee_step ce1 vs varg b_cur bk_cur rtmp_cur
+                (IC_Inlined stk ce1 e1_c e2_c));
+        [reflexivity | exact Hvs_len | exact Hbcur_id | exact Hbk_rtmp |].
+      apply (denote_block_callee_sim opt_c g0 opt_ret_dt l_origs b_origs all_fresh d_in
+               in_map (blks callee_cfg) ren_l ren_b post_bid (Some varg) caller_va
+               stk ce1 e1_c e2_c b_from1 b_from2 bk_cur rtmp_cur
+               Hinj_l Hfresh_l Hinj_b Hrtmp_af).
+      - apply Hcallee_leaf_b, Hbk_in.
+      - apply (verify_def_map_block _ _ _ _ Hvmap Hbk_in).
+      - exact Hdin_dom.
+      - rewrite <- Hbcur_id; exact Hd0_in.
+      - intros x Hx; eapply callee_local_ids_defs; eassumption.
+      - intros b Hb; eapply callee_block_ids_label; eassumption.
+      - exact Hbound.
+      - exact Hagree.
+      - exact Hentry_or_pred.
+    Qed.
+
+    Local Lemma caller_loop_va_finish
+      (Hcallee_args_nd : NoDup (df_args callee_df))
+      (Hcallee_entry : cfg_entry_has_no_phis callee_cfg = true)
+      (Hvmap : verify_def_map (df_args callee_df) callee_cfg in_map = true)
+      (Hlen_l : List.length l_fresh = n_loc)
+      (Hva_af : In va_tmp_id all_fresh)
+      (Hva_not_lf : ~ In va_tmp_id l_fresh)
+      (Hcallee_at :
+         forall b_from1 b_from2 b_cur d_in ce1 e1_c e2_c vs varg,
+           List.length vs = List.length (df_args callee_df) ->
+           incl d_in l_origs ->
+           incl (lookup_def_set in_map b_cur) d_in ->
+           callee_defs_bound ren_l d_in e1_c e2_c ->
+           env_agree_outside all_fresh ce1 e2_c ->
+           (exists bk_cur,
+              find_block (blks callee_cfg) b_cur = Some bk_cur /\
+              (blk_phis bk_cur = [] \/
+               (b_from2 = ren_b b_from1 /\
+                In b_from1 b_origs /\
+                Forall
+                  (fun '(_, Phi _ _ pargs, md) =>
+                     exists op,
+                       assoc b_from1 pargs = Some op /\
+                       incl (full_exp_uses op ++ flat_map full_metadata_uses md) d_in)
+                  (blk_phis bk_cur)))) ->
+           gen_inline_sim_ (@inl_is_ub_cfg IP IPT) inl_sync_cfg EqE_CFG EqA_CFG
+             (@inl_cfg_event_post IP IPT) (@as_local_cfg IP IPT) (@as_stack_cfg IP IPT)
+             opt_c g0 true out_rel r_caller (IC_Inlined stk ce1 e1_c e2_c)
+             (ITree.bind (run_exc (tree_callee1 b_from1 b_cur varg)) (callee_epilogue_k1 vs))
+             (run_exc (tree_at2 b_from2 (ren_b b_cur)))) :
+      forall ce1 e1_c0 e2_args vs varg,
+        e1_c0 = init_local_env (combine (df_args callee_df) vs) ->
+        List.length vs = List.length (df_args callee_df) ->
+        env_agree_outside all_fresh ce1 e2_args ->
+        (forall p v,
+           In (p, v) (combine (df_args callee_df) vs) ->
+           Maps.lookup (ren_l p) e2_args = Some v) ->
+        gen_inline_sim_ (@inl_is_ub_cfg IP IPT) inl_sync_cfg EqE_CFG EqA_CFG
+          (@inl_cfg_event_post IP IPT) (@as_local_cfg IP IPT) (@as_stack_cfg IP IPT)
+          opt_c g0 true out_rel r_caller (IC_Inlined stk ce1 e1_c0 e2_args)
+          (ITree.bind
+             (store (DTYPE_Struct true [])
+                (DVALUE_Base (DVALUE_Pointer varg))
+                (DVALUE_Struct true []))
+             (fun _ =>
+                ITree.bind (run_exc (tree_callee1 (init callee_cfg) (init callee_cfg) varg))
+                  (callee_epilogue_k1 vs)))
+          (run_exc
+             (ITree.bind (lwrite va_tmp_id (DVALUE_Base (DVALUE_Pointer varg)))
+                (fun _ => Tau (tree_at2 call_bid (ren_b (init callee_cfg)))))).
+    Proof using.
+      intros ce1 e1_c0 e2_args vs varg He1_c0 Hvs_len Hagree Hparams.
+      set (dv_va := DVALUE_Base (DVALUE_Pointer varg)).
+      eapply GIS_ZeroStoreL; [unfold store, dv_va; norm_subevent; reflexivity |].
+      assert (Er_va :
+        run_exc (ITree.bind (lwrite va_tmp_id dv_va)
+                   (fun _ => Tau (tree_at2 call_bid (ren_b (init callee_cfg))))) ≅
+        ITree.bind (ITree.trigger (subevent _ (LocalWrite va_tmp_id dv_va)))
+          (fun _ => Tau (run_exc (Tau (tree_at2 call_bid (ren_b (init callee_cfg))))))).
+      { unfold lwrite; norm_subevent.
+        rewrite run_exc_bind_trigger_none_eq by reflexivity;
+          reflexivity. }
+      eapply GIS_WriteR with (ic' := IC_Inlined stk ce1 e1_c0 (Maps.add va_tmp_id dv_va e2_args));
+        [reflexivity | exact Er_va |].
+      eapply GIS_TauR; [reflexivity |].
+      eapply gen_inline_sim__obs_eq;
+        [reflexivity | symmetry; apply run_exc_tau_eq; reflexivity |].
+      eapply GIS_TauR; [reflexivity |].
+      assert (Hbound0 : callee_defs_bound ren_l (df_args callee_df) e1_c0 e2_args).
+      { intros x Hx.
+        destruct (in_combine_same_length (df_args callee_df) vs Hvs_len x Hx) as [v Hxv].
+        exists v; split.
+        - rewrite He1_c0; apply init_local_env_nodup_lookup;
+            [exact Hcallee_args_nd | symmetry; exact Hvs_len | exact Hxv].
+        - apply Hparams, Hxv. }
+      eapply (Hcallee_at (init callee_cfg) call_bid (init callee_cfg) (df_args callee_df)
+                ce1 e1_c0 (Maps.add va_tmp_id dv_va e2_args) vs varg).
+      - exact Hvs_len.
+      - intros x Hx; apply callee_local_ids_arg, Hx.
+      - apply (verify_def_map_init _ _ _ Hvmap).
+      - apply callee_defs_bound_add_other_r; [| exact Hbound0].
+        intros x Hx Heq; apply Hva_not_lf; rewrite <- Heq.
+        apply lookup_ren_in_dom; [symmetry; exact Hlen_l | apply callee_local_ids_arg, Hx].
+      - apply env_agree_outside_add_fresh_r; [exact Hva_af | exact Hagree].
+      - destruct (cfg_entry_has_no_phis_inv _ Hcallee_entry) as (bk0 & Hfb0 & Hphis0).
+        exists bk0; split; [exact Hfb0 | left; exact Hphis0].
+    Qed.
+
+    Local Lemma caller_loop_callpre_step
+      (Hexc_out : forall ea1 ea2 ex, out_rel (IC_Synced stk ea1 ea2) (inl ex) (inl ex))
+      (Hproto_fattrs : forallb is_safe_fn_attr (dc_attrs (df_prototype callee_df)) = true)
+      (Hproto_rattrs : fst (dc_param_attrs (df_prototype callee_df)) = [])
+      (Hproto_pattrs : forallb is_empty_list (snd (dc_param_attrs (df_prototype callee_df))) = true) :
+      forall ic0 u1 u2,
+        ic_synced_stk stk ic0 ->
+        cfg_inline_sim opt_c g0 false call_pre_rel ic0 u1 u2 ->
+        gen_inline_sim_ (@inl_is_ub_cfg IP IPT) inl_sync_cfg EqE_CFG EqA_CFG
+          (@inl_cfg_event_post IP IPT) (@as_local_cfg IP IPT) (@as_stack_cfg IP IPT)
+          opt_c g0 true out_rel r_caller ic0
+          (run_exc (ITree.bind u1 call_after_args_k1))
+          (run_exc (ITree.bind u2 pre_after_args_k2)).
+    Proof using Hg_callee Hcc_eq.
+      intros ic0 u1 u2 Hic0 Hu.
+      eapply (run_exc_bind_step_sync opt_c g0 true stk call_pre_rel out_rel r_caller
+                call_after_args_k1 pre_after_args_k2 Hexc_out);
+        [| | exact Hic0 | exact Hu].
+      - intros ic' m1 m2 Hic' Hm; eapply RC_CallPre; eassumption.
+      - intros ic' vs r2 _ (-> & Hvs_len & ce1 & e2_args & -> & Hagree & Hparams).
+        assert (El_gr :
+          run_exc (call_after_args_k1 vs) ≅
+          ITree.bind (ITree.trigger (subevent _ (GlobalRead callee_gid)))
+            (fun fv =>
+               Tau (run_exc (ITree.bind (call ret_dt (anns_cconv call_anns) fv vs)
+                               (call_after_ret_k1 vs))))).
+        { assert (Eb : call_after_args_k1 vs ≅
+                       ITree.bind (ITree.trigger (subevent _ (GlobalRead callee_gid)))
+                         (fun fv => ITree.bind (call ret_dt (anns_cconv call_anns) fv vs)
+                                      (call_after_ret_k1 vs))).
+          { unfold call_after_args_k1; rewrite Eqit.bind_bind.
+            apply eq_itree_clo_bind with (UU := Logic.eq);
+              [apply denote_exp'_global_eq | intros fv _ <-; reflexivity]. }
+          rewrite (run_exc_proper _ _ Eb).
+          rewrite run_exc_bind_trigger_none_eq by reflexivity;
+            reflexivity. }
+        eapply GIS_GReadL; [exact El_gr | exact Hg_callee |].
+        eapply GIS_TauL; [reflexivity |].
+        set (ce_call :=
+          @subevent (@CallE PaV) (@CFGEtop PaV) _ _
+            (Call ret_dt (anns_cconv call_anns) (DVALUE_Base (DVALUE_Pointer p_callee)) vs)).
+        assert (El_call :
+          run_exc (ITree.bind (call ret_dt (anns_cconv call_anns)
+                                 (DVALUE_Base (DVALUE_Pointer p_callee)) vs)
+                     (call_after_ret_k1 vs)) ≅
+          ITree.bind (ITree.trigger ce_call) (callee_outer_k1 vs)).
+        { unfold call, ce_call, callee_outer_k1; norm_subevent.
+          rewrite run_exc_bind_trigger_none_eq by reflexivity;
+            reflexivity. }
+        assert (Hopt_eq : opt_c _ ce_call = Some (denote_function callee_df (anns_cconv call_anns) vs)).
+        { unfold opt_c, callee_opt_call, ce_call; norm_subevent.
+          rewrite Z.eqb_refl; reflexivity. }
+        eapply GIS_InlCallL; [reflexivity | exact El_call | exact Hopt_eq |].
+        set (bs_c := combine (df_args callee_df) vs).
+        assert (El_dfn :
+          ITree.bind (denote_function callee_df (anns_cconv call_anns) vs) (callee_outer_k1 vs) ≅
+          ITree.bind (ITree.trigger (subevent _ MemPush))
+            (fun _ =>
+               ITree.bind (ITree.trigger (subevent _ (StackPush bs_c)))
+                 (fun _ =>
+                    ITree.bind (ITree.trigger (subevent _ (Alloca (DTYPE_Struct true []) 1%N None)))
+                      (fun varargs =>
+                         ITree.bind
+                           (store (DTYPE_Struct true []) varargs (DVALUE_Struct true []))
+                           (fun _ =>
+                              ITree.bind
+                                (match varargs with
+                                 | DVALUE_Base (DVALUE_Pointer varg) => Ret varg
+                                 | _ => raise "Non-address returned from alloca of varargs"%string
+                                 end)
+                                (fun varg =>
+                                   ITree.bind (run_exc (tree_callee1 (init callee_cfg) (init callee_cfg) varg))
+                                     (callee_epilogue_k1 vs))))))).
+        { pose proof Hproto_rattrs as Hpr; pose proof Hproto_pattrs as Hpp.
+          assert (Edcpa :
+            exists args_attrs,
+              dc_param_attrs (df_prototype callee_df) = ([], args_attrs) /\
+              forallb is_empty_list args_attrs = true).
+          { clear - Hpr Hpp.
+            destruct (dc_param_attrs (df_prototype callee_df)) as [ra aa];
+              cbn [fst snd] in *; subst ra; exists aa; split; [reflexivity | exact Hpp]. }
+          destruct Edcpa as (args_attrs & Edcpa & Hpp').
+          unfold denote_function, push_call_frame, mem_push, stack_push, alloca;
+            norm_subevent.
+          fold callee_gid callee_cfg.
+          rewrite Edcpa.
+          rewrite (check_cconv_eq_true _ _ _ Hcc_eq).
+          cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+          rewrite Eqit.bind_ret_l, Eqit.bind_bind.
+          rewrite (apply_args_attrs_all_nil_eq _ _ _ Hpp'), Eqit.bind_ret_l.
+          rewrite (combine_lists_varargs_exact (df_args callee_df) vs (eq_sym Hvs_len)).
+          cbn [EOU_to_itree map_monad ExtLib.Structures.Monad.bind
+               ExtLib.Structures.Monad.ret EOU_monad Monad_itree]; fold bs_c.
+          rewrite !Eqit.bind_ret_l, !Eqit.bind_bind.
+          cbn [EOU_to_itree map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad Monad_itree].
+          rewrite !Eqit.bind_ret_l, !Eqit.bind_bind.
+          apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
+          rewrite !Eqit.bind_bind.
+          apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
+          rewrite !Eqit.bind_bind.
+          apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros varargs _ <-].
+          rewrite !Eqit.bind_bind.
+          apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
+          apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros varg _ <-].
+          rewrite !Eqit.bind_bind.
+          unfold callee_epilogue_k1; rewrite Edcpa; cbn [fst].
+          apply eq_itree_clo_bind with (UU := Logic.eq);
+            [unfold denote_cfg_map, tree_callee1, finish_cfg; reflexivity | intros rv _ <-].
+          rewrite Eqit.bind_bind; reflexivity. }
+        eapply GIS_MemPushL; [reflexivity | exact El_dfn |].
+        eapply GIS_StackPushL; [reflexivity | reflexivity |].
+        set (ev_va := @subevent (@MemoryE PaV) (@CFGEtop PaV) _ _
+                        (Alloca (DTYPE_Struct true []) 1%N None)).
+        assert (Er_al :
+          run_exc (pre_after_args_k2 tt) ≅
+          Vis ev_va
+            (fun v =>
+               Tau (run_exc (ITree.bind (lwrite va_tmp_id v)
+                               (fun _ => Tau (tree_at2 call_bid (ren_b (init callee_cfg)))))))).
+        { unfold pre_after_args_k2, alloca, ev_va; norm_subevent.
+          rewrite run_exc_bind_trigger_none_eq by reflexivity; rewrite bind_trigger.
+          reflexivity. }
+        eapply gen_inline_sim__obs_eq;
+          [symmetry; apply bind_trigger | symmetry; exact Er_al |].
+        apply GIS_Step; cbn [gis_step_body observe]; right; left.
+        split; [reflexivity | split; [apply EqE_CFG_refl |]].
+        intros a1 a2 Ha Hp.
+        apply EqA_CFG_eq in Ha; subst a2.
+        destruct Hp as [varg ->].
+        exists (ITree.bind
+                  (store (DTYPE_Struct true [])
+                     (DVALUE_Base (DVALUE_Pointer varg))
+                     (DVALUE_Struct true []))
+                  (fun _ =>
+                     ITree.bind (run_exc (tree_callee1 (init callee_cfg) (init callee_cfg) varg))
+                       (callee_epilogue_k1 vs))),
+               (run_exc
+                  (ITree.bind (lwrite va_tmp_id (DVALUE_Base (DVALUE_Pointer varg)))
+                     (fun _ => Tau (tree_at2 call_bid (ren_b (init callee_cfg)))))).
+        split.
+        + eapply ITS_Eq; [| apply ITS_Refl].
+          apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
+          rewrite Eqit.bind_ret_l; reflexivity.
+        + split; [apply ITS_Tau, ITS_Refl |].
+          eapply RC_VaFinish; [reflexivity | exact Hvs_len | exact Hagree | exact Hparams].
+    Qed.
+
+    Local Lemma caller_loop_post_at
+      (Hcaller_nd : NoDup (List.map blk_id (blks caller_cfg)))
+      (Hcallee_nd : NoDup (List.map blk_id (blks callee_cfg)))
+      (Hinj_b : forall b1 b2, In b1 b_origs -> In b2 b_origs -> ren_b b1 = ren_b b2 -> b1 = b2)
+      (Hcall_ne_post : call_bid <> post_bid)
+      (Hbcall_in : In b_call (blks caller_cfg))
+      (Hcaller_lbl_safe :
+         forall bk b,
+           In bk (blks caller_cfg) ->
+           In b (block_all_label_ids bk) ->
+           b <> post_bid /\ ~ In b b_fresh)
+      (Hcaller_use_safe :
+         forall bk x,
+           In bk (blks caller_cfg) ->
+           In x (full_block_uses bk) ->
+           ~ In x all_fresh)
+      (Hsync_step :
+         forall src1 src2 ic0 u1 u2,
+           src1 <> post_bid ->
+           src2 = remap_pred_id call_bid post_bid src1 ->
+           ic_synced_stk stk ic0 ->
+           cfg_inline_sim opt_c g0 false sync_bd_rel ic0 u1 u2 ->
+           gen_inline_sim_ (@inl_is_ub_cfg IP IPT) inl_sync_cfg EqE_CFG EqA_CFG
+             (@inl_cfg_event_post IP IPT) (@as_local_cfg IP IPT) (@as_stack_cfg IP IPT)
+             opt_c g0 true out_rel r_caller ic0
+             (run_exc (ITree.bind u1 (step_bd_cont (blks caller_cfg) caller_va src1)))
+             (run_exc (ITree.bind u2 (step_bd_cont (blks caller_cfg') caller_va src2)))) :
+      forall b_ret rtmp_ret bk_ret dv ce1 e2' vs,
+        b_ret = blk_id bk_ret ->
+        In (bk_ret, rtmp_ret) bk_rtmps ->
+        env_agree_outside all_fresh ce1 e2' ->
+        match opt_ret_dt with
+        | None => True
+        | Some _ =>
+            (exists rpair, snd (fst (blk_term bk_ret)) = TERM_Ret rpair) /\
+            Maps.lookup rtmp_ret e2' = Some dv
+        end ->
+        gen_inline_sim_ (@inl_is_ub_cfg IP IPT) inl_sync_cfg EqE_CFG EqA_CFG
+          (@inl_cfg_event_post IP IPT) (@as_local_cfg IP IPT) (@as_stack_cfg IP IPT)
+          opt_c g0 true out_rel r_caller (IC_Synced stk ce1 e2')
+          (run_exc (call_after_ret_k1 vs (inr dv)))
+          (run_exc (tree_at2 (ren_b b_ret) post_bid)).
+    Proof using Hcaller_split Hcd_split Hcall_rattrs Hcall_fattrs Hcall_range.
+      intros b_ret rtmp_ret bk_ret dv ce1 e2' vs Hb_ret Hbk_rtmp Hagree Hret_info.
+      pose proof (find_block_new_post_bid caller_df callee_df pre_blks post_blks
+                    b_call pre_cd post_cd call_iid ret_dt call_args
+                    Hcaller_nd Hcaller_split Hcallee_nd) as Hfb_post.
+      cbn zeta in Hfb_post.
+      fold callee_cfg used_ids l_origs b_origs n_loc n_blk n_ret
+           all_fresh post_bid b_fresh ret_tmps ren_b bk_rtmps caller_df' caller_cfg' in Hfb_post.
+      set (post_phis :=
+        match call_iid with
+        | IId res_id => [(res_id, Phi [] ret_dt (collect_ret_phi_incoming ren_b bk_rtmps), @nil (metadata dtyp))]
+        | IVoid _ => []
+        end).
+      assert (El_post :
+        call_after_ret_k1 vs (inr dv) ≅
+        ITree.bind
+          (ITree.bind (write_call_res dv)
+             (fun _ => ITree.bind (denote_code post_cd caller_va)
+                         (fun _ => denote_terminator (blk_term b_call))))
+          (step_bd_cont (blks caller_cfg) caller_va call_bid)).
+      { unfold call_after_ret_k1, post_call_u1.
+        rewrite Hcall_rattrs, Hcall_range.
+        rewrite (check_call_return_safe_inr_eq _ _ _ _ Hcall_fattrs).
+        rewrite Eqit.bind_ret_l, Eqit.bind_ret_l.
+        symmetry; apply Eqit.bind_bind. }
+      assert (Er_post :
+        tree_at2 (ren_b b_ret) post_bid ≅
+        ITree.bind
+          (ITree.bind (denote_phis (ren_b b_ret) post_phis)
+             (fun _ => ITree.bind (denote_code post_cd caller_va)
+                         (fun _ => denote_terminator (blk_term b_call))))
+          (step_bd_cont (blks caller_cfg') caller_va post_bid)).
+      { unfold tree_at2, post_phis; rewrite (ocfg_bind_finish_some_eq _ _ _ _ _ Hfb_post).
+        unfold denote_block;
+          cbn [blk_phis blk_code blk_term ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+        reflexivity. }
+      eapply gen_inline_sim__obs_eq;
+        [symmetry; apply run_exc_proper, El_post
+        | symmetry; apply run_exc_proper, Er_post |].
+      assert (Hremap_call : post_bid = remap_pred_id call_bid post_bid call_bid).
+      { unfold remap_pred_id; rewrite raw_id_eqb_refl; reflexivity. }
+      eapply (Hsync_step call_bid post_bid (IC_Synced stk ce1 e2'));
+        [exact Hcall_ne_post | exact Hremap_call | exists ce1, e2'; reflexivity |].
+      eapply gen_inline_sim_bind with
+        (RA := fun ic' _ _ =>
+                 exists ea1 ea2,
+                   ic' = IC_Synced stk ea1 ea2 /\
+                   env_agree_outside all_fresh ea1 ea2).
+      - unfold write_call_res, post_phis.
+        destruct ((fun c : instr_id =>
+                     match c return
+                       (c = call_iid -> (exists r, call_iid = IId r) \/ (exists v, call_iid = IVoid v))
+                     with
+                     | IId r => fun E => or_introl (ex_intro _ r (eq_sym E))
+                     | IVoid v => fun E => or_intror (ex_intro _ v (eq_sym E))
+                     end) call_iid Logic.eq_refl)
+          as [[res_id Hiid] | [vn Hiid]]; rewrite Hiid.
+        + unfold opt_ret_dt in Hret_info; rewrite Hiid in Hret_info; cbv iota in Hret_info.
+          destruct Hret_info as ([rpair Hrpair] & Hlk_rtmp).
+          assert (Hbks_dom : incl (List.map blk_id (blks callee_cfg)) b_origs).
+          { intros z Hz; apply in_map_iff in Hz as [bk [<- Hbk]].
+            apply callee_block_ids_blk_id, Hbk. }
+          pose proof (assoc_collect_ret_phi_incoming ren_b b_origs (blks callee_cfg) ret_tmps
+                        bk_ret rtmp_ret rpair Hcallee_nd Hinj_b Hbks_dom Hbk_rtmp Hrpair)
+            as Hassoc_ret.
+          rewrite <- Hb_ret in Hassoc_ret.
+          assert (Ephi_post :
+            denote_phis (ren_b b_ret)
+              [(res_id, Phi [] ret_dt (collect_ret_phi_incoming ren_b bk_rtmps), [])] ≅
+            ITree.bind (ITree.trigger (subevent _ (LocalRead rtmp_ret)))
+              (fun uv => lwrite res_id uv)).
+          { cbn [denote_phis map_monad denote_phi ExtLib.Structures.Monad.bind
+                 ExtLib.Structures.Monad.ret Monad_itree];
+            first [rewrite Hassoc_ret
+                  | lazymatch goal with
+                    | |- context [@Assoc.assoc ?A ?B ?RD ?k ?xs] =>
+                        let t := constr:(@Assoc.assoc A B RD k xs) in
+                        assert (Hassoc : t = Some (EXP_Ident (ID_Local rtmp_ret))) by exact Hassoc_ret;
+                        rewrite Hassoc; clear Hassoc
+                    end].
+            rewrite !Eqit.bind_bind.
+            apply eq_itree_clo_bind with (UU := Logic.eq);
+              [apply denote_exp'_local_eq | intros uv _ <-].
+            rewrite !Eqit.bind_ret_l;
+              cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+            rewrite !Eqit.bind_bind.
+            etransitivity; [| apply Eqit.bind_ret_r].
+            apply eq_itree_clo_bind with (UU := Logic.eq);
+              [reflexivity | intros [] [] _; rewrite !Eqit.bind_ret_l; reflexivity]. }
+          eapply gen_inline_sim_obs_eq; [reflexivity | symmetry; exact Ephi_post |].
+          assert (Hlw :
+            cfg_inline_sim opt_c g0 false
+              (fun ic' _ _ =>
+                 exists ea1 ea2,
+                   ic' = IC_Synced stk ea1 ea2 /\
+                   env_agree_outside all_fresh ea1 ea2)
+              (IC_Synced stk ce1 e2')
+              (lwrite res_id dv) (lwrite res_id dv)).
+          { eapply gen_inline_sim_weaken;
+              [| apply (cfg_inline_sim_lwrite_lr opt_c g0 false
+                          (IC_Synced stk ce1 e2')
+                          (IC_Synced stk (Maps.add res_id dv ce1) e2')
+                          (IC_Synced stk (Maps.add res_id dv ce1) (Maps.add res_id dv e2'))
+                          res_id res_id dv Logic.eq_refl Logic.eq_refl)].
+            intros ? [] [] (-> & _ & _).
+            eexists _, _; split; [reflexivity | apply env_agree_outside_add_both, Hagree]. }
+          pstep; eapply GIS_ReadR; [reflexivity | reflexivity | exact Hlk_rtmp |].
+          punfold Hlw; exact Hlw.
+        + eapply gen_inline_sim_obs_eq;
+            [ reflexivity
+            | cbn [denote_phis map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+              symmetry; rewrite !Eqit.bind_ret_l;
+              cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+              rewrite !Eqit.bind_ret_l; reflexivity
+            | ].
+          apply gen_inline_sim_ret; exists ce1, e2'; auto.
+      - intros ? _ _ (ea1 & ea2 & -> & Hag_a).
+        eapply gen_inline_sim_bind.
+        + apply (denote_code_caller_sim opt_c g0 all_fresh stk caller_va post_cd ea1 ea2);
+            [| exact Hag_a].
+          intros x Hx; apply (Hcaller_use_safe b_call x Hbcall_in).
+          unfold full_block_uses; apply in_or_app; right; apply in_or_app; left.
+          rewrite Hcd_split, flat_map_app; apply in_or_app; right; cbn [flat_map];
+            apply in_or_app; right; exact Hx.
+        + intros ? [] [] (_ & _ & eb1 & eb2 & -> & Hag_b).
+          set (tiid := fst (fst (blk_term b_call)));
+          set (tm := snd (fst (blk_term b_call)));
+          set (tmd := snd (blk_term b_call)).
+          assert (Ebt_call : blk_term b_call = (tiid, tm, tmd))
+            by (unfold tiid, tm, tmd; rewrite <- !surjective_pairing; reflexivity).
+          rewrite Ebt_call.
+          eapply gen_inline_sim_weaken;
+            [| apply (denote_terminator_caller_sim opt_c g0 all_fresh stk eb1 eb2 tiid tm tmd);
+               [| exact Hag_b]].
+          * intros ? bd1 bd2 (<- & Hsucc & ec1 & ec2 & -> & Hag_c).
+            split; [reflexivity | split; [| exists ec1, ec2; auto]].
+            intros succ_bid Hbd.
+            apply (Hcaller_lbl_safe b_call succ_bid Hbcall_in).
+            unfold block_all_label_ids; rewrite Ebt_call; cbn [fst snd].
+            right; apply in_or_app; right; apply Hsucc, Hbd.
+          * intros x Hx; apply (Hcaller_use_safe b_call x Hbcall_in).
+            unfold full_block_uses; rewrite Ebt_call.
+            apply in_or_app; right; apply in_or_app; right; exact Hx.
+    Qed.
+
+    Local Lemma caller_loop_caller_at
+      (Hcaller_nd : NoDup (List.map blk_id (blks caller_cfg)))
+      (Hcaller_entry : cfg_entry_has_no_phis caller_cfg = true)
+      (Hcallee_nd : NoDup (List.map blk_id (blks callee_cfg)))
+      (Hcallee_args_nd : NoDup (df_args callee_df))
+      (Hinj_l : forall x1 x2, In x1 l_origs -> In x2 l_origs -> ren_l x1 = ren_l x2 -> x1 = x2)
+      (Hfresh_l : forall x, In x l_origs -> In (ren_l x) all_fresh)
+      (Hcall_ne_post : call_bid <> post_bid)
+      (Hbcall_in : In b_call (blks caller_cfg))
+      (Hcaller_lbl_safe :
+         forall bk b,
+           In bk (blks caller_cfg) ->
+           In b (block_all_label_ids bk) ->
+           b <> post_bid /\ ~ In b b_fresh)
+      (Hcaller_use_safe :
+         forall bk x,
+           In bk (blks caller_cfg) ->
+           In x (full_block_uses bk) ->
+           ~ In x all_fresh)
+      (Hintr_none : lookup_intrinsic_declaration callee_gid = None)
+      (Hsync_step :
+         forall src1 src2 ic0 u1 u2,
+           src1 <> post_bid ->
+           src2 = remap_pred_id call_bid post_bid src1 ->
+           ic_synced_stk stk ic0 ->
+           cfg_inline_sim opt_c g0 false sync_bd_rel ic0 u1 u2 ->
+           gen_inline_sim_ (@inl_is_ub_cfg IP IPT) inl_sync_cfg EqE_CFG EqA_CFG
+             (@inl_cfg_event_post IP IPT) (@as_local_cfg IP IPT) (@as_stack_cfg IP IPT)
+             opt_c g0 true out_rel r_caller ic0
+             (run_exc (ITree.bind u1 (step_bd_cont (blks caller_cfg) caller_va src1)))
+             (run_exc (ITree.bind u2 (step_bd_cont (blks caller_cfg') caller_va src2))))
+      (Hcallpre_step :
+         forall ic0 u1 u2,
+           ic_synced_stk stk ic0 ->
+           cfg_inline_sim opt_c g0 false call_pre_rel ic0 u1 u2 ->
+           gen_inline_sim_ (@inl_is_ub_cfg IP IPT) inl_sync_cfg EqE_CFG EqA_CFG
+             (@inl_cfg_event_post IP IPT) (@as_local_cfg IP IPT) (@as_stack_cfg IP IPT)
+             opt_c g0 true out_rel r_caller ic0
+             (run_exc (ITree.bind u1 call_after_args_k1))
+             (run_exc (ITree.bind u2 pre_after_args_k2))) :
+      forall b_from1 b_from2 bid_cur ea1 ea2,
+        env_agree_outside all_fresh ea1 ea2 ->
+        bid_cur <> post_bid ->
+        ~ In bid_cur b_fresh ->
+        ((bid_cur = init caller_cfg /\ b_from1 = init caller_cfg /\ b_from2 = init caller_cfg) \/
+         (b_from1 <> post_bid /\ b_from2 = remap_pred_id call_bid post_bid b_from1)) ->
+        gen_inline_sim_ (@inl_is_ub_cfg IP IPT) inl_sync_cfg EqE_CFG EqA_CFG
+          (@inl_cfg_event_post IP IPT) (@as_local_cfg IP IPT) (@as_stack_cfg IP IPT)
+          opt_c g0 true out_rel r_caller (IC_Synced stk ea1 ea2)
+          (run_exc (tree_at1 b_from1 bid_cur))
+          (run_exc (tree_at2 b_from2 bid_cur)).
+    Proof using Hcaller_split Hcd_split Harg_len Hpattrs_nil.
+      intros b_from1 b_from2 bid_cur ea1 ea2 Hagree Hcur_post Hcur_bf Hpred.
+      destruct (RawIDOrd.eq_dec bid_cur call_bid) as [-> | Hne_call].
+      - (* Call-site block [b_call] vs [b_pre] *)
+        pose proof (inl_find_block_nodup_in _ _ Hcaller_nd Hbcall_in) as Hfb1;
+          fold call_bid in Hfb1.
+        pose proof (find_block_new_call_bid caller_df callee_df pre_blks post_blks
+                      b_call pre_cd post_cd call_iid ret_dt call_args
+                      Hcaller_nd Hcaller_split Hcallee_nd) as Hfb2.
+        cbn zeta in Hfb2.
+        fold callee_cfg used_ids l_origs b_origs n_loc n_blk n_ret
+             all_fresh post_bid va_tmp_id l_fresh b_fresh ren_l ren_b
+             caller_df' caller_cfg' call_bid in Hfb2.
+        assert (Hphis_cond :
+          blk_phis b_call = [] \/
+          (call_bid <> post_bid /\
+           b_from1 <> post_bid /\
+           b_from2 = remap_pred_id call_bid post_bid b_from1 /\
+           ~ In post_bid (flat_map (fun '(_, Phi _ _ pargs, _) => List.map fst pargs) (blk_phis b_call)))).
+        { destruct Hpred as [(Hinit_eq & _ & _) | (Hbf1 & Hbf2_eq)].
+          - left; destruct (cfg_entry_has_no_phis_inv _ Hcaller_entry) as (b0 & Hfb0 & Hb0_phis).
+            rewrite <- Hinit_eq, Hfb1 in Hfb0; injection Hfb0 as Hb0_eq;
+              rewrite <- Hb0_eq in Hb0_phis; exact Hb0_phis.
+          - right; split; [exact Hcall_ne_post | split; [exact Hbf1 | split; [exact Hbf2_eq |]]].
+            intros Hin; eapply (proj1 (Hcaller_lbl_safe b_call post_bid Hbcall_in
+              ltac:(unfold block_all_label_ids; right;
+                    apply in_or_app; left; exact Hin)));
+              reflexivity. }
+        assert (El_call_bk :
+          tree_at1 b_from1 call_bid ≅
+          ITree.bind
+            (ITree.bind (denote_phis b_from1 (blk_phis b_call))
+               (fun _ =>
+                  ITree.bind (denote_code pre_cd caller_va)
+                    (fun _ =>
+                       denote_call_args call_args
+                         (call_loc ++ ": Call argument violates noundef.")%string)))
+            call_after_args_k1).
+        { unfold tree_at1; rewrite (ocfg_bind_finish_some_eq _ _ _ _ _ Hfb1).
+          unfold denote_block;
+            cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+          rewrite Hcd_split.
+          unfold call_after_args_k1, call_after_ret_k1, write_call_res, post_call_u1.
+          rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry.
+          apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
+          rewrite denote_code_app_eq; rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry.
+          apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] [] _].
+          unfold denote_code at 1; cbn [loop_monad]; fold (denote_code post_cd caller_va).
+          destruct ((fun c : instr_id =>
+                       match c return
+                         (c = call_iid -> (exists r, call_iid = IId r) \/ (exists v, call_iid = IVoid v))
+                       with
+                       | IId r => fun E => or_introl (ex_intro _ r (eq_sym E))
+                       | IVoid v => fun E => or_intror (ex_intro _ v (eq_sym E))
+                       end) call_iid Logic.eq_refl)
+            as [[res_id Hiid] | [vn Hiid]]; rewrite Hiid;
+            (cbn [denote_instr ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; fold call_loc;
+             rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry;
+             apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros vs _ <-];
+             rewrite denote_operand_bundles_nil_eq, (intrinsic_exp_global_none _ Hintr_none), Eqit.bind_ret_l;
+             rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry;
+             apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros fv _ <-];
+             rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry;
+             apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros rv _ <-];
+             rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry;
+             apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros res _ <-];
+             rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry;
+             apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros retv _ <-];
+             rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry;
+             apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _];
+             rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry; reflexivity). }
+        assert (Er_call_bk :
+          tree_at2 b_from2 call_bid ≅
+          ITree.bind
+            (ITree.bind (denote_phis b_from2 (remap_phis_pred call_bid post_bid (blk_phis b_call)))
+               (fun _ =>
+                  ITree.bind (denote_code pre_cd caller_va)
+                    (fun _ =>
+                       denote_code (build_param_copies ren_l (df_args callee_df) call_args) caller_va)))
+            pre_after_args_k2).
+        { unfold tree_at2; rewrite (ocfg_bind_finish_some_eq _ _ _ _ _ Hfb2).
+          unfold denote_block;
+            cbn [blk_phis blk_code blk_term ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+          rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry.
+          apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
+          rewrite denote_code_app_eq; rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry.
+          apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] [] _].
+          rewrite denote_code_app_eq; rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry.
+          apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] [] _].
+          unfold denote_code at 1.
+          cbn [loop_monad denote_instr explicit_alignment find_option denote_terminator
+               step_bd_cont ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+          unfold pre_after_args_k2, tree_at2.
+          rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry.
+          apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros v _ <-].
+          rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry.
+          apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
+          rewrite !Eqit.bind_ret_l; reflexivity. }
+        eapply gen_inline_sim__obs_eq;
+          [symmetry; apply run_exc_proper, El_call_bk
+          | symmetry; apply run_exc_proper, Er_call_bk |].
+        eapply (Hcallpre_step (IC_Synced stk ea1 ea2));
+          [exists ea1, ea2; reflexivity |].
+        eapply gen_inline_sim_bind.
+        + apply (denote_phis_caller_sim opt_c g0 all_fresh call_bid post_bid b_from1 b_from2
+                   stk ea1 ea2 (blk_phis b_call));
+            [| exact Hagree | exact Hphis_cond].
+          intros x Hx; apply (Hcaller_use_safe b_call x Hbcall_in).
+          unfold full_block_uses; apply in_or_app; left; exact Hx.
+        + intros ? [] [] (_ & _ & e1_p & e2_p & -> & Hag_p).
+          eapply gen_inline_sim_bind.
+          * apply (denote_code_caller_sim opt_c g0 all_fresh stk caller_va pre_cd e1_p e2_p);
+              [| exact Hag_p].
+            intros x Hx; apply (Hcaller_use_safe b_call x Hbcall_in).
+            unfold full_block_uses; apply in_or_app; right; apply in_or_app; left.
+            rewrite Hcd_split, flat_map_app; apply in_or_app; left; exact Hx.
+          * intros ? [] [] (_ & _ & ce1 & e2_c & -> & Hag_c).
+            assert (Harg_use_safe :
+              forall (te : texp dtyp) (pattrs : list param_attr) (x : raw_id),
+                In (te, pattrs) call_args -> In x (full_texp_uses te) -> ~ In x all_fresh).
+            { intros te pattrs x Hin_arg Hx_use.
+              apply (Hcaller_use_safe b_call x Hbcall_in).
+              unfold full_block_uses; apply in_or_app; right; apply in_or_app; left.
+              rewrite Hcd_split, flat_map_app; apply in_or_app; right; cbn [flat_map].
+              apply in_or_app; left; apply in_or_app; left; cbn [full_instr_uses].
+              apply in_or_app; right; apply in_or_app; left.
+              apply in_flat_map; exists (te, pattrs); split; assumption. }
+            eapply gen_inline_sim_weaken;
+              [| apply (denote_call_args_param_copies_sim opt_c g0 l_origs all_fresh ren_l
+                          (call_loc ++ ": Call argument violates noundef.")%string
+                          caller_va stk ce1 Hinj_l Hfresh_l
+                          (df_args callee_df) call_args e2_c
+                          Harg_len Hcallee_args_nd
+                          (fun p Hp => callee_local_ids_arg callee_df p Hp)
+                          Hpattrs_nil Harg_use_safe Hag_c)].
+            -- intros ? vs [] (_ & Hvs_len & e2_args & -> & Hag_args & _ & Hparams).
+               split; [reflexivity | split; [exact Hvs_len | exists ce1, e2_args; auto]].
+      - (* Non-call caller block [bid_cur <> call_bid] *)
+        pose proof (find_block_new_caller_other caller_df callee_df pre_blks post_blks
+                      b_call pre_cd post_cd call_iid ret_dt call_args bid_cur
+                      Hcaller_nd Hcaller_split Hcallee_nd
+                      Hne_call Hcur_post Hcur_bf) as Hfb_other.
+        cbn zeta in Hfb_other.
+        fold caller_cfg callee_cfg used_ids l_origs b_origs n_loc n_blk n_ret
+             all_fresh post_bid b_fresh caller_df' caller_cfg' call_bid in Hfb_other.
+        destruct (find_block (blks caller_cfg) bid_cur) as [bk |] eqn:Efb1;
+          cbn [option_map] in Hfb_other.
+        + pose proof (find_block_In' _ _ Efb1) as Hbk_in.
+          assert (Hphis_cond :
+            blk_phis bk = [] \/
+            (call_bid <> post_bid /\
+             b_from1 <> post_bid /\
+             b_from2 = remap_pred_id call_bid post_bid b_from1 /\
+             ~ In post_bid (flat_map (fun '(_, Phi _ _ pargs, _) => List.map fst pargs) (blk_phis bk)))).
+          { destruct Hpred as [(Hinit_eq & _ & _) | (Hbf1 & Hbf2_eq)].
+            - left; destruct (cfg_entry_has_no_phis_inv _ Hcaller_entry) as (b0 & Hfb0 & Hb0_phis).
+              rewrite <- Hinit_eq, Efb1 in Hfb0; injection Hfb0 as ->; exact Hb0_phis.
+            - right; split; [exact Hcall_ne_post | split; [exact Hbf1 | split; [exact Hbf2_eq |]]].
+              intros Hin; eapply (proj1 (Hcaller_lbl_safe bk post_bid Hbk_in
+                ltac:(unfold block_all_label_ids; right;
+                      apply in_or_app; left; exact Hin)));
+                reflexivity. }
+          assert (Hremap_cur : bid_cur = remap_pred_id call_bid post_bid bid_cur).
+          { unfold remap_pred_id.
+            destruct (raw_id_eqb bid_cur call_bid) eqn:Eeq;
+              [apply raw_id_eqb_spec in Eeq; contradiction | reflexivity]. }
+          eapply gen_inline_sim__obs_eq;
+            [ symmetry; apply run_exc_proper; unfold tree_at1; apply (ocfg_bind_finish_some_eq _ _ _ _ _ Efb1)
+            | symmetry; apply run_exc_proper; unfold tree_at2; apply (ocfg_bind_finish_some_eq _ _ _ _ _ Hfb_other)
+            | ].
+          eapply (Hsync_step bid_cur bid_cur (IC_Synced stk ea1 ea2));
+            [exact Hcur_post | exact Hremap_cur | exists ea1, ea2; reflexivity |].
+          unfold denote_block, remap_block_phis;
+            cbn [blk_phis blk_code blk_term ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+          eapply gen_inline_sim_bind.
+          * apply (denote_phis_caller_sim opt_c g0 all_fresh call_bid post_bid b_from1 b_from2
+                     stk ea1 ea2 (blk_phis bk));
+              [| exact Hagree | exact Hphis_cond].
+            intros x Hx; apply (Hcaller_use_safe bk x Hbk_in).
+            unfold full_block_uses; apply in_or_app; left; exact Hx.
+          * intros ? [] [] (_ & _ & e1_p & e2_p & -> & Hag_p).
+            eapply gen_inline_sim_bind.
+            -- apply (denote_code_caller_sim opt_c g0 all_fresh stk caller_va (blk_code bk) e1_p e2_p);
+                 [| exact Hag_p].
+               intros x Hx; apply (Hcaller_use_safe bk x Hbk_in).
+               unfold full_block_uses; apply in_or_app;
+                 right; apply in_or_app; left; exact Hx.
+            -- intros ? [] [] (_ & _ & e1_c & e2_c & -> & Hag_c).
+               destruct (blk_term bk) as [[tiid tm] tmd] eqn:Ebt_bk.
+               eapply gen_inline_sim_weaken;
+                 [| apply (denote_terminator_caller_sim opt_c g0 all_fresh stk e1_c e2_c tiid tm tmd);
+                    [| exact Hag_c]].
+               ++ intros ? bd1 bd2 (<- & Hsucc & ec1 & ec2 & -> & Hag_ec).
+                  split; [reflexivity | split; [| exists ec1, ec2; auto]].
+                  intros succ_bid Hbd.
+                  apply (Hcaller_lbl_safe bk succ_bid Hbk_in).
+                  unfold block_all_label_ids; rewrite Ebt_bk; cbn [fst snd].
+                  right; apply in_or_app; right; apply Hsucc, Hbd.
+               ++ intros x Hx; apply (Hcaller_use_safe bk x Hbk_in).
+                  unfold full_block_uses; rewrite Ebt_bk.
+                  apply in_or_app; right; apply in_or_app; right; exact Hx.
+        + eapply gen_inline_sim__obs_eq;
+            [symmetry; apply run_exc_proper; unfold tree_at1; apply (ocfg_bind_finish_none_eq _ _ _ _ Efb1)
+            | symmetry; apply run_exc_proper; unfold tree_at2; apply (ocfg_bind_finish_none_eq _ _ _ _ Hfb_other) |].
+          apply gen_inline_sim__run_exc_raise; reflexivity.
+    Qed.
+
     Lemma denote_run_exc_cfg_caller_inline_sim (e1 e2 : @local_env PaV)
       (Hagree0 : env_agree_outside all_fresh e1 e2) :
       cfg_inline_sim opt_c g0 true out_rel
@@ -461,11 +1348,14 @@ Section InliningSemantics.
       assert (Hpb_af : In post_bid all_fresh) by (rewrite Eaf; left; reflexivity).
       assert (Hva_af : In va_tmp_id all_fresh) by (rewrite Eaf; right; left; reflexivity).
       assert (Hlf_af : forall x, In x l_fresh -> In x all_fresh).
-      { intros x Hx; rewrite Eaf; right; right; apply in_or_app; left; exact Hx. }
+      { intros x Hx; rewrite Eaf; right; right;
+          apply in_or_app; left; exact Hx. }
       assert (Hbf_af : forall x, In x b_fresh -> In x all_fresh).
-      { intros x Hx; rewrite Eaf; right; right; apply in_or_app; right; apply in_or_app; left; exact Hx. }
+      { intros x Hx; rewrite Eaf; right; right;
+          apply in_or_app; right; apply in_or_app; left; exact Hx. }
       assert (Hrt_af : forall x, In x ret_tmps -> In x all_fresh).
-      { intros x Hx; rewrite Eaf; right; right; apply in_or_app; right; apply in_or_app; right; exact Hx. }
+      { intros x Hx; rewrite Eaf; right; right;
+          apply in_or_app; right; apply in_or_app; right; exact Hx. }
       pose proof Hnd_af as Hnd_af0; rewrite Eaf in Hnd_af0.
       inversion Hnd_af0 as [| ? ? _ Hnd_af1]; subst.
       inversion Hnd_af1 as [| ? ? Hnin_va Hnd_lbr]; subst.
@@ -483,7 +1373,8 @@ Section InliningSemantics.
       assert (Hren_b_bf : forall b, In b b_origs -> In (ren_b b) b_fresh).
       { intros b Hb; apply lookup_ren_in_dom; [symmetry; exact Hlen_b | exact Hb]. }
       assert (Hcaller_not_af : forall x, In x (defn_all_ids caller_df) -> ~ In x all_fresh).
-      { intros x Hx Haf; eapply Hdisj_used; [exact Haf | unfold used_ids; apply in_or_app; left; exact Hx]. }
+      { intros x Hx Haf; eapply Hdisj_used;
+          [exact Haf | unfold used_ids; apply in_or_app; left; exact Hx]. }
       assert (Hbcall_in : In b_call (blks caller_cfg)).
       { rewrite Hcaller_split; apply in_or_app; right; left; reflexivity. }
       assert (Hcall_ne_post : call_bid <> post_bid).
@@ -506,741 +1397,19 @@ Section InliningSemantics.
       assert (Hexc_out : forall ea1 ea2 ex, out_rel (IC_Synced stk ea1 ea2) (inl ex) (inl ex)).
       { intros ea1 ea2 ex; exists ea1, ea2; auto. }
 
-      (* 1. [RC_SyncStep]: step caller non-call / post-call block body to [RC_CallerAt] or return *)
-      assert (Hsync_step :
-        forall src1 src2 ic0 u1 u2,
-          src1 <> post_bid ->
-          src2 = remap_pred_id call_bid post_bid src1 ->
-          ic_synced_stk stk ic0 ->
-          cfg_inline_sim opt_c g0 false sync_bd_rel ic0 u1 u2 ->
-          gen_inline_sim_ (@inl_is_ub_cfg IP IPT) inl_sync_cfg EqE_CFG EqA_CFG
-            (@inl_cfg_event_post IP IPT) (@as_local_cfg IP IPT) (@as_stack_cfg IP IPT)
-            opt_c g0 true out_rel r_caller ic0
-            (run_exc (ITree.bind u1 (step_bd_cont (blks caller_cfg) caller_va src1)))
-            (run_exc (ITree.bind u2 (step_bd_cont (blks caller_cfg') caller_va src2)))).
-      { intros src1 src2 ic0 u1 u2 Hsrc1 Hsrc2 Hic0 Hu.
-        eapply (run_exc_bind_step_sync opt_c g0 true stk sync_bd_rel out_rel r_caller
-                  (step_bd_cont (blks caller_cfg) caller_va src1)
-                  (step_bd_cont (blks caller_cfg') caller_va src2)
-                  Hexc_out);
-          [| | exact Hic0 | exact Hu].
-        - intros ic' m1 m2 Hic' Hm; eapply RC_SyncStep; eassumption.
-        - intros ic' bd1 bd2 _ (<- & Hsucc & e1' & e2' & -> & Hag').
-          destruct bd1 as [succ_bid | dv]; cbn [step_bd_cont].
-          + eapply gen_inline_sim__obs_eq;
-              [symmetry; apply run_exc_tau_eq; reflexivity
-              | symmetry; apply run_exc_tau_eq; reflexivity |].
-            apply GIS_Step; cbn [gis_step_body observe].
-            exists (run_exc (tree_at1 src1 succ_bid)),
-                   (run_exc (tree_at2 src2 succ_bid)).
-            split; [apply ITS_Refl | split; [apply ITS_Refl |]].
-            destruct (Hsucc succ_bid Logic.eq_refl) as [Hs_post Hs_bf].
-            apply RC_CallerAt; [exact Hag' | exact Hs_post | exact Hs_bf | right; split; assumption].
-          + eapply gen_inline_sim__obs_eq;
-              [symmetry; apply run_exc_ret_eq; reflexivity
-              | symmetry; apply run_exc_ret_eq; reflexivity |].
-            apply GIS_Step; cbn [gis_step_body observe]; exists e1', e2'; auto. }
-
-      (* 2. [RC_CalleeStep]: step inlined callee block body to [RC_CalleeAt] or [RC_PostAt] *)
-      assert (Hcallee_step :
-        forall ce1 vs varg b_cur bk_cur rtmp_cur ic0 u1 u2,
-          is_ic_inlined ic0 = true ->
-          List.length vs = List.length (df_args callee_df) ->
-          b_cur = blk_id bk_cur ->
-          In (bk_cur, rtmp_cur) bk_rtmps ->
-          cfg_inline_sim opt_c g0 false (callee_bd_rel bk_cur rtmp_cur ce1) ic0 u1 u2 ->
-          gen_inline_sim_ (@inl_is_ub_cfg IP IPT) inl_sync_cfg EqE_CFG EqA_CFG
-            (@inl_cfg_event_post IP IPT) (@as_local_cfg IP IPT) (@as_stack_cfg IP IPT)
-            opt_c g0 true out_rel r_caller ic0
-            (ITree.bind
-               (run_exc (ITree.bind u1 (step_bd_cont (blks callee_cfg) (Some varg) b_cur)))
-               (callee_epilogue_k1 vs))
-            (run_exc (ITree.bind u2 (step_bd_cont (blks caller_cfg') caller_va (ren_b b_cur))))).
-      { intros ce1 vs varg b_cur bk_cur rtmp_cur ic0 u1 u2 Hic0 Hvs_len Hbcur Hbk_rtmp Hu.
-        eapply (run_exc_bind_step_inlined opt_c g0 true
-                  (callee_bd_rel bk_cur rtmp_cur ce1) out_rel r_caller
-                  (step_bd_cont (blks callee_cfg) (Some varg) b_cur)
-                  (callee_epilogue_k1 vs)
-                  (step_bd_cont (blks caller_cfg') caller_va (ren_b b_cur)));
-          [| | exact Hic0 | exact Hu].
-        - intros ic' m1 m2 Hic' Hm; eapply RC_CalleeStep; eassumption.
-        - intros ic' bd1 bd2 _ Hbd.
-          destruct Hbd as [(succ_bid & d_out & e1' & e2' & -> & -> & _ & Hedge & Hdout_dom & -> & Hbound & Hag')
-                          | (dv & e1' & e2' & -> & -> & -> & Hag' & Hret_info)];
-            cbn [step_bd_cont].
-          + eapply gen_inline_sim__obs_eq;
-              [symmetry; erewrite run_exc_tau_eq; [rewrite Eqit.bind_tau; reflexivity | reflexivity]
-              | symmetry; apply run_exc_tau_eq; reflexivity |].
-            apply GIS_Step; cbn [gis_step_body observe].
-            exists (ITree.bind (run_exc (tree_callee1 b_cur succ_bid varg)) (callee_epilogue_k1 vs)),
-                   (run_exc (tree_at2 (ren_b b_cur) (ren_b succ_bid))).
-            split; [apply ITS_Refl | split; [apply ITS_Refl |]].
-            rewrite <- Hbcur in Hedge.
-            apply check_succ_edge_inv in Hedge as (b_succ & Hfb_succ & Hd_succ & Hphis_succ).
-            assert (Hbcur_orig : In b_cur b_origs).
-            { rewrite Hbcur; apply callee_block_ids_blk_id; eapply in_combine_l, Hbk_rtmp. }
-            eapply RC_CalleeAt with (d_in := d_out);
-              [exact Hvs_len | exact Hdout_dom | exact Hd_succ | exact Hbound | exact Hag' |].
-            exists b_succ; split; [exact Hfb_succ | right; auto].
-          + assert (El_pop :
-              ITree.bind (run_exc (Ret dv)) (callee_epilogue_k1 vs) ≅
-              ITree.bind (ITree.trigger (subevent _ StackPop))
-                (fun _ =>
-                   ITree.bind (ITree.trigger (subevent _ MemPop))
-                     (fun _ => Tau (run_exc (call_after_ret_k1 vs (inr dv)))))).
-            { rewrite (run_exc_ret_eq (Ret dv) dv Logic.eq_refl), Eqit.bind_ret_l.
-              unfold callee_epilogue_k1, pop_call_frame, stack_pop, mem_pop.
-              try unfold trigger; norm_subevent.
-              cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-              rewrite Eqit.bind_bind.
-              apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
-              apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
-              rewrite Hproto_rattrs.
-              rewrite (check_call_return_safe_inr_eq _ _ _ _ Hproto_fattrs), Eqit.bind_ret_l.
-              reflexivity. }
-            eapply GIS_StackPopL; [reflexivity | exact El_pop |].
-            eapply GIS_MemPopL; [reflexivity | reflexivity |].
-            eapply gen_inline_sim__obs_eq;
-              [reflexivity | symmetry; apply run_exc_tau_eq; reflexivity |].
-            apply GIS_Step; cbn [gis_step_body observe].
-            exists (run_exc (call_after_ret_k1 vs (inr dv))),
-                   (run_exc (tree_at2 (ren_b b_cur) post_bid)).
-            split; [apply ITS_Refl | split; [apply ITS_Refl |]].
-            eapply RC_PostAt; eassumption. }
-
-      (* 3. [RC_CalleeAt]: unfold callee block and delegate to [Hcallee_step] *)
-      assert (Hcallee_at :
-        forall b_from1 b_from2 b_cur d_in ce1 e1_c e2_c vs varg,
-          List.length vs = List.length (df_args callee_df) ->
-          incl d_in l_origs ->
-          incl (lookup_def_set in_map b_cur) d_in ->
-          callee_defs_bound ren_l d_in e1_c e2_c ->
-          env_agree_outside all_fresh ce1 e2_c ->
-          (exists bk_cur,
-             find_block (blks callee_cfg) b_cur = Some bk_cur /\
-             (blk_phis bk_cur = [] \/
-              (b_from2 = ren_b b_from1 /\
-               In b_from1 b_origs /\
-               Forall
-                 (fun '(_, Phi _ _ pargs, md) =>
-                    exists op,
-                      assoc b_from1 pargs = Some op /\
-                      incl (full_exp_uses op ++ flat_map full_metadata_uses md) d_in)
-                 (blk_phis bk_cur)))) ->
-          gen_inline_sim_ (@inl_is_ub_cfg IP IPT) inl_sync_cfg EqE_CFG EqA_CFG
-            (@inl_cfg_event_post IP IPT) (@as_local_cfg IP IPT) (@as_stack_cfg IP IPT)
-            opt_c g0 true out_rel r_caller (IC_Inlined stk ce1 e1_c e2_c)
-            (ITree.bind (run_exc (tree_callee1 b_from1 b_cur varg)) (callee_epilogue_k1 vs))
-            (run_exc (tree_at2 b_from2 (ren_b b_cur)))).
-      { intros b_from1 b_from2 b_cur d_in ce1 e1_c e2_c vs varg
-          Hvs_len Hdin_dom Hd0_in Hbound Hagree (bk_cur & Hfb_cur & Hentry_or_pred).
-        pose proof (find_block_has_id _ _ Hfb_cur) as Hbcur_id.
-        pose proof (find_block_In' _ _ Hfb_cur) as Hbk_in.
-        destruct (in_combine_same_length (blks callee_cfg) ret_tmps Hlen_r bk_cur Hbk_in)
-          as [rtmp_cur Hbk_rtmp].
-        assert (Hrtmp_af : In rtmp_cur all_fresh).
-        { apply Hrt_af; eapply in_combine_r, Hbk_rtmp. }
-        pose proof (find_block_new_callee caller_df callee_df pre_blks post_blks
-                      b_call pre_cd post_cd call_iid ret_dt call_args bk_cur rtmp_cur
-                      Hcaller_nd Hcaller_split Hcallee_nd Hbk_rtmp) as Hfb_new.
-        fold caller_df' caller_cfg' used_ids l_origs b_origs n_loc n_blk n_ret
-             all_fresh post_bid l_fresh b_fresh ret_tmps ren_l ren_b in Hfb_new.
-        rewrite <- Hbcur_id in Hfb_new.
-        assert (El_u :
-          ITree.bind (run_exc (tree_callee1 b_from1 b_cur varg)) (callee_epilogue_k1 vs) ≅
-          ITree.bind
-            (run_exc (ITree.bind (denote_block bk_cur b_from1 (Some varg))
-                        (step_bd_cont (blks callee_cfg) (Some varg) b_cur)))
-            (callee_epilogue_k1 vs)).
-        { apply eq_itree_clo_bind with (UU := Logic.eq); [| intros ? _ <-; reflexivity].
-          apply run_exc_proper; unfold tree_callee1; apply ocfg_bind_finish_some_eq, Hfb_cur. }
-        assert (Er_u :
-          run_exc (tree_at2 b_from2 (ren_b b_cur)) ≅
-          run_exc
-            (ITree.bind
-               (denote_block (transform_callee_block ren_l ren_b post_bid (bk_cur, rtmp_cur))
-                  b_from2 caller_va)
-               (step_bd_cont (blks caller_cfg') caller_va (ren_b b_cur)))).
-        { apply run_exc_proper; unfold tree_at2; apply ocfg_bind_finish_some_eq, Hfb_new. }
-        eapply gen_inline_sim__obs_eq; [symmetry; exact El_u | symmetry; exact Er_u |].
-        eapply (Hcallee_step ce1 vs varg b_cur bk_cur rtmp_cur
-                  (IC_Inlined stk ce1 e1_c e2_c));
-          [reflexivity | exact Hvs_len | exact Hbcur_id | exact Hbk_rtmp |].
-        apply (denote_block_callee_sim opt_c g0 opt_ret_dt l_origs b_origs all_fresh d_in
-                 in_map (blks callee_cfg) ren_l ren_b post_bid (Some varg) caller_va
-                 stk ce1 e1_c e2_c b_from1 b_from2 bk_cur rtmp_cur
-                 Hinj_l Hfresh_l Hinj_b Hrtmp_af).
-        - apply Hcallee_leaf_b, Hbk_in.
-        - apply (verify_def_map_block _ _ _ _ Hvmap Hbk_in).
-        - exact Hdin_dom.
-        - rewrite <- Hbcur_id; exact Hd0_in.
-        - intros x Hx; eapply callee_local_ids_defs; eassumption.
-        - intros b Hb; eapply callee_block_ids_label; eassumption.
-        - exact Hbound.
-        - exact Hagree.
-        - exact Hentry_or_pred. }
-
-      (* 4. [RC_VaFinish]: finish 0-byte varargs store / local write and enter [Hcallee_at] *)
-      assert (Hva_finish :
-        forall ce1 e1_c0 e2_args vs varg,
-          e1_c0 = init_local_env (combine (df_args callee_df) vs) ->
-          List.length vs = List.length (df_args callee_df) ->
-          env_agree_outside all_fresh ce1 e2_args ->
-          (forall p v,
-             In (p, v) (combine (df_args callee_df) vs) ->
-             Maps.lookup (ren_l p) e2_args = Some v) ->
-          gen_inline_sim_ (@inl_is_ub_cfg IP IPT) inl_sync_cfg EqE_CFG EqA_CFG
-            (@inl_cfg_event_post IP IPT) (@as_local_cfg IP IPT) (@as_stack_cfg IP IPT)
-            opt_c g0 true out_rel r_caller (IC_Inlined stk ce1 e1_c0 e2_args)
-            (ITree.bind
-               (store (DTYPE_Struct true [])
-                  (DVALUE_Base (DVALUE_Pointer varg))
-                  (DVALUE_Struct true []))
-               (fun _ =>
-                  ITree.bind (run_exc (tree_callee1 (init callee_cfg) (init callee_cfg) varg))
-                    (callee_epilogue_k1 vs)))
-            (run_exc
-               (ITree.bind (lwrite va_tmp_id (DVALUE_Base (DVALUE_Pointer varg)))
-                  (fun _ => Tau (tree_at2 call_bid (ren_b (init callee_cfg))))))).
-      { intros ce1 e1_c0 e2_args vs varg He1_c0 Hvs_len Hagree Hparams.
-        set (dv_va := DVALUE_Base (DVALUE_Pointer varg)).
-        eapply GIS_ZeroStoreL; [unfold store, dv_va; norm_subevent; reflexivity |].
-        assert (Er_va :
-          run_exc (ITree.bind (lwrite va_tmp_id dv_va)
-                     (fun _ => Tau (tree_at2 call_bid (ren_b (init callee_cfg))))) ≅
-          ITree.bind (ITree.trigger (subevent _ (LocalWrite va_tmp_id dv_va)))
-            (fun _ => Tau (run_exc (Tau (tree_at2 call_bid (ren_b (init callee_cfg))))))).
-        { unfold lwrite; norm_subevent.
-          rewrite run_exc_bind_trigger_none_eq by reflexivity;
-            reflexivity. }
-        eapply GIS_WriteR with (ic' := IC_Inlined stk ce1 e1_c0 (Maps.add va_tmp_id dv_va e2_args));
-          [reflexivity | exact Er_va |].
-        eapply GIS_TauR; [reflexivity |].
-        eapply gen_inline_sim__obs_eq;
-          [reflexivity | symmetry; apply run_exc_tau_eq; reflexivity |].
-        eapply GIS_TauR; [reflexivity |].
-        assert (Hbound0 : callee_defs_bound ren_l (df_args callee_df) e1_c0 e2_args).
-        { intros x Hx.
-          destruct (in_combine_same_length (df_args callee_df) vs Hvs_len x Hx) as [v Hxv].
-          exists v; split.
-          - rewrite He1_c0; apply init_local_env_nodup_lookup;
-              [exact Hcallee_args_nd | symmetry; exact Hvs_len | exact Hxv].
-          - apply Hparams, Hxv. }
-        eapply (Hcallee_at (init callee_cfg) call_bid (init callee_cfg) (df_args callee_df)
-                  ce1 e1_c0 (Maps.add va_tmp_id dv_va e2_args) vs varg).
-        - exact Hvs_len.
-        - intros x Hx; apply callee_local_ids_arg, Hx.
-        - apply (verify_def_map_init _ _ _ Hvmap).
-        - apply callee_defs_bound_add_other_r; [| exact Hbound0].
-          intros x Hx Heq; apply Hva_not_lf; rewrite <- Heq.
-          apply lookup_ren_in_dom; [symmetry; exact Hlen_l | apply callee_local_ids_arg, Hx].
-        - apply env_agree_outside_add_fresh_r; [exact Hva_af | exact Hagree].
-        - destruct (cfg_entry_has_no_phis_inv _ Hcallee_entry) as (bk0 & Hfb0 & Hphis0).
-          exists bk0; split; [exact Hfb0 | left; exact Hphis0]. }
-
-      (* 5. [RC_CallPre]: step call-pre prefix, inline [Call], push frame, sync 0-byte [Alloca] *)
-      assert (Hcallpre_step :
-        forall ic0 u1 u2,
-          ic_synced_stk stk ic0 ->
-          cfg_inline_sim opt_c g0 false call_pre_rel ic0 u1 u2 ->
-          gen_inline_sim_ (@inl_is_ub_cfg IP IPT) inl_sync_cfg EqE_CFG EqA_CFG
-            (@inl_cfg_event_post IP IPT) (@as_local_cfg IP IPT) (@as_stack_cfg IP IPT)
-            opt_c g0 true out_rel r_caller ic0
-            (run_exc (ITree.bind u1 call_after_args_k1))
-            (run_exc (ITree.bind u2 pre_after_args_k2))).
-      { intros ic0 u1 u2 Hic0 Hu.
-        eapply (run_exc_bind_step_sync opt_c g0 true stk call_pre_rel out_rel r_caller
-                  call_after_args_k1 pre_after_args_k2 Hexc_out);
-          [| | exact Hic0 | exact Hu].
-        - intros ic' m1 m2 Hic' Hm; eapply RC_CallPre; eassumption.
-        - intros ic' vs r2 _ (-> & Hvs_len & ce1 & e2_args & -> & Hagree & Hparams).
-          assert (El_gr :
-            run_exc (call_after_args_k1 vs) ≅
-            ITree.bind (ITree.trigger (subevent _ (GlobalRead callee_gid)))
-              (fun fv =>
-                 Tau (run_exc (ITree.bind (call ret_dt (anns_cconv call_anns) fv vs)
-                                 (call_after_ret_k1 vs))))).
-          { assert (Eb : call_after_args_k1 vs ≅
-                         ITree.bind (ITree.trigger (subevent _ (GlobalRead callee_gid)))
-                           (fun fv => ITree.bind (call ret_dt (anns_cconv call_anns) fv vs)
-                                        (call_after_ret_k1 vs))).
-            { unfold call_after_args_k1; rewrite Eqit.bind_bind.
-              apply eq_itree_clo_bind with (UU := Logic.eq);
-                [apply denote_exp'_global_eq | intros fv _ <-; reflexivity]. }
-            rewrite (run_exc_proper _ _ Eb).
-            rewrite run_exc_bind_trigger_none_eq by reflexivity;
-              reflexivity. }
-          eapply GIS_GReadL; [exact El_gr | exact Hg_callee |].
-          eapply GIS_TauL; [reflexivity |].
-          set (ce_call :=
-            @subevent (@CallE PaV) (@CFGEtop PaV) _ _
-              (Call ret_dt (anns_cconv call_anns) (DVALUE_Base (DVALUE_Pointer p_callee)) vs)).
-          assert (El_call :
-            run_exc (ITree.bind (call ret_dt (anns_cconv call_anns)
-                                   (DVALUE_Base (DVALUE_Pointer p_callee)) vs)
-                       (call_after_ret_k1 vs)) ≅
-            ITree.bind (ITree.trigger ce_call) (callee_outer_k1 vs)).
-          { unfold call, ce_call, callee_outer_k1; norm_subevent.
-            rewrite run_exc_bind_trigger_none_eq by reflexivity;
-              reflexivity. }
-          assert (Hopt_eq : opt_c _ ce_call = Some (denote_function callee_df (anns_cconv call_anns) vs)).
-          { unfold opt_c, callee_opt_call, ce_call; norm_subevent.
-            rewrite Z.eqb_refl; reflexivity. }
-          eapply GIS_InlCallL; [reflexivity | exact El_call | exact Hopt_eq |].
-          set (bs_c := combine (df_args callee_df) vs).
-          assert (El_dfn :
-            ITree.bind (denote_function callee_df (anns_cconv call_anns) vs) (callee_outer_k1 vs) ≅
-            ITree.bind (ITree.trigger (subevent _ MemPush))
-              (fun _ =>
-                 ITree.bind (ITree.trigger (subevent _ (StackPush bs_c)))
-                   (fun _ =>
-                      ITree.bind (ITree.trigger (subevent _ (Alloca (DTYPE_Struct true []) 1%N None)))
-                        (fun varargs =>
-                           ITree.bind
-                             (store (DTYPE_Struct true []) varargs (DVALUE_Struct true []))
-                             (fun _ =>
-                                ITree.bind
-                                  (match varargs with
-                                   | DVALUE_Base (DVALUE_Pointer varg) => Ret varg
-                                   | _ => raise "Non-address returned from alloca of varargs"%string
-                                   end)
-                                  (fun varg =>
-                                     ITree.bind (run_exc (tree_callee1 (init callee_cfg) (init callee_cfg) varg))
-                                       (callee_epilogue_k1 vs))))))).
-          { pose proof Hproto_rattrs as Hpr; pose proof Hproto_pattrs as Hpp.
-            assert (Edcpa :
-              exists args_attrs,
-                dc_param_attrs (df_prototype callee_df) = ([], args_attrs) /\
-                forallb is_empty_list args_attrs = true).
-            { clear - Hpr Hpp.
-              destruct (dc_param_attrs (df_prototype callee_df)) as [ra aa];
-                cbn [fst snd] in *; subst ra; exists aa; split; [reflexivity | exact Hpp]. }
-            destruct Edcpa as (args_attrs & Edcpa & Hpp').
-            unfold denote_function, push_call_frame, mem_push, stack_push, alloca;
-              norm_subevent.
-            fold callee_gid callee_cfg.
-            rewrite Edcpa.
-            rewrite (check_cconv_eq_true _ _ _ Hcc_eq).
-            cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-            rewrite Eqit.bind_ret_l, Eqit.bind_bind.
-            rewrite (apply_args_attrs_all_nil_eq _ _ _ Hpp'), Eqit.bind_ret_l.
-            rewrite (combine_lists_varargs_exact (df_args callee_df) vs (eq_sym Hvs_len)).
-            cbn [EOU_to_itree map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad Monad_itree]; fold bs_c.
-            rewrite !Eqit.bind_ret_l, !Eqit.bind_bind.
-            cbn [EOU_to_itree map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad Monad_itree].
-            rewrite !Eqit.bind_ret_l, !Eqit.bind_bind.
-            apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
-            rewrite !Eqit.bind_bind.
-            apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
-            rewrite !Eqit.bind_bind.
-            apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros varargs _ <-].
-            rewrite !Eqit.bind_bind.
-            apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
-            apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros varg _ <-].
-            rewrite !Eqit.bind_bind.
-            unfold callee_epilogue_k1; rewrite Edcpa; cbn [fst].
-            apply eq_itree_clo_bind with (UU := Logic.eq);
-              [unfold denote_cfg_map, tree_callee1, finish_cfg; reflexivity | intros rv _ <-].
-            rewrite Eqit.bind_bind; reflexivity. }
-          eapply GIS_MemPushL; [reflexivity | exact El_dfn |].
-          eapply GIS_StackPushL; [reflexivity | reflexivity |].
-          set (ev_va := @subevent (@MemoryE PaV) (@CFGEtop PaV) _ _
-                          (Alloca (DTYPE_Struct true []) 1%N None)).
-          assert (Er_al :
-            run_exc (pre_after_args_k2 tt) ≅
-            Vis ev_va
-              (fun v =>
-                 Tau (run_exc (ITree.bind (lwrite va_tmp_id v)
-                                 (fun _ => Tau (tree_at2 call_bid (ren_b (init callee_cfg)))))))).
-          { unfold pre_after_args_k2, alloca, ev_va; norm_subevent.
-            rewrite run_exc_bind_trigger_none_eq by reflexivity; rewrite bind_trigger.
-            reflexivity. }
-          eapply gen_inline_sim__obs_eq;
-            [symmetry; apply bind_trigger | symmetry; exact Er_al |].
-          apply GIS_Step; cbn [gis_step_body observe]; right; left.
-          split; [reflexivity | split; [apply EqE_CFG_refl |]].
-          intros a1 a2 Ha Hp.
-          apply EqA_CFG_eq in Ha; subst a2.
-          destruct Hp as [varg ->].
-          exists (ITree.bind
-                    (store (DTYPE_Struct true [])
-                       (DVALUE_Base (DVALUE_Pointer varg))
-                       (DVALUE_Struct true []))
-                    (fun _ =>
-                       ITree.bind (run_exc (tree_callee1 (init callee_cfg) (init callee_cfg) varg))
-                         (callee_epilogue_k1 vs))),
-                 (run_exc
-                    (ITree.bind (lwrite va_tmp_id (DVALUE_Base (DVALUE_Pointer varg)))
-                       (fun _ => Tau (tree_at2 call_bid (ren_b (init callee_cfg)))))).
-          split.
-          + eapply ITS_Eq; [| apply ITS_Refl].
-            apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
-            rewrite Eqit.bind_ret_l; reflexivity.
-          + split; [apply ITS_Tau, ITS_Refl |].
-            eapply RC_VaFinish; [reflexivity | exact Hvs_len | exact Hagree | exact Hparams]. }
-
-      (* 6. [RC_PostAt]: step return-value phi/write + [post_cd] + terminator via [Hsync_step] *)
-      assert (Hpost_at :
-        forall b_ret rtmp_ret bk_ret dv ce1 e2' vs,
-          b_ret = blk_id bk_ret ->
-          In (bk_ret, rtmp_ret) bk_rtmps ->
-          env_agree_outside all_fresh ce1 e2' ->
-          match opt_ret_dt with
-          | None => True
-          | Some _ =>
-              (exists rpair, snd (fst (blk_term bk_ret)) = TERM_Ret rpair) /\
-              Maps.lookup rtmp_ret e2' = Some dv
-          end ->
-          gen_inline_sim_ (@inl_is_ub_cfg IP IPT) inl_sync_cfg EqE_CFG EqA_CFG
-            (@inl_cfg_event_post IP IPT) (@as_local_cfg IP IPT) (@as_stack_cfg IP IPT)
-            opt_c g0 true out_rel r_caller (IC_Synced stk ce1 e2')
-            (run_exc (call_after_ret_k1 vs (inr dv)))
-            (run_exc (tree_at2 (ren_b b_ret) post_bid))).
-      { intros b_ret rtmp_ret bk_ret dv ce1 e2' vs Hb_ret Hbk_rtmp Hagree Hret_info.
-        pose proof (find_block_new_post_bid caller_df callee_df pre_blks post_blks
-                      b_call pre_cd post_cd call_iid ret_dt call_args
-                      Hcaller_nd Hcaller_split Hcallee_nd) as Hfb_post.
-        cbn zeta in Hfb_post.
-        fold callee_cfg used_ids l_origs b_origs n_loc n_blk n_ret
-             all_fresh post_bid b_fresh ret_tmps ren_b bk_rtmps caller_df' caller_cfg' in Hfb_post.
-        set (post_phis :=
-          match call_iid with
-          | IId res_id => [(res_id, Phi [] ret_dt (collect_ret_phi_incoming ren_b bk_rtmps), @nil (metadata dtyp))]
-          | IVoid _ => []
-          end).
-        assert (El_post :
-          call_after_ret_k1 vs (inr dv) ≅
-          ITree.bind
-            (ITree.bind (write_call_res dv)
-               (fun _ => ITree.bind (denote_code post_cd caller_va)
-                           (fun _ => denote_terminator (blk_term b_call))))
-            (step_bd_cont (blks caller_cfg) caller_va call_bid)).
-        { unfold call_after_ret_k1, post_call_u1.
-          rewrite Hcall_rattrs, Hcall_range.
-          rewrite (check_call_return_safe_inr_eq _ _ _ _ Hcall_fattrs).
-          rewrite Eqit.bind_ret_l, Eqit.bind_ret_l.
-          symmetry; apply Eqit.bind_bind. }
-        assert (Er_post :
-          tree_at2 (ren_b b_ret) post_bid ≅
-          ITree.bind
-            (ITree.bind (denote_phis (ren_b b_ret) post_phis)
-               (fun _ => ITree.bind (denote_code post_cd caller_va)
-                           (fun _ => denote_terminator (blk_term b_call))))
-            (step_bd_cont (blks caller_cfg') caller_va post_bid)).
-        { unfold tree_at2, post_phis; rewrite (ocfg_bind_finish_some_eq _ _ _ _ _ Hfb_post).
-          unfold denote_block;
-            cbn [blk_phis blk_code blk_term ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-          reflexivity. }
-        eapply gen_inline_sim__obs_eq;
-          [symmetry; apply run_exc_proper, El_post
-          | symmetry; apply run_exc_proper, Er_post |].
-        assert (Hremap_call : post_bid = remap_pred_id call_bid post_bid call_bid).
-        { unfold remap_pred_id; rewrite raw_id_eqb_refl; reflexivity. }
-        eapply (Hsync_step call_bid post_bid (IC_Synced stk ce1 e2'));
-          [exact Hcall_ne_post | exact Hremap_call | exists ce1, e2'; reflexivity |].
-        eapply gen_inline_sim_bind with
-          (RA := fun ic' _ _ =>
-                   exists ea1 ea2,
-                     ic' = IC_Synced stk ea1 ea2 /\
-                     env_agree_outside all_fresh ea1 ea2).
-        - unfold write_call_res, post_phis.
-          destruct ((fun c : instr_id =>
-                       match c return (c = call_iid -> (exists r, call_iid = IId r) \/ (exists v, call_iid = IVoid v)) with
-                       | IId r => fun E => or_introl (ex_intro _ r (eq_sym E))
-                       | IVoid v => fun E => or_intror (ex_intro _ v (eq_sym E))
-                       end) call_iid Logic.eq_refl)
-            as [[res_id Hiid] | [vn Hiid]]; rewrite Hiid.
-          + unfold opt_ret_dt in Hret_info; rewrite Hiid in Hret_info; cbv iota in Hret_info.
-            destruct Hret_info as ([rpair Hrpair] & Hlk_rtmp).
-            assert (Hbks_dom : incl (List.map blk_id (blks callee_cfg)) b_origs).
-            { intros z Hz; apply in_map_iff in Hz as [bk [<- Hbk]].
-              apply callee_block_ids_blk_id, Hbk. }
-            pose proof (assoc_collect_ret_phi_incoming ren_b b_origs (blks callee_cfg) ret_tmps
-                          bk_ret rtmp_ret rpair Hcallee_nd Hinj_b Hbks_dom Hbk_rtmp Hrpair)
-              as Hassoc_ret.
-            rewrite <- Hb_ret in Hassoc_ret.
-            assert (Ephi_post :
-              denote_phis (ren_b b_ret)
-                [(res_id, Phi [] ret_dt (collect_ret_phi_incoming ren_b bk_rtmps), [])] ≅
-              ITree.bind (ITree.trigger (subevent _ (LocalRead rtmp_ret)))
-                (fun uv => lwrite res_id uv)).
-            { cbn [denote_phis map_monad denote_phi ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
-              first [rewrite Hassoc_ret
-                    | lazymatch goal with
-                      | |- context [@Assoc.assoc ?A ?B ?RD ?k ?xs] =>
-                          let t := constr:(@Assoc.assoc A B RD k xs) in
-                          assert (Hassoc : t = Some (EXP_Ident (ID_Local rtmp_ret))) by exact Hassoc_ret;
-                          rewrite Hassoc; clear Hassoc
-                      end].
-              rewrite !Eqit.bind_bind.
-              apply eq_itree_clo_bind with (UU := Logic.eq);
-                [apply denote_exp'_local_eq | intros uv _ <-].
-              rewrite !Eqit.bind_ret_l; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-              rewrite !Eqit.bind_bind.
-              etransitivity; [| apply Eqit.bind_ret_r].
-              apply eq_itree_clo_bind with (UU := Logic.eq);
-                [reflexivity | intros [] [] _; rewrite !Eqit.bind_ret_l; reflexivity]. }
-            eapply gen_inline_sim_obs_eq; [reflexivity | symmetry; exact Ephi_post |].
-            assert (Hlw :
-              cfg_inline_sim opt_c g0 false
-                (fun ic' _ _ =>
-                   exists ea1 ea2,
-                     ic' = IC_Synced stk ea1 ea2 /\
-                     env_agree_outside all_fresh ea1 ea2)
-                (IC_Synced stk ce1 e2')
-                (lwrite res_id dv) (lwrite res_id dv)).
-            { eapply gen_inline_sim_weaken;
-                [| apply (cfg_inline_sim_lwrite_lr opt_c g0 false
-                            (IC_Synced stk ce1 e2')
-                            (IC_Synced stk (Maps.add res_id dv ce1) e2')
-                            (IC_Synced stk (Maps.add res_id dv ce1) (Maps.add res_id dv e2'))
-                            res_id res_id dv Logic.eq_refl Logic.eq_refl)].
-              intros ? [] [] (-> & _ & _).
-              eexists _, _; split; [reflexivity | apply env_agree_outside_add_both, Hagree]. }
-            pstep; eapply GIS_ReadR; [reflexivity | reflexivity | exact Hlk_rtmp |].
-            punfold Hlw; exact Hlw.
-          + eapply gen_inline_sim_obs_eq;
-              [reflexivity
-              | cbn [denote_phis map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
-                symmetry; rewrite !Eqit.bind_ret_l; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; rewrite !Eqit.bind_ret_l; reflexivity |].
-            apply gen_inline_sim_ret; exists ce1, e2'; auto.
-        - intros ? _ _ (ea1 & ea2 & -> & Hag_a).
-          eapply gen_inline_sim_bind.
-          + apply (denote_code_caller_sim opt_c g0 all_fresh stk caller_va post_cd ea1 ea2);
-              [| exact Hag_a].
-            intros x Hx; apply (Hcaller_use_safe b_call x Hbcall_in).
-            unfold full_block_uses; apply in_or_app; right; apply in_or_app; left.
-            rewrite Hcd_split, flat_map_app; apply in_or_app; right; cbn [flat_map];
-              apply in_or_app; right; exact Hx.
-          + intros ? [] [] (_ & _ & eb1 & eb2 & -> & Hag_b).
-            set (tiid := fst (fst (blk_term b_call)));
-            set (tm := snd (fst (blk_term b_call)));
-            set (tmd := snd (blk_term b_call)).
-            assert (Ebt_call : blk_term b_call = (tiid, tm, tmd))
-              by (unfold tiid, tm, tmd; rewrite <- !surjective_pairing; reflexivity).
-            rewrite Ebt_call.
-            eapply gen_inline_sim_weaken;
-              [| apply (denote_terminator_caller_sim opt_c g0 all_fresh stk eb1 eb2 tiid tm tmd);
-                 [| exact Hag_b]].
-            * intros ? bd1 bd2 (<- & Hsucc & ec1 & ec2 & -> & Hag_c).
-              split; [reflexivity | split; [| exists ec1, ec2; auto]].
-              intros succ_bid Hbd.
-              apply (Hcaller_lbl_safe b_call succ_bid Hbcall_in).
-              unfold block_all_label_ids; rewrite Ebt_call; cbn [fst snd].
-              right; apply in_or_app; right; apply Hsucc, Hbd.
-            * intros x Hx; apply (Hcaller_use_safe b_call x Hbcall_in).
-              unfold full_block_uses; rewrite Ebt_call.
-              apply in_or_app; right; apply in_or_app; right; exact Hx. }
-
-      (* 7. [RC_CallerAt]: dispatch [call_bid] to [Hcallpre_step] and other blocks to [Hsync_step] *)
-      assert (Hcaller_at :
-        forall b_from1 b_from2 bid_cur ea1 ea2,
-          env_agree_outside all_fresh ea1 ea2 ->
-          bid_cur <> post_bid ->
-          ~ In bid_cur b_fresh ->
-          ((bid_cur = init caller_cfg /\ b_from1 = init caller_cfg /\ b_from2 = init caller_cfg) \/
-           (b_from1 <> post_bid /\ b_from2 = remap_pred_id call_bid post_bid b_from1)) ->
-          gen_inline_sim_ (@inl_is_ub_cfg IP IPT) inl_sync_cfg EqE_CFG EqA_CFG
-            (@inl_cfg_event_post IP IPT) (@as_local_cfg IP IPT) (@as_stack_cfg IP IPT)
-            opt_c g0 true out_rel r_caller (IC_Synced stk ea1 ea2)
-            (run_exc (tree_at1 b_from1 bid_cur))
-            (run_exc (tree_at2 b_from2 bid_cur))).
-      { intros b_from1 b_from2 bid_cur ea1 ea2 Hagree Hcur_post Hcur_bf Hpred.
-        destruct (RawIDOrd.eq_dec bid_cur call_bid) as [-> | Hne_call].
-        - (* Call-site block [b_call] vs [b_pre] *)
-          pose proof (inl_find_block_nodup_in _ _ Hcaller_nd Hbcall_in) as Hfb1;
-            fold call_bid in Hfb1.
-          pose proof (find_block_new_call_bid caller_df callee_df pre_blks post_blks
-                        b_call pre_cd post_cd call_iid ret_dt call_args
-                        Hcaller_nd Hcaller_split Hcallee_nd) as Hfb2.
-          cbn zeta in Hfb2.
-          fold callee_cfg used_ids l_origs b_origs n_loc n_blk n_ret
-               all_fresh post_bid va_tmp_id l_fresh b_fresh ren_l ren_b
-               caller_df' caller_cfg' call_bid in Hfb2.
-          assert (Hphis_cond :
-            blk_phis b_call = [] \/
-            (call_bid <> post_bid /\
-             b_from1 <> post_bid /\
-             b_from2 = remap_pred_id call_bid post_bid b_from1 /\
-             ~ In post_bid (flat_map (fun '(_, Phi _ _ pargs, _) => List.map fst pargs) (blk_phis b_call)))).
-          { destruct Hpred as [(Hinit_eq & _ & _) | (Hbf1 & Hbf2_eq)].
-            - left; destruct (cfg_entry_has_no_phis_inv _ Hcaller_entry) as (b0 & Hfb0 & Hb0_phis).
-              rewrite <- Hinit_eq, Hfb1 in Hfb0; injection Hfb0 as Hb0_eq;
-                rewrite <- Hb0_eq in Hb0_phis; exact Hb0_phis.
-            - right; split; [exact Hcall_ne_post | split; [exact Hbf1 | split; [exact Hbf2_eq |]]].
-              intros Hin; eapply (proj1 (Hcaller_lbl_safe b_call post_bid Hbcall_in
-                ltac:(unfold block_all_label_ids; right; apply in_or_app; left; exact Hin))); reflexivity. }
-          assert (El_call_bk :
-            tree_at1 b_from1 call_bid ≅
-            ITree.bind
-              (ITree.bind (denote_phis b_from1 (blk_phis b_call))
-                 (fun _ =>
-                    ITree.bind (denote_code pre_cd caller_va)
-                      (fun _ =>
-                         denote_call_args call_args
-                           (call_loc ++ ": Call argument violates noundef.")%string)))
-              call_after_args_k1).
-          { unfold tree_at1; rewrite (ocfg_bind_finish_some_eq _ _ _ _ _ Hfb1).
-            unfold denote_block;
-              cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-            rewrite Hcd_split.
-            unfold call_after_args_k1, call_after_ret_k1, write_call_res, post_call_u1.
-            rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry.
-            apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
-            rewrite denote_code_app_eq; rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry.
-            apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] [] _].
-            unfold denote_code at 1; cbn [loop_monad]; fold (denote_code post_cd caller_va).
-            destruct ((fun c : instr_id =>
-                         match c return (c = call_iid -> (exists r, call_iid = IId r) \/ (exists v, call_iid = IVoid v)) with
-                         | IId r => fun E => or_introl (ex_intro _ r (eq_sym E))
-                         | IVoid v => fun E => or_intror (ex_intro _ v (eq_sym E))
-                         end) call_iid Logic.eq_refl)
-              as [[res_id Hiid] | [vn Hiid]]; rewrite Hiid;
-              (cbn [denote_instr ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; fold call_loc;
-               rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry;
-               apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros vs _ <-];
-               rewrite denote_operand_bundles_nil_eq, (intrinsic_exp_global_none _ Hintr_none), Eqit.bind_ret_l;
-               rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry;
-               apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros fv _ <-];
-               rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry;
-               apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros rv _ <-];
-               rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry;
-               apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros res _ <-];
-               rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry;
-               apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros retv _ <-];
-               rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry;
-               apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _];
-               rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry; reflexivity). }
-          assert (Er_call_bk :
-            tree_at2 b_from2 call_bid ≅
-            ITree.bind
-              (ITree.bind (denote_phis b_from2 (remap_phis_pred call_bid post_bid (blk_phis b_call)))
-                 (fun _ =>
-                    ITree.bind (denote_code pre_cd caller_va)
-                      (fun _ =>
-                         denote_code (build_param_copies ren_l (df_args callee_df) call_args) caller_va)))
-              pre_after_args_k2).
-          { unfold tree_at2; rewrite (ocfg_bind_finish_some_eq _ _ _ _ _ Hfb2).
-            unfold denote_block;
-              cbn [blk_phis blk_code blk_term ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-            rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry.
-            apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
-            rewrite denote_code_app_eq; rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry.
-            apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] [] _].
-            rewrite denote_code_app_eq; rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry.
-            apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] [] _].
-            unfold denote_code at 1.
-            cbn [loop_monad denote_instr explicit_alignment find_option denote_terminator
-                 step_bd_cont ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-            unfold pre_after_args_k2, tree_at2.
-            rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry.
-            apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros v _ <-].
-            rewrite ?Eqit.bind_bind; symmetry; rewrite ?Eqit.bind_bind; symmetry.
-            apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [] _ _].
-            rewrite !Eqit.bind_ret_l; reflexivity. }
-          eapply gen_inline_sim__obs_eq;
-            [symmetry; apply run_exc_proper, El_call_bk
-            | symmetry; apply run_exc_proper, Er_call_bk |].
-          eapply (Hcallpre_step (IC_Synced stk ea1 ea2));
-            [exists ea1, ea2; reflexivity |].
-          eapply gen_inline_sim_bind.
-          + apply (denote_phis_caller_sim opt_c g0 all_fresh call_bid post_bid b_from1 b_from2
-                     stk ea1 ea2 (blk_phis b_call));
-              [| exact Hagree | exact Hphis_cond].
-            intros x Hx; apply (Hcaller_use_safe b_call x Hbcall_in).
-            unfold full_block_uses; apply in_or_app; left; exact Hx.
-          + intros ? [] [] (_ & _ & e1_p & e2_p & -> & Hag_p).
-            eapply gen_inline_sim_bind.
-            * apply (denote_code_caller_sim opt_c g0 all_fresh stk caller_va pre_cd e1_p e2_p);
-                [| exact Hag_p].
-              intros x Hx; apply (Hcaller_use_safe b_call x Hbcall_in).
-              unfold full_block_uses; apply in_or_app; right; apply in_or_app; left.
-              rewrite Hcd_split, flat_map_app; apply in_or_app; left; exact Hx.
-            * intros ? [] [] (_ & _ & ce1 & e2_c & -> & Hag_c).
-              assert (Harg_use_safe :
-                forall (te : texp dtyp) (pattrs : list param_attr) (x : raw_id),
-                  In (te, pattrs) call_args -> In x (full_texp_uses te) -> ~ In x all_fresh).
-              { intros te pattrs x Hin_arg Hx_use.
-                apply (Hcaller_use_safe b_call x Hbcall_in).
-                unfold full_block_uses; apply in_or_app; right; apply in_or_app; left.
-                rewrite Hcd_split, flat_map_app; apply in_or_app; right; cbn [flat_map].
-                apply in_or_app; left; apply in_or_app; left; cbn [full_instr_uses].
-                apply in_or_app; right; apply in_or_app; left.
-                apply in_flat_map; exists (te, pattrs); split; assumption. }
-              eapply gen_inline_sim_weaken;
-                [| apply (denote_call_args_param_copies_sim opt_c g0 l_origs all_fresh ren_l
-                            (call_loc ++ ": Call argument violates noundef.")%string
-                            caller_va stk ce1 Hinj_l Hfresh_l
-                            (df_args callee_df) call_args e2_c
-                            Harg_len Hcallee_args_nd
-                            (fun p Hp => callee_local_ids_arg callee_df p Hp)
-                            Hpattrs_nil Harg_use_safe Hag_c)].
-              -- intros ? vs [] (_ & Hvs_len & e2_args & -> & Hag_args & _ & Hparams).
-                 split; [reflexivity | split; [exact Hvs_len | exists ce1, e2_args; auto]].
-        - (* Non-call caller block [bid_cur <> call_bid] *)
-          pose proof (find_block_new_caller_other caller_df callee_df pre_blks post_blks
-                        b_call pre_cd post_cd call_iid ret_dt call_args bid_cur
-                        Hcaller_nd Hcaller_split Hcallee_nd
-                        Hne_call Hcur_post Hcur_bf) as Hfb_other.
-          cbn zeta in Hfb_other.
-          fold caller_cfg callee_cfg used_ids l_origs b_origs n_loc n_blk n_ret
-               all_fresh post_bid b_fresh caller_df' caller_cfg' call_bid in Hfb_other.
-          destruct (find_block (blks caller_cfg) bid_cur) as [bk |] eqn:Efb1;
-            cbn [option_map] in Hfb_other.
-          + pose proof (find_block_In' _ _ Efb1) as Hbk_in.
-            assert (Hphis_cond :
-              blk_phis bk = [] \/
-              (call_bid <> post_bid /\
-               b_from1 <> post_bid /\
-               b_from2 = remap_pred_id call_bid post_bid b_from1 /\
-               ~ In post_bid (flat_map (fun '(_, Phi _ _ pargs, _) => List.map fst pargs) (blk_phis bk)))).
-            { destruct Hpred as [(Hinit_eq & _ & _) | (Hbf1 & Hbf2_eq)].
-              - left; destruct (cfg_entry_has_no_phis_inv _ Hcaller_entry) as (b0 & Hfb0 & Hb0_phis).
-                rewrite <- Hinit_eq, Efb1 in Hfb0; injection Hfb0 as ->; exact Hb0_phis.
-              - right; split; [exact Hcall_ne_post | split; [exact Hbf1 | split; [exact Hbf2_eq |]]].
-                intros Hin; eapply (proj1 (Hcaller_lbl_safe bk post_bid Hbk_in
-                  ltac:(unfold block_all_label_ids; right; apply in_or_app; left; exact Hin))); reflexivity. }
-            assert (Hremap_cur : bid_cur = remap_pred_id call_bid post_bid bid_cur).
-            { unfold remap_pred_id.
-              destruct (raw_id_eqb bid_cur call_bid) eqn:Eeq;
-                [apply raw_id_eqb_spec in Eeq; contradiction | reflexivity]. }
-            eapply gen_inline_sim__obs_eq;
-              [symmetry; apply run_exc_proper; unfold tree_at1; apply (ocfg_bind_finish_some_eq _ _ _ _ _ Efb1)
-              | symmetry; apply run_exc_proper; unfold tree_at2; apply (ocfg_bind_finish_some_eq _ _ _ _ _ Hfb_other) |].
-            eapply (Hsync_step bid_cur bid_cur (IC_Synced stk ea1 ea2));
-              [exact Hcur_post | exact Hremap_cur | exists ea1, ea2; reflexivity |].
-            unfold denote_block, remap_block_phis;
-              cbn [blk_phis blk_code blk_term ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-            eapply gen_inline_sim_bind.
-            * apply (denote_phis_caller_sim opt_c g0 all_fresh call_bid post_bid b_from1 b_from2
-                       stk ea1 ea2 (blk_phis bk));
-                [| exact Hagree | exact Hphis_cond].
-              intros x Hx; apply (Hcaller_use_safe bk x Hbk_in).
-              unfold full_block_uses; apply in_or_app; left; exact Hx.
-            * intros ? [] [] (_ & _ & e1_p & e2_p & -> & Hag_p).
-              eapply gen_inline_sim_bind.
-              -- apply (denote_code_caller_sim opt_c g0 all_fresh stk caller_va (blk_code bk) e1_p e2_p);
-                   [| exact Hag_p].
-                 intros x Hx; apply (Hcaller_use_safe bk x Hbk_in).
-                 unfold full_block_uses; apply in_or_app; right; apply in_or_app; left; exact Hx.
-              -- intros ? [] [] (_ & _ & e1_c & e2_c & -> & Hag_c).
-                 destruct (blk_term bk) as [[tiid tm] tmd] eqn:Ebt_bk.
-                 eapply gen_inline_sim_weaken;
-                   [| apply (denote_terminator_caller_sim opt_c g0 all_fresh stk e1_c e2_c tiid tm tmd);
-                      [| exact Hag_c]].
-                 ++ intros ? bd1 bd2 (<- & Hsucc & ec1 & ec2 & -> & Hag_ec).
-                    split; [reflexivity | split; [| exists ec1, ec2; auto]].
-                    intros succ_bid Hbd.
-                    apply (Hcaller_lbl_safe bk succ_bid Hbk_in).
-                    unfold block_all_label_ids; rewrite Ebt_bk; cbn [fst snd].
-                    right; apply in_or_app; right; apply Hsucc, Hbd.
-                 ++ intros x Hx; apply (Hcaller_use_safe bk x Hbk_in).
-                    unfold full_block_uses; rewrite Ebt_bk.
-                    apply in_or_app; right; apply in_or_app; right; exact Hx.
-          + eapply gen_inline_sim__obs_eq;
-              [symmetry; apply run_exc_proper; unfold tree_at1; apply (ocfg_bind_finish_none_eq _ _ _ _ Efb1)
-              | symmetry; apply run_exc_proper; unfold tree_at2; apply (ocfg_bind_finish_none_eq _ _ _ _ Hfb_other) |].
-            apply gen_inline_sim__run_exc_raise; reflexivity. }
+      pose proof (caller_loop_sync_step Hexc_out) as Hsync_step.
+      pose proof (caller_loop_callee_step (eq_sym Hlen_r) Hproto_fattrs Hproto_rattrs) as Hcallee_step.
+      pose proof (caller_loop_callee_at Hcaller_nd Hcallee_nd Hcallee_leaf_b Hvmap
+                    (eq_sym Hlen_r) Hrt_af Hinj_l Hfresh_l Hinj_b Hcallee_step) as Hcallee_at.
+      pose proof (caller_loop_va_finish Hcallee_args_nd Hcallee_entry Hvmap
+                    Hlen_l Hva_af Hva_not_lf Hcallee_at) as Hva_finish.
+      pose proof (caller_loop_callpre_step Hexc_out Hproto_fattrs Hproto_rattrs Hproto_pattrs)
+        as Hcallpre_step.
+      pose proof (caller_loop_post_at Hcaller_nd Hcallee_nd Hinj_b Hcall_ne_post Hbcall_in
+                    Hcaller_lbl_safe Hcaller_use_safe Hsync_step) as Hpost_at.
+      pose proof (caller_loop_caller_at Hcaller_nd Hcaller_entry Hcallee_nd Hcallee_args_nd
+                    Hinj_l Hfresh_l Hcall_ne_post Hbcall_in Hcaller_lbl_safe Hcaller_use_safe
+                    Hintr_none Hsync_step Hcallpre_step) as Hcaller_at.
 
       (* Tie the 7-state coinductive knot *)
       assert (Hr_all :
@@ -1742,7 +1911,8 @@ Section InliningSemantics.
       eapply refine_prov_obs_eq;
         [symmetry; rewrite Ef, Eqit.bind_vis; reflexivity
         | symmetry; rewrite Ef, Eqit.bind_vis; reflexivity |].
-      pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
+      pstep; apply RP_Step; cbn;
+        right; right; split; [exact I | intros [] [] _].
   Qed.
 
   Lemma interp_address_one_function_inline
@@ -2083,13 +2253,16 @@ Section InliningSemantics.
                cfg_inline_sim opt_c g0 true
                  (fun ic' r1 r2 => ic' = IC_Synced stk e1 e2 /\ r1 = r2)
                  (IC_Synced stk e1 e2) (f1 cc fargs) (f2 cc fargs))
-          (lookup k (IntMaps.IP.of_list ((defns1_pre ++ (ptr_to_int p_callee, denote_function callee_df) :: defns1_post) ++ libs1)))
+          (lookup k
+             (IntMaps.IP.of_list
+                ((defns1_pre ++ (ptr_to_int p_callee, denote_function callee_df) :: defns1_post) ++ libs1)))
           (lookup k (IntMaps.IP.of_list (defns2 ++ libs2)))).
     { apply of_list_fn_ctx_inline_sim, Forall2_app; assumption. }
     eapply gen_inline_sim_bind.
     - rewrite !denote_mcfg_eq_interp_mrec.
       eapply (cfg_to_mcfg_inline_sim_mrec p_callee (denote_function callee_df)
-                (IntMaps.IP.of_list ((defns1_pre ++ (ptr_to_int p_callee, denote_function callee_df) :: defns1_post) ++ libs1))
+                (IntMaps.IP.of_list
+                   ((defns1_pre ++ (ptr_to_int p_callee, denote_function callee_df) :: defns1_post) ++ libs1))
                 (IntMaps.IP.of_list (defns2 ++ libs2))
                 g0).
       + exact Hz_callee_ge1.

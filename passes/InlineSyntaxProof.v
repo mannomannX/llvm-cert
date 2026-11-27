@@ -234,7 +234,8 @@ Qed.
 Lemma defn_all_ids_cfg {T : Set} (df : definition T (CFG.cfg T)) (x : raw_id) :
   In x (cfg_all_ids (df_instrs df)) -> In x (defn_all_ids df).
 Proof.
-  intros Hx; right; apply in_or_app; right; apply in_or_app; left; exact Hx.
+  intros Hx; right; apply in_or_app; right;
+    apply in_or_app; left; exact Hx.
 Qed.
 
 Lemma defn_all_ids_init {T : Set} (df : definition T (CFG.cfg T)) :
@@ -246,7 +247,8 @@ Qed.
 Lemma defn_all_ids_blk_id {T : Set} (df : definition T (CFG.cfg T)) (bk : block T) :
   In bk (blks (df_instrs df)) -> In (blk_id bk) (defn_all_ids df).
 Proof.
-  intros Hbk; apply defn_all_ids_cfg; right; apply in_or_app; right; apply in_or_app; left.
+  intros Hbk; apply defn_all_ids_cfg; right; apply in_or_app;
+    right; apply in_or_app; left.
   apply in_map, Hbk.
 Qed.
 
@@ -254,7 +256,8 @@ Lemma defn_all_ids_block_defs {T : Set} (df : definition T (CFG.cfg T)) (bk : bl
   In bk (blks (df_instrs df)) -> In x (full_block_defs bk) -> In x (defn_all_ids df).
 Proof.
   intros Hbk Hx; apply defn_all_ids_cfg.
-  right; apply in_or_app; right; apply in_or_app; right; apply in_or_app; left.
+  right; apply in_or_app; right; apply in_or_app;
+    right; apply in_or_app; left.
   apply in_flat_map; exists bk; split; assumption.
 Qed.
 
@@ -262,14 +265,16 @@ Lemma defn_all_ids_block_uses {T : Set} (df : definition T (CFG.cfg T)) (bk : bl
   In bk (blks (df_instrs df)) -> In x (full_block_uses bk) -> In x (defn_all_ids df).
 Proof.
   intros Hbk Hx; apply defn_all_ids_cfg.
-  right; apply in_or_app; right; apply in_or_app; right; apply in_or_app; right.
+  right; apply in_or_app; right; apply in_or_app;
+    right; apply in_or_app; right.
   apply in_flat_map; exists bk; split; assumption.
 Qed.
 
 Lemma defn_all_ids_label_ids {T : Set} (df : definition T (CFG.cfg T)) (bk : block T) (b : raw_id) :
   In bk (blks (df_instrs df)) -> In b (block_all_label_ids bk) -> In b (defn_all_ids df).
 Proof.
-  intros Hbk Hb; right; apply in_or_app; right; apply in_or_app; right.
+  intros Hbk Hb; right; apply in_or_app; right;
+    apply in_or_app; right.
   apply in_flat_map; exists bk; split; assumption.
 Qed.
 
@@ -617,10 +622,12 @@ Proof.
   pose proof (inl_nodup_app_r _ _ Hnd_lbr) as Hnd_br.
   pose proof (inl_nodup_app_l _ _ Hnd_br) as Hnd_bf.
   assert (Hbf_in_af : forall x, In x b_fresh -> In x all_fresh).
-  { intros x Hx; rewrite Eaf; right; right; apply in_or_app; right; apply in_or_app; left; exact Hx. }
+  { intros x Hx; rewrite Eaf; right; right;
+      apply in_or_app; right; apply in_or_app; left; exact Hx. }
   assert (Hpb_in_af : In post_bid all_fresh) by (rewrite Eaf; left; reflexivity).
   assert (Hpb_not_bf : ~ In post_bid b_fresh).
-  { intros Hin; apply Hnin_pb; right; apply in_or_app; right; apply in_or_app; left; exact Hin. }
+  { intros Hin; apply Hnin_pb; right; apply in_or_app;
+      right; apply in_or_app; left; exact Hin. }
   assert (Hren_in_bf : forall x, In x (List.map (fun bk => ren_b (blk_id bk)) (blks callee_cfg)) -> In x b_fresh).
   { intros x Hx; apply in_map_iff in Hx as [bk [<- Hbk]].
     unfold ren_b; apply lookup_ren_in_dom; [symmetry; exact Hlen_b |].
@@ -637,11 +644,14 @@ Proof.
       | apply callee_block_ids_blk_id, Hbk2
       | exact Heq]. }
   assert (Hpre_used : forall x, In x (List.map blk_id pre_blks) -> In x used_ids).
-  { intros x Hx; apply Hcaller_in_used; unfold caller_cfg; rewrite Hcaller_split, map_app; apply in_or_app; left; exact Hx. }
+  { intros x Hx; apply Hcaller_in_used; unfold caller_cfg;
+      rewrite Hcaller_split, map_app; apply in_or_app; left; exact Hx. }
   assert (Hcall_used : In (blk_id b_call) used_ids).
-  { apply Hcaller_in_used; unfold caller_cfg; rewrite Hcaller_split, map_app; apply in_or_app; right; left; reflexivity. }
+  { apply Hcaller_in_used; unfold caller_cfg;
+      rewrite Hcaller_split, map_app; apply in_or_app; right; left; reflexivity. }
   assert (Hpost_used : forall x, In x (List.map blk_id post_blks) -> In x used_ids).
-  { intros x Hx; apply Hcaller_in_used; unfold caller_cfg; rewrite Hcaller_split, map_app; apply in_or_app; right; right; exact Hx. }
+  { intros x Hx; apply Hcaller_in_used; unfold caller_cfg;
+      rewrite Hcaller_split, map_app; apply in_or_app; right; right; exact Hx. }
   apply inl_nodup_app_intro; [exact Hnd_pre | |].
   - constructor.
     + intros Hin; apply in_app_or in Hin as [Hin | [Heq | Hin]].
@@ -777,7 +787,8 @@ Proof.
              (inline_site_in_caller caller_df callee_df pre_blks post_blks
                 b_call pre_code post_code call_iid ret_dt call_args)))).
   { unfold inline_site_in_caller; cbn [df_instrs blks].
-    apply in_or_app; right; right; apply in_or_app; right; left; reflexivity. }
+    apply in_or_app; right; right; apply in_or_app;
+      right; left; reflexivity. }
   exact (inl_find_block_nodup_in _ b_post Hnd Hin).
 Qed.
 
@@ -879,7 +890,8 @@ Proof.
       replace bid with (blk_id rbk) by (cbn; exact Hid).
       eapply (inl_find_block_nodup_in _ _ Hnd).
       unfold inline_site_in_caller; cbn [df_instrs blks].
-      apply in_or_app; right; right; apply in_or_app; right; right; apply in_map, Hbk_post.
+      apply in_or_app; right; right; apply in_or_app;
+        right; right; apply in_map, Hbk_post.
   - apply inl_find_block_not_in.
     pose proof (all_fresh_partition used_ids n_loc n_blk n_ret)
       as (_ & _ & Hlen_b & Hlen_r & _ & _).
@@ -898,7 +910,8 @@ Proof.
       * apply in_map_iff in Hin as [bk [<- Hbk]].
         apply Hnin_bf; apply lookup_ren_in_dom; [symmetry; exact Hlen_b | apply callee_block_ids_blk_id, Hbk].
       * symmetry in Heq; contradiction.
-      * apply Hnot_caller; rewrite Hcaller_split, map_app; apply in_or_app; right; right; exact Hin.
+      * apply Hnot_caller; rewrite Hcaller_split, map_app;
+          apply in_or_app; right; right; exact Hin.
 Qed.
 
 Lemma remap_pred_id_inj_not_new (old_bid new_bid b1 b2 : block_id)
@@ -1117,7 +1130,8 @@ Proof.
     cbn -[ren_exp exp_block_addresses].
     pose proof (Hall (t, ex) (or_introl Logic.eq_refl)) as Hhd.
     cbn [snd] in Hhd; rewrite Hhd.
-    f_equal; apply IHl; intros p Hp; apply Hall; right; exact Hp. }
+    f_equal; apply IHl; intros p Hp;
+      apply Hall; right; exact Hp. }
   apply (@AstLib.exp_ind T (fun e => exp_block_addresses (ren_exp ren_l e) = exp_block_addresses e));
     intros;
     repeat match goal with
@@ -1153,7 +1167,8 @@ Proof.
   destruct (block_block_addresses bk) as [| fb rest] eqn:E; [reflexivity |].
   exfalso.
   assert (Hfb : In fb (flat_map block_block_addresses bks)).
-  { apply in_flat_map; exists bk; split; [exact Hin | rewrite E; left; reflexivity]. }
+  { apply in_flat_map; exists bk; split;
+      [exact Hin | rewrite E; left; reflexivity]. }
   rewrite Hnil in Hfb; exact Hfb.
 Qed.
 

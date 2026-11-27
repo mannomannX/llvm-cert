@@ -130,7 +130,8 @@ Section MemoryAndSerialization.
     In bk bks /\ blk_id bk = bid.
   Proof using.
     induction bks as [| b0 bs IH]; intros Hfind; [cbn in Hfind; discriminate Hfind |].
-    destruct (raw_id_eqb (blk_id b0) bid) eqn:Ebid; [apply raw_id_eqb_spec in Ebid; rename Ebid into Heq | apply raw_id_eqb_neq in Ebid; rename Ebid into Hne].
+    destruct (raw_id_eqb (blk_id b0) bid) eqn:Ebid; [apply raw_id_eqb_spec in Ebid; rename Ebid into Heq | apply
+      raw_id_eqb_neq in Ebid; rename Ebid into Hne].
     - rewrite find_block_eq in Hfind by exact Heq.
       inversion Hfind; subst b0; split; [left; reflexivity | exact Heq].
     - rewrite find_block_ineq in Hfind by exact Hne.
@@ -146,7 +147,8 @@ Section MemoryAndSerialization.
     cbn [List.map] in Hnd; inversion Hnd as [| ? ? Hnin Hnd']; subst.
     destruct Hin as [<- | Hin].
     - apply find_block_eq; reflexivity.
-    - destruct (raw_id_eqb (blk_id b0) (blk_id bk)) eqn:Ebid; [apply raw_id_eqb_spec in Ebid; rename Ebid into Heq | apply raw_id_eqb_neq in Ebid; rename Ebid into Hne].
+    - destruct (raw_id_eqb (blk_id b0) (blk_id bk)) eqn:Ebid; [apply raw_id_eqb_spec in Ebid; rename Ebid into Heq |
+      apply raw_id_eqb_neq in Ebid; rename Ebid into Hne].
       + exfalso; apply Hnin; rewrite Heq; apply in_map, Hin.
       + rewrite find_block_ineq by exact Hne; apply IH; assumption.
   Qed.
@@ -158,7 +160,8 @@ Section MemoryAndSerialization.
   Proof using.
     induction bks as [| b0 bs IH]; cbn [List.map]; [reflexivity |].
     pose proof (Hid b0 (or_introl Logic.eq_refl)) as Hid0.
-    destruct (raw_id_eqb (blk_id b0) bid) eqn:Ebid; [apply raw_id_eqb_spec in Ebid; rename Ebid into Heq | apply raw_id_eqb_neq in Ebid; rename Ebid into Hne].
+    destruct (raw_id_eqb (blk_id b0) bid) eqn:Ebid; [apply raw_id_eqb_spec in Ebid; rename Ebid into Heq | apply
+      raw_id_eqb_neq in Ebid; rename Ebid into Hne].
     - rewrite find_block_eq by congruence.
       rewrite find_block_eq by exact Heq.
       reflexivity.
@@ -179,7 +182,8 @@ Section MemoryAndSerialization.
       - exact (conj Hinc Logic.eq_refl).
       - right; apply CIH, Hinc.
       - destruct e as [pe | be].
-        + destruct pe; right; right; intros pr Hpr; right; apply CIH.
+        + destruct pe; right; right; intros pr Hpr;
+          right; apply CIH.
           intros z Hz; right; apply Hinc, Hz.
         + destruct (is_ub_bot be) eqn:Eub.
           * left; exact Eub.
@@ -924,7 +928,8 @@ Section MemoryAndSerialization.
   Proof using.
     intros Hg Hv gid' v' Hlk.
     destruct (RawIDOrd.eq_dec gid gid') as [<- | Hne].
-    - cbn [Maps.lookup Maps.add Map_rmap] in Hlk; rewrite RMF.F.add_eq_o in Hlk by reflexivity; inversion Hlk; subst v'; exact Hv.
+    - cbn [Maps.lookup Maps.add Map_rmap] in Hlk; rewrite RMF.F.add_eq_o in Hlk by reflexivity; inversion Hlk; subst v';
+      exact Hv.
     - cbn [Maps.lookup Maps.add Map_rmap] in Hlk; rewrite RMF.F.add_neq_o in Hlk by exact Hne; exact (Hg gid' v' Hlk).
   Qed.
 
@@ -1379,7 +1384,8 @@ Section MemoryAndSerialization.
     obs_clos r U b1' b2'.
   Proof using.
     intros E1 E2 (a1 & a2 & Ea1 & Ea2 & Hr).
-    exists a1, a2; split; [etransitivity; eassumption | split; [etransitivity; eassumption | exact Hr]].
+    exists a1, a2; split; [etransitivity; eassumption | split;
+      [etransitivity; eassumption | exact Hr]].
   Qed.
 
   Definition m2r_paco
@@ -1453,10 +1459,12 @@ Section MemoryAndSerialization.
       + eapply refine_prov__obs_eq with
           (r := fun U'' b1 b2 => R_fold U'' b1 b2 \/ obs_clos r U'' b1 b2);
           [| exact Et1 | exact Et2
-           | eapply refine_prov__mon; [exact H | intros U'' b1 b2 [Hb | Hb]; [left; left; exact Hb | right; exact Hb]]].
+           | eapply refine_prov__mon; [exact H | intros U'' b1 b2 [Hb | Hb]; [left; left; exact Hb |
+             right; exact Hb]]].
         intros U'' x1 x1' x2 x2' Ex1 Ex2 [[Hx | (-> & E1 & E2)] | Hx].
         * left; left; exact (m2r_paco_obs_eq r U'' x1 x1' x2 x2' Ex1 Ex2 Hx).
-        * left; right; split; [reflexivity | split; etransitivity; eassumption].
+        * left; right; split; [reflexivity | split;
+          etransitivity; eassumption].
         * right; exact (obs_clos_eq r U'' x1 x1' x2 x2' Ex1 Ex2 Hx).
     - right; split; [reflexivity | split; reflexivity].
   Qed.
@@ -1869,7 +1877,8 @@ Section MemoryAndSerialization.
   Proof using.
     assert (Ecall : call dt cc fv vs ≅ ITree.trigger (inl1 (Call dt cc fv vs) : @CFGEtop (@ParamsV IP IPT) _)).
     { unfold call, trigger, ITree.trigger;
-        cbn [subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun];
+        cbn [subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_
+          Id_IFun];
         reflexivity. }
     rewrite (interp_cfg_exc_obs_eq ctx _ _ s Ecall).
     rewrite interp_cfg_exc_trigger_non_exc; [| reflexivity].
@@ -2026,7 +2035,8 @@ Section MemoryAndSerialization.
   Proof using.
     intros Hv Henv q v0 Hq Hlk.
     destruct (RawIDOrd.eq_dec x q) as [<- | Hne].
-    - cbn [Maps.lookup Maps.add Map_rmap] in Hlk; rewrite RMF.F.add_eq_o in Hlk by reflexivity; inversion Hlk; subst v0; exact Hv.
+    - cbn [Maps.lookup Maps.add Map_rmap] in Hlk; rewrite RMF.F.add_eq_o in Hlk by reflexivity; inversion Hlk; subst v0;
+      exact Hv.
     - cbn [Maps.lookup Maps.add Map_rmap] in Hlk; rewrite RMF.F.add_neq_o in Hlk by exact Hne; exact (Henv q v0 Hq Hlk).
   Qed.
 
@@ -2324,7 +2334,8 @@ Section MemoryAndSerialization.
                  (conj Logic.eq_refl (conj Logic.eq_refl (conj Heq' Hfs')))))).
   Qed.
 
-  (** *** Promoted [init_op], [mk_store_vec_exp]/[mk_store_ext_exp], and [mk_load_vec_exp]/[mk_load_cast_exp] Simulations *)
+  (** *** Promoted [init_op], [mk_store_vec_exp]/[mk_store_ext_exp],
+      and [mk_load_vec_exp]/[mk_load_cast_exp] Simulations *)
 
   Lemma denote_init_copy_poison_exc_r {R1 : Type}
     (ctx2 : IntMap (@function_denotation (@ParamsV IP IPT)))
@@ -2390,7 +2401,8 @@ Section MemoryAndSerialization.
     unfold lread, Subevent.trigger; try unfold trigger_cast.
     eapply tau_star_mcfg_det; [reflexivity |].
     unfold interp_vellvm_prov_h;
-      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+      cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl
+        ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     exact (fused_local_prov_read_some x v (σ, ((sf, fstk), g)) Hlk).
   Qed.
 
@@ -2444,7 +2456,8 @@ Section MemoryAndSerialization.
     cbn [subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_vis | symmetry; apply Eqit.bind_vis |].
-    pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
+    pstep; apply RP_Step; cbn; right;
+      right; split; [exact I | intros [] [] _].
   Qed.
 
   Lemma bind_unit_ret_r {E : Type -> Type} (t : itree E unit) :
@@ -2483,7 +2496,8 @@ Section MemoryAndSerialization.
     rewrite !Eqit.bind_ret_l, !Eqit.bind_bind.
     eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
     intros [db | pk flds | vec elts] _ <-.
-    - cbn [dvalue_to_dvalue_base EOU_monad ExtLib.Structures.Monad.ret EOU_to_itree ExtLib.Structures.Monad.bind Monad_itree].
+    - cbn [dvalue_to_dvalue_base EOU_monad ExtLib.Structures.Monad.ret EOU_to_itree ExtLib.Structures.Monad.bind
+      Monad_itree].
       rewrite !Eqit.bind_ret_l, ?Eqit.bind_bind, ?Eqit.bind_ret_l.
       unfold insert_element, dvalue_to_Z, VellvmIntegers.signed, VellvmIntegers.zero;
         rewrite ?(@Integers.signed_zero 1);
@@ -2618,7 +2632,8 @@ Section MemoryAndSerialization.
                         cbn beta iota)).
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_vis | symmetry; apply Eqit.bind_vis |].
-    pstep; apply RP_Step; unfold rp_step_body; cbn [observe]; right; right; cbn;
+    pstep; apply RP_Step; unfold rp_step_body; cbn [observe];
+      right; right; cbn;
       split; [exact Logic.I | intros [] [] _].
   Qed.
 
@@ -2690,7 +2705,8 @@ Section MemoryAndSerialization.
                    match res2 with
                    | inl ex => Ret (s2''', inl ex)
                    | inr _ =>
-                       interp_cfg_exc ctx2 (denote_instr (IId st_reg, INSTR_Op (mk_store_ext_exp dt sv_reg), []) va2) s2'''
+                       interp_cfg_exc ctx2 (denote_instr (IId st_reg, INSTR_Op (mk_store_ext_exp dt sv_reg), []) va2)
+                         s2'''
                    end)).
     { etransitivity.
       { match goal with
@@ -3142,7 +3158,8 @@ Section MemoryAndSerialization.
     set (sf2_mid := upd_local_sf sf2 (Maps.add lv_reg (DVALUE_Array true [DVALUE_Base (gs_db gs)]) (stack_vars sf2))).
     assert (Hlk_lv : Maps.lookup lv_reg (stack_vars sf2_mid) = Some (DVALUE_Array true [DVALUE_Base (gs_db gs)]))
       by (cbn [sf2_mid upd_local_sf stack_vars Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity).
-    set (k_cast := denote_instr (Pa := @ParamsV IP IPT) (IId dst, INSTR_Op (mk_load_cast_exp (gs_dt gs) lv_reg), []) va2).
+    set (k_cast := denote_instr (Pa := @ParamsV IP IPT) (IId dst, INSTR_Op (mk_load_cast_exp (gs_dt gs) lv_reg), [])
+      va2).
     assert (Er_lv :
               interp_cfg_exc ctx2
                 (ITree.bind (denote_instr (IId lv_reg, INSTR_Op (mk_load_vec_exp (gs_dt gs) cur_reg), []) va2)

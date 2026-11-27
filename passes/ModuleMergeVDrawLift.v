@@ -106,12 +106,14 @@ From CertPasses Require Import ModuleMergeEqb ModuleMergeLink ModuleMergeVDrawCo
 
 Section ValueDrawRefinement.
   Context {IP : IPtr} {IPT : @IPtrTheory IP}.
-  #[local] Hint Resolve refine_prov__mon cfg_local_sim__mon gen_stack_sim__mon refine_prov_draw__mon vds_sim__mon : paco.
+  #[local] Hint Resolve refine_prov__mon cfg_local_sim__mon gen_stack_sim__mon
+    refine_prov_draw__mon vds_sim__mon : paco.
   #[local] Hint Extern 1 (monotone5 (vds_sim_ _ _ _ _ _ _ _ _)) => apply vds_sim__mon : paco.
   #[local] Notation PaV := (@ParamsV IP IPT).
   Arguments interp_vellvm_rel_draw_h {_ _} [T] _ _.
 
-  (** ** 8.4 Lifting [cfg_local_vdraw_sim] Across [run_exc], [check_call_return], [denote_function], [mrec], & [interp_state] *)
+  (** ** 8.4 Lifting [cfg_local_vdraw_sim] Across [run_exc],
+      [check_call_return], [denote_function], [mrec], & [interp_state] *)
 
   (** Boolean gate [allow_call]:
       - [allow_call = true] ([cfg_vdraw_sim] / [cfg_local_vdraw_sim]) permits
@@ -308,7 +310,8 @@ Section ValueDrawRefinement.
     - gstep; constructor; gfinal; left; exact (CIH m1 m2 Hm).
     - destruct (exc_of_event e) as [x |].
       + gstep; constructor; reflexivity.
-      + gstep; constructor; intros y; gstep; constructor; gfinal; left;
+      + gstep; constructor; intros y;
+          gstep; constructor; gfinal; left;
           exact (CIH (k1 y) (k2 y) (Hk y)).
   Qed.
 
@@ -352,7 +355,9 @@ Section ValueDrawRefinement.
     assert (Hr_eq : forall s1 e1 e2 a1 a1' a2 a2',
               a1 ≅ a1' -> a2 ≅ a2' -> r_rel s1 e1 e2 a1 a2 -> r_rel s1 e1 e2 a1' a2').
     { intros s1 e1 e2 a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv).
-      exists v1, v2; split; [etransitivity; [exact Ev1 | exact Ea1] | split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]]. }
+      exists v1, v2; split;
+        [etransitivity; [exact Ev1 | exact Ea1]
+        | split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]]. }
     eapply vds_sim__mon with (r := r_rel);
       [| intros s1 e1 e2 a1 a2 (v1 & v2 & Ev1 & Ev2 & Hv);
          right; eapply CIH; [exact Ev1 | exact Ev2 | exact Hv]].
@@ -376,7 +381,8 @@ Section ValueDrawRefinement.
         apply VDS_Step; cbn; exact Hstep.
       + destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
         destruct Hstep as [Hstep | Hb]; [| inversion Hb].
-        apply VDS_Step; cbn; exists m1, m2; split; [reflexivity | split; [reflexivity | exact Hstep]].
+        apply VDS_Step; cbn; exists m1, m2;
+          split; [reflexivity | split; [reflexivity | exact Hstep]].
       + destruct Hstep as [Hub | Hvis].
         * rewrite (is_ub_cfg_exc_none ev1 Hub).
           apply VDS_Step; cbn; left; exact Hub.
@@ -700,7 +706,8 @@ Section ValueDrawRefinement.
                    r1 = r2).
         { unfold stack_push, trigger_cast; pstep; apply VDS_Step;
             unfold vds_step_body, ITree.trigger; cbn.
-          right; right; right; left; apply vds_sim_ret; repeat split; reflexivity. }
+          right; right; right; left;
+            apply vds_sim_ret; repeat split; reflexivity. }
         intros ? ? ? [] _ (-> & -> & -> & <-).
         eapply vds_sim_bind.
         { unfold alloca, trigger_cast; apply vds_cfg_trigger_mcfg_sync; reflexivity. }
@@ -732,7 +739,8 @@ Section ValueDrawRefinement.
                    stk' = stk /\ e1' = env1 /\ e2' = env2 /\ r1 = r2).
         - unfold stack_pop, trigger_cast; pstep; apply VDS_Step;
             unfold vds_step_body, ITree.trigger; cbn.
-          right; right; right; left; apply vds_sim_ret; repeat split; reflexivity.
+          right; right; right; left;
+            apply vds_sim_ret; repeat split; reflexivity.
         - intros ? ? ? [] _ (-> & -> & -> & <-).
           unfold mem_pop, trigger_cast; apply vds_cfg_trigger_mcfg_sync; reflexivity. }
       intros ? ? ? [] _ (-> & -> & -> & <-).
@@ -869,7 +877,9 @@ Section ValueDrawRefinement.
     assert (Hr_eq : forall s0 e1 e2 a1 a1' a2 a2',
               a1 ≅ a1' -> a2 ≅ a2' -> r_rel s0 e1 e2 a1 a2 -> r_rel s0 e1 e2 a1' a2').
     { intros s0 e1 e2 a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv).
-      exists v1, v2; split; [etransitivity; [exact Ev1 | exact Ea1] | split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]]. }
+      exists v1, v2; split;
+        [etransitivity; [exact Ev1 | exact Ea1]
+        | split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]]. }
     eapply vds_sim__mon with (r := r_rel);
       [| intros s0 e1 e2 a1 a2 (v1 & v2 & Ev1 & Ev2 & Hv);
          right; eapply CIH; [exact Ev1 | exact Ev2 | exact Hv]].
@@ -951,13 +961,15 @@ Section ValueDrawRefinement.
                       (as_stack_mcfg me2) as [se2 |] eqn:Ese2; try contradiction.
              destruct se1, se2; try contradiction.
              ++ destruct Hstk as [Hr | Hb]; [| inversion Hb].
-                apply VDS_Step; cbn; right; right; right; rewrite Ese1, Ese2.
+                apply VDS_Step; cbn; right;
+                  right; right; rewrite Ese1, Ese2.
                 exists (Tau (k1 tt)), (Tau (k2 tt)).
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 split; [rewrite unfold_interp_mrec; reflexivity |].
                 pstep; eapply VDS_TauL; [reflexivity |]; eapply VDS_TauR; [reflexivity |].
                 punfold Hr; exact Hr.
-             ++ apply VDS_Step; cbn; right; right; right; rewrite Ese1, Ese2.
+             ++ apply VDS_Step; cbn; right;
+                  right; right; rewrite Ese1, Ese2.
                 destruct stk as [| [p1 p2] rest]; [exact I |].
                 destruct Hstk as [Hr | Hb]; [| inversion Hb].
                 exists (Tau (k1 tt)), (Tau (k2 tt)).
@@ -967,44 +979,341 @@ Section ValueDrawRefinement.
                 punfold Hr; exact Hr.
     - eapply vds_sim__obs_eq with (t1 := Tau (interp_mrec (mm_mrec_ctx ctx1) mu1))
                                   (t2 := interp_mrec (mm_mrec_ctx ctx2) u2);
-        [exact Hr_eq | unfold CFGtop, CFGEtop in Hu1; symmetry; rewrite unfold_interp_mrec, Hu1; reflexivity | reflexivity |].
+        [exact Hr_eq
+        | unfold CFGtop, CFGEtop in Hu1;
+          symmetry; rewrite unfold_interp_mrec, Hu1; reflexivity
+        | reflexivity |].
       eapply VDS_TauL; [reflexivity | exact IH].
     - eapply vds_sim__obs_eq with (t1 := interp_mrec (mm_mrec_ctx ctx1) u1)
                                   (t2 := Tau (interp_mrec (mm_mrec_ctx ctx2) mu2));
-        [exact Hr_eq | reflexivity | unfold CFGtop, CFGEtop in Hu2; symmetry; rewrite unfold_interp_mrec, Hu2; reflexivity |].
+        [exact Hr_eq
+        | reflexivity
+        | unfold CFGtop, CFGEtop in Hu2;
+          symmetry; rewrite unfold_interp_mrec, Hu2; reflexivity |].
       eapply VDS_TauR; [reflexivity | exact IH].
     - eapply VDS_ReadL with (x := x) (k1 := fun y => Tau (interp_mrec (mm_mrec_ctx ctx1) (k1 y))).
       + unfold CFGtop, CFGEtop in *; rewrite Hu1, !bind_trigger, unfold_interp_mrec;
-          cbn [observe _interp_mrec subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1];
+          cbn [observe _interp_mrec subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+               cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1];
           reflexivity.
       + exact Hlk.
       + eapply VDS_TauL; [reflexivity | exact IH].
     - eapply VDS_ReadR with (x := x) (k2 := fun y => Tau (interp_mrec (mm_mrec_ctx ctx2) (k2 y))).
       + unfold CFGtop, CFGEtop in *; rewrite Hu2, !bind_trigger, unfold_interp_mrec;
-          cbn [observe _interp_mrec subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1];
+          cbn [observe _interp_mrec subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+               cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1];
           reflexivity.
       + exact Hlk.
       + eapply VDS_TauR; [reflexivity | exact IH].
     - eapply VDS_WriteL with (x := x) (v := v) (k1 := fun y => Tau (interp_mrec (mm_mrec_ctx ctx1) (k1 y))).
       + unfold CFGtop, CFGEtop in *; rewrite Hu1, !bind_trigger, unfold_interp_mrec;
-          cbn [observe _interp_mrec subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1];
+          cbn [observe _interp_mrec subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+               cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1];
           reflexivity.
       + eapply VDS_TauL; [reflexivity | exact IH].
     - eapply VDS_WriteR with (x := x) (v := v) (k2 := fun y => Tau (interp_mrec (mm_mrec_ctx ctx2) (k2 y))).
       + unfold CFGtop, CFGEtop in *; rewrite Hu2, !bind_trigger, unfold_interp_mrec;
-          cbn [observe _interp_mrec subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1];
+          cbn [observe _interp_mrec subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+               cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1];
           reflexivity.
       + eapply VDS_TauR; [reflexivity | exact IH].
     - eapply VDS_DrawL with (dt := dt) (v := v) (k1 := fun y => Tau (interp_mrec (mm_mrec_ctx ctx1) (k1 y))).
       + unfold CFGtop, CFGEtop in *; rewrite Hu1, !bind_trigger, unfold_interp_mrec;
-          cbn [observe _interp_mrec subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1];
+          cbn [observe _interp_mrec subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+               cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1];
           reflexivity.
       + exact Hv.
       + eapply VDS_TauL; [reflexivity | exact IH].
     - eapply VDS_DrawR with (dt := dt) (k2 := fun y => Tau (interp_mrec (mm_mrec_ctx ctx2) (k2 y))).
       + unfold CFGtop, CFGEtop in *; rewrite Hu2, !bind_trigger, unfold_interp_mrec;
-          cbn [observe _interp_mrec subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1];
+          cbn [observe _interp_mrec subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+               cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1];
           reflexivity.
+      + intros v Hv; eapply VDS_TauR; [reflexivity | exact (IH v Hv)].
+  Qed.
+
+  Local Definition intr_step_rel {R1 R2}
+    (RR : env_stack -> @local_env PaV -> @local_env PaV -> R1 -> R2 -> Prop)
+    (s0 : env_stack) (e1 e2 : @local_env PaV)
+    (x1 : R1 + @MCFGtop PaV R1) (x2 : R2 + @MCFGtop PaV R2) : Prop :=
+    match x1, x2 with
+    | inl r1, inl r2 => RR s0 e1 e2 r1 r2
+    | inr v1, inr v2 => mcfg_vdraw_sim RR s0 e1 e2 v1 v2
+    | _, _ => False
+    end.
+
+  Local Lemma mcfg_vdraw_sim_intrinsics_step {R1 R2}
+    (RR : env_stack -> @local_env PaV -> @local_env PaV -> R1 -> R2 -> Prop) :
+    forall stk env1 env2
+      (u1 : @MCFGtop PaV R1) (u2 : @MCFGtop PaV R2),
+      vds_step_body (@is_ub_mcfg IP IPT) (@sync_non_local_mcfg IP IPT) EqE_MCFG EqA_MCFG
+        (@mcfg_event_post IP IPT) (@as_local_mcfg IP IPT) (@as_stack_mcfg IP IPT)
+        RR (upaco5 (vds_sim_ (@is_ub_mcfg IP IPT) (@sync_non_local_mcfg IP IPT) EqE_MCFG EqA_MCFG
+                      (@mcfg_event_post IP IPT) (@as_local_mcfg IP IPT) (@as_stack_mcfg IP IPT) RR) bot5)
+        stk env1 env2 (observe u1) (observe u2) ->
+      mcfg_vdraw_sim (intr_step_rel RR) stk env1 env2 (decomp_intr u1) (decomp_intr u2).
+  Proof using.
+    intros stk env1 env2 u1 u2 Hstep.
+    unfold vds_step_body, decomp_intr in *.
+    destruct (observe u1) as [r1 | m1 | X1 ev1 k1] eqn:Hou1.
+    - destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
+      apply vds_sim_ret; exact Hstep.
+    - destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
+      destruct Hstep as [Hstep | Hb]; [| inversion Hb].
+      apply vds_sim_ret; exact Hstep.
+    - destruct Hstep as [Hub | Hvis].
+      + destruct_sum1 ev1; try discriminate Hub; destruct ev1 as [u].
+        pstep; apply VDS_Step; unfold vds_step_body;
+          rewrite observe_bind; cbn; left; reflexivity.
+      + destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
+        destruct Hvis as [(Hsync & HE & HA) | [Hloc | Hstk]].
+        * destruct ev1 as [ec1 | [ie1 | re1]], ev2 as [ec2 | [ie2 | re2]]; cbn in HE; try contradiction.
+          -- cbn [interp_intrinsics_h case_ Case_sum1 case_sum1
+                  Case_sum1_Handler Handler.case_ E_trigger]; unfold ITree.trigger.
+             pstep; apply VDS_Step; unfold vds_step_body; rewrite !observe_bind; cbn.
+             right; left; split; [reflexivity | split; [exact HE |]].
+             intros a1 a2 Ha Hp; specialize (HA a1 a2 Ha Hp); destruct HA as [HA | Hb]; [| inversion Hb].
+             left; eapply vds_sim_obs_eq;
+               [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
+             apply vds_sim_ret; exact HA.
+          -- destruct ie1 as [dt1 fn1 args1 va1], ie2 as [dt2 fn2 args2 va2].
+             destruct HE as (<- & <- & <- & <-);
+               cbn [interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_].
+             eapply vds_sim_bind; [apply mcfg_stack_to_vdraw_sim, handle_intrinsics_sync |].
+             intros ? ? ? a1 _ (-> & -> & -> & <-).
+             specialize (HA a1 a1 Logic.eq_refl I); destruct HA as [HA | Hb]; [| inversion Hb].
+             apply vds_sim_ret; exact HA.
+          -- cbn [interp_intrinsics_h case_ Case_sum1 case_sum1
+                  Case_sum1_Handler Handler.case_ F_trigger]; unfold ITree.trigger.
+             pstep; apply VDS_Step; unfold vds_step_body; rewrite !observe_bind; cbn.
+             right; left; split; [exact Hsync | split; [exact HE |]].
+             intros a1 a2 Ha Hp; specialize (HA a1 a2 Ha Hp); destruct HA as [HA | Hb]; [| inversion Hb].
+             left; eapply vds_sim_obs_eq;
+               [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
+             apply vds_sim_ret; exact HA.
+        * destruct (as_local_mcfg ev1) as [le1 |] eqn:Ele1,
+                   (as_local_mcfg ev2) as [le2 |] eqn:Ele2; try contradiction.
+          destruct le1 as [x1 v1 | x1], le2 as [x2 v2 | x2]; try contradiction;
+            destruct_sum1 ev1; try discriminate Ele1;
+            destruct_sum1 ev2; try discriminate Ele2;
+            inversion Ele1; subst; inversion Ele2; subst;
+            cbn [interp_intrinsics_h case_ Case_sum1 case_sum1
+                 Case_sum1_Handler Handler.case_ F_trigger];
+            unfold ITree.trigger.
+          -- destruct Hloc as (<- & <- & [Hr | Hb]); [| inversion Hb].
+             pstep; apply VDS_Step; unfold vds_step_body; rewrite !observe_bind; cbn.
+             right; right; left; split;
+               [reflexivity | split; [reflexivity |]].
+             left; eapply vds_sim_obs_eq;
+               [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
+             apply vds_sim_ret; exact Hr.
+          -- destruct Hloc as (<- & Hlk & Hrd).
+             pstep; apply VDS_Step; unfold vds_step_body; rewrite !observe_bind; cbn.
+             right; right; left; split;
+               [reflexivity | split; [exact Hlk |]].
+             intros v Hv; specialize (Hrd v Hv); destruct Hrd as [Hrd | Hb]; [| inversion Hb].
+             left; eapply vds_sim_obs_eq;
+               [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
+             apply vds_sim_ret; exact Hrd.
+        * destruct (as_stack_mcfg ev1) as [se1 |] eqn:Ese1,
+                   (as_stack_mcfg ev2) as [se2 |] eqn:Ese2; try contradiction.
+          destruct se1, se2; try contradiction;
+            destruct_sum1 ev1; try discriminate Ese1;
+            destruct_sum1 ev2; try discriminate Ese2;
+            inversion Ese1; subst; inversion Ese2; subst;
+            cbn [interp_intrinsics_h case_ Case_sum1 case_sum1
+                 Case_sum1_Handler Handler.case_ F_trigger];
+            unfold ITree.trigger.
+          -- destruct Hstk as [Hr | Hb]; [| inversion Hb].
+             pstep; apply VDS_Step; unfold vds_step_body; rewrite !observe_bind; cbn.
+             right; right; right.
+             left; eapply vds_sim_obs_eq;
+               [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
+             apply vds_sim_ret; exact Hr.
+          -- pstep; apply VDS_Step; unfold vds_step_body; rewrite !observe_bind; cbn.
+             right; right; right.
+             destruct stk as [| [p1 p2] rest]; [exact I |].
+             destruct Hstk as [Hr | Hb]; [| inversion Hb].
+             left; eapply vds_sim_obs_eq;
+               [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
+             apply vds_sim_ret; exact Hr.
+  Qed.
+
+  Local Definition intr_r_both {R1 R2}
+    (RR : env_stack -> @local_env PaV -> @local_env PaV -> R1 -> R2 -> Prop)
+    (s0 : env_stack) (e1 e2 : @local_env PaV)
+    (a1 : @MCFGtop PaV R1) (a2 : @MCFGtop PaV R2) : Prop :=
+    (exists v1 v2,
+       interp_intrinsics v1 ≅ a1 /\
+       interp_intrinsics v2 ≅ a2 /\
+       mcfg_vdraw_sim RR s0 e1 e2 v1 v2) \/
+    (exists w1 w2,
+       ITree.bind w1 intr_cont ≅ a1 /\
+       ITree.bind w2 intr_cont ≅ a2 /\
+       mcfg_vdraw_sim (intr_step_rel RR) s0 e1 e2 w1 w2).
+
+  Local Lemma intr_r_both_obs_eq {R1 R2}
+    (RR : env_stack -> @local_env PaV -> @local_env PaV -> R1 -> R2 -> Prop) :
+    forall s0 e1 e2 a1 a1' a2 a2',
+      a1 ≅ a1' -> a2 ≅ a2' -> intr_r_both RR s0 e1 e2 a1 a2 -> intr_r_both RR s0 e1 e2 a1' a2'.
+  Proof using.
+    intros s0 e1 e2 a1 a1' a2 a2' Ea1 Ea2 Hrb; unfold intr_r_both in Hrb |- *.
+    destruct Hrb as [(v1 & v2 & Ev1 & Ev2 & Hv) | (w1 & w2 & Ew1 & Ew2 & Hw)].
+    - left; exists v1, v2; split;
+        [etransitivity; eassumption | split; [etransitivity; eassumption | exact Hv]].
+    - right; exists w1, w2; split;
+        [etransitivity; eassumption | split; [etransitivity; eassumption | exact Hw]].
+  Qed.
+
+  Local Lemma mcfg_vdraw_sim_intrinsics_branch_b {R1 R2}
+    (RR : env_stack -> @local_env PaV -> @local_env PaV -> R1 -> R2 -> Prop) :
+    forall stk env1 env2 w1 w2 t1 t2,
+      ITree.bind w1 intr_cont ≅ t1 ->
+      ITree.bind w2 intr_cont ≅ t2 ->
+      mcfg_vdraw_sim (intr_step_rel RR) stk env1 env2 w1 w2 ->
+      vds_sim_ (@is_ub_mcfg IP IPT) (@sync_non_local_mcfg IP IPT) EqE_MCFG EqA_MCFG
+        (@mcfg_event_post IP IPT) (@as_local_mcfg IP IPT) (@as_stack_mcfg IP IPT) RR (intr_r_both RR)
+        stk env1 env2 t1 t2.
+  Proof using.
+    intros stk env1 env2 w1 w2 t1 t2 Et1 Et2 Hw.
+    eapply vds_sim__obs_eq; [exact (intr_r_both_obs_eq RR) | exact Et1 | exact Et2 |].
+    punfold Hw; clear t1 t2 Et1 Et2.
+    induction Hw as [stk env1 env2 w1 w2 Hstep
+                     | stk env1 env2 w1 mw1 w2 Hw1 _ IH
+                     | stk env1 env2 w1 w2 mw2 Hw2 _ IH
+                     | stk env1 env2 w1 x v kw1 w2 Hw1 Hlk _ IH
+                     | stk env1 env2 w1 w2 x v kw2 Hw2 Hlk _ IH
+                     | stk env1 env2 w1 x v kw1 w2 Hw1 _ IH
+                     | stk env1 env2 w1 w2 x v kw2 Hw2 _ IH
+                     | stk env1 env2 w1 dt v kw1 w2 Hw1 Hv _ IH
+                     | stk env1 env2 w1 w2 dt kw2 Hw2 _ IH].
+    - unfold vds_step_body in Hstep.
+      destruct (observe w1) as [x1 | mw1 | X1 ev1 kw1] eqn:How1.
+      + destruct (observe w2) as [x2 | mw2 | X2 ev2 kw2] eqn:How2; try contradiction.
+        destruct x1 as [r1 | v1], x2 as [r2 | v2]; cbn in Hstep; try contradiction.
+        * apply VDS_Step; unfold vds_step_body;
+            rewrite !observe_bind, How1, How2; cbn; exact Hstep.
+        * apply VDS_Step; unfold vds_step_body; rewrite !observe_bind, How1, How2; cbn.
+          unfold intr_r_both; left; exists v1, v2;
+            split; [reflexivity | split; [reflexivity | exact Hstep]].
+      + destruct (observe w2) as [x2 | mw2 | X2 ev2 kw2] eqn:How2; try contradiction.
+        destruct Hstep as [Hstep | Hb]; [| inversion Hb].
+        apply VDS_Step; unfold vds_step_body; rewrite !observe_bind, How1, How2.
+        unfold intr_r_both; right; exists mw1, mw2;
+          split; [reflexivity | split; [reflexivity | exact Hstep]].
+      + apply VDS_Step; unfold vds_step_body; rewrite (observe_bind w1 intr_cont), How1.
+        destruct Hstep as [Hub | Hvis]; [left; exact Hub | right].
+        destruct (observe w2) as [x2 | mw2 | X2 ev2 kw2] eqn:How2; try contradiction.
+        rewrite (observe_bind w2 intr_cont), How2.
+        destruct Hvis as [(Hsync & HE & HA) | [Hloc | Hstk]].
+        * left; split; [exact Hsync | split; [exact HE |]].
+          intros a1 a2 Ha Hp; specialize (HA a1 a2 Ha Hp); destruct HA as [HA | Hb]; [| inversion Hb].
+          unfold intr_r_both; right; exists (kw1 a1), (kw2 a2);
+            split; [reflexivity | split; [reflexivity | exact HA]].
+        * right; left.
+          destruct (as_local_mcfg ev1) as [le1 |], (as_local_mcfg ev2) as [le2 |]; try contradiction.
+          destruct le1 as [x1 v1 | x1], le2 as [x2 v2 | x2]; try contradiction.
+          -- destruct Hloc as (Hx & Hv & [Hr | Hb]); [| inversion Hb].
+             split;
+               [exact Hx
+               | split;
+                   [exact Hv
+                   | unfold intr_r_both; right; exists (kw1 tt), (kw2 tt);
+                     split; [reflexivity | split; [reflexivity | exact Hr]]]].
+          -- destruct Hloc as (Hx & Hlk & Hrd); split; [exact Hx | split; [exact Hlk |]].
+             intros v Hv; specialize (Hrd v Hv); destruct Hrd as [Hrd | Hb]; [| inversion Hb].
+             unfold intr_r_both; right; exists (kw1 v), (kw2 v);
+               split; [reflexivity | split; [reflexivity | exact Hrd]].
+        * right; right.
+          destruct (as_stack_mcfg ev1) as [se1 |], (as_stack_mcfg ev2) as [se2 |]; try contradiction.
+          destruct se1, se2; try contradiction.
+          -- destruct Hstk as [Hr | Hb]; [| inversion Hb].
+             unfold intr_r_both; right; exists (kw1 tt), (kw2 tt);
+               split; [reflexivity | split; [reflexivity | exact Hr]].
+          -- destruct stk as [| [p1 p2] rest]; [exact I |].
+             destruct Hstk as [Hr | Hb]; [| inversion Hb].
+             unfold intr_r_both; right; exists (kw1 tt), (kw2 tt);
+               split; [reflexivity | split; [reflexivity | exact Hr]].
+    - eapply VDS_TauL; [rewrite (observe_bind w1 intr_cont), Hw1; reflexivity | exact IH].
+    - eapply VDS_TauR; [rewrite (observe_bind w2 intr_cont), Hw2; reflexivity | exact IH].
+    - eapply VDS_ReadL; [rewrite Hw1, Eqit.bind_bind; reflexivity | exact Hlk | exact IH].
+    - eapply VDS_ReadR; [rewrite Hw2, Eqit.bind_bind; reflexivity | exact Hlk | exact IH].
+    - eapply VDS_WriteL; [rewrite Hw1, Eqit.bind_bind; reflexivity | exact IH].
+    - eapply VDS_WriteR; [rewrite Hw2, Eqit.bind_bind; reflexivity | exact IH].
+    - eapply VDS_DrawL; [rewrite Hw1, Eqit.bind_bind; reflexivity | exact Hv | exact IH].
+    - eapply VDS_DrawR; [rewrite Hw2, Eqit.bind_bind; reflexivity | intros v Hv; exact (IH v Hv)].
+  Qed.
+
+  Local Lemma mcfg_vdraw_sim_intrinsics_branch_a {R1 R2}
+    (RR : env_stack -> @local_env PaV -> @local_env PaV -> R1 -> R2 -> Prop) :
+    forall stk env1 env2 u1 u2 t1 t2,
+      interp_intrinsics u1 ≅ t1 ->
+      interp_intrinsics u2 ≅ t2 ->
+      mcfg_vdraw_sim RR stk env1 env2 u1 u2 ->
+      vds_sim_ (@is_ub_mcfg IP IPT) (@sync_non_local_mcfg IP IPT) EqE_MCFG EqA_MCFG
+        (@mcfg_event_post IP IPT) (@as_local_mcfg IP IPT) (@as_stack_mcfg IP IPT) RR (intr_r_both RR)
+        stk env1 env2 t1 t2.
+  Proof using.
+    intros stk env1 env2 u1 u2 t1 t2 Et1 Et2 Hu.
+    eapply vds_sim__obs_eq; [exact (intr_r_both_obs_eq RR) | exact Et1 | exact Et2 |].
+    punfold Hu; clear t1 t2 Et1 Et2.
+    induction Hu as [stk env1 env2 u1 u2 Hstep
+                     | stk env1 env2 u1 mu1 u2 Hu1 _ IH
+                     | stk env1 env2 u1 u2 mu2 Hu2 _ IH
+                     | stk env1 env2 u1 x v k1 u2 Hu1 Hlk _ IH
+                     | stk env1 env2 u1 u2 x v k2 Hu2 Hlk _ IH
+                     | stk env1 env2 u1 x v k1 u2 Hu1 _ IH
+                     | stk env1 env2 u1 u2 x v k2 Hu2 _ IH
+                     | stk env1 env2 u1 dt v k1 u2 Hu1 Hv _ IH
+                     | stk env1 env2 u1 u2 dt k2 Hu2 _ IH].
+    - eapply mcfg_vdraw_sim_intrinsics_branch_b;
+        [apply decomp_intr_spec
+        | apply decomp_intr_spec
+        | apply mcfg_vdraw_sim_intrinsics_step, Hstep].
+    - eapply vds_sim__obs_eq with (t1 := Tau (interp_intrinsics mu1))
+                                  (t2 := interp_intrinsics u2);
+        [exact (intr_r_both_obs_eq RR)
+        | symmetry; rewrite (itree_eta u1), Hu1, interp_intrinsics_Tau; reflexivity
+        | reflexivity |].
+      eapply VDS_TauL; [reflexivity | exact IH].
+    - eapply vds_sim__obs_eq with (t1 := interp_intrinsics u1)
+                                  (t2 := Tau (interp_intrinsics mu2));
+        [exact (intr_r_both_obs_eq RR)
+        | reflexivity
+        | symmetry; rewrite (itree_eta u2), Hu2, interp_intrinsics_Tau; reflexivity |].
+      eapply VDS_TauR; [reflexivity | exact IH].
+    - eapply VDS_ReadL with (x := x) (k1 := fun y => Tau (interp_intrinsics (k1 y))).
+      + rewrite Hu1, !bind_trigger, interp_intrinsics_vis_eqit;
+          cbn - [interp_intrinsics ITree.trigger ITree.bind]; unfold F_trigger;
+          cbn - [interp_intrinsics ITree.trigger ITree.bind]; rewrite bind_trigger; reflexivity.
+      + exact Hlk.
+      + eapply VDS_TauL; [reflexivity | exact IH].
+    - eapply VDS_ReadR with (x := x) (k2 := fun y => Tau (interp_intrinsics (k2 y))).
+      + rewrite Hu2, !bind_trigger, interp_intrinsics_vis_eqit;
+          cbn - [interp_intrinsics ITree.trigger ITree.bind]; unfold F_trigger;
+          cbn - [interp_intrinsics ITree.trigger ITree.bind]; rewrite bind_trigger; reflexivity.
+      + exact Hlk.
+      + eapply VDS_TauR; [reflexivity | exact IH].
+    - eapply VDS_WriteL with (x := x) (v := v) (k1 := fun y => Tau (interp_intrinsics (k1 y))).
+      + rewrite Hu1, !bind_trigger, interp_intrinsics_vis_eqit;
+          cbn - [interp_intrinsics ITree.trigger ITree.bind]; unfold F_trigger;
+          cbn - [interp_intrinsics ITree.trigger ITree.bind]; rewrite bind_trigger; reflexivity.
+      + eapply VDS_TauL; [reflexivity | exact IH].
+    - eapply VDS_WriteR with (x := x) (v := v) (k2 := fun y => Tau (interp_intrinsics (k2 y))).
+      + rewrite Hu2, !bind_trigger, interp_intrinsics_vis_eqit;
+          cbn - [interp_intrinsics ITree.trigger ITree.bind]; unfold F_trigger;
+          cbn - [interp_intrinsics ITree.trigger ITree.bind]; rewrite bind_trigger; reflexivity.
+      + eapply VDS_TauR; [reflexivity | exact IH].
+    - eapply VDS_DrawL with (dt := dt) (v := v) (k1 := fun y => Tau (interp_intrinsics (k1 y))).
+      + rewrite Hu1, !bind_trigger, interp_intrinsics_vis_eqit;
+          cbn - [interp_intrinsics ITree.trigger ITree.bind]; unfold F_trigger;
+          cbn - [interp_intrinsics ITree.trigger ITree.bind]; rewrite bind_trigger; reflexivity.
+      + exact Hv.
+      + eapply VDS_TauL; [reflexivity | exact IH].
+    - eapply VDS_DrawR with (dt := dt) (k2 := fun y => Tau (interp_intrinsics (k2 y))).
+      + rewrite Hu2, !bind_trigger, interp_intrinsics_vis_eqit;
+          cbn - [interp_intrinsics ITree.trigger ITree.bind]; unfold F_trigger;
+          cbn - [interp_intrinsics ITree.trigger ITree.bind]; rewrite bind_trigger; reflexivity.
       + intros v Hv; eapply VDS_TauR; [reflexivity | exact (IH v Hv)].
   Qed.
 
@@ -1016,249 +1325,21 @@ Section ValueDrawRefinement.
       mcfg_vdraw_sim RR stk env1 env2 u1 u2 ->
       mcfg_vdraw_sim RR stk env1 env2 (interp_intrinsics u1) (interp_intrinsics u2).
   Proof using.
-    set (intr_rel := fun s0 e1 e2 (x1 : R1 + @MCFGtop PaV R1)
-                                  (x2 : R2 + @MCFGtop PaV R2) =>
-                       match x1, x2 with
-                       | inl r1, inl r2 => RR s0 e1 e2 r1 r2
-                       | inr v1, inr v2 => mcfg_vdraw_sim RR s0 e1 e2 v1 v2
-                       | _, _ => False
-                       end).
-    assert (Hstep_decomp :
-      forall stk env1 env2
-        (u1 : @MCFGtop PaV R1) (u2 : @MCFGtop PaV R2),
-        vds_step_body (@is_ub_mcfg IP IPT) (@sync_non_local_mcfg IP IPT) EqE_MCFG EqA_MCFG
-          (@mcfg_event_post IP IPT) (@as_local_mcfg IP IPT) (@as_stack_mcfg IP IPT)
-          RR (upaco5 (vds_sim_ (@is_ub_mcfg IP IPT) (@sync_non_local_mcfg IP IPT) EqE_MCFG EqA_MCFG
-                        (@mcfg_event_post IP IPT) (@as_local_mcfg IP IPT) (@as_stack_mcfg IP IPT) RR) bot5)
-          stk env1 env2 (observe u1) (observe u2) ->
-        mcfg_vdraw_sim intr_rel stk env1 env2 (decomp_intr u1) (decomp_intr u2)).
-    { intros stk env1 env2 u1 u2 Hstep.
-      unfold vds_step_body, decomp_intr in *.
-      destruct (observe u1) as [r1 | m1 | X1 ev1 k1] eqn:Hou1.
-      - destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
-        apply vds_sim_ret; exact Hstep.
-      - destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
-        destruct Hstep as [Hstep | Hb]; [| inversion Hb].
-        apply vds_sim_ret; exact Hstep.
-      - destruct Hstep as [Hub | Hvis].
-        + destruct_sum1 ev1; try discriminate Hub; destruct ev1 as [u].
-          pstep; apply VDS_Step; unfold vds_step_body; rewrite observe_bind; cbn; left; reflexivity.
-        + destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
-          destruct Hvis as [(Hsync & HE & HA) | [Hloc | Hstk]].
-          * destruct ev1 as [ec1 | [ie1 | re1]], ev2 as [ec2 | [ie2 | re2]]; cbn in HE; try contradiction.
-            -- cbn [interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ E_trigger]; unfold ITree.trigger.
-               pstep; apply VDS_Step; unfold vds_step_body; rewrite !observe_bind; cbn.
-               right; left; split; [reflexivity | split; [exact HE |]].
-               intros a1 a2 Ha Hp; specialize (HA a1 a2 Ha Hp); destruct HA as [HA | Hb]; [| inversion Hb].
-               left; eapply vds_sim_obs_eq;
-                 [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-               apply vds_sim_ret; exact HA.
-            -- destruct ie1 as [dt1 fn1 args1 va1], ie2 as [dt2 fn2 args2 va2].
-               destruct HE as (<- & <- & <- & <-); cbn [interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_].
-               eapply vds_sim_bind; [apply mcfg_stack_to_vdraw_sim, handle_intrinsics_sync |].
-               intros ? ? ? a1 _ (-> & -> & -> & <-).
-               specialize (HA a1 a1 Logic.eq_refl I); destruct HA as [HA | Hb]; [| inversion Hb].
-               apply vds_sim_ret; exact HA.
-            -- cbn [interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ F_trigger]; unfold ITree.trigger.
-               pstep; apply VDS_Step; unfold vds_step_body; rewrite !observe_bind; cbn.
-               right; left; split; [exact Hsync | split; [exact HE |]].
-               intros a1 a2 Ha Hp; specialize (HA a1 a2 Ha Hp); destruct HA as [HA | Hb]; [| inversion Hb].
-               left; eapply vds_sim_obs_eq;
-                 [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-               apply vds_sim_ret; exact HA.
-          * destruct (as_local_mcfg ev1) as [le1 |] eqn:Ele1,
-                     (as_local_mcfg ev2) as [le2 |] eqn:Ele2; try contradiction.
-            destruct le1 as [x1 v1 | x1], le2 as [x2 v2 | x2]; try contradiction;
-              destruct_sum1 ev1; try discriminate Ele1;
-              destruct_sum1 ev2; try discriminate Ele2;
-              inversion Ele1; subst; inversion Ele2; subst;
-              cbn [interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ F_trigger]; unfold ITree.trigger.
-            -- destruct Hloc as (<- & <- & [Hr | Hb]); [| inversion Hb].
-               pstep; apply VDS_Step; unfold vds_step_body; rewrite !observe_bind; cbn.
-               right; right; left; split; [reflexivity | split; [reflexivity |]].
-               left; eapply vds_sim_obs_eq;
-                 [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-               apply vds_sim_ret; exact Hr.
-            -- destruct Hloc as (<- & Hlk & Hrd).
-               pstep; apply VDS_Step; unfold vds_step_body; rewrite !observe_bind; cbn.
-               right; right; left; split; [reflexivity | split; [exact Hlk |]].
-               intros v Hv; specialize (Hrd v Hv); destruct Hrd as [Hrd | Hb]; [| inversion Hb].
-               left; eapply vds_sim_obs_eq;
-                 [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-               apply vds_sim_ret; exact Hrd.
-          * destruct (as_stack_mcfg ev1) as [se1 |] eqn:Ese1,
-                     (as_stack_mcfg ev2) as [se2 |] eqn:Ese2; try contradiction.
-            destruct se1, se2; try contradiction;
-              destruct_sum1 ev1; try discriminate Ese1;
-              destruct_sum1 ev2; try discriminate Ese2;
-              inversion Ese1; subst; inversion Ese2; subst;
-              cbn [interp_intrinsics_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ F_trigger]; unfold ITree.trigger.
-            -- destruct Hstk as [Hr | Hb]; [| inversion Hb].
-               pstep; apply VDS_Step; unfold vds_step_body; rewrite !observe_bind; cbn.
-               right; right; right.
-               left; eapply vds_sim_obs_eq;
-                 [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-               apply vds_sim_ret; exact Hr.
-            -- pstep; apply VDS_Step; unfold vds_step_body; rewrite !observe_bind; cbn.
-               right; right; right.
-               destruct stk as [| [p1 p2] rest]; [exact I |].
-               destruct Hstk as [Hr | Hb]; [| inversion Hb].
-               left; eapply vds_sim_obs_eq;
-                 [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-               apply vds_sim_ret; exact Hr. }
-    set (r_both := fun s0 e1 e2 (a1 : @MCFGtop PaV R1) (a2 : @MCFGtop PaV R2) =>
-                     (exists v1 v2,
-                        interp_intrinsics v1 ≅ a1 /\
-                        interp_intrinsics v2 ≅ a2 /\
-                        mcfg_vdraw_sim RR s0 e1 e2 v1 v2) \/
-                     (exists w1 w2,
-                        ITree.bind w1 intr_cont ≅ a1 /\
-                        ITree.bind w2 intr_cont ≅ a2 /\
-                        mcfg_vdraw_sim intr_rel s0 e1 e2 w1 w2)).
-    assert (Hr_eq :
-      forall s0 e1 e2 a1 a1' a2 a2',
-        a1 ≅ a1' -> a2 ≅ a2' -> r_both s0 e1 e2 a1 a2 -> r_both s0 e1 e2 a1' a2').
-    { intros s0 e1 e2 a1 a1' a2 a2' Ea1 Ea2 [(v1 & v2 & Ev1 & Ev2 & Hv) | (w1 & w2 & Ew1 & Ew2 & Hw)].
-      - left; exists v1, v2; split; [etransitivity; eassumption | split; [etransitivity; eassumption | exact Hv]].
-      - right; exists w1, w2; split; [etransitivity; eassumption | split; [etransitivity; eassumption | exact Hw]]. }
-    assert (Hbranch_b :
-      forall stk env1 env2 w1 w2 t1 t2,
-        ITree.bind w1 intr_cont ≅ t1 ->
-        ITree.bind w2 intr_cont ≅ t2 ->
-        mcfg_vdraw_sim intr_rel stk env1 env2 w1 w2 ->
-        vds_sim_ (@is_ub_mcfg IP IPT) (@sync_non_local_mcfg IP IPT) EqE_MCFG EqA_MCFG
-          (@mcfg_event_post IP IPT) (@as_local_mcfg IP IPT) (@as_stack_mcfg IP IPT) RR r_both
-          stk env1 env2 t1 t2).
-    { intros stk env1 env2 w1 w2 t1 t2 Et1 Et2 Hw.
-      eapply vds_sim__obs_eq; [exact Hr_eq | exact Et1 | exact Et2 |].
-      punfold Hw; clear t1 t2 Et1 Et2.
-      induction Hw as [stk env1 env2 w1 w2 Hstep
-                       | stk env1 env2 w1 mw1 w2 Hw1 _ IH
-                       | stk env1 env2 w1 w2 mw2 Hw2 _ IH
-                       | stk env1 env2 w1 x v kw1 w2 Hw1 Hlk _ IH
-                       | stk env1 env2 w1 w2 x v kw2 Hw2 Hlk _ IH
-                       | stk env1 env2 w1 x v kw1 w2 Hw1 _ IH
-                       | stk env1 env2 w1 w2 x v kw2 Hw2 _ IH
-                       | stk env1 env2 w1 dt v kw1 w2 Hw1 Hv _ IH
-                       | stk env1 env2 w1 w2 dt kw2 Hw2 _ IH].
-      - unfold vds_step_body in Hstep.
-        destruct (observe w1) as [x1 | mw1 | X1 ev1 kw1] eqn:How1.
-        + destruct (observe w2) as [x2 | mw2 | X2 ev2 kw2] eqn:How2; try contradiction.
-          destruct x1 as [r1 | v1], x2 as [r2 | v2]; cbn in Hstep; try contradiction.
-          * apply VDS_Step; unfold vds_step_body; rewrite !observe_bind, How1, How2; cbn; exact Hstep.
-          * apply VDS_Step; unfold vds_step_body; rewrite !observe_bind, How1, How2; cbn.
-            left; exists v1, v2; split; [reflexivity | split; [reflexivity | exact Hstep]].
-        + destruct (observe w2) as [x2 | mw2 | X2 ev2 kw2] eqn:How2; try contradiction.
-          destruct Hstep as [Hstep | Hb]; [| inversion Hb].
-          apply VDS_Step; unfold vds_step_body; rewrite !observe_bind, How1, How2.
-          right; exists mw1, mw2; split; [reflexivity | split; [reflexivity | exact Hstep]].
-        + apply VDS_Step; unfold vds_step_body; rewrite (observe_bind w1 intr_cont), How1.
-          destruct Hstep as [Hub | Hvis]; [left; exact Hub | right].
-          destruct (observe w2) as [x2 | mw2 | X2 ev2 kw2] eqn:How2; try contradiction.
-          rewrite (observe_bind w2 intr_cont), How2.
-          destruct Hvis as [(Hsync & HE & HA) | [Hloc | Hstk]].
-          * left; split; [exact Hsync | split; [exact HE |]].
-            intros a1 a2 Ha Hp; specialize (HA a1 a2 Ha Hp); destruct HA as [HA | Hb]; [| inversion Hb].
-            right; exists (kw1 a1), (kw2 a2); split; [reflexivity | split; [reflexivity | exact HA]].
-          * right; left.
-            destruct (as_local_mcfg ev1) as [le1 |], (as_local_mcfg ev2) as [le2 |]; try contradiction.
-            destruct le1 as [x1 v1 | x1], le2 as [x2 v2 | x2]; try contradiction.
-            -- destruct Hloc as (Hx & Hv & [Hr | Hb]); [| inversion Hb].
-               split; [exact Hx | split; [exact Hv | right; exists (kw1 tt), (kw2 tt); split; [reflexivity | split; [reflexivity | exact Hr]]]].
-            -- destruct Hloc as (Hx & Hlk & Hrd); split; [exact Hx | split; [exact Hlk |]].
-               intros v Hv; specialize (Hrd v Hv); destruct Hrd as [Hrd | Hb]; [| inversion Hb].
-               right; exists (kw1 v), (kw2 v); split; [reflexivity | split; [reflexivity | exact Hrd]].
-          * right; right.
-            destruct (as_stack_mcfg ev1) as [se1 |], (as_stack_mcfg ev2) as [se2 |]; try contradiction.
-            destruct se1, se2; try contradiction.
-            -- destruct Hstk as [Hr | Hb]; [| inversion Hb].
-               right; exists (kw1 tt), (kw2 tt); split; [reflexivity | split; [reflexivity | exact Hr]].
-            -- destruct stk as [| [p1 p2] rest]; [exact I |].
-               destruct Hstk as [Hr | Hb]; [| inversion Hb].
-               right; exists (kw1 tt), (kw2 tt); split; [reflexivity | split; [reflexivity | exact Hr]].
-      - eapply VDS_TauL; [rewrite (observe_bind w1 intr_cont), Hw1; reflexivity | exact IH].
-      - eapply VDS_TauR; [rewrite (observe_bind w2 intr_cont), Hw2; reflexivity | exact IH].
-      - eapply VDS_ReadL; [rewrite Hw1, Eqit.bind_bind; reflexivity | exact Hlk | exact IH].
-      - eapply VDS_ReadR; [rewrite Hw2, Eqit.bind_bind; reflexivity | exact Hlk | exact IH].
-      - eapply VDS_WriteL; [rewrite Hw1, Eqit.bind_bind; reflexivity | exact IH].
-      - eapply VDS_WriteR; [rewrite Hw2, Eqit.bind_bind; reflexivity | exact IH].
-      - eapply VDS_DrawL; [rewrite Hw1, Eqit.bind_bind; reflexivity | exact Hv | exact IH].
-      - eapply VDS_DrawR; [rewrite Hw2, Eqit.bind_bind; reflexivity | intros v Hv; exact (IH v Hv)]. }
-    assert (Hbranch_a :
-      forall stk env1 env2 u1 u2 t1 t2,
-        interp_intrinsics u1 ≅ t1 ->
-        interp_intrinsics u2 ≅ t2 ->
-        mcfg_vdraw_sim RR stk env1 env2 u1 u2 ->
-        vds_sim_ (@is_ub_mcfg IP IPT) (@sync_non_local_mcfg IP IPT) EqE_MCFG EqA_MCFG
-          (@mcfg_event_post IP IPT) (@as_local_mcfg IP IPT) (@as_stack_mcfg IP IPT) RR r_both
-          stk env1 env2 t1 t2).
-    { intros stk env1 env2 u1 u2 t1 t2 Et1 Et2 Hu.
-      eapply vds_sim__obs_eq; [exact Hr_eq | exact Et1 | exact Et2 |].
-      punfold Hu; clear t1 t2 Et1 Et2.
-      induction Hu as [stk env1 env2 u1 u2 Hstep
-                       | stk env1 env2 u1 mu1 u2 Hu1 _ IH
-                       | stk env1 env2 u1 u2 mu2 Hu2 _ IH
-                       | stk env1 env2 u1 x v k1 u2 Hu1 Hlk _ IH
-                       | stk env1 env2 u1 u2 x v k2 Hu2 Hlk _ IH
-                       | stk env1 env2 u1 x v k1 u2 Hu1 _ IH
-                       | stk env1 env2 u1 u2 x v k2 Hu2 _ IH
-                       | stk env1 env2 u1 dt v k1 u2 Hu1 Hv _ IH
-                       | stk env1 env2 u1 u2 dt k2 Hu2 _ IH].
-      - eapply Hbranch_b; [apply decomp_intr_spec | apply decomp_intr_spec | apply Hstep_decomp, Hstep].
-      - eapply vds_sim__obs_eq with (t1 := Tau (interp_intrinsics mu1))
-                                    (t2 := interp_intrinsics u2);
-          [exact Hr_eq | symmetry; rewrite (itree_eta u1), Hu1, interp_intrinsics_Tau; reflexivity | reflexivity |].
-        eapply VDS_TauL; [reflexivity | exact IH].
-      - eapply vds_sim__obs_eq with (t1 := interp_intrinsics u1)
-                                    (t2 := Tau (interp_intrinsics mu2));
-          [exact Hr_eq | reflexivity | symmetry; rewrite (itree_eta u2), Hu2, interp_intrinsics_Tau; reflexivity |].
-        eapply VDS_TauR; [reflexivity | exact IH].
-      - eapply VDS_ReadL with (x := x) (k1 := fun y => Tau (interp_intrinsics (k1 y))).
-        + rewrite Hu1, !bind_trigger, interp_intrinsics_vis_eqit;
-            cbn - [interp_intrinsics ITree.trigger ITree.bind]; unfold F_trigger;
-            cbn - [interp_intrinsics ITree.trigger ITree.bind]; rewrite bind_trigger; reflexivity.
-        + exact Hlk.
-        + eapply VDS_TauL; [reflexivity | exact IH].
-      - eapply VDS_ReadR with (x := x) (k2 := fun y => Tau (interp_intrinsics (k2 y))).
-        + rewrite Hu2, !bind_trigger, interp_intrinsics_vis_eqit;
-            cbn - [interp_intrinsics ITree.trigger ITree.bind]; unfold F_trigger;
-            cbn - [interp_intrinsics ITree.trigger ITree.bind]; rewrite bind_trigger; reflexivity.
-        + exact Hlk.
-        + eapply VDS_TauR; [reflexivity | exact IH].
-      - eapply VDS_WriteL with (x := x) (v := v) (k1 := fun y => Tau (interp_intrinsics (k1 y))).
-        + rewrite Hu1, !bind_trigger, interp_intrinsics_vis_eqit;
-            cbn - [interp_intrinsics ITree.trigger ITree.bind]; unfold F_trigger;
-            cbn - [interp_intrinsics ITree.trigger ITree.bind]; rewrite bind_trigger; reflexivity.
-        + eapply VDS_TauL; [reflexivity | exact IH].
-      - eapply VDS_WriteR with (x := x) (v := v) (k2 := fun y => Tau (interp_intrinsics (k2 y))).
-        + rewrite Hu2, !bind_trigger, interp_intrinsics_vis_eqit;
-            cbn - [interp_intrinsics ITree.trigger ITree.bind]; unfold F_trigger;
-            cbn - [interp_intrinsics ITree.trigger ITree.bind]; rewrite bind_trigger; reflexivity.
-        + eapply VDS_TauR; [reflexivity | exact IH].
-      - eapply VDS_DrawL with (dt := dt) (v := v) (k1 := fun y => Tau (interp_intrinsics (k1 y))).
-        + rewrite Hu1, !bind_trigger, interp_intrinsics_vis_eqit;
-            cbn - [interp_intrinsics ITree.trigger ITree.bind]; unfold F_trigger;
-            cbn - [interp_intrinsics ITree.trigger ITree.bind]; rewrite bind_trigger; reflexivity.
-        + exact Hv.
-        + eapply VDS_TauL; [reflexivity | exact IH].
-      - eapply VDS_DrawR with (dt := dt) (k2 := fun y => Tau (interp_intrinsics (k2 y))).
-        + rewrite Hu2, !bind_trigger, interp_intrinsics_vis_eqit;
-            cbn - [interp_intrinsics ITree.trigger ITree.bind]; unfold F_trigger;
-            cbn - [interp_intrinsics ITree.trigger ITree.bind]; rewrite bind_trigger; reflexivity.
-        + intros v Hv; eapply VDS_TauR; [reflexivity | exact (IH v Hv)]. }
     assert (Hmain :
       forall stk env1 env2 t1 t2,
-        r_both stk env1 env2 t1 t2 ->
+        intr_r_both RR stk env1 env2 t1 t2 ->
         mcfg_vdraw_sim RR stk env1 env2 t1 t2).
     { pcofix CIH.
       intros stk env1 env2 t1 t2 Hrb; pstep.
-      eapply vds_sim__mon with (r := r_both);
+      eapply vds_sim__mon with (r := intr_r_both RR);
         [| intros s0 e1 e2 a1 a2 Hr; right; apply CIH, Hr].
+      unfold intr_r_both in Hrb.
       destruct Hrb as [(v1 & v2 & Ev1 & Ev2 & Hv) | (w1 & w2 & Ew1 & Ew2 & Hw)].
-      - eapply Hbranch_a; eassumption.
-      - eapply Hbranch_b; eassumption. }
+      - eapply mcfg_vdraw_sim_intrinsics_branch_a; eassumption.
+      - eapply mcfg_vdraw_sim_intrinsics_branch_b; eassumption. }
     intros stk env1 env2 u1 u2 Hsim.
-    apply Hmain; left; exists u1, u2; split; [reflexivity | split; [reflexivity | exact Hsim]].
+    apply Hmain; unfold intr_r_both; left; exists u1, u2;
+      split; [reflexivity | split; [reflexivity | exact Hsim]].
   Qed.
 
   (** Lower [mcfg_vdraw_sim] to [interp_state interp_vellvm_rel_draw_h]. *)
@@ -1312,7 +1393,8 @@ Section ValueDrawRefinement.
     - destruct_sum1 e1; try discriminate Ed1;
         destruct_sum1 e2; cbn in HE; try contradiction.
       destruct e1 as [dt1], e2 as [dt2]; cbn in HE; subst dt2.
-      unfold interp_vellvm_rel_draw_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_]; unfold ITree.trigger.
+      unfold interp_vellvm_rel_draw_h;
+        cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_]; unfold ITree.trigger.
       pstep; apply RPD_Step; unfold rpd_step_body; rewrite !observe_bind; cbn.
       right; right; split; [reflexivity | intros v Hv].
       left; eapply refine_prov_draw_obs_eq;
@@ -1369,6 +1451,398 @@ Section ValueDrawRefinement.
       | _, _ => False
       end.
 
+  Local Lemma mcfg_vdraw_sim_to_model_step {R1 R2}
+    (RR : env_stack -> @local_env PaV -> @local_env PaV -> R1 -> R2 -> Prop) :
+    forall U stk env1 env2 (s1 s2 : FusedS)
+      (u1 : @MCFGtop PaV R1) (u2 : @MCFGtop PaV R2),
+      fused_state_match stk env1 env2 s1 s2 ->
+      vds_step_body (@is_ub_mcfg IP IPT) (@sync_non_local_mcfg IP IPT) EqE_MCFG EqA_MCFG
+        (@mcfg_event_post IP IPT) (@as_local_mcfg IP IPT) (@as_stack_mcfg IP IPT)
+        RR (upaco5 (vds_sim_ (@is_ub_mcfg IP IPT) (@sync_non_local_mcfg IP IPT) EqE_MCFG EqA_MCFG
+                      (@mcfg_event_post IP IPT) (@as_local_mcfg IP IPT) (@as_stack_mcfg IP IPT) RR) bot5)
+        stk env1 env2 (observe u1) (observe u2) ->
+      refine_prov_draw (rel_draw_model_stack_step_rel RR) U
+        (decomp_rel_draw_model u1 s1) (decomp_rel_draw_model u2 s2).
+  Proof using.
+    intros U stk env1 env2 s1 s2 u1 u2 Hmatch Hstep.
+    unfold vds_step_body, decomp_rel_draw_model in *.
+    destruct (observe u1) as [r1 | m1 | X1 ev1 k1] eqn:Hou1.
+    - destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
+      pstep; apply RPD_Step; cbn;
+        exists stk, env1, env2; split; assumption.
+    - destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
+      destruct Hstep as [Hstep | Hb]; [| inversion Hb].
+      pstep; apply RPD_Step; cbn;
+        exists stk, env1, env2; split; assumption.
+    - destruct Hstep as [Hub | Hvis].
+      + destruct_sum1 ev1; try discriminate Hub; destruct ev1 as [u].
+        pstep; apply RPD_Step; unfold rpd_step_body, interp_vellvm_rel_draw_h;
+          cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_];
+          unfold fused_trigger_prov, ITree.trigger, lift_prov_to_draw;
+          repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
+      + destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
+        destruct Hvis as [(Hsync & HE & HA) | [Hloc | Hstk]].
+        * eapply refine_prov_draw_bind;
+            [eapply interp_vellvm_rel_draw_h_stack_sync; eassumption |].
+          intros U' [s1' a1] [s2' a2] _ (Hm' & Ha & Hp).
+          specialize (HA a1 a2 Ha Hp); destruct HA as [HA | Hb]; [| inversion Hb].
+          pstep; apply RPD_Step; cbn;
+            exists stk, env1, env2; split; [exact Hm' | exact HA].
+        * destruct (as_local_mcfg ev1) as [le1 |] eqn:Ele1,
+                   (as_local_mcfg ev2) as [le2 |] eqn:Ele2; try contradiction.
+          destruct le1 as [x1 v1 | x1], le2 as [x2 v2 | x2]; try contradiction;
+            destruct_sum1 ev1; try discriminate Ele1;
+            destruct_sum1 ev2; try discriminate Ele2;
+            inversion Ele1; subst; inversion Ele2; subst;
+            unfold interp_vellvm_rel_draw_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_];
+            destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]].
+          -- destruct Hloc as (<- & <- & [Hr | Hb]); [| inversion Hb].
+             destruct Hmatch as (<- & <- & (Hvars1 & Hvars2 & Hexc & Hloc) & Hsfm).
+             eapply refine_prov_draw_obs_eq;
+               [symmetry; rewrite (lift_prov_to_draw_eq _ _ (fused_local_prov_write _ _ _ _ _ _)),
+                          lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity
+               | symmetry; rewrite (lift_prov_to_draw_eq _ _ (fused_local_prov_write _ _ _ _ _ _)),
+                          lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity |].
+             pstep; apply RPD_Step; cbn.
+             exists stk, (Maps.add x1 v1 env1), (Maps.add x1 v1 env2); split; [| exact Hr].
+             rewrite Hvars1, Hvars2;
+               repeat split; try exact Hexc; try exact Hloc; try exact Hsfm; reflexivity.
+          -- destruct Hloc as (<- & Hlk_eq & Hrd).
+             pose proof Hmatch as (Hmm & Hgg & (Hvars1 & Hvars2 & Hexc & Hloc) & Hsfm).
+             destruct (Maps.lookup x1 env1) as [v |] eqn:Elkv.
+             ++ assert (Elkv2 : Maps.lookup x1 env2 = Some v) by congruence.
+                eapply refine_prov_draw_obs_eq.
+                ** symmetry;
+                     rewrite (lift_prov_to_draw_eq _ _
+                                (fused_local_prov_read_some x1 v (mm1, ((sf1, fstk1), gg1))
+                                   (ltac:(cbn; rewrite Hvars1; exact Elkv)))),
+                             lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity.
+                ** symmetry;
+                     rewrite (lift_prov_to_draw_eq _ _
+                                (fused_local_prov_read_some x1 v (mm2, ((sf2, fstk2), gg2))
+                                   (ltac:(cbn; rewrite Hvars2; exact Elkv2)))),
+                             lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity.
+                ** specialize (Hrd v Logic.eq_refl); destruct Hrd as [Hrd | Hb]; [| inversion Hb].
+                   pstep; apply RPD_Step; cbn;
+                     exists stk, env1, env2; split; [exact Hmatch | exact Hrd].
+             ++ assert (Elkv2 : Maps.lookup x1 env2 = None) by congruence.
+                destruct (fused_local_prov_read_none x1 (mm1, ((sf1, fstk1), gg1))
+                            (ltac:(cbn; rewrite Hvars1; exact Elkv))) as (msg1 & kf1 & Ef1).
+                destruct (fused_local_prov_read_none x1 (mm2, ((sf2, fstk2), gg2))
+                            (ltac:(cbn; rewrite Hvars2; exact Elkv2))) as (msg2 & kf2 & Ef2).
+                eapply refine_prov_draw_obs_eq;
+                  [symmetry; rewrite (lift_prov_to_draw_eq _ _ Ef1),
+                             lift_prov_to_draw_vis, Eqit.bind_vis; reflexivity
+                  | symmetry; rewrite (lift_prov_to_draw_eq _ _ Ef2),
+                             lift_prov_to_draw_vis, Eqit.bind_vis; reflexivity |].
+                pstep; apply RPD_Step; cbn;
+                  right; right; split; [exact I | intros [] [] _].
+        * destruct (as_stack_mcfg ev1) as [se1 |] eqn:Ese1,
+                   (as_stack_mcfg ev2) as [se2 |] eqn:Ese2; try contradiction.
+          destruct se1 as [bs1 | | |], se2 as [bs2 | | |]; try contradiction;
+            destruct_sum1 ev1; try discriminate Ese1;
+            destruct_sum1 ev2; try discriminate Ese2;
+            inversion Ese1; subst; inversion Ese2; subst;
+            unfold interp_vellvm_rel_draw_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_];
+            destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]];
+            destruct Hmatch as (<- & <- & Hsf & Hsfm).
+          -- destruct Hstk as [Hr | Hb]; [| inversion Hb].
+             assert (Hps1 :
+               fused_stack_prov _ (StackPush bs1) (mm1, ((sf1, fstk1), gg1)) ≅
+               Ret ((mm1, (({| stack_vars := init_local_env bs1; stack_exc := None;
+                               stack_loc := Some (printer_object.(printer_get_loc) tt) |},
+                            sf1 :: fstk1), gg1)), tt)).
+             { unfold fused_stack_prov, on_ls_prov, handle_stack;
+                 cbn - [Maps.lookup Maps.add lift_bot_prov init_local_env printer_get_loc].
+               rewrite lift_bot_prov_bind_ret, lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity. }
+             assert (Hps2 :
+               fused_stack_prov _ (StackPush bs2) (mm1, ((sf2, fstk2), gg1)) ≅
+               Ret ((mm1, (({| stack_vars := init_local_env bs2; stack_exc := None;
+                               stack_loc := Some (printer_object.(printer_get_loc) tt) |},
+                            sf2 :: fstk2), gg1)), tt)).
+             { unfold fused_stack_prov, on_ls_prov, handle_stack;
+                 cbn - [Maps.lookup Maps.add lift_bot_prov init_local_env printer_get_loc].
+               rewrite lift_bot_prov_bind_ret, lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity. }
+             eapply refine_prov_draw_obs_eq;
+               [symmetry; rewrite (lift_prov_to_draw_eq _ _ Hps1),
+                          lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity
+               | symmetry; rewrite (lift_prov_to_draw_eq _ _ Hps2),
+                          lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity |].
+             pstep; apply RPD_Step; cbn.
+             exists ((env1, env2) :: stk), (init_local_env bs1), (init_local_env bs2).
+             split; [| exact Hr].
+             repeat split; try reflexivity.
+             apply SFM_cons; [exact Hsf | exact Hsfm].
+          -- destruct stk as [| [p1 p2] rest].
+             ++ inversion Hsfm; subst.
+                unfold fused_stack_prov, on_ls_prov, handle_stack, raise, trigger_cast,
+                       ITree.trigger, lift_bot_prov, lift_prov_to_draw;
+                  cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret
+                       ExtLib.Data.Monads.StateMonad.Monad_stateT Monad_itree].
+                pstep; apply RPD_Step; unfold rpd_step_body;
+                  repeat (rewrite observe_bind || rewrite observe_translate); cbn.
+                right; right; split; [exact I | intros [] [] _].
+             ++ destruct Hstk as [Hr | Hb]; [| inversion Hb].
+                inversion Hsfm as [| ? ? sf1' sf2' ? fstk1' fstk2' Hsf' Hsfm']; subst.
+                assert (Hpp1 :
+                  fused_stack_prov _ StackPop (mm1, ((sf1, sf1' :: fstk1'), gg1)) ≅
+                  Ret ((mm1, ((sf1', fstk1'), gg1)), tt)).
+                { unfold fused_stack_prov, on_ls_prov, handle_stack;
+                    cbn - [Maps.lookup Maps.add lift_bot_prov init_local_env printer_get_loc].
+                  rewrite lift_bot_prov_bind_ret, lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity. }
+                assert (Hpp2 :
+                  fused_stack_prov _ StackPop (mm1, ((sf2, sf2' :: fstk2'), gg1)) ≅
+                  Ret ((mm1, ((sf2', fstk2'), gg1)), tt)).
+                { unfold fused_stack_prov, on_ls_prov, handle_stack;
+                    cbn - [Maps.lookup Maps.add lift_bot_prov init_local_env printer_get_loc].
+                  rewrite lift_bot_prov_bind_ret, lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity. }
+                eapply refine_prov_draw_obs_eq;
+                  [symmetry; rewrite (lift_prov_to_draw_eq _ _ Hpp1),
+                             lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity
+                  | symmetry; rewrite (lift_prov_to_draw_eq _ _ Hpp2),
+                             lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity |].
+                pstep; apply RPD_Step; cbn.
+                exists rest, p1, p2; split; [| exact Hr].
+                repeat (first [exact Hsf' | exact Hsfm' | reflexivity | split]).
+  Qed.
+
+  Local Definition rdm_r_both {R1 R2}
+    (RR : env_stack -> @local_env PaV -> @local_env PaV -> R1 -> R2 -> Prop)
+    (U0 : list N)
+    (a1 : itree ProvDrawBotE (FusedS * R1))
+    (a2 : itree ProvDrawBotE (FusedS * R2)) : Prop :=
+    (exists stk e1 e2 s1 s2 v1 v2,
+       interp_state interp_vellvm_rel_draw_h v1 s1 ≅ a1 /\
+       interp_state interp_vellvm_rel_draw_h v2 s2 ≅ a2 /\
+       fused_state_match stk e1 e2 s1 s2 /\
+       mcfg_vdraw_sim RR stk e1 e2 v1 v2) \/
+    (exists w1 w2,
+       ITree.bind w1 (rel_draw_model_cont R1) ≅ a1 /\
+       ITree.bind w2 (rel_draw_model_cont R2) ≅ a2 /\
+       refine_prov_draw (rel_draw_model_stack_step_rel RR) U0 w1 w2).
+
+  Local Lemma rdm_r_both_obs_eq {R1 R2}
+    (RR : env_stack -> @local_env PaV -> @local_env PaV -> R1 -> R2 -> Prop) :
+    forall U0 a1 a1' a2 a2',
+      a1 ≅ a1' -> a2 ≅ a2' -> rdm_r_both RR U0 a1 a2 -> rdm_r_both RR U0 a1' a2'.
+  Proof using.
+    intros U0 a1 a1' a2 a2' Ea1 Ea2 Hrb; unfold rdm_r_both in Hrb |- *.
+    destruct Hrb as [(stk & e1 & e2 & s1 & s2 & v1 & v2 & Ev1 & Ev2 & Hm & Hv) |
+                     (w1 & w2 & Ew1 & Ew2 & Hw)].
+    - left; exists stk, e1, e2, s1, s2, v1, v2.
+      split; [etransitivity; eassumption |];
+        split; [etransitivity; eassumption | split; assumption].
+    - right; exists w1, w2.
+      split; [etransitivity; eassumption |];
+        split; [etransitivity; eassumption | exact Hw].
+  Qed.
+
+  Local Lemma mcfg_vdraw_sim_to_model_branch_b {R1 R2}
+    (RR : env_stack -> @local_env PaV -> @local_env PaV -> R1 -> R2 -> Prop) :
+    forall U0 w1 w2 t1 t2,
+      ITree.bind w1 (rel_draw_model_cont R1) ≅ t1 ->
+      ITree.bind w2 (rel_draw_model_cont R2) ≅ t2 ->
+      refine_prov_draw (rel_draw_model_stack_step_rel RR) U0 w1 w2 ->
+      refine_prov_draw_
+        (fun (_ : list N) '(s1', r1) '(s2', r2) =>
+           exists stk' e1' e2',
+             fused_state_match stk' e1' e2' s1' s2' /\ RR stk' e1' e2' r1 r2)
+        (rdm_r_both RR) U0 t1 t2.
+  Proof using.
+    intros U0 w1 w2 t1 t2 Et1 Et2 Hw.
+    eapply refine_prov_draw__obs_eq;
+      [exact (rdm_r_both_obs_eq RR) | exact Et1 | exact Et2 |].
+    punfold Hw; clear t1 t2 Et1 Et2.
+    induction Hw as [U0 w1 w2 Hstep
+                     | U0 w1 mw1 w2 Hw1 _ IH
+                     | U0 w1 w2 mw2 Hw2 _ IH
+                     | U0 w1 dt v kw1 w2 Hw1 Hv _ IH
+                     | U0 w1 w2 dt kw2 Hw2 _ IH].
+    - unfold rpd_step_body in Hstep.
+      destruct (observe w1) as [x1 | mw1 | X1 ev1 kw1] eqn:How1.
+      + destruct (observe w2) as [x2 | mw2 | X2 ev2 kw2] eqn:How2; try contradiction.
+        destruct x1 as [[s1 r1] | [s1 v1]], x2 as [[s2 r2] | [s2 v2]]; cbn in Hstep; try contradiction.
+        * apply RPD_Step; unfold rpd_step_body;
+            rewrite !observe_bind, How1, How2; cbn; exact Hstep.
+        * destruct Hstep as (stk & e1 & e2 & Hm & Hv).
+          apply RPD_Step; unfold rpd_step_body; rewrite !observe_bind, How1, How2; cbn.
+          unfold rdm_r_both; left; exists stk, e1, e2, s1, s2, v1, v2;
+            split; [reflexivity | split; [reflexivity | split; assumption]].
+      + destruct (observe w2) as [x2 | mw2 | X2 ev2 kw2] eqn:How2; try contradiction; pclearbot.
+        apply RPD_Step; unfold rpd_step_body; rewrite !observe_bind, How1, How2.
+        unfold rdm_r_both; right; exists mw1, mw2;
+          split; [reflexivity | split; [reflexivity | exact Hstep]].
+      + apply RPD_Step; unfold rpd_step_body;
+          rewrite (observe_bind w1 (rel_draw_model_cont R1)), How1.
+        destruct Hstep as [Hub | [Hleft | Hboth]].
+        * left; exact Hub.
+        * right; left; destruct ev1 as [d1 | [p1 | b1]]; try contradiction; destruct p1.
+          intros p Hp; specialize (Hleft p Hp); pclearbot.
+          unfold rdm_r_both; right; exists (kw1 p), w2;
+            split; [reflexivity | split; [reflexivity | exact Hleft]].
+        * right; right.
+          destruct (observe w2) as [x2 | mw2 | X2 ev2 kw2] eqn:How2; try contradiction.
+          rewrite (observe_bind w2 (rel_draw_model_cont R2)), How2.
+          clear How1 How2;
+            destruct ev1 as [d1 | [p1 | b1]], ev2 as [d2 | [p2 | b2]]; cbn in *; try contradiction.
+          -- revert kw1 kw2 Hboth; destruct d1 as [dt1], d2 as [dt2];
+               intros kw1 kw2 [Hdt Hd]; split; [exact Hdt |].
+             intros v Hv; specialize (Hd v Hv); pclearbot.
+             unfold rdm_r_both; right; exists (kw1 v), (kw2 v);
+               split; [reflexivity | split; [reflexivity | exact Hd]].
+          -- revert kw1 kw2 Hboth; destruct p1, p2;
+               intros kw1 kw2 Hboth p Hp; specialize (Hboth p Hp); pclearbot.
+             unfold rdm_r_both; right; exists (kw1 p), (kw2 p);
+               split; [reflexivity | split; [reflexivity | exact Hboth]].
+          -- destruct Hboth as [HE HA]; split; [exact HE |].
+             intros a1 a2 Ha; specialize (HA a1 a2 Ha); pclearbot.
+             unfold rdm_r_both; right; exists (kw1 a1), (kw2 a2);
+               split; [reflexivity | split; [reflexivity | exact HA]].
+    - eapply RPD_TauL; [rewrite (observe_bind w1 (rel_draw_model_cont R1)), Hw1; reflexivity | exact IH].
+    - eapply RPD_TauR; [rewrite (observe_bind w2 (rel_draw_model_cont R2)), Hw2; reflexivity | exact IH].
+    - eapply RPD_DrawL; [rewrite Hw1, Eqit.bind_bind; reflexivity | exact Hv | exact IH].
+    - eapply RPD_DrawR; [rewrite Hw2, Eqit.bind_bind; reflexivity | intros v Hv; exact (IH v Hv)].
+  Qed.
+
+  Local Lemma mcfg_vdraw_sim_to_model_branch_a {R1 R2}
+    (RR : env_stack -> @local_env PaV -> @local_env PaV -> R1 -> R2 -> Prop) :
+    forall U0 stk env1 env2 s1 s2 u1 u2 t1 t2,
+      interp_state interp_vellvm_rel_draw_h u1 s1 ≅ t1 ->
+      interp_state interp_vellvm_rel_draw_h u2 s2 ≅ t2 ->
+      fused_state_match stk env1 env2 s1 s2 ->
+      mcfg_vdraw_sim RR stk env1 env2 u1 u2 ->
+      refine_prov_draw_
+        (fun (_ : list N) '(s1', r1) '(s2', r2) =>
+           exists stk' e1' e2',
+             fused_state_match stk' e1' e2' s1' s2' /\ RR stk' e1' e2' r1 r2)
+        (rdm_r_both RR) U0 t1 t2.
+  Proof using.
+    intros U0 stk env1 env2 s1 s2 u1 u2 t1 t2 Et1 Et2 Hmatch Hu.
+    eapply refine_prov_draw__obs_eq;
+      [exact (rdm_r_both_obs_eq RR) | exact Et1 | exact Et2 |].
+    punfold Hu; clear t1 t2 Et1 Et2.
+    revert s1 s2 Hmatch;
+      induction Hu as [stk env1 env2 u1 u2 Hstep
+                       | stk env1 env2 u1 mu1 u2 Hu1 _ IH
+                       | stk env1 env2 u1 u2 mu2 Hu2 _ IH
+                       | stk env1 env2 u1 x v k1 u2 Hu1 Hlk _ IH
+                       | stk env1 env2 u1 u2 x v k2 Hu2 Hlk _ IH
+                       | stk env1 env2 u1 x v k1 u2 Hu1 _ IH
+                       | stk env1 env2 u1 u2 x v k2 Hu2 _ IH
+                       | stk env1 env2 u1 dt v k1 u2 Hu1 Hv _ IH
+                       | stk env1 env2 u1 u2 dt k2 Hu2 _ IH];
+      intros s1 s2 Hmatch.
+    - eapply mcfg_vdraw_sim_to_model_branch_b;
+        [apply decomp_rel_draw_model_spec
+        | apply decomp_rel_draw_model_spec
+        | eapply mcfg_vdraw_sim_to_model_step; eassumption].
+    - eapply refine_prov_draw__obs_eq with
+        (t1 := Tau (interp_state interp_vellvm_rel_draw_h mu1 s1))
+        (t2 := interp_state interp_vellvm_rel_draw_h u2 s2);
+        [exact (rdm_r_both_obs_eq RR)
+        | symmetry; rewrite (unfold_interp_state interp_vellvm_rel_draw_h u1 s1), Hu1; reflexivity
+        | reflexivity |].
+      eapply RPD_TauL; [reflexivity | apply IH, Hmatch].
+    - eapply refine_prov_draw__obs_eq with
+        (t1 := interp_state interp_vellvm_rel_draw_h u1 s1)
+        (t2 := Tau (interp_state interp_vellvm_rel_draw_h mu2 s2));
+        [exact (rdm_r_both_obs_eq RR)
+        | reflexivity
+        | symmetry; rewrite (unfold_interp_state interp_vellvm_rel_draw_h u2 s2), Hu2; reflexivity |].
+      eapply RPD_TauR; [reflexivity | apply IH, Hmatch].
+    - destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]].
+      pose proof Hmatch as (_ & _ & (Hvars1 & _) & _).
+      eapply refine_prov_draw__obs_eq with
+        (t1 := Tau (interp_state interp_vellvm_rel_draw_h (k1 v) (mm1, ((sf1, fstk1), gg1))))
+        (t2 := interp_state interp_vellvm_rel_draw_h u2 (mm2, ((sf2, fstk2), gg2))).
+      + exact (rdm_r_both_obs_eq RR).
+      + symmetry; rewrite Hu1, bind_trigger, interp_state_vis;
+          cbn [interp_vellvm_rel_draw_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_
+               subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun
+               inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+        rewrite (lift_prov_to_draw_eq _ _
+                   (fused_local_prov_read_some x v (mm1, ((sf1, fstk1), gg1))
+                      (ltac:(cbn; rewrite Hvars1; exact Hlk)))),
+                lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity.
+      + reflexivity.
+      + eapply RPD_TauL; [reflexivity | apply IH, Hmatch].
+    - destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]].
+      pose proof Hmatch as (_ & _ & (_ & Hvars2 & _) & _).
+      eapply refine_prov_draw__obs_eq with
+        (t1 := interp_state interp_vellvm_rel_draw_h u1 (mm1, ((sf1, fstk1), gg1)))
+        (t2 := Tau (interp_state interp_vellvm_rel_draw_h (k2 v) (mm2, ((sf2, fstk2), gg2)))).
+      + exact (rdm_r_both_obs_eq RR).
+      + reflexivity.
+      + symmetry; rewrite Hu2, bind_trigger, interp_state_vis;
+          cbn [interp_vellvm_rel_draw_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_
+               subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun
+               inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+        rewrite (lift_prov_to_draw_eq _ _
+                   (fused_local_prov_read_some x v (mm2, ((sf2, fstk2), gg2))
+                      (ltac:(cbn; rewrite Hvars2; exact Hlk)))),
+                lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity.
+      + eapply RPD_TauR; [reflexivity | apply IH, Hmatch].
+    - destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]].
+      destruct Hmatch as (<- & <- & (Hvars1 & Hvars2 & Hexc & Hloc) & Hsfm).
+      eapply refine_prov_draw__obs_eq with
+        (t1 := Tau (interp_state interp_vellvm_rel_draw_h (k1 tt)
+                      (mm1, ((upd_local_sf sf1 (Maps.add x v sf1.(stack_vars)), fstk1), gg1))))
+        (t2 := interp_state interp_vellvm_rel_draw_h u2 (mm1, ((sf2, fstk2), gg1))).
+      + exact (rdm_r_both_obs_eq RR).
+      + symmetry; rewrite Hu1, bind_trigger, interp_state_vis;
+          cbn [interp_vellvm_rel_draw_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_
+               subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun
+               inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+        try change (resum IFun unit (LocalWrite x v)) with (LocalWrite x v);
+        rewrite (lift_prov_to_draw_eq _ _ (fused_local_prov_write _ _ _ _ _ _)),
+                lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity.
+      + reflexivity.
+      + eapply RPD_TauL; [reflexivity | apply IH].
+        rewrite Hvars1;
+          repeat split; try exact Hvars2;
+          try exact Hexc; try exact Hloc; try exact Hsfm; reflexivity.
+    - destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]].
+      destruct Hmatch as (<- & <- & (Hvars1 & Hvars2 & Hexc & Hloc) & Hsfm).
+      eapply refine_prov_draw__obs_eq with
+        (t1 := interp_state interp_vellvm_rel_draw_h u1 (mm1, ((sf1, fstk1), gg1)))
+        (t2 := Tau (interp_state interp_vellvm_rel_draw_h (k2 tt)
+                      (mm1, ((upd_local_sf sf2 (Maps.add x v sf2.(stack_vars)), fstk2), gg1)))).
+      + exact (rdm_r_both_obs_eq RR).
+      + reflexivity.
+      + symmetry; rewrite Hu2, bind_trigger, interp_state_vis;
+          cbn [interp_vellvm_rel_draw_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_
+               subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun
+               inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+        try change (resum IFun unit (LocalWrite x v)) with (LocalWrite x v);
+        rewrite (lift_prov_to_draw_eq _ _ (fused_local_prov_write _ _ _ _ _ _)),
+                lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity.
+      + eapply RPD_TauR; [reflexivity | apply IH].
+        rewrite Hvars2;
+          repeat split; try exact Hvars1;
+          try exact Hexc; try exact Hloc; try exact Hsfm; reflexivity.
+    - eapply RPD_DrawL with (dt := dt)
+        (k1 := fun v => Tau (interp_state interp_vellvm_rel_draw_h (k1 v) s1)).
+      + rewrite Hu1, bind_trigger, interp_state_vis;
+          cbn [interp_vellvm_rel_draw_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_
+               subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun
+               inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun];
+          rewrite Eqit.bind_bind.
+        apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros v' ? <-].
+        rewrite Eqit.bind_ret_l; reflexivity.
+      + exact Hv.
+      + eapply RPD_TauL; [reflexivity | apply IH, Hmatch].
+    - eapply RPD_DrawR with (dt := dt)
+        (k2 := fun v => Tau (interp_state interp_vellvm_rel_draw_h (k2 v) s2)).
+      + rewrite Hu2, bind_trigger, interp_state_vis;
+          cbn [interp_vellvm_rel_draw_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_
+               subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun
+               inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun];
+          rewrite Eqit.bind_bind.
+        apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros v' ? <-].
+        rewrite Eqit.bind_ret_l; reflexivity.
+      + intros v Hv; eapply RPD_TauR; [reflexivity | apply (IH v Hv), Hmatch].
+  Qed.
+
   Lemma mcfg_vdraw_sim_to_model {R1 R2}
     (RR : env_stack -> @local_env PaV -> @local_env PaV -> R1 -> R2 -> Prop) :
     forall U stk env1 env2 (s1 s2 : FusedS)
@@ -1382,339 +1856,25 @@ Section ValueDrawRefinement.
         (interp_state interp_vellvm_rel_draw_h u1 s1)
         (interp_state interp_vellvm_rel_draw_h u2 s2).
   Proof using.
-    set (RR_out := fun (_ : list N) '(s1', r1) '(s2', r2) =>
-                     exists stk' e1' e2',
-                       fused_state_match stk' e1' e2' s1' s2' /\ RR stk' e1' e2' r1 r2).
-    assert (Hstep_decomp :
-      forall U stk env1 env2 (s1 s2 : FusedS)
-        (u1 : @MCFGtop PaV R1) (u2 : @MCFGtop PaV R2),
-        fused_state_match stk env1 env2 s1 s2 ->
-        vds_step_body (@is_ub_mcfg IP IPT) (@sync_non_local_mcfg IP IPT) EqE_MCFG EqA_MCFG
-          (@mcfg_event_post IP IPT) (@as_local_mcfg IP IPT) (@as_stack_mcfg IP IPT)
-          RR (upaco5 (vds_sim_ (@is_ub_mcfg IP IPT) (@sync_non_local_mcfg IP IPT) EqE_MCFG EqA_MCFG
-                        (@mcfg_event_post IP IPT) (@as_local_mcfg IP IPT) (@as_stack_mcfg IP IPT) RR) bot5)
-          stk env1 env2 (observe u1) (observe u2) ->
-        refine_prov_draw (rel_draw_model_stack_step_rel RR) U
-          (decomp_rel_draw_model u1 s1) (decomp_rel_draw_model u2 s2)).
-    { intros U stk env1 env2 s1 s2 u1 u2 Hmatch Hstep.
-      unfold vds_step_body, decomp_rel_draw_model in *.
-      destruct (observe u1) as [r1 | m1 | X1 ev1 k1] eqn:Hou1.
-      - destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
-        pstep; apply RPD_Step; cbn; exists stk, env1, env2; split; assumption.
-      - destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
-        destruct Hstep as [Hstep | Hb]; [| inversion Hb].
-        pstep; apply RPD_Step; cbn; exists stk, env1, env2; split; assumption.
-      - destruct Hstep as [Hub | Hvis].
-        + destruct_sum1 ev1; try discriminate Hub; destruct ev1 as [u].
-          pstep; apply RPD_Step; unfold rpd_step_body, interp_vellvm_rel_draw_h;
-            cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_]; unfold fused_trigger_prov, ITree.trigger, lift_prov_to_draw;
-            repeat (rewrite observe_bind || rewrite observe_translate); cbn; left; reflexivity.
-        + destruct (observe u2) as [r2 | m2 | X2 ev2 k2] eqn:Hou2; try contradiction.
-          destruct Hvis as [(Hsync & HE & HA) | [Hloc | Hstk]].
-          * eapply refine_prov_draw_bind;
-              [eapply interp_vellvm_rel_draw_h_stack_sync; eassumption |].
-            intros U' [s1' a1] [s2' a2] _ (Hm' & Ha & Hp).
-            specialize (HA a1 a2 Ha Hp); destruct HA as [HA | Hb]; [| inversion Hb].
-            pstep; apply RPD_Step; cbn; exists stk, env1, env2; split; [exact Hm' | exact HA].
-          * destruct (as_local_mcfg ev1) as [le1 |] eqn:Ele1,
-                     (as_local_mcfg ev2) as [le2 |] eqn:Ele2; try contradiction.
-            destruct le1 as [x1 v1 | x1], le2 as [x2 v2 | x2]; try contradiction;
-              destruct_sum1 ev1; try discriminate Ele1;
-              destruct_sum1 ev2; try discriminate Ele2;
-              inversion Ele1; subst; inversion Ele2; subst;
-              unfold interp_vellvm_rel_draw_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_];
-              destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]].
-            -- destruct Hloc as (<- & <- & [Hr | Hb]); [| inversion Hb].
-               destruct Hmatch as (<- & <- & (Hvars1 & Hvars2 & Hexc & Hloc) & Hsfm).
-               eapply refine_prov_draw_obs_eq;
-                 [symmetry; rewrite (lift_prov_to_draw_eq _ _ (fused_local_prov_write _ _ _ _ _ _)),
-                            lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity
-                 | symmetry; rewrite (lift_prov_to_draw_eq _ _ (fused_local_prov_write _ _ _ _ _ _)),
-                            lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity |].
-               pstep; apply RPD_Step; cbn.
-               exists stk, (Maps.add x1 v1 env1), (Maps.add x1 v1 env2); split; [| exact Hr].
-               rewrite Hvars1, Hvars2; repeat split; try exact Hexc; try exact Hloc; try exact Hsfm; reflexivity.
-            -- destruct Hloc as (<- & Hlk_eq & Hrd).
-               pose proof Hmatch as (Hmm & Hgg & (Hvars1 & Hvars2 & Hexc & Hloc) & Hsfm).
-               destruct (Maps.lookup x1 env1) as [v |] eqn:Elkv.
-               ++ assert (Elkv2 : Maps.lookup x1 env2 = Some v) by congruence.
-                  eapply refine_prov_draw_obs_eq.
-                  ** symmetry;
-                       rewrite (lift_prov_to_draw_eq _ _
-                                  (fused_local_prov_read_some x1 v (mm1, ((sf1, fstk1), gg1))
-                                     (ltac:(cbn; rewrite Hvars1; exact Elkv)))),
-                               lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity.
-                  ** symmetry;
-                       rewrite (lift_prov_to_draw_eq _ _
-                                  (fused_local_prov_read_some x1 v (mm2, ((sf2, fstk2), gg2))
-                                     (ltac:(cbn; rewrite Hvars2; exact Elkv2)))),
-                               lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity.
-                  ** specialize (Hrd v Logic.eq_refl); destruct Hrd as [Hrd | Hb]; [| inversion Hb].
-                     pstep; apply RPD_Step; cbn; exists stk, env1, env2; split; [exact Hmatch | exact Hrd].
-               ++ assert (Elkv2 : Maps.lookup x1 env2 = None) by congruence.
-                  destruct (fused_local_prov_read_none x1 (mm1, ((sf1, fstk1), gg1))
-                              (ltac:(cbn; rewrite Hvars1; exact Elkv))) as (msg1 & kf1 & Ef1).
-                  destruct (fused_local_prov_read_none x1 (mm2, ((sf2, fstk2), gg2))
-                              (ltac:(cbn; rewrite Hvars2; exact Elkv2))) as (msg2 & kf2 & Ef2).
-                  eapply refine_prov_draw_obs_eq;
-                    [symmetry; rewrite (lift_prov_to_draw_eq _ _ Ef1), lift_prov_to_draw_vis, Eqit.bind_vis; reflexivity
-                    | symmetry; rewrite (lift_prov_to_draw_eq _ _ Ef2), lift_prov_to_draw_vis, Eqit.bind_vis; reflexivity |].
-                  pstep; apply RPD_Step; cbn; right; right; split; [exact I | intros [] [] _].
-          * destruct (as_stack_mcfg ev1) as [se1 |] eqn:Ese1,
-                     (as_stack_mcfg ev2) as [se2 |] eqn:Ese2; try contradiction.
-            destruct se1 as [bs1 | | |], se2 as [bs2 | | |]; try contradiction;
-              destruct_sum1 ev1; try discriminate Ese1;
-              destruct_sum1 ev2; try discriminate Ese2;
-              inversion Ese1; subst; inversion Ese2; subst;
-              unfold interp_vellvm_rel_draw_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_];
-              destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]];
-              destruct Hmatch as (<- & <- & Hsf & Hsfm).
-            -- destruct Hstk as [Hr | Hb]; [| inversion Hb].
-               assert (Hps1 :
-                 fused_stack_prov _ (StackPush bs1) (mm1, ((sf1, fstk1), gg1)) ≅
-                 Ret ((mm1, (({| stack_vars := init_local_env bs1; stack_exc := None; stack_loc := Some (printer_object.(printer_get_loc) tt) |},
-                              sf1 :: fstk1), gg1)), tt)).
-               { unfold fused_stack_prov, on_ls_prov, handle_stack;
-                   cbn - [Maps.lookup Maps.add lift_bot_prov init_local_env printer_get_loc].
-                 rewrite lift_bot_prov_bind_ret, lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity. }
-               assert (Hps2 :
-                 fused_stack_prov _ (StackPush bs2) (mm1, ((sf2, fstk2), gg1)) ≅
-                 Ret ((mm1, (({| stack_vars := init_local_env bs2; stack_exc := None; stack_loc := Some (printer_object.(printer_get_loc) tt) |},
-                              sf2 :: fstk2), gg1)), tt)).
-               { unfold fused_stack_prov, on_ls_prov, handle_stack;
-                   cbn - [Maps.lookup Maps.add lift_bot_prov init_local_env printer_get_loc].
-                 rewrite lift_bot_prov_bind_ret, lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity. }
-               eapply refine_prov_draw_obs_eq;
-                 [symmetry; rewrite (lift_prov_to_draw_eq _ _ Hps1), lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity
-                 | symmetry; rewrite (lift_prov_to_draw_eq _ _ Hps2), lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity |].
-               pstep; apply RPD_Step; cbn.
-               exists ((env1, env2) :: stk), (init_local_env bs1), (init_local_env bs2).
-               split; [| exact Hr].
-               repeat split; try reflexivity.
-               apply SFM_cons; [exact Hsf | exact Hsfm].
-            -- destruct stk as [| [p1 p2] rest].
-               ++ inversion Hsfm; subst.
-                  unfold fused_stack_prov, on_ls_prov, handle_stack, raise, trigger_cast,
-                         ITree.trigger, lift_bot_prov, lift_prov_to_draw;
-                    cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret ExtLib.Data.Monads.StateMonad.Monad_stateT Monad_itree].
-                  pstep; apply RPD_Step; unfold rpd_step_body;
-                    repeat (rewrite observe_bind || rewrite observe_translate); cbn.
-                  right; right; split; [exact I | intros [] [] _].
-               ++ destruct Hstk as [Hr | Hb]; [| inversion Hb].
-                  inversion Hsfm as [| ? ? sf1' sf2' ? fstk1' fstk2' Hsf' Hsfm']; subst.
-                  assert (Hpp1 :
-                    fused_stack_prov _ StackPop (mm1, ((sf1, sf1' :: fstk1'), gg1)) ≅
-                    Ret ((mm1, ((sf1', fstk1'), gg1)), tt)).
-                  { unfold fused_stack_prov, on_ls_prov, handle_stack;
-                      cbn - [Maps.lookup Maps.add lift_bot_prov init_local_env printer_get_loc].
-                    rewrite lift_bot_prov_bind_ret, lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity. }
-                  assert (Hpp2 :
-                    fused_stack_prov _ StackPop (mm1, ((sf2, sf2' :: fstk2'), gg1)) ≅
-                    Ret ((mm1, ((sf2', fstk2'), gg1)), tt)).
-                  { unfold fused_stack_prov, on_ls_prov, handle_stack;
-                      cbn - [Maps.lookup Maps.add lift_bot_prov init_local_env printer_get_loc].
-                    rewrite lift_bot_prov_bind_ret, lift_bot_prov_ret, Eqit.bind_ret_l; reflexivity. }
-                  eapply refine_prov_draw_obs_eq;
-                    [symmetry; rewrite (lift_prov_to_draw_eq _ _ Hpp1), lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity
-                    | symmetry; rewrite (lift_prov_to_draw_eq _ _ Hpp2), lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity |].
-                  pstep; apply RPD_Step; cbn.
-                  exists rest, p1, p2; split; [| exact Hr].
-                  repeat (first [exact Hsf' | exact Hsfm' | reflexivity | split]). }
-    set (r_both := fun U0 (a1 : itree ProvDrawBotE (FusedS * R1)) (a2 : itree ProvDrawBotE (FusedS * R2)) =>
-                     (exists stk e1 e2 s1 s2 v1 v2,
-                        interp_state interp_vellvm_rel_draw_h v1 s1 ≅ a1 /\
-                        interp_state interp_vellvm_rel_draw_h v2 s2 ≅ a2 /\
-                        fused_state_match stk e1 e2 s1 s2 /\
-                        mcfg_vdraw_sim RR stk e1 e2 v1 v2) \/
-                     (exists w1 w2,
-                        ITree.bind w1 (rel_draw_model_cont R1) ≅ a1 /\
-                        ITree.bind w2 (rel_draw_model_cont R2) ≅ a2 /\
-                        refine_prov_draw (rel_draw_model_stack_step_rel RR) U0 w1 w2)).
-    assert (Hr_eq :
-      forall U0 a1 a1' a2 a2',
-        a1 ≅ a1' -> a2 ≅ a2' -> r_both U0 a1 a2 -> r_both U0 a1' a2').
-    { intros U0 a1 a1' a2 a2' Ea1 Ea2
-        [(stk & e1 & e2 & s1 & s2 & v1 & v2 & Ev1 & Ev2 & Hm & Hv) | (w1 & w2 & Ew1 & Ew2 & Hw)].
-      - left; exists stk, e1, e2, s1, s2, v1, v2.
-        split; [etransitivity; eassumption | split; [etransitivity; eassumption | split; assumption]].
-      - right; exists w1, w2.
-        split; [etransitivity; eassumption | split; [etransitivity; eassumption | exact Hw]]. }
-    assert (Hbranch_b :
-      forall U0 w1 w2 t1 t2,
-        ITree.bind w1 (rel_draw_model_cont R1) ≅ t1 ->
-        ITree.bind w2 (rel_draw_model_cont R2) ≅ t2 ->
-        refine_prov_draw (rel_draw_model_stack_step_rel RR) U0 w1 w2 ->
-        refine_prov_draw_ RR_out r_both U0 t1 t2).
-    { intros U0 w1 w2 t1 t2 Et1 Et2 Hw.
-      eapply refine_prov_draw__obs_eq; [exact Hr_eq | exact Et1 | exact Et2 |].
-      punfold Hw; clear t1 t2 Et1 Et2.
-      induction Hw as [U0 w1 w2 Hstep
-                       | U0 w1 mw1 w2 Hw1 _ IH
-                       | U0 w1 w2 mw2 Hw2 _ IH
-                       | U0 w1 dt v kw1 w2 Hw1 Hv _ IH
-                       | U0 w1 w2 dt kw2 Hw2 _ IH].
-      - unfold rpd_step_body in Hstep.
-        destruct (observe w1) as [x1 | mw1 | X1 ev1 kw1] eqn:How1.
-        + destruct (observe w2) as [x2 | mw2 | X2 ev2 kw2] eqn:How2; try contradiction.
-          destruct x1 as [[s1 r1] | [s1 v1]], x2 as [[s2 r2] | [s2 v2]]; cbn in Hstep; try contradiction.
-          * apply RPD_Step; unfold rpd_step_body; rewrite !observe_bind, How1, How2; cbn; exact Hstep.
-          * destruct Hstep as (stk & e1 & e2 & Hm & Hv).
-            apply RPD_Step; unfold rpd_step_body; rewrite !observe_bind, How1, How2; cbn.
-            left; exists stk, e1, e2, s1, s2, v1, v2;
-              split; [reflexivity | split; [reflexivity | split; assumption]].
-        + destruct (observe w2) as [x2 | mw2 | X2 ev2 kw2] eqn:How2; try contradiction; pclearbot.
-          apply RPD_Step; unfold rpd_step_body; rewrite !observe_bind, How1, How2.
-          right; exists mw1, mw2; split; [reflexivity | split; [reflexivity | exact Hstep]].
-        + apply RPD_Step; unfold rpd_step_body; rewrite (observe_bind w1 (rel_draw_model_cont R1)), How1.
-          destruct Hstep as [Hub | [Hleft | Hboth]].
-          * left; exact Hub.
-          * right; left; destruct ev1 as [d1 | [p1 | b1]]; try contradiction; destruct p1.
-            intros p Hp; specialize (Hleft p Hp); pclearbot.
-            right; exists (kw1 p), w2; split; [reflexivity | split; [reflexivity | exact Hleft]].
-          * right; right.
-            destruct (observe w2) as [x2 | mw2 | X2 ev2 kw2] eqn:How2; try contradiction.
-            rewrite (observe_bind w2 (rel_draw_model_cont R2)), How2.
-            clear How1 How2;
-              destruct ev1 as [d1 | [p1 | b1]], ev2 as [d2 | [p2 | b2]]; cbn in *; try contradiction.
-            -- revert kw1 kw2 Hboth; destruct d1 as [dt1], d2 as [dt2];
-                 intros kw1 kw2 [Hdt Hd]; split; [exact Hdt |].
-               intros v Hv; specialize (Hd v Hv); pclearbot.
-               right; exists (kw1 v), (kw2 v); split; [reflexivity | split; [reflexivity | exact Hd]].
-            -- revert kw1 kw2 Hboth; destruct p1, p2;
-                 intros kw1 kw2 Hboth p Hp; specialize (Hboth p Hp); pclearbot.
-               right; exists (kw1 p), (kw2 p); split; [reflexivity | split; [reflexivity | exact Hboth]].
-            -- destruct Hboth as [HE HA]; split; [exact HE |].
-               intros a1 a2 Ha; specialize (HA a1 a2 Ha); pclearbot.
-               right; exists (kw1 a1), (kw2 a2); split; [reflexivity | split; [reflexivity | exact HA]].
-      - eapply RPD_TauL; [rewrite (observe_bind w1 (rel_draw_model_cont R1)), Hw1; reflexivity | exact IH].
-      - eapply RPD_TauR; [rewrite (observe_bind w2 (rel_draw_model_cont R2)), Hw2; reflexivity | exact IH].
-      - eapply RPD_DrawL; [rewrite Hw1, Eqit.bind_bind; reflexivity | exact Hv | exact IH].
-      - eapply RPD_DrawR; [rewrite Hw2, Eqit.bind_bind; reflexivity | intros v Hv; exact (IH v Hv)]. }
-    assert (Hbranch_a :
-      forall U0 stk env1 env2 s1 s2 u1 u2 t1 t2,
-        interp_state interp_vellvm_rel_draw_h u1 s1 ≅ t1 ->
-        interp_state interp_vellvm_rel_draw_h u2 s2 ≅ t2 ->
-        fused_state_match stk env1 env2 s1 s2 ->
-        mcfg_vdraw_sim RR stk env1 env2 u1 u2 ->
-        refine_prov_draw_ RR_out r_both U0 t1 t2).
-    { intros U0 stk env1 env2 s1 s2 u1 u2 t1 t2 Et1 Et2 Hmatch Hu.
-      eapply refine_prov_draw__obs_eq; [exact Hr_eq | exact Et1 | exact Et2 |].
-      punfold Hu; clear t1 t2 Et1 Et2.
-      revert s1 s2 Hmatch;
-        induction Hu as [stk env1 env2 u1 u2 Hstep
-                         | stk env1 env2 u1 mu1 u2 Hu1 _ IH
-                         | stk env1 env2 u1 u2 mu2 Hu2 _ IH
-                         | stk env1 env2 u1 x v k1 u2 Hu1 Hlk _ IH
-                         | stk env1 env2 u1 u2 x v k2 Hu2 Hlk _ IH
-                         | stk env1 env2 u1 x v k1 u2 Hu1 _ IH
-                         | stk env1 env2 u1 u2 x v k2 Hu2 _ IH
-                         | stk env1 env2 u1 dt v k1 u2 Hu1 Hv _ IH
-                         | stk env1 env2 u1 u2 dt k2 Hu2 _ IH];
-        intros s1 s2 Hmatch.
-      - eapply Hbranch_b;
-          [apply decomp_rel_draw_model_spec | apply decomp_rel_draw_model_spec | eapply Hstep_decomp; eassumption].
-      - eapply refine_prov_draw__obs_eq with
-          (t1 := Tau (interp_state interp_vellvm_rel_draw_h mu1 s1))
-          (t2 := interp_state interp_vellvm_rel_draw_h u2 s2);
-          [exact Hr_eq
-          | symmetry; rewrite (unfold_interp_state interp_vellvm_rel_draw_h u1 s1), Hu1; reflexivity
-          | reflexivity |].
-        eapply RPD_TauL; [reflexivity | apply IH, Hmatch].
-      - eapply refine_prov_draw__obs_eq with
-          (t1 := interp_state interp_vellvm_rel_draw_h u1 s1)
-          (t2 := Tau (interp_state interp_vellvm_rel_draw_h mu2 s2));
-          [exact Hr_eq
-          | reflexivity
-          | symmetry; rewrite (unfold_interp_state interp_vellvm_rel_draw_h u2 s2), Hu2; reflexivity |].
-        eapply RPD_TauR; [reflexivity | apply IH, Hmatch].
-      - destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]].
-        pose proof Hmatch as (_ & _ & (Hvars1 & _) & _).
-        eapply refine_prov_draw__obs_eq with
-          (t1 := Tau (interp_state interp_vellvm_rel_draw_h (k1 v) (mm1, ((sf1, fstk1), gg1))))
-          (t2 := interp_state interp_vellvm_rel_draw_h u2 (mm2, ((sf2, fstk2), gg2))).
-        + exact Hr_eq.
-        + symmetry; rewrite Hu1, bind_trigger, interp_state_vis;
-            cbn [interp_vellvm_rel_draw_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
-          rewrite (lift_prov_to_draw_eq _ _
-                     (fused_local_prov_read_some x v (mm1, ((sf1, fstk1), gg1))
-                        (ltac:(cbn; rewrite Hvars1; exact Hlk)))),
-                  lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity.
-        + reflexivity.
-        + eapply RPD_TauL; [reflexivity | apply IH, Hmatch].
-      - destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]].
-        pose proof Hmatch as (_ & _ & (_ & Hvars2 & _) & _).
-        eapply refine_prov_draw__obs_eq with
-          (t1 := interp_state interp_vellvm_rel_draw_h u1 (mm1, ((sf1, fstk1), gg1)))
-          (t2 := Tau (interp_state interp_vellvm_rel_draw_h (k2 v) (mm2, ((sf2, fstk2), gg2)))).
-        + exact Hr_eq.
-        + reflexivity.
-        + symmetry; rewrite Hu2, bind_trigger, interp_state_vis;
-            cbn [interp_vellvm_rel_draw_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
-          rewrite (lift_prov_to_draw_eq _ _
-                     (fused_local_prov_read_some x v (mm2, ((sf2, fstk2), gg2))
-                        (ltac:(cbn; rewrite Hvars2; exact Hlk)))),
-                  lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity.
-        + eapply RPD_TauR; [reflexivity | apply IH, Hmatch].
-      - destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]].
-        destruct Hmatch as (<- & <- & (Hvars1 & Hvars2 & Hexc & Hloc) & Hsfm).
-        eapply refine_prov_draw__obs_eq with
-          (t1 := Tau (interp_state interp_vellvm_rel_draw_h (k1 tt)
-                        (mm1, ((upd_local_sf sf1 (Maps.add x v sf1.(stack_vars)), fstk1), gg1))))
-          (t2 := interp_state interp_vellvm_rel_draw_h u2 (mm1, ((sf2, fstk2), gg1))).
-        + exact Hr_eq.
-        + symmetry; rewrite Hu1, bind_trigger, interp_state_vis;
-            cbn [interp_vellvm_rel_draw_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
-          try change (resum IFun unit (LocalWrite x v)) with (LocalWrite x v);
-          rewrite (lift_prov_to_draw_eq _ _ (fused_local_prov_write _ _ _ _ _ _)),
-                  lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity.
-        + reflexivity.
-        + eapply RPD_TauL; [reflexivity | apply IH].
-          rewrite Hvars1; repeat split; try exact Hvars2; try exact Hexc; try exact Hloc; try exact Hsfm; reflexivity.
-      - destruct s1 as [mm1 [[sf1 fstk1] gg1]], s2 as [mm2 [[sf2 fstk2] gg2]].
-        destruct Hmatch as (<- & <- & (Hvars1 & Hvars2 & Hexc & Hloc) & Hsfm).
-        eapply refine_prov_draw__obs_eq with
-          (t1 := interp_state interp_vellvm_rel_draw_h u1 (mm1, ((sf1, fstk1), gg1)))
-          (t2 := Tau (interp_state interp_vellvm_rel_draw_h (k2 tt)
-                        (mm1, ((upd_local_sf sf2 (Maps.add x v sf2.(stack_vars)), fstk2), gg1)))).
-        + exact Hr_eq.
-        + reflexivity.
-        + symmetry; rewrite Hu2, bind_trigger, interp_state_vis;
-            cbn [interp_vellvm_rel_draw_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
-          try change (resum IFun unit (LocalWrite x v)) with (LocalWrite x v);
-          rewrite (lift_prov_to_draw_eq _ _ (fused_local_prov_write _ _ _ _ _ _)),
-                  lift_prov_to_draw_ret, Eqit.bind_ret_l; reflexivity.
-        + eapply RPD_TauR; [reflexivity | apply IH].
-          rewrite Hvars2; repeat split; try exact Hvars1; try exact Hexc; try exact Hloc; try exact Hsfm; reflexivity.
-      - eapply RPD_DrawL with (dt := dt)
-          (k1 := fun v => Tau (interp_state interp_vellvm_rel_draw_h (k1 v) s1)).
-        + rewrite Hu1, bind_trigger, interp_state_vis;
-            cbn [interp_vellvm_rel_draw_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun];
-            rewrite Eqit.bind_bind.
-          apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros v' ? <-].
-          rewrite Eqit.bind_ret_l; reflexivity.
-        + exact Hv.
-        + eapply RPD_TauL; [reflexivity | apply IH, Hmatch].
-      - eapply RPD_DrawR with (dt := dt)
-          (k2 := fun v => Tau (interp_state interp_vellvm_rel_draw_h (k2 v) s2)).
-        + rewrite Hu2, bind_trigger, interp_state_vis;
-            cbn [interp_vellvm_rel_draw_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun];
-            rewrite Eqit.bind_bind.
-          apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros v' ? <-].
-          rewrite Eqit.bind_ret_l; reflexivity.
-        + intros v Hv; eapply RPD_TauR; [reflexivity | apply (IH v Hv), Hmatch]. }
     assert (Hmain :
       forall U0 t1 t2,
-        r_both U0 t1 t2 ->
-        refine_prov_draw RR_out U0 t1 t2).
+        rdm_r_both RR U0 t1 t2 ->
+        refine_prov_draw
+          (fun _ '(s1', r1) '(s2', r2) =>
+             exists stk' e1' e2', fused_state_match stk' e1' e2' s1' s2' /\ RR stk' e1' e2' r1 r2)
+          U0 t1 t2).
     { pcofix CIH.
       intros U0 t1 t2 Hrb; pstep.
-      eapply refine_prov_draw__mon with (r := r_both);
+      eapply refine_prov_draw__mon with (r := rdm_r_both RR);
         [| intros U1 a1 a2 Hr; right; apply CIH, Hr].
-      destruct Hrb as [(stk & e1 & e2 & s1 & s2 & v1 & v2 & Ev1 & Ev2 & Hm & Hv) | (w1 & w2 & Ew1 & Ew2 & Hw)].
-      - eapply Hbranch_a; eassumption.
-      - eapply Hbranch_b; eassumption. }
+      unfold rdm_r_both in Hrb.
+      destruct Hrb as [(stk & e1 & e2 & s1 & s2 & v1 & v2 & Ev1 & Ev2 & Hm & Hv) |
+                       (w1 & w2 & Ew1 & Ew2 & Hw)].
+      - eapply mcfg_vdraw_sim_to_model_branch_a; eassumption.
+      - eapply mcfg_vdraw_sim_to_model_branch_b; eassumption. }
     intros U stk env1 env2 s1 s2 u1 u2 Hmatch Hsim.
-    apply Hmain; left; exists stk, env1, env2, s1, s2, u1, u2;
+    apply Hmain; unfold rdm_r_both; left;
+      exists stk, env1, env2, s1, s2, u1, u2;
       split; [reflexivity | split; [reflexivity | split; assumption]].
   Qed.
 
@@ -1733,6 +1893,266 @@ Section ValueDrawRefinement.
       + rewrite !IntMaps.IP.F.add_neq_o by exact Hne; apply IH.
   Qed.
 
+  Local Lemma i8_str_index_vdraw_sim (allow_call : bool) strptr index e1 e2 :
+    cfg_local_vdraw_sim_b allow_call
+      (fun e1' e2' r1 r2 => e1' = e1 /\ e2' = e2 /\ r1 = r2)
+      e1 e2 (i8_str_index strptr index) (i8_str_index strptr index).
+  Proof using.
+    assert (Heou : forall A (m : EOU A) s0 a1 a2,
+              vds_sim (@is_ub_cfg IP IPT) (@sync_cfg_b allow_call) EqE_CFG EqA_CFG
+                (@cfg_event_post IP IPT) (@as_local_cfg IP IPT) (fun _ _ => None)
+                (fun _ e1' e2' r1 r2 => e1' = a1 /\ e2' = a2 /\ r1 = r2)
+                s0 a1 a2 (EOU_to_itree m) (EOU_to_itree m)).
+    { intros A [s | s | s | x] s0 a1 a2; cbn [EOU_to_itree].
+      - unfold raise, trigger_cast, ITree.trigger; pstep; apply VDS_Step;
+          unfold vds_step_body; rewrite !observe_bind; cbn;
+          right; left; split; [reflexivity | split; [apply EqE_CFG_refl | intros []]].
+      - unfold raiseOOM, trigger_cast, ITree.trigger; pstep; apply VDS_Step;
+          unfold vds_step_body; rewrite !observe_bind; cbn;
+          right; left; split; [reflexivity | split; [apply EqE_CFG_refl | intros []]].
+      - unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply VDS_Step;
+          unfold vds_step_body; rewrite !observe_bind; cbn; left; reflexivity.
+      - apply vds_sim_ret; repeat split; reflexivity. }
+    assert (Herr : forall msg A s0 a1 a2,
+              vds_sim (@is_ub_cfg IP IPT) (@sync_cfg_b allow_call) EqE_CFG EqA_CFG
+                (@cfg_event_post IP IPT) (@as_local_cfg IP IPT) (fun _ _ => None)
+                (fun _ e1' e2' (r1 r2 : A) => e1' = a1 /\ e2' = a2 /\ r1 = r2)
+                s0 a1 a2 (raise msg) (raise msg)).
+    { intros msg A s0 a1 a2; unfold raise, trigger_cast, ITree.trigger; pstep; apply VDS_Step;
+        unfold vds_step_body; rewrite !observe_bind; cbn;
+        right; left; split; [reflexivity | split; [apply EqE_CFG_refl | intros []]]. }
+    unfold i8_str_index, cfg_local_vdraw_sim_b.
+    eapply vds_sim_bind; [apply Heou | intros ? ? ? iptr _ (-> & -> & <-)].
+    eapply vds_sim_bind; [apply Heou | intros ? ? ? addr _ (-> & -> & <-)].
+    eapply vds_sim_bind with (RR := fun _ e1' e2' r1 r2 => e1' = e1 /\ e2' = e2 /\ r1 = r2).
+    { unfold load, trigger_cast, ITree.trigger; pstep; apply VDS_Step; cbn;
+        right; left; split; [reflexivity | split; [apply EqE_CFG_refl |]].
+      intros a1 a2 Ha _; apply EqA_CFG_eq in Ha; subst a2;
+        left; apply vds_sim_ret; repeat split; reflexivity. }
+    intros ? ? ? d_byte _ (-> & -> & <-).
+    destruct d_byte as [[| sz b | | | | | |] | |]; try apply Herr.
+    destruct sz as [p | p |]; try apply Herr;
+      destruct p as [p | p |]; try apply Herr;
+      destruct p as [p | p |]; try apply Herr;
+      destruct p as [p | p |]; try apply Herr.
+    apply vds_sim_ret; repeat split; reflexivity.
+  Qed.
+
+  Local Lemma putchar_vdraw_sim (allow_call : bool) :
+    forall stk env1 env2 cc args,
+      cfg_vdraw_sim_b allow_call
+        (fun stk' e1' e2' r1 r2 =>
+           stk' = stk /\ e1' = env1 /\ e2' = env2 /\
+           mm_exc_ret_refines r1 r2 /\ r1 = r2)
+        stk env1 env2 (putchar_denotation cc args) (putchar_denotation cc args).
+  Proof using.
+    intros stk env1 env2 cc args; unfold putchar_denotation.
+    destruct args as [| ch [| ? ?]];
+      try (unfold raise; apply vds_cfg_trigger_cast_sync;
+           [reflexivity | apply EqE_CFG_refl]).
+    cbn [Functor.fmap Functor_itree]; unfold ITree.map.
+    eapply vds_sim_bind with (RR := fun stk' e1' e2' r1 r2 => stk' = stk /\ e1' = env1 /\ e2' = env2 /\ r1 = r2);
+      [| intros ? ? ? dv _ (-> & -> & -> & <-); apply vds_sim_ret;
+         split; [reflexivity | split; [reflexivity | split; [reflexivity |]]];
+         split; [apply mm_ret_dvalue_refines_refl | reflexivity]].
+    destruct ch as [[| sz x32 | | | | | |] | |];
+      try (unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply VDS_Step;
+           unfold vds_step_body; rewrite !observe_bind; cbn; left; reflexivity).
+    destruct (Pos.eq_dec 32 sz) as [<- | _];
+      [| unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply VDS_Step;
+         unfold vds_step_body; rewrite !observe_bind; cbn; left; reflexivity].
+    eapply vds_sim_bind.
+    - unfold io_stdout, trigger_cast; apply vds_cfg_trigger_mcfg_sync; reflexivity.
+    - intros ? ? ? _ _ (-> & -> & -> & <-); apply vds_sim_ret; repeat split; reflexivity.
+  Qed.
+
+  Local Lemma puts_vdraw_sim (allow_call : bool) :
+    forall stk env1 env2 cc args,
+      cfg_vdraw_sim_b allow_call
+        (fun stk' e1' e2' r1 r2 =>
+           stk' = stk /\ e1' = env1 /\ e2' = env2 /\
+           mm_exc_ret_refines r1 r2 /\ r1 = r2)
+        stk env1 env2 (puts_denotation cc args) (puts_denotation cc args).
+  Proof using.
+    intros stk env1 env2 cc args; unfold puts_denotation.
+    destruct args as [| u_strptr [| ? ?]];
+      try (unfold raise; apply vds_cfg_trigger_cast_sync;
+           [reflexivity | apply EqE_CFG_refl]).
+    cbn [Functor.fmap Functor_itree]; unfold ITree.map.
+    eapply vds_sim_bind with (RR := fun stk' e1' e2' r1 r2 => stk' = stk /\ e1' = env1 /\ e2' = env2 /\ r1 = r2);
+      [| intros ? ? ? dv _ (-> & -> & -> & <-); apply vds_sim_ret;
+         split; [reflexivity | split; [reflexivity | split; [reflexivity |]]];
+         split; [apply mm_ret_dvalue_refines_refl | reflexivity]].
+    destruct u_strptr as [[strptr | | | | | | |] | |];
+      try (unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply VDS_Step;
+           unfold vds_step_body; rewrite !observe_bind; cbn; left; reflexivity).
+    eapply vds_sim_bind; [apply cfg_local_vdraw_to_stack_sim_b, i8_str_index_vdraw_sim |].
+    intros ? ? ? ch _ (-> & -> & -> & <-).
+    eapply vds_sim_bind.
+    - apply cfg_local_vdraw_to_stack_sim_b.
+      assert (Hvds_any_stk :
+        forall {A1 A2} (Rloc : @local_env PaV -> @local_env PaV -> A1 -> A2 -> Prop)
+          s0 e1 e2 (t1 : @CFGtop PaV A1) (t2 : @CFGtop PaV A2),
+          cfg_local_vdraw_sim_b allow_call Rloc e1 e2 t1 t2 ->
+          vds_sim (@is_ub_cfg IP IPT) (@sync_cfg_b allow_call) EqE_CFG EqA_CFG
+            (@cfg_event_post IP IPT) (@as_local_cfg IP IPT) (fun _ _ => None)
+            (fun _ => Rloc) s0 e1 e2 t1 t2).
+      { intros A1 A2 Rloc s0.
+        unfold cfg_local_vdraw_sim_b.
+        remember (@nil (@local_env PaV * @local_env PaV)) as s_nil eqn:Es; clear Es.
+        pcofix CIH; intros e1_l e2_l t1_l t2_l Hl; pstep; punfold Hl.
+        induction Hl as [s1 e1 e2 t1 t2 Hstep
+                         | s1 e1 e2 t1 m1 t2 Ht1 _ IH
+                         | s1 e1 e2 t1 t2 m2 Ht2 _ IH
+                         | s1 e1 e2 t1 x v k1 t2 Ht1 Hlk _ IH
+                         | s1 e1 e2 t1 t2 x v k2 Ht2 Hlk _ IH
+                         | s1 e1 e2 t1 x v k1 t2 Ht1 _ IH
+                         | s1 e1 e2 t1 t2 x v k2 Ht2 _ IH
+                         | s1 e1 e2 t1 dt v k1 t2 Ht1 Hv _ IH
+                         | s1 e1 e2 t1 t2 dt k2 Ht2 _ IH].
+        - apply VDS_Step; unfold vds_step_body in *.
+          destruct (observe t1) as [r1 | m1 | X1 ev1 k1].
+          + exact Hstep.
+          + destruct (observe t2);
+              [exact Hstep | destruct Hstep as [Hs | Hb]; [right; eapply CIH, Hs | inversion Hb] | exact Hstep].
+          + destruct Hstep as [Hub | Hvis]; [left; exact Hub | right].
+            destruct (observe t2) as [r2 | m2 | X2 ev2 k2]; try contradiction.
+            destruct Hvis as [(Hsync & HE & HA) | [Hloc | Hf]]; [| | contradiction].
+            * left; split; [exact Hsync | split; [exact HE |]].
+              intros a1 a2 Ha Hp; specialize (HA a1 a2 Ha Hp);
+                destruct HA as [HA | Hb]; [right; eapply CIH, HA | inversion Hb].
+            * right; left.
+              destruct (as_local_cfg ev1) as [le1 |], (as_local_cfg ev2) as [le2 |]; try contradiction.
+              destruct le1 as [x1 v1 | x1], le2 as [x2 v2 | x2]; try contradiction.
+              -- destruct Hloc as (Hx & Hv & [Hr | Hb]); [| inversion Hb].
+                 split; [exact Hx | split; [exact Hv | right; eapply CIH, Hr]].
+              -- destruct Hloc as (Hx & Hlk & Hrd); split; [exact Hx | split; [exact Hlk |]].
+                 intros v Hv; specialize (Hrd v Hv);
+                   destruct Hrd as [Hrd | Hb]; [right; eapply CIH, Hrd | inversion Hb].
+        - eapply VDS_TauL; [exact Ht1 | exact (IH CIH)].
+        - eapply VDS_TauR; [exact Ht2 | exact (IH CIH)].
+        - eapply VDS_ReadL; [exact Ht1 | exact Hlk | exact (IH CIH)].
+        - eapply VDS_ReadR; [exact Ht2 | exact Hlk | exact (IH CIH)].
+        - eapply VDS_WriteL; [exact Ht1 | exact (IH CIH)].
+        - eapply VDS_WriteR; [exact Ht2 | exact (IH CIH)].
+        - eapply VDS_DrawL; [exact Ht1 | exact Hv | exact (IH CIH)].
+        - eapply VDS_DrawR; [exact Ht2 | intros v Hv; exact (IH v Hv CIH)]. }
+      set (pbody := fun '((c, bytes), offset) =>
+                      if @Integers.eq 8 c (@Integers.zero 8)
+                      then Ret (inr ((@Integers.repr 8 10) :: bytes))
+                      else ITree.bind (i8_str_index strptr offset)
+                             (fun next_char => Ret (inl (next_char, c :: bytes, (offset + 1)%Z)))).
+      set (ic := fun lr : (@Integers.bit_int 8 * list (@Integers.bit_int 8) * Z) + list (@Integers.bit_int 8) =>
+                   match lr with
+                   | inl j => Tau (ITree.iter pbody j)
+                   | inr r => Ret r
+                   end).
+      set (istep := fun e1' e2'
+                      (x1 x2 : (@Integers.bit_int 8 * list (@Integers.bit_int 8) * Z) + list (@Integers.bit_int 8)) =>
+                      match x1, x2 with
+                      | inl j1, inl j2 => e1' = env1 /\ e2' = env2 /\ j1 = j2
+                      | inr r1, inr r2 => e1' = env1 /\ e2' = env2 /\ r1 = r2
+                      | _, _ => False
+                      end).
+      assert (Hpbody : forall j,
+                cfg_local_vdraw_sim_b allow_call istep env1 env2 (pbody j) (pbody j)).
+      { intros [[c bytes] offset]; unfold pbody.
+        destruct (@Integers.eq 8 c (@Integers.zero 8)).
+        - apply vds_sim_ret; cbn; repeat split; reflexivity.
+        - eapply vds_sim_bind; [apply i8_str_index_vdraw_sim |].
+          intros ? ? ? next_char _ (-> & -> & <-).
+          apply vds_sim_ret; cbn; repeat split; reflexivity. }
+      assert (Hiter_aux :
+        forall s0 e1 e2 w1 w2 t1 t2,
+          ITree.bind w1 ic ≅ t1 ->
+          ITree.bind w2 ic ≅ t2 ->
+          vds_sim (@is_ub_cfg IP IPT) (@sync_cfg_b allow_call) EqE_CFG EqA_CFG
+            (@cfg_event_post IP IPT) (@as_local_cfg IP IPT) (fun _ _ => None)
+            (fun _ => istep) s0 e1 e2 w1 w2 ->
+          vds_sim (@is_ub_cfg IP IPT) (@sync_cfg_b allow_call) EqE_CFG EqA_CFG
+            (@cfg_event_post IP IPT) (@as_local_cfg IP IPT) (fun _ _ => None)
+            (fun _ e1' e2' r1 r2 => e1' = env1 /\ e2' = env2 /\ r1 = r2) s0 e1 e2 t1 t2).
+      { pcofix CIH.
+        intros s0 e1 e2 w1 w2 t1 t2 Et1 Et2 Hw; pstep.
+        set (r_rel := fun s1 e1' e2' a1 a2 =>
+                        exists v1 v2,
+                          ITree.bind v1 ic ≅ a1 /\
+                          ITree.bind v2 ic ≅ a2 /\
+                          vds_sim (@is_ub_cfg IP IPT) (@sync_cfg_b allow_call) EqE_CFG EqA_CFG
+                            (@cfg_event_post IP IPT) (@as_local_cfg IP IPT) (fun _ _ => None)
+                            (fun _ => istep) s1 e1' e2' v1 v2).
+        assert (Hr_eq : forall s1 e1' e2' a1 a1' a2 a2',
+                  a1 ≅ a1' -> a2 ≅ a2' -> r_rel s1 e1' e2' a1 a2 -> r_rel s1 e1' e2' a1' a2').
+        { intros s1 e1' e2' a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv).
+          exists v1, v2; split;
+            [etransitivity; [exact Ev1 | exact Ea1]
+            | split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]]. }
+        eapply vds_sim__mon with (r := r_rel);
+          [| intros s1 e1' e2' a1 a2 (v1 & v2 & Ev1 & Ev2 & Hv);
+             right; eapply CIH; [exact Ev1 | exact Ev2 | exact Hv]].
+        eapply vds_sim__obs_eq; [exact Hr_eq | exact Et1 | exact Et2 |].
+        punfold Hw; clear t1 t2 Et1 Et2 CIH r.
+        induction Hw as [s0 e1 e2 w1 w2 Hstep
+                         | s0 e1 e2 w1 mw1 w2 Hw1 _ IH
+                         | s0 e1 e2 w1 w2 mw2 Hw2 _ IH
+                         | s0 e1 e2 w1 x v kw1 w2 Hw1 Hlk _ IH
+                         | s0 e1 e2 w1 w2 x v kw2 Hw2 Hlk _ IH
+                         | s0 e1 e2 w1 x v kw1 w2 Hw1 _ IH
+                         | s0 e1 e2 w1 w2 x v kw2 Hw2 _ IH
+                         | s0 e1 e2 w1 dt v kw1 w2 Hw1 Hv _ IH
+                         | s0 e1 e2 w1 w2 dt kw2 Hw2 _ IH].
+        - unfold vds_step_body in Hstep.
+          destruct (observe w1) as [x1 | mw1 | X1 ev1 kw1] eqn:How1.
+          + destruct (observe w2) as [x2 | mw2 | X2 ev2 kw2] eqn:How2; try contradiction.
+            destruct x1 as [j1 | r1], x2 as [j2 | r2]; cbn in Hstep; try contradiction.
+            * destruct Hstep as (-> & -> & <-).
+              apply VDS_Step; unfold vds_step_body; rewrite !observe_bind, How1, How2; cbn.
+              exists (pbody j1), (pbody j1).
+              split; [symmetry; apply unfold_iter |].
+              split; [symmetry; apply unfold_iter |].
+              apply Hvds_any_stk, Hpbody.
+            * apply VDS_Step; unfold vds_step_body; rewrite !observe_bind, How1, How2; cbn; exact Hstep.
+          + destruct (observe w2) as [x2 | mw2 | X2 ev2 kw2] eqn:How2; try contradiction.
+            destruct Hstep as [Hstep | Hb]; [| inversion Hb].
+            apply VDS_Step; unfold vds_step_body; rewrite !observe_bind, How1, How2.
+            exists mw1, mw2; split; [reflexivity | split; [reflexivity | exact Hstep]].
+          + apply VDS_Step; unfold vds_step_body; rewrite (observe_bind w1 ic), How1.
+            destruct Hstep as [Hub | Hvis]; [left; exact Hub | right].
+            destruct (observe w2) as [x2 | mw2 | X2 ev2 kw2] eqn:How2; try contradiction.
+            rewrite (observe_bind w2 ic), How2.
+            destruct Hvis as [(Hsync & HE & HA) | [Hloc | Hf]]; [| | contradiction].
+            * left; split; [exact Hsync | split; [exact HE |]].
+              intros a1 a2 Ha Hp; specialize (HA a1 a2 Ha Hp); destruct HA as [HA | Hb]; [| inversion Hb].
+              exists (kw1 a1), (kw2 a2); split; [reflexivity | split; [reflexivity | exact HA]].
+            * right; left.
+              destruct (as_local_cfg ev1) as [le1 |], (as_local_cfg ev2) as [le2 |]; try contradiction.
+              destruct le1 as [x1 v1 | x1], le2 as [x2 v2 | x2]; try contradiction.
+              -- destruct Hloc as (Hx & Hv & [Hr | Hb]); [| inversion Hb].
+                 split;
+                   [exact Hx
+                   | split;
+                       [exact Hv
+                       | exists (kw1 tt), (kw2 tt);
+                         split; [reflexivity | split; [reflexivity | exact Hr]]]].
+              -- destruct Hloc as (Hx & Hlk & Hrd); split; [exact Hx | split; [exact Hlk |]].
+                 intros v Hv; specialize (Hrd v Hv); destruct Hrd as [Hrd | Hb]; [| inversion Hb].
+                 exists (kw1 v), (kw2 v); split; [reflexivity | split; [reflexivity | exact Hrd]].
+        - eapply VDS_TauL; [rewrite (observe_bind w1 ic), Hw1; reflexivity | exact IH].
+        - eapply VDS_TauR; [rewrite (observe_bind w2 ic), Hw2; reflexivity | exact IH].
+        - eapply VDS_ReadL; [rewrite Hw1, Eqit.bind_bind; reflexivity | exact Hlk | exact IH].
+        - eapply VDS_ReadR; [rewrite Hw2, Eqit.bind_bind; reflexivity | exact Hlk | exact IH].
+        - eapply VDS_WriteL; [rewrite Hw1, Eqit.bind_bind; reflexivity | exact IH].
+        - eapply VDS_WriteR; [rewrite Hw2, Eqit.bind_bind; reflexivity | exact IH].
+        - eapply VDS_DrawL; [rewrite Hw1, Eqit.bind_bind; reflexivity | exact Hv | exact IH].
+        - eapply VDS_DrawR; [rewrite Hw2, Eqit.bind_bind; reflexivity | intros v Hv; exact (IH v Hv)]. }
+      eapply Hiter_aux with (w1 := pbody (ch, [], 1%Z)) (w2 := pbody (ch, [], 1%Z));
+        [symmetry; apply unfold_iter | symmetry; apply unfold_iter | apply Hvds_any_stk, Hpbody].
+    - intros ? ? ? bytes _ (-> & -> & -> & <-).
+      eapply vds_sim_bind.
+      + unfold io_stdout, trigger_cast; apply vds_cfg_trigger_mcfg_sync; reflexivity.
+      + intros ? ? ? _ _ (-> & -> & -> & <-); apply vds_sim_ret; repeat split; reflexivity.
+  Qed.
+
   Lemma library_functions_vdraw_sync (allow_call : bool) (decls : list (declaration dtyp)) :
     Forall
       (fun '(_, den) =>
@@ -1744,252 +2164,11 @@ Section ValueDrawRefinement.
              stk env1 env2 (den cc args) (den cc args))
       (library_functions decls).
   Proof using.
-    assert (Hi8_loc : forall strptr index e1 e2,
-              cfg_local_vdraw_sim_b allow_call
-                (fun e1' e2' r1 r2 => e1' = e1 /\ e2' = e2 /\ r1 = r2)
-                e1 e2 (i8_str_index strptr index) (i8_str_index strptr index)).
-    { intros strptr index e1 e2.
-      assert (Heou : forall A (m : EOU A) s0 a1 a2,
-                vds_sim (@is_ub_cfg IP IPT) (@sync_cfg_b allow_call) EqE_CFG EqA_CFG
-                  (@cfg_event_post IP IPT) (@as_local_cfg IP IPT) (fun _ _ => None)
-                  (fun _ e1' e2' r1 r2 => e1' = a1 /\ e2' = a2 /\ r1 = r2)
-                  s0 a1 a2 (EOU_to_itree m) (EOU_to_itree m)).
-      { intros A [s | s | s | x] s0 a1 a2; cbn [EOU_to_itree].
-        - unfold raise, trigger_cast, ITree.trigger; pstep; apply VDS_Step;
-            unfold vds_step_body; rewrite !observe_bind; cbn;
-            right; left; split; [reflexivity | split; [apply EqE_CFG_refl | intros []]].
-        - unfold raiseOOM, trigger_cast, ITree.trigger; pstep; apply VDS_Step;
-            unfold vds_step_body; rewrite !observe_bind; cbn;
-            right; left; split; [reflexivity | split; [apply EqE_CFG_refl | intros []]].
-        - unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply VDS_Step;
-            unfold vds_step_body; rewrite !observe_bind; cbn; left; reflexivity.
-        - apply vds_sim_ret; repeat split; reflexivity. }
-      assert (Herr : forall msg A s0 a1 a2,
-                vds_sim (@is_ub_cfg IP IPT) (@sync_cfg_b allow_call) EqE_CFG EqA_CFG
-                  (@cfg_event_post IP IPT) (@as_local_cfg IP IPT) (fun _ _ => None)
-                  (fun _ e1' e2' (r1 r2 : A) => e1' = a1 /\ e2' = a2 /\ r1 = r2)
-                  s0 a1 a2 (raise msg) (raise msg)).
-      { intros msg A s0 a1 a2; unfold raise, trigger_cast, ITree.trigger; pstep; apply VDS_Step;
-          unfold vds_step_body; rewrite !observe_bind; cbn;
-          right; left; split; [reflexivity | split; [apply EqE_CFG_refl | intros []]]. }
-      unfold i8_str_index, cfg_local_vdraw_sim_b.
-      eapply vds_sim_bind; [apply Heou | intros ? ? ? iptr _ (-> & -> & <-)].
-      eapply vds_sim_bind; [apply Heou | intros ? ? ? addr _ (-> & -> & <-)].
-      eapply vds_sim_bind with (RR := fun _ e1' e2' r1 r2 => e1' = e1 /\ e2' = e2 /\ r1 = r2).
-      { unfold load, trigger_cast, ITree.trigger; pstep; apply VDS_Step; cbn;
-          right; left; split; [reflexivity | split; [apply EqE_CFG_refl |]].
-        intros a1 a2 Ha _; apply EqA_CFG_eq in Ha; subst a2; left; apply vds_sim_ret; repeat split; reflexivity. }
-      intros ? ? ? d_byte _ (-> & -> & <-).
-      destruct d_byte as [[| sz b | | | | | |] | |]; try apply Herr.
-      destruct sz as [p | p |]; try apply Herr;
-        destruct p as [p | p |]; try apply Herr;
-        destruct p as [p | p |]; try apply Herr;
-        destruct p as [p | p |]; try apply Herr.
-      apply vds_sim_ret; repeat split; reflexivity. }
-    assert (Hputc : forall stk env1 env2 cc args,
-              cfg_vdraw_sim_b allow_call
-                (fun stk' e1' e2' r1 r2 =>
-                   stk' = stk /\ e1' = env1 /\ e2' = env2 /\
-                   mm_exc_ret_refines r1 r2 /\ r1 = r2)
-                stk env1 env2 (putchar_denotation cc args) (putchar_denotation cc args)).
-    { intros stk env1 env2 cc args; unfold putchar_denotation.
-      destruct args as [| ch [| ? ?]];
-        try (unfold raise; apply vds_cfg_trigger_cast_sync;
-             [reflexivity | apply EqE_CFG_refl]).
-      cbn [Functor.fmap Functor_itree]; unfold ITree.map.
-      eapply vds_sim_bind with (RR := fun stk' e1' e2' r1 r2 => stk' = stk /\ e1' = env1 /\ e2' = env2 /\ r1 = r2);
-        [| intros ? ? ? dv _ (-> & -> & -> & <-); apply vds_sim_ret;
-           split; [reflexivity | split; [reflexivity | split; [reflexivity |]]];
-           split; [apply mm_ret_dvalue_refines_refl | reflexivity]].
-      destruct ch as [[| sz x32 | | | | | |] | |];
-        try (unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply VDS_Step;
-             unfold vds_step_body; rewrite !observe_bind; cbn; left; reflexivity).
-      destruct (Pos.eq_dec 32 sz) as [<- | _];
-        [| unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply VDS_Step;
-           unfold vds_step_body; rewrite !observe_bind; cbn; left; reflexivity].
-      eapply vds_sim_bind.
-      - unfold io_stdout, trigger_cast; apply vds_cfg_trigger_mcfg_sync; reflexivity.
-      - intros ? ? ? _ _ (-> & -> & -> & <-); apply vds_sim_ret; repeat split; reflexivity. }
-    assert (Hputs : forall stk env1 env2 cc args,
-              cfg_vdraw_sim_b allow_call
-                (fun stk' e1' e2' r1 r2 =>
-                   stk' = stk /\ e1' = env1 /\ e2' = env2 /\
-                   mm_exc_ret_refines r1 r2 /\ r1 = r2)
-                stk env1 env2 (puts_denotation cc args) (puts_denotation cc args)).
-    { intros stk env1 env2 cc args; unfold puts_denotation.
-      destruct args as [| u_strptr [| ? ?]];
-        try (unfold raise; apply vds_cfg_trigger_cast_sync;
-             [reflexivity | apply EqE_CFG_refl]).
-      cbn [Functor.fmap Functor_itree]; unfold ITree.map.
-      eapply vds_sim_bind with (RR := fun stk' e1' e2' r1 r2 => stk' = stk /\ e1' = env1 /\ e2' = env2 /\ r1 = r2);
-        [| intros ? ? ? dv _ (-> & -> & -> & <-); apply vds_sim_ret;
-           split; [reflexivity | split; [reflexivity | split; [reflexivity |]]];
-           split; [apply mm_ret_dvalue_refines_refl | reflexivity]].
-      destruct u_strptr as [[strptr | | | | | | |] | |];
-        try (unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply VDS_Step;
-             unfold vds_step_body; rewrite !observe_bind; cbn; left; reflexivity).
-      eapply vds_sim_bind; [apply cfg_local_vdraw_to_stack_sim_b, Hi8_loc |].
-      intros ? ? ? ch _ (-> & -> & -> & <-).
-      eapply vds_sim_bind.
-      - apply cfg_local_vdraw_to_stack_sim_b.
-        assert (Hvds_any_stk :
-          forall {A1 A2} (Rloc : @local_env PaV -> @local_env PaV -> A1 -> A2 -> Prop)
-            s0 e1 e2 (t1 : @CFGtop PaV A1) (t2 : @CFGtop PaV A2),
-            cfg_local_vdraw_sim_b allow_call Rloc e1 e2 t1 t2 ->
-            vds_sim (@is_ub_cfg IP IPT) (@sync_cfg_b allow_call) EqE_CFG EqA_CFG
-              (@cfg_event_post IP IPT) (@as_local_cfg IP IPT) (fun _ _ => None)
-              (fun _ => Rloc) s0 e1 e2 t1 t2).
-        { intros A1 A2 Rloc s0.
-          unfold cfg_local_vdraw_sim_b.
-          remember (@nil (@local_env PaV * @local_env PaV)) as s_nil eqn:Es; clear Es.
-          pcofix CIH; intros e1_l e2_l t1_l t2_l Hl; pstep; punfold Hl.
-          induction Hl as [s1 e1 e2 t1 t2 Hstep
-                           | s1 e1 e2 t1 m1 t2 Ht1 _ IH
-                           | s1 e1 e2 t1 t2 m2 Ht2 _ IH
-                           | s1 e1 e2 t1 x v k1 t2 Ht1 Hlk _ IH
-                           | s1 e1 e2 t1 t2 x v k2 Ht2 Hlk _ IH
-                           | s1 e1 e2 t1 x v k1 t2 Ht1 _ IH
-                           | s1 e1 e2 t1 t2 x v k2 Ht2 _ IH
-                           | s1 e1 e2 t1 dt v k1 t2 Ht1 Hv _ IH
-                           | s1 e1 e2 t1 t2 dt k2 Ht2 _ IH].
-          - apply VDS_Step; unfold vds_step_body in *.
-            destruct (observe t1) as [r1 | m1 | X1 ev1 k1].
-            + exact Hstep.
-            + destruct (observe t2);
-                [exact Hstep | destruct Hstep as [Hs | Hb]; [right; eapply CIH, Hs | inversion Hb] | exact Hstep].
-            + destruct Hstep as [Hub | Hvis]; [left; exact Hub | right].
-              destruct (observe t2) as [r2 | m2 | X2 ev2 k2]; try contradiction.
-              destruct Hvis as [(Hsync & HE & HA) | [Hloc | Hf]]; [| | contradiction].
-              * left; split; [exact Hsync | split; [exact HE |]].
-                intros a1 a2 Ha Hp; specialize (HA a1 a2 Ha Hp);
-                  destruct HA as [HA | Hb]; [right; eapply CIH, HA | inversion Hb].
-              * right; left.
-                destruct (as_local_cfg ev1) as [le1 |], (as_local_cfg ev2) as [le2 |]; try contradiction.
-                destruct le1 as [x1 v1 | x1], le2 as [x2 v2 | x2]; try contradiction.
-                -- destruct Hloc as (Hx & Hv & [Hr | Hb]); [| inversion Hb].
-                   split; [exact Hx | split; [exact Hv | right; eapply CIH, Hr]].
-                -- destruct Hloc as (Hx & Hlk & Hrd); split; [exact Hx | split; [exact Hlk |]].
-                   intros v Hv; specialize (Hrd v Hv);
-                     destruct Hrd as [Hrd | Hb]; [right; eapply CIH, Hrd | inversion Hb].
-          - eapply VDS_TauL; [exact Ht1 | exact (IH CIH)].
-          - eapply VDS_TauR; [exact Ht2 | exact (IH CIH)].
-          - eapply VDS_ReadL; [exact Ht1 | exact Hlk | exact (IH CIH)].
-          - eapply VDS_ReadR; [exact Ht2 | exact Hlk | exact (IH CIH)].
-          - eapply VDS_WriteL; [exact Ht1 | exact (IH CIH)].
-          - eapply VDS_WriteR; [exact Ht2 | exact (IH CIH)].
-          - eapply VDS_DrawL; [exact Ht1 | exact Hv | exact (IH CIH)].
-          - eapply VDS_DrawR; [exact Ht2 | intros v Hv; exact (IH v Hv CIH)]. }
-        set (pbody := fun '((c, bytes), offset) =>
-                        if @Integers.eq 8 c (@Integers.zero 8)
-                        then Ret (inr ((@Integers.repr 8 10) :: bytes))
-                        else ITree.bind (i8_str_index strptr offset)
-                               (fun next_char => Ret (inl (next_char, c :: bytes, (offset + 1)%Z)))).
-        set (ic := fun lr : (@Integers.bit_int 8 * list (@Integers.bit_int 8) * Z) + list (@Integers.bit_int 8) =>
-                     match lr with
-                     | inl j => Tau (ITree.iter pbody j)
-                     | inr r => Ret r
-                     end).
-        set (istep := fun e1' e2'
-                        (x1 x2 : (@Integers.bit_int 8 * list (@Integers.bit_int 8) * Z) + list (@Integers.bit_int 8)) =>
-                        match x1, x2 with
-                        | inl j1, inl j2 => e1' = env1 /\ e2' = env2 /\ j1 = j2
-                        | inr r1, inr r2 => e1' = env1 /\ e2' = env2 /\ r1 = r2
-                        | _, _ => False
-                        end).
-        assert (Hpbody : forall j,
-                  cfg_local_vdraw_sim_b allow_call istep env1 env2 (pbody j) (pbody j)).
-        { intros [[c bytes] offset]; unfold pbody.
-          destruct (@Integers.eq 8 c (@Integers.zero 8)).
-          - apply vds_sim_ret; cbn; repeat split; reflexivity.
-          - eapply vds_sim_bind; [apply Hi8_loc |].
-            intros ? ? ? next_char _ (-> & -> & <-).
-            apply vds_sim_ret; cbn; repeat split; reflexivity. }
-        assert (Hiter_aux :
-          forall s0 e1 e2 w1 w2 t1 t2,
-            ITree.bind w1 ic ≅ t1 ->
-            ITree.bind w2 ic ≅ t2 ->
-            vds_sim (@is_ub_cfg IP IPT) (@sync_cfg_b allow_call) EqE_CFG EqA_CFG
-              (@cfg_event_post IP IPT) (@as_local_cfg IP IPT) (fun _ _ => None)
-              (fun _ => istep) s0 e1 e2 w1 w2 ->
-            vds_sim (@is_ub_cfg IP IPT) (@sync_cfg_b allow_call) EqE_CFG EqA_CFG
-              (@cfg_event_post IP IPT) (@as_local_cfg IP IPT) (fun _ _ => None)
-              (fun _ e1' e2' r1 r2 => e1' = env1 /\ e2' = env2 /\ r1 = r2) s0 e1 e2 t1 t2).
-        { pcofix CIH.
-          intros s0 e1 e2 w1 w2 t1 t2 Et1 Et2 Hw; pstep.
-          set (r_rel := fun s1 e1' e2' a1 a2 =>
-                          exists v1 v2,
-                            ITree.bind v1 ic ≅ a1 /\
-                            ITree.bind v2 ic ≅ a2 /\
-                            vds_sim (@is_ub_cfg IP IPT) (@sync_cfg_b allow_call) EqE_CFG EqA_CFG
-                              (@cfg_event_post IP IPT) (@as_local_cfg IP IPT) (fun _ _ => None)
-                              (fun _ => istep) s1 e1' e2' v1 v2).
-          assert (Hr_eq : forall s1 e1' e2' a1 a1' a2 a2',
-                    a1 ≅ a1' -> a2 ≅ a2' -> r_rel s1 e1' e2' a1 a2 -> r_rel s1 e1' e2' a1' a2').
-          { intros s1 e1' e2' a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv).
-            exists v1, v2; split; [etransitivity; [exact Ev1 | exact Ea1] | split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]]. }
-          eapply vds_sim__mon with (r := r_rel);
-            [| intros s1 e1' e2' a1 a2 (v1 & v2 & Ev1 & Ev2 & Hv);
-               right; eapply CIH; [exact Ev1 | exact Ev2 | exact Hv]].
-          eapply vds_sim__obs_eq; [exact Hr_eq | exact Et1 | exact Et2 |].
-          punfold Hw; clear t1 t2 Et1 Et2 CIH r.
-          induction Hw as [s0 e1 e2 w1 w2 Hstep
-                           | s0 e1 e2 w1 mw1 w2 Hw1 _ IH
-                           | s0 e1 e2 w1 w2 mw2 Hw2 _ IH
-                           | s0 e1 e2 w1 x v kw1 w2 Hw1 Hlk _ IH
-                           | s0 e1 e2 w1 w2 x v kw2 Hw2 Hlk _ IH
-                           | s0 e1 e2 w1 x v kw1 w2 Hw1 _ IH
-                           | s0 e1 e2 w1 w2 x v kw2 Hw2 _ IH
-                           | s0 e1 e2 w1 dt v kw1 w2 Hw1 Hv _ IH
-                           | s0 e1 e2 w1 w2 dt kw2 Hw2 _ IH].
-          - unfold vds_step_body in Hstep.
-            destruct (observe w1) as [x1 | mw1 | X1 ev1 kw1] eqn:How1.
-            + destruct (observe w2) as [x2 | mw2 | X2 ev2 kw2] eqn:How2; try contradiction.
-              destruct x1 as [j1 | r1], x2 as [j2 | r2]; cbn in Hstep; try contradiction.
-              * destruct Hstep as (-> & -> & <-).
-                apply VDS_Step; unfold vds_step_body; rewrite !observe_bind, How1, How2; cbn.
-                exists (pbody j1), (pbody j1).
-                split; [symmetry; apply unfold_iter |].
-                split; [symmetry; apply unfold_iter |].
-                apply Hvds_any_stk, Hpbody.
-              * apply VDS_Step; unfold vds_step_body; rewrite !observe_bind, How1, How2; cbn; exact Hstep.
-            + destruct (observe w2) as [x2 | mw2 | X2 ev2 kw2] eqn:How2; try contradiction.
-              destruct Hstep as [Hstep | Hb]; [| inversion Hb].
-              apply VDS_Step; unfold vds_step_body; rewrite !observe_bind, How1, How2.
-              exists mw1, mw2; split; [reflexivity | split; [reflexivity | exact Hstep]].
-            + apply VDS_Step; unfold vds_step_body; rewrite (observe_bind w1 ic), How1.
-              destruct Hstep as [Hub | Hvis]; [left; exact Hub | right].
-              destruct (observe w2) as [x2 | mw2 | X2 ev2 kw2] eqn:How2; try contradiction.
-              rewrite (observe_bind w2 ic), How2.
-              destruct Hvis as [(Hsync & HE & HA) | [Hloc | Hf]]; [| | contradiction].
-              * left; split; [exact Hsync | split; [exact HE |]].
-                intros a1 a2 Ha Hp; specialize (HA a1 a2 Ha Hp); destruct HA as [HA | Hb]; [| inversion Hb].
-                exists (kw1 a1), (kw2 a2); split; [reflexivity | split; [reflexivity | exact HA]].
-              * right; left.
-                destruct (as_local_cfg ev1) as [le1 |], (as_local_cfg ev2) as [le2 |]; try contradiction.
-                destruct le1 as [x1 v1 | x1], le2 as [x2 v2 | x2]; try contradiction.
-                -- destruct Hloc as (Hx & Hv & [Hr | Hb]); [| inversion Hb].
-                   split; [exact Hx | split; [exact Hv | exists (kw1 tt), (kw2 tt); split; [reflexivity | split; [reflexivity | exact Hr]]]].
-                -- destruct Hloc as (Hx & Hlk & Hrd); split; [exact Hx | split; [exact Hlk |]].
-                   intros v Hv; specialize (Hrd v Hv); destruct Hrd as [Hrd | Hb]; [| inversion Hb].
-                   exists (kw1 v), (kw2 v); split; [reflexivity | split; [reflexivity | exact Hrd]].
-          - eapply VDS_TauL; [rewrite (observe_bind w1 ic), Hw1; reflexivity | exact IH].
-          - eapply VDS_TauR; [rewrite (observe_bind w2 ic), Hw2; reflexivity | exact IH].
-          - eapply VDS_ReadL; [rewrite Hw1, Eqit.bind_bind; reflexivity | exact Hlk | exact IH].
-          - eapply VDS_ReadR; [rewrite Hw2, Eqit.bind_bind; reflexivity | exact Hlk | exact IH].
-          - eapply VDS_WriteL; [rewrite Hw1, Eqit.bind_bind; reflexivity | exact IH].
-          - eapply VDS_WriteR; [rewrite Hw2, Eqit.bind_bind; reflexivity | exact IH].
-          - eapply VDS_DrawL; [rewrite Hw1, Eqit.bind_bind; reflexivity | exact Hv | exact IH].
-          - eapply VDS_DrawR; [rewrite Hw2, Eqit.bind_bind; reflexivity | intros v Hv; exact (IH v Hv)]. }
-        eapply Hiter_aux with (w1 := pbody (ch, [], 1%Z)) (w2 := pbody (ch, [], 1%Z));
-          [symmetry; apply unfold_iter | symmetry; apply unfold_iter | apply Hvds_any_stk, Hpbody].
-      - intros ? ? ? bytes _ (-> & -> & -> & <-).
-        eapply vds_sim_bind.
-        + unfold io_stdout, trigger_cast; apply vds_cfg_trigger_mcfg_sync; reflexivity.
-        + intros ? ? ? _ _ (-> & -> & -> & <-); apply vds_sim_ret; repeat split; reflexivity. }
     unfold library_functions, _LIBRARIES.
     apply Forall_forall; intros [nm den] Hin.
     apply filter_In in Hin as [Hin _]; cbn [In] in Hin.
-    destruct Hin as [Heq | [Heq | []]]; injection Heq as _ <-; [exact Hputs | exact Hputc].
+    destruct Hin as [Heq | [Heq | []]]; injection Heq as _ <-;
+      [exact (puts_vdraw_sim allow_call) | exact (putchar_vdraw_sim allow_call)].
   Qed.
 
   (** Per-definition value- & [DrawE]-refinement contract parameterized by
@@ -2137,7 +2316,11 @@ Section ValueDrawRefinement.
           intros s0 a1 a2 cc args.
           eapply vds_sim_weaken; [| exact (Hden s0 a1 a2 cc args)].
           intros ? ? ? rv1 rv2 (-> & -> & -> & Hmr & Heq).
-          split; [reflexivity | split; [reflexivity | split; [reflexivity | split; [exact Hmr | intros _; exact Heq]]]].
+          split;
+            [reflexivity
+            | split;
+                [reflexivity
+                | split; [reflexivity | split; [exact Hmr | intros _; exact Heq]]]].
       + intros ? ? ? [k1 fn1] [k2 fn2] (-> & -> & -> & Hk & Hhd); cbn [fst snd] in Hk, Hhd.
         eapply vds_sim_bind; [apply IH |].
         intros ? ? ? tl1 tl2 (-> & -> & -> & Htl).

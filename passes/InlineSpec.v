@@ -139,7 +139,9 @@ Proof.
   - change (fold_right add_unique_id [] ys) with (dedup_raw_ids ys); unfold add_unique_id.
     destruct (in_raw_ids y (dedup_raw_ids ys)) eqn:Ein.
     + apply in_raw_ids_spec in Ein.
-      split; [intros H; right; apply IH; exact H | intros [<- | H]; [exact Ein | apply IH; exact H]].
+      split;
+        [ intros H; right; apply IH; exact H
+        | intros [<- | H]; [exact Ein | apply IH; exact H] ].
     + cbn [In]; rewrite IH; tauto.
 Qed.
 

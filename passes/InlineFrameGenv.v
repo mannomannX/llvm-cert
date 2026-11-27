@@ -626,8 +626,10 @@ Section InliningSemantics.
     intros σ U; destruct e as [s | s | s | x]; cbn.
     - unfold raise, trigger_cast, ITree.trigger; pstep; apply RP_Step; cbn;
         right; right; split; [exact I | intros [] [] _].
-    - unfold raiseOOM, trigger_cast, ITree.trigger; pstep; apply RP_Step; cbn; left; reflexivity.
-    - unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply RP_Step; cbn; left; reflexivity.
+    - unfold raiseOOM, trigger_cast, ITree.trigger; pstep; apply RP_Step;
+        cbn; left; reflexivity.
+    - unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply RP_Step;
+        cbn; left; reflexivity.
     - pstep; apply RP_Step; cbn; auto.
   Qed.
 
@@ -642,7 +644,8 @@ Section InliningSemantics.
     memM_rel_empty P (merr msg) (merr msg).
   Proof using.
     intros σ U; cbn; unfold raise, trigger_cast, ITree.trigger.
-    pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
+    pstep; apply RP_Step; cbn;
+      right; right; split; [exact I | intros [] [] _].
   Qed.
 
   Lemma memM_rel_empty_read_byte (p : @ptr (@PROV PaV) (@PTR PaV)) :
@@ -656,8 +659,10 @@ Section InliningSemantics.
       as [[b aid] |]; cbn [memS_bind memM_interp_prov].
     - destruct (access_allowed (ptr_provenance p) aid); cbn [memM_interp_prov].
       + pstep; apply RP_Step; cbn; auto.
-      + unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply RP_Step; cbn; left; reflexivity.
-    - unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply RP_Step; cbn; left; reflexivity.
+      + unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply RP_Step;
+          cbn; left; reflexivity.
+    - unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply RP_Step;
+        cbn; left; reflexivity.
   Qed.
 
   Lemma memM_rel_empty_write_byte (p : @ptr (@PROV PaV) (@PTR PaV)) (mb : @memory_byte PaV) :
@@ -671,9 +676,12 @@ Section InliningSemantics.
     destruct (read_byte_raw_mem (Memory_stack_memory (state_memory_stack σ)) (ptr_to_int p))
       as [[b aid] |]; cbn [memS_bind memM_interp_prov].
     - destruct (access_allowed (ptr_provenance p) aid); cbn [memM_interp_prov].
-      + pstep; apply RP_Step; cbn; unfold push_empty_frame; cbn; auto.
-      + unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply RP_Step; cbn; left; reflexivity.
-    - unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply RP_Step; cbn; left; reflexivity.
+      + pstep; apply RP_Step; cbn;
+          unfold push_empty_frame; cbn; auto.
+      + unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply RP_Step;
+          cbn; left; reflexivity.
+    - unfold raiseUB, trigger_cast, ITree.trigger; pstep; apply RP_Step;
+        cbn; left; reflexivity.
   Qed.
 
   Lemma memM_rel_empty_map_monad_acc {A B : Type} (f : A -> @memM PaV _ B) (xs : list A)
@@ -924,7 +932,9 @@ Section InliningSemantics.
   Proof using.
     revert base m; induction vs as [| v tl IH]; intros base m Hk; cbn [add_all_index_acc List.length] in *.
     - destruct Hk as [Hin | [Hle Hlt]];
-        [exact Hin | cbn [Z.of_nat] in Hlt; rewrite Z.add_0_r in Hlt; exfalso; exact (Z.lt_irrefl _ (Z.le_lt_trans _ _ _ Hle Hlt))].
+        [ exact Hin
+        | cbn [Z.of_nat] in Hlt; rewrite Z.add_0_r in Hlt;
+          exfalso; exact (Z.lt_irrefl _ (Z.le_lt_trans _ _ _ Hle Hlt)) ].
     - apply IH.
       destruct Hk as [Hin | [Hle Hlt]].
       + left; unfold add; apply IntMaps.IP.F.add_in_iff; right; exact Hin.
@@ -983,7 +993,8 @@ Section InliningSemantics.
     eapply refine_prov_obs_eq;
       [symmetry; apply interp_mcfg_model_ret_eq
       | symmetry; apply interp_mcfg_model_ret_eq |].
-    pstep; apply RP_Step; cbn; split; [reflexivity | split; [reflexivity | apply Hx, Hs]].
+    pstep; apply RP_Step; cbn;
+      split; [reflexivity | split; [reflexivity | apply Hx, Hs]].
   Qed.
 
   Lemma model_hoare_bind {A B : Type}
@@ -1024,7 +1035,8 @@ Section InliningSemantics.
     induction xs as [| x xs' IH]; cbn [loop_monad].
     - apply model_hoare_ret; intros s Hs; exact Hs.
     - eapply model_hoare_bind; [apply (Hf x (or_introl Logic.eq_refl)) |].
-      intros []; apply IH; intros y Hy; apply Hf; right; exact Hy.
+      intros []; apply IH; intros y Hy;
+        apply Hf; right; exact Hy.
   Qed.
 
   Lemma model_hoare_map_monad {A B : Type} (I : FusedS -> Prop)
@@ -1049,7 +1061,9 @@ Section InliningSemantics.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite interp_mcfg_model_non_intr_eq by reflexivity; reflexivity
       | symmetry; rewrite interp_mcfg_model_non_intr_eq by reflexivity; reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler
+         Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+         cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_trigger_prov, ITree.trigger.
     pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn.
     right; right; split; [exact I | intros [] [] _].
@@ -1064,9 +1078,12 @@ Section InliningSemantics.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite interp_mcfg_model_non_intr_eq by reflexivity; reflexivity
       | reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler
+         Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+         cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_trigger_prov, ITree.trigger.
-    pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; left; reflexivity.
+    pstep; apply RP_Step; unfold rp_step_body;
+      rewrite !observe_bind; cbn; left; reflexivity.
   Qed.
 
   Lemma model_hoare_raiseOOM {R : Type} (P : FusedS -> Prop) (Q : FusedS -> R -> Prop) (msg : string) :
@@ -1078,9 +1095,12 @@ Section InliningSemantics.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite interp_mcfg_model_non_intr_eq by reflexivity; reflexivity
       | reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler
+         Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+         cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_trigger_prov, ITree.trigger.
-    pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; left; reflexivity.
+    pstep; apply RP_Step; unfold rp_step_body;
+      rewrite !observe_bind; cbn; left; reflexivity.
   Qed.
 
   Lemma model_hoare_EOU {A : Type} (I : FusedS -> Prop) (m : EOU A) :
@@ -1128,13 +1148,16 @@ Section InliningSemantics.
   Proof using.
     apply model_hoare_non_intr_refl_preserve; [reflexivity |].
     intros [m lsg] U HI.
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler
+         Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+         cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_memory_prov, on_mem_prov, handle_memory.
     try change (resum IFun X me) with me.
     eapply refine_prov_bind;
       [apply (memM_interp_prov_post (fun _ => True)); apply memM_all_ret_true |].
     intros U' [m1 r1] [m2 r2] _ (-> & <- & _).
-    pstep; apply RP_Step; cbn; split; [reflexivity | split; [reflexivity | eapply Hlsg, HI]].
+    pstep; apply RP_Step; cbn;
+      split; [reflexivity | split; [reflexivity | eapply Hlsg, HI]].
   Qed.
 
   Lemma model_hoare_gread_preserve (I : FusedS -> Prop) (k : raw_id) :
@@ -1143,7 +1166,9 @@ Section InliningSemantics.
     unfold gread, trigger_cast.
     apply model_hoare_non_intr_refl_preserve; [reflexivity |].
     intros s U HI.
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler
+         Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+         cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     try change (resum IFun (@dvalue PaV) (GlobalRead k)) with (GlobalRead k).
     destruct (Maps.lookup k (snd (snd s))) as [v |] eqn:Elk.
     - eapply refine_prov_obs_eq;
@@ -1152,7 +1177,8 @@ Section InliningSemantics.
       pstep; apply RP_Step; cbn; auto.
     - destruct (fused_global_prov_read_none k s Elk) as (u & kf & Ef).
       eapply refine_prov_obs_eq; [symmetry; exact Ef | symmetry; exact Ef |].
-      pstep; apply RP_Step; cbn; right; right; split; [exact Logic.I | intros [] [] _].
+      pstep; apply RP_Step; cbn;
+        right; right; split; [exact Logic.I | intros [] [] _].
   Qed.
 
   Lemma model_hoare_lread_preserve (I : FusedS -> Prop) (k : raw_id) :
@@ -1161,7 +1187,9 @@ Section InliningSemantics.
     unfold lread, trigger_cast.
     apply model_hoare_non_intr_refl_preserve; [reflexivity |].
     intros [m [[sf fstk] g]] U HI.
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler
+         Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+         cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     try change (resum IFun (@dvalue PaV) (LocalRead k)) with (LocalRead k).
     destruct (Maps.lookup k sf.(stack_vars)) as [v |] eqn:Elk.
     - eapply refine_prov_obs_eq;
@@ -1170,7 +1198,8 @@ Section InliningSemantics.
       pstep; apply RP_Step; cbn; auto.
     - destruct (fused_local_prov_read_none k (m, ((sf, fstk), g)) Elk) as (msg & kf & Ef).
       eapply refine_prov_obs_eq; [symmetry; exact Ef | symmetry; exact Ef |].
-      pstep; apply RP_Step; cbn; right; right; split; [exact Logic.I | intros [] [] _].
+      pstep; apply RP_Step; cbn;
+        right; right; split; [exact Logic.I | intros [] [] _].
   Qed.
 
   Lemma model_hoare_draw_preserve (I : FusedS -> Prop) (dt : dtyp) :
@@ -1219,7 +1248,9 @@ Section InliningSemantics.
     eapply refine_prov_obs_eq;
       [symmetry; apply interp_mcfg_model_non_intr_eq; reflexivity
       | symmetry; apply interp_mcfg_model_non_intr_eq; reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler
+         Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+         cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     try change (resum IFun unit (GlobalWrite k v)) with (GlobalWrite k v).
     eapply refine_prov_obs_eq;
       [symmetry; rewrite fused_global_prov_write, Eqit.bind_ret_l; reflexivity
@@ -1418,7 +1449,9 @@ Section InliningSemantics.
     unfold alloca; eapply refine_prov_obs_eq;
       [symmetry; apply interp_mcfg_model_non_intr_eq; reflexivity
       | symmetry; apply interp_mcfg_model_non_intr_eq; reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 Case_sum1_Handler
+         Handler.case_ subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+         cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_memory_prov, on_mem_prov, handle_memory.
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_bind | symmetry; apply Eqit.bind_bind |].
@@ -1452,7 +1485,8 @@ Section InliningSemantics.
     cbn [ExtLib.Structures.Monad.bind memS_mon memS_bind ExtLib.Structures.Monad.ret
          memM_interp_prov m_pr state_memory_stack Memory_stack_memory].
     fold addr; try fold m_pr.
-    unfold int_to_ptr; cbn [P2I ParamsV PIV PointerV EOU_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret].
+    unfold int_to_ptr;
+      cbn [P2I ParamsV PIV PointerV EOU_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret].
     destruct (from_Z addr) as [s | s | s | ip_a] eqn:Efz;
       cbn [EOU_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Vellvm.Semantics.Interfaces.Memory.lift
            memS_mon memS_bind memM_interp_prov].
@@ -1478,7 +1512,8 @@ Section InliningSemantics.
       | |- context [get_consecutive_ptrs ?p0 _] => change p0 with p
       end.
       destruct (get_consecutive_ptrs p (N.length pbytes)) as [s | s | s | ptrs] eqn:Ecptrs;
-        cbn [Vellvm.Semantics.Interfaces.Memory.lift EOU_monad memS_mon memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
+        cbn [Vellvm.Semantics.Interfaces.Memory.lift EOU_monad memS_mon
+             memS_bind ExtLib.Structures.Monad.ret memM_interp_prov].
       + unfold raise, trigger_cast, ITree.trigger.
         pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind;
           norm_subevent;
@@ -1517,7 +1552,10 @@ Section InliningSemantics.
                   state_provenance := pr0 |}, p.
         split; [exact HP |].
         split; [reflexivity |].
-        split; [assert (Hp_ge : (ptr_to_int p >= 1)%Z) by (rewrite Hp_addr; apply next_key_with_alignment_ge_1); exact Hp_ge |].
+        split;
+          [ assert (Hp_ge : (ptr_to_int p >= 1)%Z)
+              by (rewrite Hp_addr; apply next_key_with_alignment_ge_1);
+            exact Hp_ge | ].
         cbn [state_memory_stack];
         repeat lazymatch goal with
                | |- context [Memory_stack_memory (add_all_to_frame ?ks ?ms)] =>
@@ -1625,7 +1663,9 @@ Section InliningSemantics.
                 ** injection Heq as <- <-.
                    split; [exact Hp_ge1 |].
                    split; [exact Hp_in |].
-                   exists p; split; [reflexivity | cbn [Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity].
+                   exists p; split;
+                     [ reflexivity
+                     | cbn [Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity ].
                 ** destruct (Hseen_ok x z Hin_s) as (Hz_ge1 & Hz_in0 & p0 & Hp0_z & Hlk0).
                    destruct (Hprev_lt z Hz_in0) as (_ & Hz_in').
                    assert (Hne : dc_name d <> x).
@@ -1752,7 +1792,9 @@ Section InliningSemantics.
       + intros [m [[sf fstk] g]] _ (seen & Hincl & Hall & Hvars & Hexc & Hloc & Hfstk & Hok & Hdom & Hdisj).
         cbn [app] in *.
         split; [exact Hvars | split; [exact Hexc | split; [exact Hloc | split; [exact Hfstk |]]]].
-        exists seen; split; [exact Hincl | split; [exact Hall | split; [| split; [| exact Hdisj]]]].
+        exists seen; split;
+          [ exact Hincl
+          | split; [exact Hall | split; [| split; [| exact Hdisj]]] ].
         * intros x z Hxz; destruct (Hok x z Hxz) as (Hz1 & _ & p & Hpz & Hlk).
           split; [exact Hz1 | exists p; split; assumption].
         * intros x v _ Hlk; eapply Hdom, Hlk.

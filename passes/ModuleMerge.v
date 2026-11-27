@@ -1859,12 +1859,16 @@ Proof.
                     n_mid n_merged
                     (List.map mm_tle_slice_to_norm_dtyp (cert_slices ++ safe_slices ++ stage2_fast))
                     E2 Hs2) as Hmid2.
-      left; split; [apply mm_norm_mcfg_refines_fwd | split; [exists n_mid; exact (conj Hmid1 Hmid2) | apply mm_norm_mcfg_refines_bwd]].
+      left; split;
+        [apply mm_norm_mcfg_refines_fwd
+        | split; [exists n_mid; exact (conj Hmid1 Hmid2) | apply mm_norm_mcfg_refines_bwd]].
     + destruct (mm_safe_export_mcfg orig_tle) as [m_exp_orig |]; [| discriminate Hstage2].
       pose proof (@check_flex_module_merge_value_refines IP IPT
                     n_mid n_merged _ Hstage2
                     (mm_Forall_app _ _ _ Hs2 (Hwm_slices m_exp_orig Logic.eq_refl))) as Hmid2.
-      left; split; [apply mm_norm_mcfg_refines_fwd | split; [exists n_mid; exact (conj Hmid1 Hmid2) | apply mm_norm_mcfg_refines_bwd]].
+      left; split;
+        [apply mm_norm_mcfg_refines_fwd
+        | split; [exists n_mid; exact (conj Hmid1 Hmid2) | apply mm_norm_mcfg_refines_bwd]].
 Qed.
 
 

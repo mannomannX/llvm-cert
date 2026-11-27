@@ -261,7 +261,8 @@ Section DCESoundness.
         (vec_loop f (List.combine (repeat (@DVALUE_Poison PaV) (Datatypes.length elts')) elts'))).
     { unfold vec_loop.
       induction elts' as [| y ys IH];
-        cbn [Datatypes.length repeat List.combine monad_fold_right ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad].
+        cbn [Datatypes.length repeat List.combine monad_fold_right
+             ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad].
       - cbn [eou_ret_imp]; constructor.
       - destruct (monad_fold_right _ (List.combine (repeat (@DVALUE_Poison PaV) (Datatypes.length ys)) ys) [])
           as [| | | acc];
@@ -486,7 +487,8 @@ Section DCESoundness.
       cbn [eval_iop]; apply eou_safe_fmap.
     - (* Poison, Poison *)
       unfold eval_iop_integer_base; destruct (iop_is_div iop) eqn:Ediv; cbn;
-        [destruct iop; try discriminate Ediv; try (exfalso; apply Hnp; reflexivity); exact I
+        [ destruct iop; try discriminate Ediv;
+            try (exfalso; apply Hnp; reflexivity); exact I
         | apply dvalue_has_dtyp_Poison].
     - (* Poison, I *)
       destruct iop; cbn;
@@ -694,7 +696,8 @@ Section DCESoundness.
     - destruct (dvalue_has_dtyp_Float_inv v1 Hv1) as [-> | [f1 ->]];
         destruct v2 as [db2 | | [|] elts2]; try exact I.
       + cbn [eval_fop]; apply eou_ret_imp_fmap; cbn; apply dvalue_has_dtyp_Poison.
-      + cbn [eval_fop]; apply eou_ret_imp_vec_poison_l; intros y; destruct y; cbn; reflexivity.
+      + cbn [eval_fop]; apply eou_ret_imp_vec_poison_l;
+          intros y; destruct y; cbn; reflexivity.
       + cbn [eval_fop]; apply eou_ret_imp_fmap.
         destruct db2 as [p2 | sz2 i2 | ip2 | d2 | f2 | | | bsz2 bv2];
           cbn [eval_fop_base]; try exact I.
@@ -703,7 +706,8 @@ Section DCESoundness.
     - destruct (dvalue_has_dtyp_Double_inv v1 Hv1) as [-> | [d1 ->]];
         destruct v2 as [db2 | | [|] elts2]; try exact I.
       + cbn [eval_fop]; apply eou_ret_imp_fmap; cbn; apply dvalue_has_dtyp_Poison.
-      + cbn [eval_fop]; apply eou_ret_imp_vec_poison_l; intros y; destruct y; cbn; reflexivity.
+      + cbn [eval_fop]; apply eou_ret_imp_vec_poison_l;
+          intros y; destruct y; cbn; reflexivity.
       + cbn [eval_fop]; apply eou_ret_imp_fmap.
         destruct db2 as [p2 | sz2 i2 | ip2 | d2 | f2 | | | bsz2 bv2];
           cbn [eval_fop_base]; try exact I.

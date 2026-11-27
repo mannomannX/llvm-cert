@@ -244,7 +244,10 @@ Section DCESoundness.
   Proof.
     unfold withCall, draw, ITree.trigger.
     pstep; apply CLS_Step; unfold cls_step_body.
-    rewrite !observe_translate; cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1].
+    rewrite !observe_translate;
+      cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+           cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun
+           case_ Case_sum1 case_sum1].
     right; left; split; [reflexivity | split; [apply EqE_CFG_refl |]].
     intros a1 a2 Ha Hp; apply EqA_CFG_eq in Ha; subst a2.
     left; eapply cfg_local_sim_obs_eq;
@@ -346,14 +349,17 @@ Section DCESoundness.
              eapply cfg_local_sim_obs_eq;
                [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
              apply cfg_local_sim_ret; split;
-               [reflexivity | split; [reflexivity | split; [reflexivity | intros Hsc Hty; exfalso; exact (Hnot_sc Hsc Hty)]]].
+               [ reflexivity
+               | split; [reflexivity | split; [reflexivity | intros Hsc Hty; exfalso; exact (Hnot_sc Hsc Hty)]] ].
           -- eapply cfg_local_sim_obs_eq;
                [symmetry; apply withCall_fmap_ret
                | symmetry; apply withCall_fmap_ret |].
              apply cfg_local_sim_ret; repeat split; auto.
     - (* DVALUE_Struct *)
       destruct dt as [| p' dts |];
-        [cbn [freeze]; apply cfg_local_sim_withCall_raise_sync | | cbn [freeze]; apply cfg_local_sim_withCall_raise_sync].
+        [ cbn [freeze]; apply cfg_local_sim_withCall_raise_sync
+        |
+        | cbn [freeze]; apply cfg_local_sim_withCall_raise_sync ].
       cbn [freeze].
       eapply cfg_local_sim_obs_eq;
         [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
@@ -430,7 +436,9 @@ Section DCESoundness.
     unfold withCall, lread, ITree.trigger.
     pstep; apply CLS_Step; unfold cls_step_body.
     rewrite !observe_translate;
-      cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1].
+      cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+           cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun
+           case_ Case_sum1 case_sum1].
     right; right.
     split; [reflexivity | split; [exact Hlk |]].
     intros v Hv; left.
@@ -1035,7 +1043,8 @@ Section DCESoundness.
       intros ? ? y _ (-> & -> & <-).
       eapply cfg_local_sim_obs_eq;
         [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [apply IH; intros z Hz; apply Hagree; right; exact Hz |].
+      eapply cfg_local_sim_bind;
+        [apply IH; intros z Hz; apply Hagree; right; exact Hz |].
       intros ? ? ys _ (-> & -> & <-).
       eapply cfg_local_sim_obs_eq;
         [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
@@ -1057,6 +1066,648 @@ Section DCESoundness.
     destruct Hin as [<- | Hin].
     - cbn [snd]; eapply env_agree_on_app_l; exact Hagree.
     - apply IH; [eapply env_agree_on_app_r; exact Hagree | exact Hin].
+  Qed.
+
+  Local Definition exp_sync_goal
+    (te : ty_env) (env1 env2 : @local_env PaV) (e : exp dtyp) : Prop :=
+    env_agree_on (full_exp_uses e) env1 env2 ->
+    forall top : option dtyp,
+      cfg_local_sim
+        (fun e1' e2' v1 v2 =>
+           e1' = env1 /\ e2' = env2 /\ v1 = v2 /\
+           match top with
+           | Some dt => guarantees_scalar_dtyp te dt e = true -> dvalue_has_dtyp v1 dt
+           | None => True
+           end)
+        env1 env2 (denote_exp' top e) (denote_exp' top e).
+
+  Local Lemma cfg_local_sim_denote_exp_cstring_sync
+    (te : ty_env) (env1 env2 : @local_env PaV)
+    (elts : list (dtyp * exp dtyp))
+    (IHelts : Forall (fun p => exp_sync_goal te env1 env2 (snd p)) elts) :
+    exp_sync_goal te env1 env2 (EXP_Cstring elts).
+  Proof.
+    unfold exp_sync_goal in *; intros Hagree top.
+    unfold denote_exp'; cbn [denote_exp].
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind.
+    - eapply cfg_local_sim_withCall_map_monad with (uses := fun p => full_exp_uses (snd p)).
+      + eapply Forall_impl; [| exact IHelts].
+        intros [dt_i ex_i] H_i Hag_i; cbn [snd] in *.
+        eapply cfg_local_sim_weaken; [| exact (H_i Hag_i (Some dt_i))].
+        intros ? ? ? ? (-> & -> & <- & _); repeat split; reflexivity.
+      + apply env_agree_on_texp_list, Hagree.
+    - intros ? ? vs _ (-> & -> & <-).
+      eapply cfg_local_sim_obs_eq;
+        [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
+      apply cfg_local_sim_ret; repeat split; try reflexivity.
+      destruct top as [dt |]; [| exact I].
+      cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
+  Qed.
+
+  Local Lemma cfg_local_sim_denote_exp_struct_sync
+    (te : ty_env) (env1 env2 : @local_env PaV)
+    (fields : list (dtyp * exp dtyp))
+    (IHfields : Forall (fun p => exp_sync_goal te env1 env2 (snd p)) fields) :
+    exp_sync_goal te env1 env2 (EXP_Struct fields).
+  Proof.
+    unfold exp_sync_goal in *; intros Hagree top.
+    unfold denote_exp'; cbn [denote_exp].
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind.
+    - eapply cfg_local_sim_withCall_map_monad with (uses := fun p => full_exp_uses (snd p)).
+      + eapply Forall_impl; [| exact IHfields].
+        intros [dt_i ex_i] H_i Hag_i; cbn [snd] in *.
+        eapply cfg_local_sim_weaken; [| exact (H_i Hag_i (Some dt_i))].
+        intros ? ? ? ? (-> & -> & <- & _); repeat split; reflexivity.
+      + apply env_agree_on_texp_list, Hagree.
+    - intros ? ? vs _ (-> & -> & <-).
+      eapply cfg_local_sim_obs_eq;
+        [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
+      apply cfg_local_sim_ret; repeat split; try reflexivity.
+      destruct top as [dt |]; [| exact I].
+      cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
+  Qed.
+
+  Local Lemma cfg_local_sim_denote_exp_packed_struct_sync
+    (te : ty_env) (env1 env2 : @local_env PaV)
+    (fields : list (dtyp * exp dtyp))
+    (IHfields : Forall (fun p => exp_sync_goal te env1 env2 (snd p)) fields) :
+    exp_sync_goal te env1 env2 (EXP_Packed_struct fields).
+  Proof.
+    unfold exp_sync_goal in *; intros Hagree top.
+    unfold denote_exp'; cbn [denote_exp].
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [apply cfg_local_sim_withCall_EOU_sync |].
+    intros ? ? _ _ (-> & -> & _).
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind.
+    - eapply cfg_local_sim_withCall_map_monad with (uses := fun p => full_exp_uses (snd p)).
+      + eapply Forall_impl; [| exact IHfields].
+        intros [dt_i ex_i] H_i Hag_i; cbn [snd] in *.
+        eapply cfg_local_sim_weaken; [| exact (H_i Hag_i (Some dt_i))].
+        intros ? ? ? ? (-> & -> & <- & _); repeat split; reflexivity.
+      + apply env_agree_on_texp_list, Hagree.
+    - intros ? ? vs _ (-> & -> & <-).
+      eapply cfg_local_sim_obs_eq;
+        [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
+      apply cfg_local_sim_ret; repeat split; try reflexivity.
+      destruct top as [dt |]; [| exact I].
+      cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
+  Qed.
+
+  Local Lemma cfg_local_sim_denote_exp_array_sync
+    (te : ty_env) (env1 env2 : @local_env PaV)
+    (elts : list (dtyp * exp dtyp))
+    (IHelts : Forall (fun p => exp_sync_goal te env1 env2 (snd p)) elts) :
+    exp_sync_goal te env1 env2 (EXP_Array elts).
+  Proof.
+    unfold exp_sync_goal in *; intros Hagree top.
+    unfold denote_exp'; cbn [denote_exp].
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind.
+    - eapply cfg_local_sim_withCall_map_monad with (uses := fun p => full_exp_uses (snd p)).
+      + eapply Forall_impl; [| exact IHelts].
+        intros [dt_i ex_i] H_i Hag_i; cbn [snd] in *.
+        eapply cfg_local_sim_weaken; [| exact (H_i Hag_i (Some dt_i))].
+        intros ? ? ? ? (-> & -> & <- & _); repeat split; reflexivity.
+      + apply env_agree_on_texp_list, Hagree.
+    - intros ? ? vs _ (-> & -> & <-).
+      eapply cfg_local_sim_obs_eq;
+        [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
+      apply cfg_local_sim_ret; repeat split; try reflexivity.
+      destruct top as [dt |]; [| exact I].
+      cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
+  Qed.
+
+  Local Lemma cfg_local_sim_denote_exp_vector_sync
+    (te : ty_env) (env1 env2 : @local_env PaV)
+    (elts : list (dtyp * exp dtyp))
+    (IHelts : Forall (fun p => exp_sync_goal te env1 env2 (snd p)) elts) :
+    exp_sync_goal te env1 env2 (EXP_Vector elts).
+  Proof.
+    unfold exp_sync_goal in *; intros Hagree top.
+    unfold denote_exp'; cbn [denote_exp].
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind.
+    - eapply cfg_local_sim_withCall_map_monad with (uses := fun p => full_exp_uses (snd p)).
+      + eapply Forall_impl; [| exact IHelts].
+        intros [dt_i ex_i] H_i Hag_i; cbn [snd] in *.
+        eapply cfg_local_sim_weaken; [| exact (H_i Hag_i (Some dt_i))].
+        intros ? ? ? ? (-> & -> & <- & _); repeat split; reflexivity.
+      + apply env_agree_on_texp_list, Hagree.
+    - intros ? ? vs _ (-> & -> & <-).
+      eapply cfg_local_sim_obs_eq;
+        [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
+      apply cfg_local_sim_ret; repeat split; try reflexivity.
+      destruct top as [dt |]; [| exact I].
+      cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
+  Qed.
+
+  Local Lemma cfg_local_sim_denote_exp_ibinop_sync
+    (te : ty_env) (env1 env2 : @local_env PaV)
+    (iop : ibinop) (dt' : dtyp) (e1 e2 : exp dtyp)
+    (IHe1 : exp_sync_goal te env1 env2 e1)
+    (IHe2 : exp_sync_goal te env1 env2 e2) :
+    exp_sync_goal te env1 env2 (OP_IBinop iop dt' e1 e2).
+  Proof.
+    unfold exp_sync_goal in *; intros Hagree top.
+    cbn [full_exp_uses] in Hagree.
+    pose proof (env_agree_on_app_l _ _ _ _ Hagree) as Hag1.
+    pose proof (env_agree_on_app_r _ _ _ _ Hagree) as Hag2.
+    unfold denote_exp'; cbn [denote_exp].
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHe1 Hag1 (Some dt')) |].
+    intros ? ? v1 _ (-> & -> & <- & Hv1).
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHe2 Hag2 (Some dt')) |].
+    intros ? ? v2 _ (-> & -> & <- & Hv2).
+    eapply cfg_local_sim_weaken;
+      [| apply (cfg_local_sim_withCall_EOU_ret_sync
+                  (fun r =>
+                     match top with
+                     | Some dt =>
+                         guarantees_scalar_dtyp te dt (OP_IBinop iop dt' e1 e2) = true ->
+                         dvalue_has_dtyp r dt
+                     | None => True
+                     end))].
+    - intros ? ? r _ (-> & -> & <- & Hr); repeat split; auto.
+    - destruct (eval_iop iop v1 v2) as [| | | r] eqn:E; cbn; try exact I.
+      destruct top as [dt |]; [| exact I].
+      cbn [guarantees_scalar_dtyp]; intros Hguar.
+      apply andb_true_iff in Hguar as [_ Hguar].
+      apply andb_true_iff in Hguar as [Hguar Hg2].
+      apply andb_true_iff in Hguar as [Hguar Hg1].
+      apply andb_true_iff in Hguar as [Hint Heq].
+      apply dtyp_eqb_eq in Heq; subst dt'.
+      pose proof (eval_iop_ret_imp iop dt v1 v2 Hint (Hv1 Hg1) (Hv2 Hg2)) as Hret.
+      rewrite E in Hret; exact Hret.
+  Qed.
+
+  Local Lemma cfg_local_sim_denote_exp_icmp_sync
+    (te : ty_env) (env1 env2 : @local_env PaV)
+    (samesign : bool) (cmp : icmp) (dt' : dtyp) (e1 e2 : exp dtyp)
+    (IHe1 : exp_sync_goal te env1 env2 e1)
+    (IHe2 : exp_sync_goal te env1 env2 e2) :
+    exp_sync_goal te env1 env2 (OP_ICmp samesign cmp dt' e1 e2).
+  Proof.
+    unfold exp_sync_goal in *; intros Hagree top.
+    cbn [full_exp_uses] in Hagree.
+    pose proof (env_agree_on_app_l _ _ _ _ Hagree) as Hag1.
+    pose proof (env_agree_on_app_r _ _ _ _ Hagree) as Hag2.
+    unfold denote_exp'; cbn [denote_exp].
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHe1 Hag1 (Some dt')) |].
+    intros ? ? v1 _ (-> & -> & <- & Hv1).
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHe2 Hag2 (Some dt')) |].
+    intros ? ? v2 _ (-> & -> & <- & _).
+    eapply cfg_local_sim_weaken;
+      [| apply (cfg_local_sim_withCall_EOU_ret_sync
+                  (fun r =>
+                     match top with
+                     | Some dt =>
+                         guarantees_scalar_dtyp te dt (OP_ICmp samesign cmp dt' e1 e2) = true ->
+                         dvalue_has_dtyp r dt
+                     | None => True
+                     end))].
+    - intros ? ? r _ (-> & -> & <- & Hr); repeat split; auto.
+    - destruct (eval_icmp samesign cmp v1 v2) as [| | | r] eqn:E; cbn; try exact I.
+      destruct top as [dt |]; [| exact I].
+      cbn [guarantees_scalar_dtyp]; intros Hguar.
+      apply andb_true_iff in Hguar as [_ Hguar].
+      apply andb_true_iff in Hguar as [Hguar Hg1].
+      apply andb_true_iff in Hguar as [Hi1 Hty].
+      rewrite (is_i1_dtyp_eq dt Hi1).
+      pose proof (eval_icmp_ret_imp samesign cmp dt' v1 v2 Hty (Hv1 Hg1)) as Hret.
+      rewrite E in Hret; exact Hret.
+  Qed.
+
+  Local Lemma cfg_local_sim_denote_exp_fbinop_sync
+    (te : ty_env) (env1 env2 : @local_env PaV)
+    (fop : fbinop) (fm : list fast_math) (dt' : dtyp) (e1 e2 : exp dtyp)
+    (IHe1 : exp_sync_goal te env1 env2 e1)
+    (IHe2 : exp_sync_goal te env1 env2 e2) :
+    exp_sync_goal te env1 env2 (OP_FBinop fop fm dt' e1 e2).
+  Proof.
+    unfold exp_sync_goal in *; intros Hagree top.
+    cbn [full_exp_uses] in Hagree.
+    pose proof (env_agree_on_app_l _ _ _ _ Hagree) as Hag1.
+    pose proof (env_agree_on_app_r _ _ _ _ Hagree) as Hag2.
+    unfold denote_exp'; cbn [denote_exp].
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHe1 Hag1 (Some dt')) |].
+    intros ? ? v1 _ (-> & -> & <- & Hv1).
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHe2 Hag2 (Some dt')) |].
+    intros ? ? v2 _ (-> & -> & <- & _).
+    eapply cfg_local_sim_weaken;
+      [| apply (cfg_local_sim_withCall_EOU_ret_sync
+                  (fun r =>
+                     match top with
+                     | Some dt =>
+                         guarantees_scalar_dtyp te dt (OP_FBinop fop fm dt' e1 e2) = true ->
+                         dvalue_has_dtyp r dt
+                     | None => True
+                     end))].
+    - intros ? ? r _ (-> & -> & <- & Hr); repeat split; auto.
+    - destruct (eval_fop fop v1 v2) as [| | | r] eqn:E; cbn; try exact I.
+      destruct top as [dt |]; [| exact I].
+      cbn [guarantees_scalar_dtyp]; intros Hguar.
+      apply andb_true_iff in Hguar as [_ Hguar].
+      apply andb_true_iff in Hguar as [Hguar Hg1].
+      apply andb_true_iff in Hguar as [Hfp Heq].
+      apply dtyp_eqb_eq in Heq; subst dt'.
+      pose proof (eval_fop_ret_imp fop dt v1 v2 Hfp (Hv1 Hg1)) as Hret.
+      rewrite E in Hret; exact Hret.
+  Qed.
+
+  Local Lemma cfg_local_sim_denote_exp_fneg_sync
+    (te : ty_env) (env1 env2 : @local_env PaV)
+    (flags : list fast_math) (dt' : dtyp) (e1 : exp dtyp)
+    (IHe1 : exp_sync_goal te env1 env2 e1) :
+    exp_sync_goal te env1 env2 (OP_Fneg flags (dt', e1)).
+  Proof.
+    unfold exp_sync_goal in *; intros Hagree top.
+    cbn [full_exp_uses] in Hagree.
+    unfold denote_exp'; cbn [denote_exp].
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHe1 Hagree (Some dt')) |].
+    intros ? ? v1 _ (-> & -> & <- & Hv1).
+    eapply cfg_local_sim_weaken;
+      [| apply (cfg_local_sim_withCall_EOU_ret_sync
+                  (fun r =>
+                     match top with
+                     | Some dt =>
+                         guarantees_scalar_dtyp te dt (OP_Fneg flags (dt', e1)) = true ->
+                         dvalue_has_dtyp r dt
+                     | None => True
+                     end))].
+    - intros ? ? r _ (-> & -> & <- & Hr); repeat split; auto.
+    - destruct (eval_fneg v1) as [| | | r] eqn:E; cbn; try exact I.
+      destruct top as [dt |]; [| exact I].
+      cbn [guarantees_scalar_dtyp]; intros Hguar.
+      apply andb_true_iff in Hguar as [_ Hguar].
+      apply andb_true_iff in Hguar as [Hguar Hg1].
+      apply andb_true_iff in Hguar as [Hfp Heq].
+      apply dtyp_eqb_eq in Heq; subst dt'.
+      pose proof (eou_safe_to_ret_imp _ _ (eval_fneg_safe dt v1 Hfp (Hv1 Hg1))) as Hret.
+      rewrite E in Hret; exact Hret.
+  Qed.
+
+  Local Lemma cfg_local_sim_denote_exp_fcmp_sync
+    (te : ty_env) (env1 env2 : @local_env PaV)
+    (cmp : fcmp) (fm : list fast_math) (dt' : dtyp) (e1 e2 : exp dtyp)
+    (IHe1 : exp_sync_goal te env1 env2 e1)
+    (IHe2 : exp_sync_goal te env1 env2 e2) :
+    exp_sync_goal te env1 env2 (OP_FCmp cmp fm dt' e1 e2).
+  Proof.
+    unfold exp_sync_goal in *; intros Hagree top.
+    cbn [full_exp_uses] in Hagree.
+    pose proof (env_agree_on_app_l _ _ _ _ Hagree) as Hag1.
+    pose proof (env_agree_on_app_r _ _ _ _ Hagree) as Hag2.
+    unfold denote_exp'; cbn [denote_exp].
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHe1 Hag1 (Some dt')) |].
+    intros ? ? v1 _ (-> & -> & <- & Hv1).
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHe2 Hag2 (Some dt')) |].
+    intros ? ? v2 _ (-> & -> & <- & _).
+    eapply cfg_local_sim_weaken;
+      [| apply (cfg_local_sim_withCall_EOU_ret_sync
+                  (fun r =>
+                     match top with
+                     | Some dt =>
+                         guarantees_scalar_dtyp te dt (OP_FCmp cmp fm dt' e1 e2) = true ->
+                         dvalue_has_dtyp r dt
+                     | None => True
+                     end))].
+    - intros ? ? r _ (-> & -> & <- & Hr); repeat split; auto.
+    - destruct (eval_fcmp cmp v1 v2) as [| | | r] eqn:E; cbn; try exact I.
+      destruct top as [dt |]; [| exact I].
+      cbn [guarantees_scalar_dtyp]; intros Hguar.
+      apply andb_true_iff in Hguar as [_ Hguar].
+      apply andb_true_iff in Hguar as [Hguar Hg1].
+      apply andb_true_iff in Hguar as [Hi1 Hfp].
+      rewrite (is_i1_dtyp_eq dt Hi1).
+      pose proof (eval_fcmp_ret_imp cmp dt' v1 v2 Hfp (Hv1 Hg1)) as Hret.
+      rewrite E in Hret; exact Hret.
+  Qed.
+
+  Local Lemma cfg_local_sim_denote_exp_conv_sync
+    (te : ty_env) (env1 env2 : @local_env PaV)
+    (conv : conversion_type) (dt_from : dtyp) (e1 : exp dtyp) (dt_to : dtyp)
+    (IHe1 : exp_sync_goal te env1 env2 e1) :
+    exp_sync_goal te env1 env2 (OP_Conversion conv dt_from e1 dt_to).
+  Proof.
+    unfold exp_sync_goal in *; intros Hagree top.
+    cbn [full_exp_uses] in Hagree.
+    unfold denote_exp'; cbn [denote_exp].
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHe1 Hagree (Some dt_from)) |].
+    intros ? ? v1 _ (-> & -> & <- & Hv1).
+    destruct conv as [| pc | ic]; cbn [convert].
+    - (* CONV_Bitcast *)
+      destruct (dtyp_eqb dt_from dt_to) eqn:Eeq12.
+      + eapply cfg_local_sim_obs_eq;
+          [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
+        apply cfg_local_sim_ret; repeat split; try reflexivity.
+        destruct top as [dt |]; [| exact I].
+        cbn [guarantees_scalar_dtyp]; rewrite Eeq12; intros Hguar.
+        apply andb_true_iff in Hguar as [_ Hguar].
+        apply andb_true_iff in Hguar as [Heq2 Hg1].
+        apply dtyp_eqb_eq in Heq2; subst dt_to.
+        apply dtyp_eqb_eq in Eeq12; subst dt_from.
+        apply Hv1, Hg1.
+      + destruct (bit_sizeof_dtyp dt_from =? bit_sizeof_dtyp dt_to)%N;
+          [| apply cfg_local_sim_withCall_raise_sync].
+        eapply cfg_local_sim_weaken;
+          [| apply (cfg_local_sim_withCall_EOU_ret_sync
+                      (fun r => is_scalar_dtyp dt_to = true -> dvalue_has_dtyp r dt_to))].
+        * intros ? ? r _ (-> & -> & <- & Hr); repeat split; try reflexivity.
+          destruct top as [dt |]; [| exact I].
+          cbn [guarantees_scalar_dtyp]; rewrite Eeq12, andb_true_r; intros Hguar.
+          apply andb_true_iff in Hguar as [Hsc Heq2].
+          apply dtyp_eqb_eq in Heq2; subst dt_to; apply Hr, Hsc.
+        * destruct (dvalue_to_memory_bytes dt_from v1 None) as [| | | bytes]; cbn; try exact I.
+          destruct (memory_bytes_to_dvalue bytes dt_to) as [| | | r] eqn:Erd; cbn; try exact I.
+          intros Hsc; eapply memory_bytes_to_dvalue_scalar_typ; eassumption.
+    - (* CONV_Pure *)
+      eapply cfg_local_sim_weaken;
+        [| apply (cfg_local_sim_withCall_EOU_ret_sync
+                    (fun r => is_scalar_dtyp dt_to = true -> dvalue_has_dtyp r dt_to))].
+      + intros ? ? r _ (-> & -> & <- & Hr); repeat split; try reflexivity.
+        destruct top as [dt |]; [| exact I].
+        cbn [guarantees_scalar_dtyp]; intros Hguar.
+        apply andb_true_iff in Hguar as [Hsc Heq2].
+        apply dtyp_eqb_eq in Heq2; subst dt_to; apply Hr, Hsc.
+      + destruct (convert_pure pc dt_from v1 dt_to) as [| | | r] eqn:E; cbn; try exact I.
+        intros Hsc; pose proof (convert_pure_ret_imp pc dt_from dt_to v1 Hsc) as Hret.
+        rewrite E in Hret; exact Hret.
+    - (* CONV_Impure *)
+      eapply cfg_local_sim_weaken; [| apply cfg_local_sim_withCall_conv_sync].
+      intros ? ? r _ (-> & -> & <-); repeat split; try reflexivity.
+      destruct top as [dt |]; [| exact I].
+      cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
+  Qed.
+
+  Local Lemma cfg_local_sim_denote_exp_gep_sync
+    (te : ty_env) (env1 env2 : @local_env PaV)
+    (flags : gep_flags) (t dt_p : dtyp) (ep : exp dtyp)
+    (idxs : list (dtyp * exp dtyp))
+    (IHep : exp_sync_goal te env1 env2 ep)
+    (IHidxs : Forall (fun p => exp_sync_goal te env1 env2 (snd p)) idxs) :
+    exp_sync_goal te env1 env2 (OP_GetElementPtr flags t (dt_p, ep) idxs).
+  Proof.
+    unfold exp_sync_goal in *; intros Hagree top.
+    cbn [full_exp_uses] in Hagree.
+    pose proof (env_agree_on_app_l _ _ _ _ Hagree) as Hag_p.
+    pose proof (env_agree_on_app_r _ _ _ _ Hagree) as Hag_i.
+    unfold denote_exp'; cbn [denote_exp].
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHep Hag_p (Some dt_p)) |].
+    intros ? ? vptr _ (-> & -> & <- & _).
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind.
+    - eapply cfg_local_sim_withCall_map_monad with (uses := fun p => full_exp_uses (snd p)).
+      + eapply Forall_impl; [| exact IHidxs].
+        intros [dt_i ex_i] H_i Hag_k; cbn [snd] in *.
+        eapply cfg_local_sim_weaken; [| exact (H_i Hag_k (Some dt_i))].
+        intros ? ? ? ? (-> & -> & <- & _); repeat split; reflexivity.
+      + apply env_agree_on_texp_list, Hag_i.
+    - intros ? ? vs _ (-> & -> & <-).
+      eapply cfg_local_sim_weaken;
+        [| apply (cfg_local_sim_withCall_EOU_ret_sync
+                    (fun r => dvalue_has_dtyp r (DTYPE_Base DTYPE_Pointer))
+                    env1 env2 _ (eval_gep_ret_imp flags t vptr vs))].
+      intros ? ? r _ (-> & -> & <- & Hr); repeat split; try reflexivity.
+      destruct top as [dt |]; [| exact I].
+      cbn [guarantees_scalar_dtyp]; intros Hguar.
+      apply andb_true_iff in Hguar as [_ Hptr].
+      rewrite (is_ptr_dtyp_eq dt Hptr); exact Hr.
+  Qed.
+
+  Local Lemma cfg_local_sim_denote_exp_insert_elt_sync
+    (te : ty_env) (env1 env2 : @local_env PaV)
+    (dt_v : dtyp) (ev : exp dtyp) (dt_e : dtyp) (ee : exp dtyp)
+    (dt_i : dtyp) (ei : exp dtyp)
+    (IHev : exp_sync_goal te env1 env2 ev)
+    (IHee : exp_sync_goal te env1 env2 ee)
+    (IHei : exp_sync_goal te env1 env2 ei) :
+    exp_sync_goal te env1 env2 (OP_InsertElement (dt_v, ev) (dt_e, ee) (dt_i, ei)).
+  Proof.
+    unfold exp_sync_goal in *; intros Hagree top.
+    cbn [full_exp_uses] in Hagree.
+    pose proof (env_agree_on_app_l _ _ _ _ Hagree) as Hag_v.
+    pose proof (env_agree_on_app_r _ _ _ _ Hagree) as Hag_ei.
+    pose proof (env_agree_on_app_l _ _ _ _ Hag_ei) as Hag_e.
+    pose proof (env_agree_on_app_r _ _ _ _ Hag_ei) as Hag_i.
+    unfold denote_exp'; cbn [denote_exp].
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHev Hag_v (Some dt_v)) |].
+    intros ? ? vec _ (-> & -> & <- & _).
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind.
+    - eapply cfg_local_sim_obs_eq;
+        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+      eapply cfg_local_sim_bind; [exact (IHee Hag_e (Some dt_e)) |].
+      intros ? ? ve _ (-> & -> & <- & _); apply cfg_local_sim_withCall_EOU_sync.
+    - intros ? ? elt _ (-> & -> & <-).
+      eapply cfg_local_sim_obs_eq;
+        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+      eapply cfg_local_sim_bind; [exact (IHei Hag_i (Some dt_i)) |].
+      intros ? ? idx _ (-> & -> & <- & _).
+      eapply cfg_local_sim_weaken; [| apply cfg_local_sim_withCall_EOU_sync].
+      intros ? ? r _ (-> & -> & <-); repeat split; try reflexivity.
+      destruct top as [dt |]; [| exact I].
+      cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
+  Qed.
+
+  Local Lemma cfg_local_sim_denote_exp_shuffle_sync
+    (te : ty_env) (env1 env2 : @local_env PaV)
+    (dt1 : dtyp) (e1 : exp dtyp) (dt2 : dtyp) (e2 : exp dtyp)
+    (dtm : dtyp) (em : exp dtyp)
+    (IHe1 : exp_sync_goal te env1 env2 e1)
+    (IHe2 : exp_sync_goal te env1 env2 e2)
+    (IHem : exp_sync_goal te env1 env2 em) :
+    exp_sync_goal te env1 env2 (OP_ShuffleVector (dt1, e1) (dt2, e2) (dtm, em)).
+  Proof.
+    unfold exp_sync_goal in *; intros Hagree top.
+    cbn [full_exp_uses] in Hagree.
+    pose proof (env_agree_on_app_l _ _ _ _ Hagree) as Hag1.
+    pose proof (env_agree_on_app_r _ _ _ _ Hagree) as Hag2m.
+    pose proof (env_agree_on_app_l _ _ _ _ Hag2m) as Hag2.
+    pose proof (env_agree_on_app_r _ _ _ _ Hag2m) as Hagm.
+    unfold denote_exp'; cbn [denote_exp].
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHe1 Hag1 (Some dt1)) |].
+    intros ? ? v1 _ (-> & -> & <- & _).
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHe2 Hag2 (Some dt2)) |].
+    intros ? ? v2 _ (-> & -> & <- & _).
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHem Hagm (Some dtm)) |].
+    intros ? ? vm _ (-> & -> & <- & _).
+    eapply cfg_local_sim_weaken; [| apply cfg_local_sim_withCall_EOU_sync].
+    intros ? ? r _ (-> & -> & <-); repeat split; try reflexivity.
+    destruct top as [dt |]; [| exact I].
+    cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
+  Qed.
+
+  Local Lemma cfg_local_sim_denote_exp_select_sync
+    (te : ty_env) (env1 env2 : @local_env PaV)
+    (fm : list fast_math) (dt_c : dtyp) (ec : exp dtyp)
+    (dt1 : dtyp) (e1 : exp dtyp) (dt2 : dtyp) (e2 : exp dtyp)
+    (IHec : exp_sync_goal te env1 env2 ec)
+    (IHe1 : exp_sync_goal te env1 env2 e1)
+    (IHe2 : exp_sync_goal te env1 env2 e2) :
+    exp_sync_goal te env1 env2 (OP_Select fm (dt_c, ec) (dt1, e1) (dt2, e2)).
+  Proof.
+    unfold exp_sync_goal in *; intros Hagree top.
+    cbn [full_exp_uses] in Hagree.
+    pose proof (env_agree_on_app_l _ _ _ _ Hagree) as Hag_c.
+    pose proof (env_agree_on_app_r _ _ _ _ Hagree) as Hag12.
+    pose proof (env_agree_on_app_l _ _ _ _ Hag12) as Hag1.
+    pose proof (env_agree_on_app_r _ _ _ _ Hag12) as Hag2.
+    unfold denote_exp'; cbn [denote_exp].
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHec Hag_c (Some dt_c)) |].
+    intros ? ? vc _ (-> & -> & <- & Hvc).
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHe1 Hag1 (Some dt1)) |].
+    intros ? ? v1 _ (-> & -> & <- & Hv1).
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHe2 Hag2 (Some dt2)) |].
+    intros ? ? v2 _ (-> & -> & <- & Hv2).
+    eapply cfg_local_sim_weaken;
+      [| apply (cfg_local_sim_withCall_EOU_ret_sync
+                  (fun r =>
+                     match top with
+                     | Some dt =>
+                         guarantees_scalar_dtyp te dt
+                           (OP_Select fm (dt_c, ec) (dt1, e1) (dt2, e2)) = true ->
+                         dvalue_has_dtyp r dt
+                     | None => True
+                     end))].
+    - intros ? ? r _ (-> & -> & <- & Hr); repeat split; auto.
+    - destruct (eval_select vc dt1 v1 v2) as [| | | r] eqn:E; cbn; try exact I.
+      destruct top as [dt |]; [| exact I].
+      cbn [guarantees_scalar_dtyp]; intros Hguar.
+      apply andb_true_iff in Hguar as [_ Hguar].
+      apply andb_true_iff in Hguar as [Hguar Hg2].
+      apply andb_true_iff in Hguar as [Hguar Hg1].
+      apply andb_true_iff in Hguar as [Hguar Hgc].
+      apply andb_true_iff in Hguar as [Hguar Heq2].
+      apply andb_true_iff in Hguar as [Hi1 Heq1].
+      apply dtyp_eqb_eq in Heq1; subst dt1.
+      apply dtyp_eqb_eq in Heq2; subst dt2.
+      assert (Hvc_i1 : dvalue_has_dtyp vc (DTYPE_Base (DTYPE_I 1%positive))).
+      { rewrite <- (is_i1_dtyp_eq dt_c Hi1); apply Hvc, Hgc. }
+      pose proof (eou_safe_to_ret_imp (fun x => dvalue_has_dtyp x dt) _
+                    (eval_select_safe_P (fun x => dvalue_has_dtyp x dt)
+                       (dvalue_has_dtyp_Poison dt)
+                       vc v1 v2 dt Hvc_i1 (Hv1 Hg1) (Hv2 Hg2))) as Hret.
+      rewrite E in Hret; exact Hret.
+  Qed.
+
+  Local Lemma cfg_local_sim_denote_exp_insert_val_sync
+    (te : ty_env) (env1 env2 : @local_env PaV)
+    (dt_s : dtyp) (es : exp dtyp) (dt_e : dtyp) (ee : exp dtyp)
+    (idxs : list int_syntax)
+    (IHes : exp_sync_goal te env1 env2 es)
+    (IHee : exp_sync_goal te env1 env2 ee) :
+    exp_sync_goal te env1 env2 (OP_InsertValue (dt_s, es) (dt_e, ee) idxs).
+  Proof.
+    unfold exp_sync_goal in *; intros Hagree top.
+    cbn [full_exp_uses] in Hagree.
+    pose proof (env_agree_on_app_l _ _ _ _ Hagree) as Hag_s.
+    pose proof (env_agree_on_app_r _ _ _ _ Hagree) as Hag_e.
+    unfold denote_exp'; cbn [denote_exp].
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHes Hag_s (Some dt_s)) |].
+    intros ? ? str _ (-> & -> & <- & _).
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHee Hag_e (Some dt_e)) |].
+    intros ? ? elt _ (-> & -> & <- & _).
+    eapply cfg_local_sim_weaken; [| apply cfg_local_sim_withCall_EOU_sync].
+    intros ? ? r _ (-> & -> & <-); repeat split; try reflexivity.
+    destruct top as [dt |]; [| exact I].
+    cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
+  Qed.
+
+  Local Lemma cfg_local_sim_denote_exp_freeze_sync
+    (te : ty_env) (env1 env2 : @local_env PaV)
+    (dt' : dtyp) (e1 : exp dtyp)
+    (IHe1 : exp_sync_goal te env1 env2 e1) :
+    exp_sync_goal te env1 env2 (OP_Freeze (dt', e1)).
+  Proof.
+    unfold exp_sync_goal in *; intros Hagree top.
+    cbn [full_exp_uses] in Hagree.
+    unfold denote_exp'; cbn [denote_exp].
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHe1 Hagree (Some dt')) |].
+    intros ? ? v1 _ (-> & -> & <- & Hv1).
+    eapply cfg_local_sim_weaken; [| apply cfg_local_sim_withCall_freeze].
+    intros ? ? r _ (-> & -> & <- & Hfr); repeat split; try reflexivity.
+    destruct top as [dt |]; [| exact I].
+    cbn [guarantees_scalar_dtyp]; intros Hguar.
+    apply andb_true_iff in Hguar as [Hsc Hguar].
+    apply andb_true_iff in Hguar as [Heq Hg1].
+    apply dtyp_eqb_eq in Heq; subst dt'.
+    apply Hfr; [exact Hsc | apply Hv1, Hg1].
+  Qed.
+
+  Local Lemma cfg_local_sim_denote_exp_splat_sync
+    (te : ty_env) (env1 env2 : @local_env PaV)
+    (dt' : dtyp) (e1 : exp dtyp)
+    (IHe1 : exp_sync_goal te env1 env2 e1) :
+    exp_sync_goal te env1 env2 (EXP_Splat (dt', e1)).
+  Proof.
+    unfold exp_sync_goal in *; intros Hagree top.
+    cbn [full_exp_uses] in Hagree.
+    unfold denote_exp'; cbn [denote_exp].
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [apply cfg_local_sim_withCall_EOU_sync |].
+    intros ? ? [sz t] _ (-> & -> & <-).
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
+    eapply cfg_local_sim_bind; [exact (IHe1 Hagree (Some dt')) |].
+    intros ? ? v1 _ (-> & -> & <- & _).
+    eapply cfg_local_sim_obs_eq;
+      [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
+    apply cfg_local_sim_ret; repeat split; try reflexivity.
+    destruct top as [dt |]; [| exact I].
+    cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
   Qed.
 
   Lemma cfg_local_sim_denote_exp_sync
@@ -1182,22 +1833,7 @@ Section DCESoundness.
       + destruct (default_dvalue_of_dtyp dt) as [| | | v] eqn:E; cbn; try exact I.
         intros Hsc; eapply default_dvalue_scalar_typ; eassumption.
     - (* EXP_Cstring *)
-      unfold denote_exp'; cbn [denote_exp].
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind.
-      + eapply cfg_local_sim_withCall_map_monad with (uses := fun p => full_exp_uses (snd p)).
-        * eapply Forall_impl; [| exact IHelts].
-          intros [dt_i ex_i] H_i Hag_i; cbn [snd] in *.
-          eapply cfg_local_sim_weaken; [| exact (H_i Hag_i (Some dt_i))].
-          intros ? ? ? ? (-> & -> & <- & _); repeat split; reflexivity.
-        * apply env_agree_on_texp_list, Hagree.
-      + intros ? ? vs _ (-> & -> & <-).
-        eapply cfg_local_sim_obs_eq;
-          [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
-        apply cfg_local_sim_ret; repeat split; try reflexivity.
-        destruct top as [dt |]; [| exact I].
-        cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
+      exact (cfg_local_sim_denote_exp_cstring_sync te env1 env2 elts IHelts Hagree top).
     - (* EXP_Undef *)
       unfold denote_exp'; cbn [denote_exp].
       eapply cfg_local_sim_obs_eq;
@@ -1211,300 +1847,27 @@ Section DCESoundness.
       apply cfg_local_sim_ret; repeat split; try reflexivity.
       destruct top as [dt |]; [intros _; apply dvalue_has_dtyp_Poison | exact I].
     - (* EXP_Struct *)
-      unfold denote_exp'; cbn [denote_exp].
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind.
-      + eapply cfg_local_sim_withCall_map_monad with (uses := fun p => full_exp_uses (snd p)).
-        * eapply Forall_impl; [| exact IHfields].
-          intros [dt_i ex_i] H_i Hag_i; cbn [snd] in *.
-          eapply cfg_local_sim_weaken; [| exact (H_i Hag_i (Some dt_i))].
-          intros ? ? ? ? (-> & -> & <- & _); repeat split; reflexivity.
-        * apply env_agree_on_texp_list, Hagree.
-      + intros ? ? vs _ (-> & -> & <-).
-        eapply cfg_local_sim_obs_eq;
-          [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
-        apply cfg_local_sim_ret; repeat split; try reflexivity.
-        destruct top as [dt |]; [| exact I].
-        cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
+      exact (cfg_local_sim_denote_exp_struct_sync te env1 env2 fields IHfields Hagree top).
     - (* EXP_Packed_struct *)
-      unfold denote_exp'; cbn [denote_exp].
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [apply cfg_local_sim_withCall_EOU_sync |].
-      intros ? ? _ _ (-> & -> & _).
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind.
-      + eapply cfg_local_sim_withCall_map_monad with (uses := fun p => full_exp_uses (snd p)).
-        * eapply Forall_impl; [| exact IHfields].
-          intros [dt_i ex_i] H_i Hag_i; cbn [snd] in *.
-          eapply cfg_local_sim_weaken; [| exact (H_i Hag_i (Some dt_i))].
-          intros ? ? ? ? (-> & -> & <- & _); repeat split; reflexivity.
-        * apply env_agree_on_texp_list, Hagree.
-      + intros ? ? vs _ (-> & -> & <-).
-        eapply cfg_local_sim_obs_eq;
-          [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
-        apply cfg_local_sim_ret; repeat split; try reflexivity.
-        destruct top as [dt |]; [| exact I].
-        cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
+      exact (cfg_local_sim_denote_exp_packed_struct_sync te env1 env2 fields IHfields Hagree top).
     - (* EXP_Array *)
-      unfold denote_exp'; cbn [denote_exp].
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind.
-      + eapply cfg_local_sim_withCall_map_monad with (uses := fun p => full_exp_uses (snd p)).
-        * eapply Forall_impl; [| exact IHelts].
-          intros [dt_i ex_i] H_i Hag_i; cbn [snd] in *.
-          eapply cfg_local_sim_weaken; [| exact (H_i Hag_i (Some dt_i))].
-          intros ? ? ? ? (-> & -> & <- & _); repeat split; reflexivity.
-        * apply env_agree_on_texp_list, Hagree.
-      + intros ? ? vs _ (-> & -> & <-).
-        eapply cfg_local_sim_obs_eq;
-          [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
-        apply cfg_local_sim_ret; repeat split; try reflexivity.
-        destruct top as [dt |]; [| exact I].
-        cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
+      exact (cfg_local_sim_denote_exp_array_sync te env1 env2 elts IHelts Hagree top).
     - (* EXP_Vector *)
-      unfold denote_exp'; cbn [denote_exp].
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind.
-      + eapply cfg_local_sim_withCall_map_monad with (uses := fun p => full_exp_uses (snd p)).
-        * eapply Forall_impl; [| exact IHelts].
-          intros [dt_i ex_i] H_i Hag_i; cbn [snd] in *.
-          eapply cfg_local_sim_weaken; [| exact (H_i Hag_i (Some dt_i))].
-          intros ? ? ? ? (-> & -> & <- & _); repeat split; reflexivity.
-        * apply env_agree_on_texp_list, Hagree.
-      + intros ? ? vs _ (-> & -> & <-).
-        eapply cfg_local_sim_obs_eq;
-          [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
-        apply cfg_local_sim_ret; repeat split; try reflexivity.
-        destruct top as [dt |]; [| exact I].
-        cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
+      exact (cfg_local_sim_denote_exp_vector_sync te env1 env2 elts IHelts Hagree top).
     - (* OP_IBinop *)
-      cbn [full_exp_uses] in Hagree.
-      pose proof (env_agree_on_app_l _ _ _ _ Hagree) as Hag1.
-      pose proof (env_agree_on_app_r _ _ _ _ Hagree) as Hag2.
-      unfold denote_exp'; cbn [denote_exp].
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHe1 Hag1 (Some dt')) |].
-      intros ? ? v1 _ (-> & -> & <- & Hv1).
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHe2 Hag2 (Some dt')) |].
-      intros ? ? v2 _ (-> & -> & <- & Hv2).
-      eapply cfg_local_sim_weaken;
-        [| apply (cfg_local_sim_withCall_EOU_ret_sync
-                    (fun r =>
-                       match top with
-                       | Some dt => guarantees_scalar_dtyp te dt (OP_IBinop iop dt' e1 e2) = true -> dvalue_has_dtyp r dt
-                       | None => True
-                       end))].
-      + intros ? ? r _ (-> & -> & <- & Hr); repeat split; auto.
-      + destruct (eval_iop iop v1 v2) as [| | | r] eqn:E; cbn; try exact I.
-        destruct top as [dt |]; [| exact I].
-        cbn [guarantees_scalar_dtyp]; intros Hguar.
-        apply andb_true_iff in Hguar as [_ Hguar].
-        apply andb_true_iff in Hguar as [Hguar Hg2].
-        apply andb_true_iff in Hguar as [Hguar Hg1].
-        apply andb_true_iff in Hguar as [Hint Heq].
-        apply dtyp_eqb_eq in Heq; subst dt'.
-        pose proof (eval_iop_ret_imp iop dt v1 v2 Hint (Hv1 Hg1) (Hv2 Hg2)) as Hret.
-        rewrite E in Hret; exact Hret.
+      exact (cfg_local_sim_denote_exp_ibinop_sync te env1 env2 iop dt' e1 e2 IHe1 IHe2 Hagree top).
     - (* OP_ICmp *)
-      cbn [full_exp_uses] in Hagree.
-      pose proof (env_agree_on_app_l _ _ _ _ Hagree) as Hag1.
-      pose proof (env_agree_on_app_r _ _ _ _ Hagree) as Hag2.
-      unfold denote_exp'; cbn [denote_exp].
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHe1 Hag1 (Some dt')) |].
-      intros ? ? v1 _ (-> & -> & <- & Hv1).
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHe2 Hag2 (Some dt')) |].
-      intros ? ? v2 _ (-> & -> & <- & _).
-      eapply cfg_local_sim_weaken;
-        [| apply (cfg_local_sim_withCall_EOU_ret_sync
-                    (fun r =>
-                       match top with
-                       | Some dt => guarantees_scalar_dtyp te dt (OP_ICmp samesign cmp dt' e1 e2) = true -> dvalue_has_dtyp r dt
-                       | None => True
-                       end))].
-      + intros ? ? r _ (-> & -> & <- & Hr); repeat split; auto.
-      + destruct (eval_icmp samesign cmp v1 v2) as [| | | r] eqn:E; cbn; try exact I.
-        destruct top as [dt |]; [| exact I].
-        cbn [guarantees_scalar_dtyp]; intros Hguar.
-        apply andb_true_iff in Hguar as [_ Hguar].
-        apply andb_true_iff in Hguar as [Hguar Hg1].
-        apply andb_true_iff in Hguar as [Hi1 Hty].
-        rewrite (is_i1_dtyp_eq dt Hi1).
-        pose proof (eval_icmp_ret_imp samesign cmp dt' v1 v2 Hty (Hv1 Hg1)) as Hret.
-        rewrite E in Hret; exact Hret.
+      exact (cfg_local_sim_denote_exp_icmp_sync te env1 env2 samesign cmp dt' e1 e2 IHe1 IHe2 Hagree top).
     - (* OP_FBinop *)
-      cbn [full_exp_uses] in Hagree.
-      pose proof (env_agree_on_app_l _ _ _ _ Hagree) as Hag1.
-      pose proof (env_agree_on_app_r _ _ _ _ Hagree) as Hag2.
-      unfold denote_exp'; cbn [denote_exp].
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHe1 Hag1 (Some dt')) |].
-      intros ? ? v1 _ (-> & -> & <- & Hv1).
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHe2 Hag2 (Some dt')) |].
-      intros ? ? v2 _ (-> & -> & <- & _).
-      eapply cfg_local_sim_weaken;
-        [| apply (cfg_local_sim_withCall_EOU_ret_sync
-                    (fun r =>
-                       match top with
-                       | Some dt => guarantees_scalar_dtyp te dt (OP_FBinop fop fm dt' e1 e2) = true -> dvalue_has_dtyp r dt
-                       | None => True
-                       end))].
-      + intros ? ? r _ (-> & -> & <- & Hr); repeat split; auto.
-      + destruct (eval_fop fop v1 v2) as [| | | r] eqn:E; cbn; try exact I.
-        destruct top as [dt |]; [| exact I].
-        cbn [guarantees_scalar_dtyp]; intros Hguar.
-        apply andb_true_iff in Hguar as [_ Hguar].
-        apply andb_true_iff in Hguar as [Hguar Hg1].
-        apply andb_true_iff in Hguar as [Hfp Heq].
-        apply dtyp_eqb_eq in Heq; subst dt'.
-        pose proof (eval_fop_ret_imp fop dt v1 v2 Hfp (Hv1 Hg1)) as Hret.
-        rewrite E in Hret; exact Hret.
+      exact (cfg_local_sim_denote_exp_fbinop_sync te env1 env2 fop fm dt' e1 e2 IHe1 IHe2 Hagree top).
     - (* OP_Fneg *)
-      cbn [full_exp_uses] in Hagree.
-      unfold denote_exp'; cbn [denote_exp].
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHe1 Hagree (Some dt')) |].
-      intros ? ? v1 _ (-> & -> & <- & Hv1).
-      eapply cfg_local_sim_weaken;
-        [| apply (cfg_local_sim_withCall_EOU_ret_sync
-                    (fun r =>
-                       match top with
-                       | Some dt => guarantees_scalar_dtyp te dt (OP_Fneg flags (dt', e1)) = true -> dvalue_has_dtyp r dt
-                       | None => True
-                       end))].
-      + intros ? ? r _ (-> & -> & <- & Hr); repeat split; auto.
-      + destruct (eval_fneg v1) as [| | | r] eqn:E; cbn; try exact I.
-        destruct top as [dt |]; [| exact I].
-        cbn [guarantees_scalar_dtyp]; intros Hguar.
-        apply andb_true_iff in Hguar as [_ Hguar].
-        apply andb_true_iff in Hguar as [Hguar Hg1].
-        apply andb_true_iff in Hguar as [Hfp Heq].
-        apply dtyp_eqb_eq in Heq; subst dt'.
-        pose proof (eou_safe_to_ret_imp _ _ (eval_fneg_safe dt v1 Hfp (Hv1 Hg1))) as Hret.
-        rewrite E in Hret; exact Hret.
+      exact (cfg_local_sim_denote_exp_fneg_sync te env1 env2 flags dt' e1 IHe1 Hagree top).
     - (* OP_FCmp *)
-      cbn [full_exp_uses] in Hagree.
-      pose proof (env_agree_on_app_l _ _ _ _ Hagree) as Hag1.
-      pose proof (env_agree_on_app_r _ _ _ _ Hagree) as Hag2.
-      unfold denote_exp'; cbn [denote_exp].
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHe1 Hag1 (Some dt')) |].
-      intros ? ? v1 _ (-> & -> & <- & Hv1).
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHe2 Hag2 (Some dt')) |].
-      intros ? ? v2 _ (-> & -> & <- & _).
-      eapply cfg_local_sim_weaken;
-        [| apply (cfg_local_sim_withCall_EOU_ret_sync
-                    (fun r =>
-                       match top with
-                       | Some dt => guarantees_scalar_dtyp te dt (OP_FCmp cmp fm dt' e1 e2) = true -> dvalue_has_dtyp r dt
-                       | None => True
-                       end))].
-      + intros ? ? r _ (-> & -> & <- & Hr); repeat split; auto.
-      + destruct (eval_fcmp cmp v1 v2) as [| | | r] eqn:E; cbn; try exact I.
-        destruct top as [dt |]; [| exact I].
-        cbn [guarantees_scalar_dtyp]; intros Hguar.
-        apply andb_true_iff in Hguar as [_ Hguar].
-        apply andb_true_iff in Hguar as [Hguar Hg1].
-        apply andb_true_iff in Hguar as [Hi1 Hfp].
-        rewrite (is_i1_dtyp_eq dt Hi1).
-        pose proof (eval_fcmp_ret_imp cmp dt' v1 v2 Hfp (Hv1 Hg1)) as Hret.
-        rewrite E in Hret; exact Hret.
+      exact (cfg_local_sim_denote_exp_fcmp_sync te env1 env2 cmp fm dt' e1 e2 IHe1 IHe2 Hagree top).
     - (* OP_Conversion *)
-      cbn [full_exp_uses] in Hagree.
-      unfold denote_exp'; cbn [denote_exp].
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHe1 Hagree (Some dt_from)) |].
-      intros ? ? v1 _ (-> & -> & <- & Hv1).
-      destruct conv as [| pc | ic]; cbn [convert].
-      + (* CONV_Bitcast *)
-        destruct (dtyp_eqb dt_from dt_to) eqn:Eeq12.
-        * eapply cfg_local_sim_obs_eq;
-            [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
-          apply cfg_local_sim_ret; repeat split; try reflexivity.
-          destruct top as [dt |]; [| exact I].
-          cbn [guarantees_scalar_dtyp]; rewrite Eeq12; intros Hguar.
-          apply andb_true_iff in Hguar as [_ Hguar].
-          apply andb_true_iff in Hguar as [Heq2 Hg1].
-          apply dtyp_eqb_eq in Heq2; subst dt_to.
-          apply dtyp_eqb_eq in Eeq12; subst dt_from.
-          apply Hv1, Hg1.
-        * destruct (bit_sizeof_dtyp dt_from =? bit_sizeof_dtyp dt_to)%N;
-            [| apply cfg_local_sim_withCall_raise_sync].
-          eapply cfg_local_sim_weaken;
-            [| apply (cfg_local_sim_withCall_EOU_ret_sync
-                        (fun r => is_scalar_dtyp dt_to = true -> dvalue_has_dtyp r dt_to))].
-          -- intros ? ? r _ (-> & -> & <- & Hr); repeat split; try reflexivity.
-             destruct top as [dt |]; [| exact I].
-             cbn [guarantees_scalar_dtyp]; rewrite Eeq12, andb_true_r; intros Hguar.
-             apply andb_true_iff in Hguar as [Hsc Heq2].
-             apply dtyp_eqb_eq in Heq2; subst dt_to; apply Hr, Hsc.
-          -- destruct (dvalue_to_memory_bytes dt_from v1 None) as [| | | bytes]; cbn; try exact I.
-             destruct (memory_bytes_to_dvalue bytes dt_to) as [| | | r] eqn:Erd; cbn; try exact I.
-             intros Hsc; eapply memory_bytes_to_dvalue_scalar_typ; eassumption.
-      + (* CONV_Pure *)
-        eapply cfg_local_sim_weaken;
-          [| apply (cfg_local_sim_withCall_EOU_ret_sync
-                      (fun r => is_scalar_dtyp dt_to = true -> dvalue_has_dtyp r dt_to))].
-        * intros ? ? r _ (-> & -> & <- & Hr); repeat split; try reflexivity.
-          destruct top as [dt |]; [| exact I].
-          cbn [guarantees_scalar_dtyp]; intros Hguar.
-          apply andb_true_iff in Hguar as [Hsc Heq2].
-          apply dtyp_eqb_eq in Heq2; subst dt_to; apply Hr, Hsc.
-        * destruct (convert_pure pc dt_from v1 dt_to) as [| | | r] eqn:E; cbn; try exact I.
-          intros Hsc; pose proof (convert_pure_ret_imp pc dt_from dt_to v1 Hsc) as Hret.
-          rewrite E in Hret; exact Hret.
-      + (* CONV_Impure *)
-        eapply cfg_local_sim_weaken; [| apply cfg_local_sim_withCall_conv_sync].
-        intros ? ? r _ (-> & -> & <-); repeat split; try reflexivity.
-        destruct top as [dt |]; [| exact I].
-        cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
+      exact (cfg_local_sim_denote_exp_conv_sync te env1 env2 conv dt_from e1 dt_to IHe1 Hagree top).
     - (* OP_GetElementPtr *)
-      cbn [full_exp_uses] in Hagree.
-      pose proof (env_agree_on_app_l _ _ _ _ Hagree) as Hag_p.
-      pose proof (env_agree_on_app_r _ _ _ _ Hagree) as Hag_i.
-      unfold denote_exp'; cbn [denote_exp].
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHep Hag_p (Some dt_p)) |].
-      intros ? ? vptr _ (-> & -> & <- & _).
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind.
-      + eapply cfg_local_sim_withCall_map_monad with (uses := fun p => full_exp_uses (snd p)).
-        * eapply Forall_impl; [| exact IHidxs].
-          intros [dt_i ex_i] H_i Hag_k; cbn [snd] in *.
-          eapply cfg_local_sim_weaken; [| exact (H_i Hag_k (Some dt_i))].
-          intros ? ? ? ? (-> & -> & <- & _); repeat split; reflexivity.
-        * apply env_agree_on_texp_list, Hag_i.
-      + intros ? ? vs _ (-> & -> & <-).
-        eapply cfg_local_sim_weaken;
-          [| apply (cfg_local_sim_withCall_EOU_ret_sync
-                      (fun r => dvalue_has_dtyp r (DTYPE_Base DTYPE_Pointer))
-                      env1 env2 _ (eval_gep_ret_imp flags t vptr vs))].
-        intros ? ? r _ (-> & -> & <- & Hr); repeat split; try reflexivity.
-        destruct top as [dt |]; [| exact I].
-        cbn [guarantees_scalar_dtyp]; intros Hguar.
-        apply andb_true_iff in Hguar as [_ Hptr].
-        rewrite (is_ptr_dtyp_eq dt Hptr); exact Hr.
+      exact (cfg_local_sim_denote_exp_gep_sync te env1 env2 flags t dt_p ep idxs IHep IHidxs Hagree top).
     - (* OP_ExtractElement *)
       cbn [full_exp_uses] in Hagree.
       pose proof (env_agree_on_app_l _ _ _ _ Hagree) as Hag_v.
@@ -1523,55 +1886,11 @@ Section DCESoundness.
       destruct top as [dt |]; [| exact I].
       cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
     - (* OP_InsertElement *)
-      cbn [full_exp_uses] in Hagree.
-      pose proof (env_agree_on_app_l _ _ _ _ Hagree) as Hag_v.
-      pose proof (env_agree_on_app_r _ _ _ _ Hagree) as Hag_ei.
-      pose proof (env_agree_on_app_l _ _ _ _ Hag_ei) as Hag_e.
-      pose proof (env_agree_on_app_r _ _ _ _ Hag_ei) as Hag_i.
-      unfold denote_exp'; cbn [denote_exp].
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHev Hag_v (Some dt_v)) |].
-      intros ? ? vec _ (-> & -> & <- & _).
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind.
-      + eapply cfg_local_sim_obs_eq;
-          [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-        eapply cfg_local_sim_bind; [exact (IHee Hag_e (Some dt_e)) |].
-        intros ? ? ve _ (-> & -> & <- & _); apply cfg_local_sim_withCall_EOU_sync.
-      + intros ? ? elt _ (-> & -> & <-).
-        eapply cfg_local_sim_obs_eq;
-          [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-        eapply cfg_local_sim_bind; [exact (IHei Hag_i (Some dt_i)) |].
-        intros ? ? idx _ (-> & -> & <- & _).
-        eapply cfg_local_sim_weaken; [| apply cfg_local_sim_withCall_EOU_sync].
-        intros ? ? r _ (-> & -> & <-); repeat split; try reflexivity.
-        destruct top as [dt |]; [| exact I].
-        cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
+      exact (cfg_local_sim_denote_exp_insert_elt_sync
+               te env1 env2 dt_v ev dt_e ee dt_i ei IHev IHee IHei Hagree top).
     - (* OP_ShuffleVector *)
-      cbn [full_exp_uses] in Hagree.
-      pose proof (env_agree_on_app_l _ _ _ _ Hagree) as Hag1.
-      pose proof (env_agree_on_app_r _ _ _ _ Hagree) as Hag2m.
-      pose proof (env_agree_on_app_l _ _ _ _ Hag2m) as Hag2.
-      pose proof (env_agree_on_app_r _ _ _ _ Hag2m) as Hagm.
-      unfold denote_exp'; cbn [denote_exp].
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHe1 Hag1 (Some dt1)) |].
-      intros ? ? v1 _ (-> & -> & <- & _).
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHe2 Hag2 (Some dt2)) |].
-      intros ? ? v2 _ (-> & -> & <- & _).
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHem Hagm (Some dtm)) |].
-      intros ? ? vm _ (-> & -> & <- & _).
-      eapply cfg_local_sim_weaken; [| apply cfg_local_sim_withCall_EOU_sync].
-      intros ? ? r _ (-> & -> & <-); repeat split; try reflexivity.
-      destruct top as [dt |]; [| exact I].
-      cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
+      exact (cfg_local_sim_denote_exp_shuffle_sync
+               te env1 env2 dt1 e1 dt2 e2 dtm em IHe1 IHe2 IHem Hagree top).
     - (* OP_ExtractValue *)
       cbn [full_exp_uses] in Hagree.
       unfold denote_exp'; cbn [denote_exp].
@@ -1584,82 +1903,13 @@ Section DCESoundness.
       destruct top as [dt |]; [| exact I].
       cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
     - (* OP_InsertValue *)
-      cbn [full_exp_uses] in Hagree.
-      pose proof (env_agree_on_app_l _ _ _ _ Hagree) as Hag_s.
-      pose proof (env_agree_on_app_r _ _ _ _ Hagree) as Hag_e.
-      unfold denote_exp'; cbn [denote_exp].
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHes Hag_s (Some dt_s)) |].
-      intros ? ? str _ (-> & -> & <- & _).
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHee Hag_e (Some dt_e)) |].
-      intros ? ? elt _ (-> & -> & <- & _).
-      eapply cfg_local_sim_weaken; [| apply cfg_local_sim_withCall_EOU_sync].
-      intros ? ? r _ (-> & -> & <-); repeat split; try reflexivity.
-      destruct top as [dt |]; [| exact I].
-      cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
+      exact (cfg_local_sim_denote_exp_insert_val_sync
+               te env1 env2 dt_s es dt_e ee idxs IHes IHee Hagree top).
     - (* OP_Select *)
-      cbn [full_exp_uses] in Hagree.
-      pose proof (env_agree_on_app_l _ _ _ _ Hagree) as Hag_c.
-      pose proof (env_agree_on_app_r _ _ _ _ Hagree) as Hag12.
-      pose proof (env_agree_on_app_l _ _ _ _ Hag12) as Hag1.
-      pose proof (env_agree_on_app_r _ _ _ _ Hag12) as Hag2.
-      unfold denote_exp'; cbn [denote_exp].
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHec Hag_c (Some dt_c)) |].
-      intros ? ? vc _ (-> & -> & <- & Hvc).
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHe1 Hag1 (Some dt1)) |].
-      intros ? ? v1 _ (-> & -> & <- & Hv1).
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHe2 Hag2 (Some dt2)) |].
-      intros ? ? v2 _ (-> & -> & <- & Hv2).
-      eapply cfg_local_sim_weaken;
-        [| apply (cfg_local_sim_withCall_EOU_ret_sync
-                    (fun r =>
-                       match top with
-                       | Some dt => guarantees_scalar_dtyp te dt (OP_Select fm (dt_c, ec) (dt1, e1) (dt2, e2)) = true -> dvalue_has_dtyp r dt
-                       | None => True
-                       end))].
-      + intros ? ? r _ (-> & -> & <- & Hr); repeat split; auto.
-      + destruct (eval_select vc dt1 v1 v2) as [| | | r] eqn:E; cbn; try exact I.
-        destruct top as [dt |]; [| exact I].
-        cbn [guarantees_scalar_dtyp]; intros Hguar.
-        apply andb_true_iff in Hguar as [_ Hguar].
-        apply andb_true_iff in Hguar as [Hguar Hg2].
-        apply andb_true_iff in Hguar as [Hguar Hg1].
-        apply andb_true_iff in Hguar as [Hguar Hgc].
-        apply andb_true_iff in Hguar as [Hguar Heq2].
-        apply andb_true_iff in Hguar as [Hi1 Heq1].
-        apply dtyp_eqb_eq in Heq1; subst dt1.
-        apply dtyp_eqb_eq in Heq2; subst dt2.
-        assert (Hvc_i1 : dvalue_has_dtyp vc (DTYPE_Base (DTYPE_I 1%positive))).
-        { rewrite <- (is_i1_dtyp_eq dt_c Hi1); apply Hvc, Hgc. }
-        pose proof (eou_safe_to_ret_imp (fun x => dvalue_has_dtyp x dt) _
-                      (eval_select_safe_P (fun x => dvalue_has_dtyp x dt)
-                         (dvalue_has_dtyp_Poison dt)
-                         vc v1 v2 dt Hvc_i1 (Hv1 Hg1) (Hv2 Hg2))) as Hret.
-        rewrite E in Hret; exact Hret.
+      exact (cfg_local_sim_denote_exp_select_sync
+               te env1 env2 fm dt_c ec dt1 e1 dt2 e2 IHec IHe1 IHe2 Hagree top).
     - (* OP_Freeze *)
-      cbn [full_exp_uses] in Hagree.
-      unfold denote_exp'; cbn [denote_exp].
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHe1 Hagree (Some dt')) |].
-      intros ? ? v1 _ (-> & -> & <- & Hv1).
-      eapply cfg_local_sim_weaken; [| apply cfg_local_sim_withCall_freeze].
-      intros ? ? r _ (-> & -> & <- & Hfr); repeat split; try reflexivity.
-      destruct top as [dt |]; [| exact I].
-      cbn [guarantees_scalar_dtyp]; intros Hguar.
-      apply andb_true_iff in Hguar as [Hsc Hguar].
-      apply andb_true_iff in Hguar as [Heq Hg1].
-      apply dtyp_eqb_eq in Heq; subst dt'.
-      apply Hfr; [exact Hsc | apply Hv1, Hg1].
+      exact (cfg_local_sim_denote_exp_freeze_sync te env1 env2 dt' e1 IHe1 Hagree top).
     - (* EXP_Asm *)
       unfold denote_exp'; cbn [denote_exp]; apply cfg_local_sim_withCall_raise_sync.
     - (* EXP_Metadata METADATA_Const *)
@@ -1679,21 +1929,7 @@ Section DCESoundness.
          destruct top as [dt |]; [| exact I];
          cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc).
     - (* EXP_Splat *)
-      cbn [full_exp_uses] in Hagree.
-      unfold denote_exp'; cbn [denote_exp].
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [apply cfg_local_sim_withCall_EOU_sync |].
-      intros ? ? [sz t] _ (-> & -> & <-).
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_bind | symmetry; apply withCall_bind |].
-      eapply cfg_local_sim_bind; [exact (IHe1 Hagree (Some dt')) |].
-      intros ? ? v1 _ (-> & -> & <- & _).
-      eapply cfg_local_sim_obs_eq;
-        [symmetry; apply withCall_ret | symmetry; apply withCall_ret |].
-      apply cfg_local_sim_ret; repeat split; try reflexivity.
-      destruct top as [dt |]; [| exact I].
-      cbn [guarantees_scalar_dtyp]; rewrite andb_false_r; intros Hc; discriminate Hc.
+      exact (cfg_local_sim_denote_exp_splat_sync te env1 env2 dt' e1 IHe1 Hagree top).
     - (* EXP_BlockAddress *)
       unfold denote_exp'; cbn [denote_exp].
       eapply cfg_local_sim_weaken; [| apply cfg_local_sim_withCall_gread_sync].
@@ -2074,6 +2310,211 @@ Section DCESoundness.
       end in
     add_raw_ids (full_instr_uses i) live_killed.
 
+  Local Lemma cfg_local_sim_denote_instr_call_sync
+    (te : ty_env) (live_after : list raw_id)
+    (env1 env2 : @local_env PaV)
+    (iid : instr_id) (dt : dtyp) (f : exp dtyp)
+    (args : list (texp dtyp * list param_attr))
+    (anns : list (annotation dtyp)) (obs : list (@operand_bundle dtyp))
+    (md : list (metadata dtyp))
+    (va : option (@ptr (@PROV PaV) (@PTR PaV)))
+    (Hte : tenv_sound te env1)
+    (Huses : env_agree_on (full_instr_uses (INSTR_Call (dt, f) args anns obs)) env1 env2)
+    (Hkill : env_agree_on
+               (match instr_must_kill iid (INSTR_Call (dt, f) args anns obs) with
+                | Some x => remove_raw_id x live_after
+                | None => live_after
+                end) env1 env2) :
+    cfg_local_sim
+      (fun e1' e2' _ _ =>
+         (env1 = env2 -> e1' = e2') /\
+         tenv_sound (step_tenv_instr te (iid, INSTR_Call (dt, f) args anns obs, md)) e1' /\
+         env_agree_on live_after e1' e2')
+      env1 env2
+      (denote_instr (iid, INSTR_Call (dt, f) args anns obs, md) va)
+      (denote_instr (iid, INSTR_Call (dt, f) args anns obs, md) va).
+  Proof.
+    cbn [full_instr_uses] in Huses.
+    pose proof (env_agree_on_app_l _ _ _ _ Huses) as Hag_f.
+    pose proof (env_agree_on_app_r _ _ _ _ Huses) as Hag_rest1.
+    pose proof (env_agree_on_app_l _ _ _ _ Hag_rest1) as Hag_args.
+    pose proof (env_agree_on_app_r _ _ _ _ Hag_rest1) as Hag_rest2.
+    pose proof (env_agree_on_app_r _ _ _ _ Hag_rest2) as Hag_obs.
+    cbn [full_texp_uses snd] in Hag_f.
+    destruct iid as [id | vid];
+      cbn [step_tenv_instr instr_must_kill] in Hkill |- *;
+      unfold denote_instr; cbv beta iota zeta.
+    - eapply cfg_local_sim_bind;
+        [apply (cfg_local_sim_denote_call_args_sync env1 env2 args _ Hag_args) |].
+      intros ? ? vs _ (-> & -> & <-).
+      eapply cfg_local_sim_bind;
+        [apply (cfg_local_sim_denote_operand_bundles_sync env1 env2 _ f obs Hag_obs) |].
+      intros ? ? _ _ (-> & -> & _).
+      eapply cfg_local_sim_bind.
+      + destruct (intrinsic_exp f) as [s |].
+        * apply cfg_local_sim_intrinsic_sync.
+        * eapply cfg_local_sim_bind;
+            [exact (cfg_local_sim_denote_exp_plain_sync env1 env2 None f Hag_f) |].
+          intros ? ? fv _ (-> & -> & <-); apply cfg_local_sim_call_sync.
+      + intros ? ? res _ (-> & -> & <-).
+        eapply cfg_local_sim_bind; [apply cfg_local_sim_check_call_return_sync |].
+        intros ? ? res' _ (-> & -> & <-).
+        eapply cfg_local_sim_bind with
+          (RR := fun e1' e2' (r1 r2 : @dvalue PaV) => e1' = env1 /\ e2' = env2 /\ r1 = r2).
+        * destruct res' as [ex | dv];
+            [apply cfg_local_sim_raiseLLVM_sync
+            | apply cfg_local_sim_ret; repeat split; reflexivity].
+        * intros ? ? rv _ (-> & -> & <-).
+          eapply cfg_local_sim_weaken; [| apply cfg_local_sim_lwrite_both].
+          intros ? ? _ _ (-> & -> & _); split; [intros ->; reflexivity |].
+          split;
+            [ apply (tenv_sound_set_ty id None rv te env1 I Hte)
+            | apply (env_agree_on_add_both live_after id rv env1 env2 Hkill) ].
+    - eapply cfg_local_sim_bind;
+        [apply (cfg_local_sim_denote_call_args_sync env1 env2 args _ Hag_args) |].
+      intros ? ? vs _ (-> & -> & <-).
+      eapply cfg_local_sim_bind;
+        [apply (cfg_local_sim_denote_operand_bundles_sync env1 env2 _ f obs Hag_obs) |].
+      intros ? ? _ _ (-> & -> & _).
+      eapply cfg_local_sim_bind.
+      + destruct (intrinsic_exp f) as [s |].
+        * apply cfg_local_sim_intrinsic_sync.
+        * eapply cfg_local_sim_bind;
+            [exact (cfg_local_sim_denote_exp_plain_sync env1 env2 None f Hag_f) |].
+          intros ? ? fv _ (-> & -> & <-); apply cfg_local_sim_call_sync.
+      + intros ? ? res _ (-> & -> & <-).
+        eapply cfg_local_sim_bind; [apply cfg_local_sim_check_call_return_sync |].
+        intros ? ? res' _ (-> & -> & <-).
+        eapply cfg_local_sim_bind with
+          (RR := fun e1' e2' (r1 r2 : @dvalue PaV) => e1' = env1 /\ e2' = env2 /\ r1 = r2).
+        * destruct res' as [ex | dv];
+            [apply cfg_local_sim_raiseLLVM_sync
+            | apply cfg_local_sim_ret; repeat split; reflexivity].
+        * intros ? ? dv1 dv2 (-> & -> & _).
+          apply cfg_local_sim_ret; split; [intros Heq; exact Heq | exact (conj Hte Hkill)].
+  Qed.
+
+  Local Lemma cfg_local_sim_denote_instr_load_sync
+    (te : ty_env) (live_after : list raw_id)
+    (env1 env2 : @local_env PaV)
+    (iid : instr_id) (dt du : dtyp) (pexp : exp dtyp)
+    (anns : list (annotation dtyp)) (md : list (metadata dtyp))
+    (va : option (@ptr (@PROV PaV) (@PTR PaV)))
+    (Hte : tenv_sound te env1)
+    (Huses : env_agree_on (full_instr_uses (INSTR_Load dt (du, pexp) anns)) env1 env2)
+    (Hkill : env_agree_on
+               (match instr_must_kill iid (INSTR_Load dt (du, pexp) anns) with
+                | Some x => remove_raw_id x live_after
+                | None => live_after
+                end) env1 env2) :
+    cfg_local_sim
+      (fun e1' e2' _ _ =>
+         (env1 = env2 -> e1' = e2') /\
+         tenv_sound (step_tenv_instr te (iid, INSTR_Load dt (du, pexp) anns, md)) e1' /\
+         env_agree_on live_after e1' e2')
+      env1 env2
+      (denote_instr (iid, INSTR_Load dt (du, pexp) anns, md) va)
+      (denote_instr (iid, INSTR_Load dt (du, pexp) anns, md) va).
+  Proof.
+    destruct iid as [id | vid];
+      [| unfold denote_instr; cbv beta iota zeta; apply cfg_local_sim_raise_sync].
+    cbn [full_instr_uses step_tenv_instr instr_must_kill] in Huses, Hkill |- *.
+    pose proof (env_agree_on_app_l _ _ _ _ Huses) as Hag_ptr.
+    cbn [full_texp_uses snd] in Hag_ptr.
+    unfold denote_instr; cbv beta iota zeta.
+    eapply cfg_local_sim_bind;
+      [exact (cfg_local_sim_denote_exp_plain_sync env1 env2 (Some du) pexp Hag_ptr) |].
+    intros ? ? a _ (-> & -> & <-).
+    eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
+    intros ? ? _ _ (-> & -> & _).
+    eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
+    intros ? ? v _ (-> & -> & <- & Hv).
+    eapply cfg_local_sim_bind.
+    - apply (cfg_local_sim_EOU_ret_sync
+               (fun v' => is_scalar_dtyp dt = true -> dvalue_has_dtyp v' dt)).
+      eapply eou_ret_imp_weaken;
+        [| apply (apply_value_attrs_scalar_typ
+                    (load_metadata_attrs md) _ dt
+                    (value_metadata_range (metadata_range md) v))].
+      intros v' Hattr Hsc.
+      apply (Hattr Hsc), (value_metadata_range_scalar_typ (metadata_range md) dt v Hsc (Hv Hsc)).
+    - intros ? ? v' _ (-> & -> & <- & Hv').
+      eapply cfg_local_sim_bind.
+      + unfold assert_load_dereferenceable.
+        destruct (load_metadata_dereferenceable md) as [[or_null n] |];
+          [ apply cfg_local_sim_assert_dereferenceable_sync
+          | apply cfg_local_sim_ret; repeat split; reflexivity ].
+      + intros ? ? _ _ (-> & -> & _).
+        eapply cfg_local_sim_weaken; [| apply cfg_local_sim_lwrite_both].
+        intros ? ? _ _ (-> & -> & _); split; [intros ->; reflexivity |].
+        split.
+        * apply (tenv_sound_set_ty id (Some dt) v' te env1);
+            [apply val_matches_normalize_oty, Hv' | exact Hte].
+        * apply (env_agree_on_add_both live_after id v' env1 env2 Hkill).
+  Qed.
+
+  Local Lemma cfg_local_sim_denote_instr_vaarg_sync
+    (te : ty_env) (live_after : list raw_id)
+    (env1 env2 : @local_env PaV)
+    (iid : instr_id) (t : dtyp) (ptr_exp : exp dtyp) (argty : dtyp)
+    (md : list (metadata dtyp))
+    (va : option (@ptr (@PROV PaV) (@PTR PaV)))
+    (Hte : tenv_sound te env1)
+    (Huses : env_agree_on (full_instr_uses (INSTR_VAArg (t, ptr_exp) argty)) env1 env2)
+    (Hkill : env_agree_on
+               (match instr_must_kill iid (INSTR_VAArg (t, ptr_exp) argty) with
+                | Some x => remove_raw_id x live_after
+                | None => live_after
+                end) env1 env2) :
+    cfg_local_sim
+      (fun e1' e2' _ _ =>
+         (env1 = env2 -> e1' = e2') /\
+         tenv_sound (step_tenv_instr te (iid, INSTR_VAArg (t, ptr_exp) argty, md)) e1' /\
+         env_agree_on live_after e1' e2')
+      env1 env2
+      (denote_instr (iid, INSTR_VAArg (t, ptr_exp) argty, md) va)
+      (denote_instr (iid, INSTR_VAArg (t, ptr_exp) argty, md) va).
+  Proof.
+    cbn [full_instr_uses full_texp_uses snd] in Huses.
+    destruct iid as [id | vid];
+      cbn [step_tenv_instr instr_must_kill] in Hkill |- *;
+      unfold denote_instr; cbv beta iota zeta.
+    - eapply cfg_local_sim_bind;
+        [exact (cfg_local_sim_denote_exp_plain_sync
+                  env1 env2 (Some (DTYPE_Base DTYPE_Pointer)) ptr_exp Huses) |].
+      intros ? ? ptr_to_args _ (-> & -> & <-).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
+      intros ? ? args_p _ (-> & -> & <- & _).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
+      intros ? ? retv _ (-> & -> & <- & _).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
+      intros ? ? ix _ (-> & -> & <-).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
+      intros ? ? args' _ (-> & -> & <-).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_store_sync |].
+      intros ? ? _ _ (-> & -> & _).
+      eapply cfg_local_sim_weaken; [| apply cfg_local_sim_lwrite_both].
+      intros ? ? _ _ (-> & -> & _); split; [intros ->; reflexivity |].
+      split;
+        [ apply (tenv_sound_set_ty id None retv te env1 I Hte)
+        | apply (env_agree_on_add_both live_after id retv env1 env2 Hkill) ].
+    - eapply cfg_local_sim_bind;
+        [exact (cfg_local_sim_denote_exp_plain_sync
+                  env1 env2 (Some (DTYPE_Base DTYPE_Pointer)) ptr_exp Huses) |].
+      intros ? ? ptr_to_args _ (-> & -> & <-).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
+      intros ? ? args_p _ (-> & -> & <- & _).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
+      intros ? ? _ _ (-> & -> & _ & _).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
+      intros ? ? ix _ (-> & -> & <-).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
+      intros ? ? args' _ (-> & -> & <-).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_store_sync |].
+      intros ? ? _ _ (-> & -> & _).
+      apply cfg_local_sim_ret; split; [intros Heq; exact Heq | exact (conj Hte Hkill)].
+  Qed.
+
   Lemma cfg_local_sim_denote_instr_sync
     (te : ty_env) (live_after : list raw_id)
     (env1 env2 : @local_env PaV)
@@ -2124,64 +2565,8 @@ Section DCESoundness.
         [ apply (tenv_sound_set_ty id (infer_op_oty te op) uv te env1 Huv Hte)
         | apply (env_agree_on_add_both live_after id uv env1 env2 Hkill) ].
     - (* INSTR_Call *)
-      cbn [full_instr_uses] in Huses.
-      pose proof (env_agree_on_app_l _ _ _ _ Huses) as Hag_f.
-      pose proof (env_agree_on_app_r _ _ _ _ Huses) as Hag_rest1.
-      pose proof (env_agree_on_app_l _ _ _ _ Hag_rest1) as Hag_args.
-      pose proof (env_agree_on_app_r _ _ _ _ Hag_rest1) as Hag_rest2.
-      pose proof (env_agree_on_app_r _ _ _ _ Hag_rest2) as Hag_obs.
-      cbn [full_texp_uses snd] in Hag_f.
-      destruct iid as [id | vid];
-        cbn [step_tenv_instr instr_must_kill] in Hkill |- *;
-        unfold denote_instr; cbv beta iota zeta.
-      + eapply cfg_local_sim_bind;
-          [apply (cfg_local_sim_denote_call_args_sync env1 env2 args _ Hag_args) |].
-        intros ? ? vs _ (-> & -> & <-).
-        eapply cfg_local_sim_bind;
-          [apply (cfg_local_sim_denote_operand_bundles_sync env1 env2 _ f obs Hag_obs) |].
-        intros ? ? _ _ (-> & -> & _).
-        eapply cfg_local_sim_bind.
-        * destruct (intrinsic_exp f) as [s |].
-          -- apply cfg_local_sim_intrinsic_sync.
-          -- eapply cfg_local_sim_bind;
-               [exact (cfg_local_sim_denote_exp_plain_sync env1 env2 None f Hag_f) |].
-             intros ? ? fv _ (-> & -> & <-); apply cfg_local_sim_call_sync.
-        * intros ? ? res _ (-> & -> & <-).
-          eapply cfg_local_sim_bind; [apply cfg_local_sim_check_call_return_sync |].
-          intros ? ? res' _ (-> & -> & <-).
-          eapply cfg_local_sim_bind with
-            (RR := fun e1' e2' (r1 r2 : @dvalue PaV) => e1' = env1 /\ e2' = env2 /\ r1 = r2).
-          -- destruct res' as [ex | dv];
-               [apply cfg_local_sim_raiseLLVM_sync
-               | apply cfg_local_sim_ret; repeat split; reflexivity].
-          -- intros ? ? rv _ (-> & -> & <-).
-             eapply cfg_local_sim_weaken; [| apply cfg_local_sim_lwrite_both].
-             intros ? ? _ _ (-> & -> & _); split; [intros ->; reflexivity |].
-             split;
-               [ apply (tenv_sound_set_ty id None rv te env1 I Hte)
-               | apply (env_agree_on_add_both live_after id rv env1 env2 Hkill) ].
-      + eapply cfg_local_sim_bind;
-          [apply (cfg_local_sim_denote_call_args_sync env1 env2 args _ Hag_args) |].
-        intros ? ? vs _ (-> & -> & <-).
-        eapply cfg_local_sim_bind;
-          [apply (cfg_local_sim_denote_operand_bundles_sync env1 env2 _ f obs Hag_obs) |].
-        intros ? ? _ _ (-> & -> & _).
-        eapply cfg_local_sim_bind.
-        * destruct (intrinsic_exp f) as [s |].
-          -- apply cfg_local_sim_intrinsic_sync.
-          -- eapply cfg_local_sim_bind;
-               [exact (cfg_local_sim_denote_exp_plain_sync env1 env2 None f Hag_f) |].
-             intros ? ? fv _ (-> & -> & <-); apply cfg_local_sim_call_sync.
-        * intros ? ? res _ (-> & -> & <-).
-          eapply cfg_local_sim_bind; [apply cfg_local_sim_check_call_return_sync |].
-          intros ? ? res' _ (-> & -> & <-).
-          eapply cfg_local_sim_bind with
-            (RR := fun e1' e2' (r1 r2 : @dvalue PaV) => e1' = env1 /\ e2' = env2 /\ r1 = r2).
-          -- destruct res' as [ex | dv];
-               [apply cfg_local_sim_raiseLLVM_sync
-               | apply cfg_local_sim_ret; repeat split; reflexivity].
-          -- intros ? ? dv1 dv2 (-> & -> & _).
-             apply cfg_local_sim_ret; split; [intros Heq; exact Heq | exact (conj Hte Hkill)].
+      exact (cfg_local_sim_denote_instr_call_sync
+               te live_after env1 env2 iid dt f args anns obs md va Hte Huses Hkill).
     - (* INSTR_Alloca *)
       destruct iid as [id | vid];
         [| unfold denote_instr; cbv beta iota zeta; apply cfg_local_sim_raise_sync].
@@ -2219,41 +2604,8 @@ Section DCESoundness.
             [apply val_matches_normalize_oty; intros _; exact Hv | exact Hte].
         * apply (env_agree_on_add_both live_after id v env1 env2 Hkill).
     - (* INSTR_Load *)
-      destruct iid as [id | vid];
-        [| unfold denote_instr; cbv beta iota zeta; apply cfg_local_sim_raise_sync].
-      cbn [full_instr_uses step_tenv_instr instr_must_kill] in Huses, Hkill |- *.
-      pose proof (env_agree_on_app_l _ _ _ _ Huses) as Hag_ptr.
-      cbn [full_texp_uses snd] in Hag_ptr.
-      unfold denote_instr; cbv beta iota zeta.
-      eapply cfg_local_sim_bind;
-        [exact (cfg_local_sim_denote_exp_plain_sync env1 env2 (Some du) ptr Hag_ptr) |].
-      intros ? ? a _ (-> & -> & <-).
-      eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
-      intros ? ? _ _ (-> & -> & _).
-      eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
-      intros ? ? v _ (-> & -> & <- & Hv).
-      eapply cfg_local_sim_bind.
-      + apply (cfg_local_sim_EOU_ret_sync
-                 (fun v' => is_scalar_dtyp dt = true -> dvalue_has_dtyp v' dt)).
-        eapply eou_ret_imp_weaken;
-          [| apply (apply_value_attrs_scalar_typ
-                      (load_metadata_attrs md) _ dt
-                      (value_metadata_range (metadata_range md) v))].
-        intros v' Hattr Hsc.
-        apply (Hattr Hsc), (value_metadata_range_scalar_typ (metadata_range md) dt v Hsc (Hv Hsc)).
-      + intros ? ? v' _ (-> & -> & <- & Hv').
-        eapply cfg_local_sim_bind.
-        * unfold assert_load_dereferenceable.
-          destruct (load_metadata_dereferenceable md) as [[or_null n] |];
-            [ apply cfg_local_sim_assert_dereferenceable_sync
-            | apply cfg_local_sim_ret; repeat split; reflexivity ].
-        * intros ? ? _ _ (-> & -> & _).
-          eapply cfg_local_sim_weaken; [| apply cfg_local_sim_lwrite_both].
-          intros ? ? _ _ (-> & -> & _); split; [intros ->; reflexivity |].
-          split.
-          -- apply (tenv_sound_set_ty id (Some dt) v' te env1);
-               [apply val_matches_normalize_oty, Hv' | exact Hte].
-          -- apply (env_agree_on_add_both live_after id v' env1 env2 Hkill).
+      exact (cfg_local_sim_denote_instr_load_sync
+               te live_after env1 env2 iid dt du ptr anns md va Hte Huses Hkill).
     - (* INSTR_Store *)
       destruct iid as [id | vid];
         [unfold denote_instr; cbv beta iota zeta; apply cfg_local_sim_raise_sync |].
@@ -2310,44 +2662,8 @@ Section DCESoundness.
         [ apply (tenv_sound_set_ty id None v te env1 I Hte)
         | apply (env_agree_on_add_both live_after id v env1 env2 Hkill) ].
     - (* INSTR_VAArg *)
-      cbn [full_instr_uses full_texp_uses snd] in Huses.
-      destruct iid as [id | vid];
-        cbn [step_tenv_instr instr_must_kill] in Hkill |- *;
-        unfold denote_instr; cbv beta iota zeta.
-      + eapply cfg_local_sim_bind;
-          [exact (cfg_local_sim_denote_exp_plain_sync
-                    env1 env2 (Some (DTYPE_Base DTYPE_Pointer)) ptr_exp Huses) |].
-        intros ? ? ptr_to_args _ (-> & -> & <-).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
-        intros ? ? args_p _ (-> & -> & <- & _).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
-        intros ? ? retv _ (-> & -> & <- & _).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
-        intros ? ? ix _ (-> & -> & <-).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
-        intros ? ? args' _ (-> & -> & <-).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_store_sync |].
-        intros ? ? _ _ (-> & -> & _).
-        eapply cfg_local_sim_weaken; [| apply cfg_local_sim_lwrite_both].
-        intros ? ? _ _ (-> & -> & _); split; [intros ->; reflexivity |].
-        split;
-          [ apply (tenv_sound_set_ty id None retv te env1 I Hte)
-          | apply (env_agree_on_add_both live_after id retv env1 env2 Hkill) ].
-      + eapply cfg_local_sim_bind;
-          [exact (cfg_local_sim_denote_exp_plain_sync
-                    env1 env2 (Some (DTYPE_Base DTYPE_Pointer)) ptr_exp Huses) |].
-        intros ? ? ptr_to_args _ (-> & -> & <-).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
-        intros ? ? args_p _ (-> & -> & <- & _).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
-        intros ? ? _ _ (-> & -> & _ & _).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
-        intros ? ? ix _ (-> & -> & <-).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
-        intros ? ? args' _ (-> & -> & <-).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_store_sync |].
-        intros ? ? _ _ (-> & -> & _).
-        apply cfg_local_sim_ret; split; [intros Heq; exact Heq | exact (conj Hte Hkill)].
+      exact (cfg_local_sim_denote_instr_vaarg_sync
+               te live_after env1 env2 iid t ptr_exp argty md va Hte Huses Hkill).
     - (* INSTR_LandingPad *)
       destruct iid as [id | vid];
         [| unfold denote_instr; cbv beta iota zeta; apply cfg_local_sim_raise_sync].
@@ -2944,7 +3260,8 @@ Section DCESoundness.
         intros ? ? _ _ (-> & -> & _).
         apply cfg_local_sim_ret;
           split; [intros Heq; exact Heq | split; [reflexivity |]].
-        split; [cbn; right; left; reflexivity | split; [| exact Hlive]].
+        split;
+          [cbn; right; left; reflexivity | split; [| exact Hlive]].
         destruct iid as [x | vid]; cbn [step_tenv_term]; [| exact Hte].
         rewrite raw_id_eqb_refl; cbn [negb]; rewrite andb_false_r.
         destruct (raw_id_eqb unwind_label to_label); cbn [negb];
@@ -2961,7 +3278,9 @@ Section DCESoundness.
             [ apply tenv_sound_remove_ty_add, Hte
             | apply (tenv_sound_set_ty x None returned_value te env1 I Hte) ].
         * eapply cfg_local_sim_bind;
-            [apply cfg_local_sim_ret; instantiate (1 := fun e1' e2' _ _ => e1' = env1 /\ e2' = env2); split; reflexivity |].
+            [ apply cfg_local_sim_ret;
+              instantiate (1 := fun e1' e2' _ _ => e1' = env1 /\ e2' = env2);
+              split; reflexivity | ].
           intros ? ? _ _ (-> & ->).
           apply cfg_local_sim_ret;
             split; [intros Heq; exact Heq | split; [reflexivity |]].

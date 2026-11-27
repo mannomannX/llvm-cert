@@ -201,7 +201,8 @@ Proof.
     split.
     + intros [Hx Hrest] y [<- | Hy]; [exact Hx | apply Hrest, Hy].
     + intros Hall; split;
-        [apply Hall; left; reflexivity | intros y Hy; apply Hall; right; exact Hy].
+        [ apply Hall; left; reflexivity
+        | intros y Hy; apply Hall; right; exact Hy ].
 Qed.
 
 Lemma block_block_addresses_nil_iff (b : block dtyp) :
@@ -281,7 +282,9 @@ Lemma eval_switch_dests {Pa : Params} (dests : list (tint_literal * block_id)) :
   = raise_ret (List.map (@eval_one_switch_dest Pa) dests).
 Proof.
   induction dests as [| [[sz x] id] rest IH]; [reflexivity |].
-  cbn [map_monad List.map eval_one_switch_dest coerce_integer_to_int ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad] in IH |- *.
+  cbn [map_monad List.map eval_one_switch_dest coerce_integer_to_int
+       ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad]
+    in IH |- *.
   rewrite IH; reflexivity.
 Qed.
 
@@ -351,11 +354,14 @@ Proof.
         | _ => idtac
         end.
       destruct (VellvmIntegers.equ bit VellvmIntegers.one).
-      * apply ruttc_ret; constructor; split; [reflexivity | cbn; left; reflexivity].
-      * apply ruttc_ret; constructor; split; [reflexivity | cbn; right; left; reflexivity].
+      * apply ruttc_ret; constructor; split;
+          [reflexivity | cbn; left; reflexivity].
+      * apply ruttc_ret; constructor; split;
+          [reflexivity | cbn; right; left; reflexivity].
     + apply refine_cfg_raiseUB.
   - (* TERM_Br_1 *)
-    apply ruttc_ret; constructor; split; [reflexivity | cbn; left; reflexivity].
+    apply ruttc_ret; constructor; split;
+      [reflexivity | cbn; left; reflexivity].
   - (* TERM_Switch *)
     eapply ruttc_bind; [apply refine_cfg_refl | intros sel _ <-].
     destruct (dvalue_is_poison sel); [apply refine_cfg_raiseUB |].
@@ -471,7 +477,9 @@ Proof.
   - destruct (Pos.eqb sz sz') eqn:Esz; [| intros H; discriminate H].
     apply Pos.eqb_eq in Esz; subst sz'.
     destruct (Pos.eq_dec sz sz) as [Heq | Hneq]; [| exfalso; exact (Hneq eq_refl)].
-    rewrite (pos_uip Heq); cbn [eq_rec_r eq_rec eq_rect_r eq_rect eq_ind eq_ind_r eq_sym VellvmIntegers.cmp VellvmIntegers.VInt_Bounded].
+    rewrite (pos_uip Heq);
+      cbn [eq_rec_r eq_rec eq_rect_r eq_rect eq_ind eq_ind_r eq_sym
+           VellvmIntegers.cmp VellvmIntegers.VInt_Bounded].
     destruct (@Integers.cmp sz Ceq val (@Integers.repr sz (denote_int_syntax x'))).
     + intros H; inversion H; reflexivity.
     + exact IH.
@@ -1374,7 +1382,9 @@ Proof.
               (from1 = blk_id b2 /\ from2 = blk_id b1) \/
               (blk_id b1 = init_id /\ from1 = blk_id b1 /\ from2 = blk_id b1)).
     { destruct Hfrom_cases as [H1 | [H2 | [_ H3]]];
-        [left; exact H1 | right; left; exact H2 | right; right; exact H3]. }
+        [ left; exact H1
+        | right; left; exact H2
+        | right; right; exact H3 ]. }
     pose proof (find_block_coalesce_merged bks b1 b2 Hnd Hin1 Hid12) as Hfind1'.
     rewrite (denote_ocfg_coalesce_lhs_euttge va bks from1 (blk_id b1) (blk_id b2)
                b1 b2 iid1 md1 Hfind1 Hterm1 Hfind2).
@@ -1390,7 +1400,9 @@ Proof.
         { intros Heq; subst t1; eapply (Huniq b2 Hin2); [congruence | exact Hout]. }
         assert (Hnext : coalesce_rel init_id (blk_id b1) (blk_id b2)
                           (blk_id b2, t1) (blk_id b1, t1)).
-        { split; [reflexivity | split; [exact Ht_nid2 | right; left; split; reflexivity]]. }
+        { split;
+            [ reflexivity
+            | split; [exact Ht_nid2 | right; left; split; reflexivity] ]. }
         gstep; constructor; gfinal; left; exact (CIH _ _ Hnext).
       * gstep; constructor; constructor; reflexivity.
   - (* Lockstep single-block step for [src1 <> blk_id b1] and [src1 <> blk_id b2]. *)

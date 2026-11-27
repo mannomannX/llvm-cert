@@ -132,7 +132,8 @@ Proof.
   destruct cv as [sz val]; cbn [const_to_lit_exp].
   destruct (Pos.eq_dec sz 1%positive) as [Heq | Hne].
   - rewrite <- (sccp_eq_sym_involutive Heq).
-    revert val; generalize (Logic.eq_sym Heq); clear Heq; intros p; destruct p; intros val.
+    revert val; generalize (Logic.eq_sym Heq); clear Heq;
+      intros p; destruct p; intros val.
     cbn [eq_rect eq_sym]; intros H; inversion H; subst dt_cv e_lit; clear H.
     cbn [eval_cert_exp].
     pose proof (sccp_bit_int_1_cases val) as Hcases.
@@ -181,7 +182,8 @@ Proof.
   destruct cv as [sz val]; cbn [const_to_lit_exp] in Elit.
   destruct (Pos.eq_dec sz 1%positive) as [Heq | Hne].
   - revert Elit; rewrite <- (sccp_eq_sym_involutive Heq).
-    revert val; generalize (Logic.eq_sym Heq); clear Heq; intros p; destruct p; intros val Elit.
+    revert val; generalize (Logic.eq_sym Heq); clear Heq;
+      intros p; destruct p; intros val Elit.
     cbn [eq_rect eq_sym] in Elit; inversion Elit; subst; reflexivity.
   - destruct (sccp_z_to_lit_checked (@Integers.unsigned sz val)); [| discriminate].
     inversion Elit; subst; reflexivity.
@@ -623,7 +625,8 @@ Section ConstEvalSound.
     destruct cv as [sz val]; cbn [const_to_lit_exp].
     destruct (Pos.eq_dec sz 1%positive) as [Heq | Hne].
     - rewrite <- (sccp_eq_sym_involutive Heq).
-      revert val; generalize (Logic.eq_sym Heq); clear Heq; intros p; destruct p; intros val.
+      revert val; generalize (Logic.eq_sym Heq); clear Heq;
+        intros p; destruct p; intros val.
       cbn [eq_rect eq_sym]; intros H; inversion H; subst dt_cv e_lit; clear H.
       pose proof (sccp_bit_int_1_cases val) as Hcases.
       destruct (@Integers.unsigned 1 val =? 1)%Z; subst val; reflexivity.
@@ -1016,7 +1019,9 @@ Section SCCPSimulation.
     unfold withCall, lread, ITree.trigger.
     pstep; apply CLS_Step; unfold cls_step_body.
     rewrite !observe_translate;
-      cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1].
+      cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+           cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun
+           case_ Case_sum1 case_sum1].
     right; right.
     split; [reflexivity | split; [exact Hlk |]].
     intros v _; left.
@@ -1045,7 +1050,9 @@ Section SCCPSimulation.
     unfold withCall, draw, ITree.trigger.
     pstep; apply CLS_Step; unfold cls_step_body.
     rewrite !observe_translate;
-      cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1].
+      cbn [observe subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+           cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun
+           case_ Case_sum1 case_sum1].
     right; left; split; [reflexivity | split; [apply EqE_CFG_refl |]].
     intros a1 a2 Ha _; apply EqA_CFG_eq in Ha; subst a2.
     left; apply cfg_local_sim_withCall_ret; repeat split; reflexivity.
@@ -1577,8 +1584,9 @@ Section SCCPSimulation.
       destruct b; try discriminate H.
       inversion H; subst cv; clear H.
       cbn [denote_exp' denote_exp denote_int_syntax_as_int coerce_integer_to_int
-           VellvmIntegers.repr VellvmIntegers.VInt_Bounded ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret EOU_monad
-           EOU_to_itree const_to_dvalue].
+           VellvmIntegers.repr VellvmIntegers.VInt_Bounded
+           ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret
+           EOU_monad EOU_to_itree const_to_dvalue].
       apply evals_local_to_withCall_ret.
     - (* EXP_Bool *)
       intros b top cv H; cbn [eval_cert_exp] in H; inversion H; subst cv; clear H.
@@ -1621,7 +1629,8 @@ Section SCCPSimulation.
       destruct (eval_cert_exp cm defs (Some dt_c) cnd) as [[sz_c vc] |] eqn:Ec; [| discriminate H].
       destruct (Pos.eq_dec sz_c 1%positive) as [Heq | _]; [| discriminate H].
       revert H; rewrite <- (sccp_eq_sym_involutive Heq).
-      revert vc Ec; generalize (Logic.eq_sym Heq); clear Heq; intros p; destruct p; intros vc Ec H.
+      revert vc Ec; generalize (Logic.eq_sym Heq); clear Heq;
+        intros p; destruct p; intros vc Ec H.
       cbn [eq_rect eq_sym] in H.
       cbn [denote_exp' denote_exp].
       eapply evals_local_to_withCall_bind; [apply (IHc (Some dt_c) (CInt 1 vc) Ec) |].
@@ -2124,6 +2133,188 @@ Section SCCPSimulation.
     - intros ? ? _ _ (-> & -> & _); apply cfg_local_sim_ret; repeat split; reflexivity.
   Qed.
 
+  Local Lemma denote_instr_call_sim (cm : rmap const_val) (cur_defs : list raw_id)
+    (iid : instr_id) (dt : dtyp) (f : exp dtyp)
+    (args : list (texp dtyp * list param_attr))
+    (anns : list (annotation dtyp)) (obs : list (@operand_bundle dtyp))
+    (md : list (metadata dtyp))
+    (va : option (@ptr (@PROV PaV) (@PTR PaV))) (env : @local_env PaV) :
+    check_sccp_instr cm cur_defs (iid, INSTR_Call (dt, f) args anns obs, md) = true ->
+    env_matches_cert cm cur_defs env ->
+    cfg_local_sim
+      (fun e1' e2' _ _ =>
+         e1' = e2' /\
+         env_matches_cert cm
+           (sccp_instr_defs (iid, INSTR_Call (dt, f) args anns obs, md) ++ cur_defs) e1' /\
+         fargs_preserved cm env e1')
+      env env
+      (denote_instr (iid, INSTR_Call (dt, f) args anns obs, md) va)
+      (denote_instr
+         (iid, sccp_rewrite_instr cm cur_defs (INSTR_Call (dt, f) args anns obs), md) va).
+  Proof using.
+    intros Hchk Henv.
+    destruct iid as [id | vid];
+      cbn [sccp_rewrite_instr]; unfold denote_instr; cbv beta iota zeta;
+      (eapply cfg_local_sim_bind;
+         [apply (denote_call_args_sim cm cur_defs env Henv args _) |];
+       intros ? ? vs _ (-> & -> & <-);
+       eapply cfg_local_sim_bind;
+         [apply (denote_operand_bundles_sim cm cur_defs env Henv _ f obs) |];
+       intros ? ? _ _ (-> & -> & _);
+       eapply cfg_local_sim_bind with
+         (RR := fun e1' e2' r1 r2 => e1' = env /\ e2' = env /\ r1 = r2);
+       [ destruct (intrinsic_exp f) as [s |];
+         [ apply cfg_local_sim_intrinsic_sync
+         | eapply cfg_local_sim_bind; [apply denote_exp'_refl_sim |];
+           intros ? ? fv _ (-> & -> & <-); apply cfg_local_sim_call_sync ]
+       | intros ? ? res _ (-> & -> & <-);
+         eapply cfg_local_sim_bind; [apply cfg_local_sim_check_call_return_sync |];
+         intros ? ? res' _ (-> & -> & <-);
+         destruct res' as [exc | dv];
+         [ eapply cfg_local_sim_bind;
+             [apply cfg_local_sim_raiseLLVM_sync with
+                (RR := fun _ _ (_ _ : @dvalue PaV) => False) |];
+           intros ? ? ? ? []
+         | eapply cfg_local_sim_bind;
+             [apply cfg_local_sim_ret;
+              instantiate (1 := fun e1' e2' r1 r2 => e1' = env /\ e2' = env /\ r1 = dv /\ r2 = dv);
+              repeat split; reflexivity |];
+           intros ? ? ? ? (-> & -> & -> & ->) ] ]).
+    - cbn [sccp_instr_defs app check_sccp_instr] in Hchk |- *.
+      destruct (RM.find id cm) eqn:Ef; [discriminate Hchk |].
+      eapply cfg_local_sim_weaken; [| apply cfg_local_sim_lwrite_both].
+      intros ? ? _ _ (-> & -> & _); split; [reflexivity |].
+      split; [apply (env_matches_cert_add_none_cons cm cur_defs id dv env Ef Henv)
+             | apply fargs_preserved_add].
+    - cbn [sccp_instr_defs app].
+      apply cfg_local_sim_ret;
+        split; [reflexivity | split; [exact Henv | apply fargs_preserved_refl]].
+  Qed.
+
+  Local Lemma denote_instr_cmpxchg_sim (cm : rmap const_val) (cur_defs : list raw_id)
+    (iid : instr_id) (cpx : cmpxchg dtyp) (md : list (metadata dtyp))
+    (va : option (@ptr (@PROV PaV) (@PTR PaV))) (env : @local_env PaV) :
+    check_sccp_instr cm cur_defs (iid, INSTR_AtomicCmpXchg cpx, md) = true ->
+    env_matches_cert cm cur_defs env ->
+    cfg_local_sim
+      (fun e1' e2' _ _ =>
+         e1' = e2' /\
+         env_matches_cert cm
+           (sccp_instr_defs (iid, INSTR_AtomicCmpXchg cpx, md) ++ cur_defs) e1' /\
+         fargs_preserved cm env e1')
+      env env
+      (denote_instr (iid, INSTR_AtomicCmpXchg cpx, md) va)
+      (denote_instr (iid, sccp_rewrite_instr cm cur_defs (INSTR_AtomicCmpXchg cpx), md) va).
+  Proof using.
+    intros Hchk Henv.
+    destruct iid as [id | vid];
+      [| cbn [sccp_rewrite_instr]; destruct (c_ptr cpx), (c_cmp cpx), (c_new cpx);
+         unfold denote_instr; cbv beta iota zeta; apply cfg_local_sim_raise_sync].
+    cbn [check_sccp_instr] in Hchk.
+    destruct (RM.find id cm) eqn:Ef; [discriminate Hchk |].
+    destruct cpx as [cw cv_f [ptr_ty ptr_val] [cmp_ty cmp_val] [new_ty new_val] cs_o cso cfo cal].
+    cbn [sccp_rewrite_instr sccp_instr_defs app denote_instr denote_cmpxchg
+         c_ptr c_cmp c_new c_align].
+    destruct (dtyp_eq_dec cmp_ty new_ty) as [<- | _]; [| apply cfg_local_sim_raise_sync].
+    eapply cfg_local_sim_bind;
+      [apply (subst_exp_at_sim cm cur_defs env Henv ptr_val (Some ptr_ty)) |].
+    intros ? ? ptr_v _ (-> & -> & <-).
+    eapply cfg_local_sim_bind;
+      [apply (subst_exp_at_sim cm cur_defs env Henv cmp_val (Some cmp_ty)) |].
+    intros ? ? cmp_v _ (-> & -> & <-).
+    eapply cfg_local_sim_bind;
+      [apply (subst_exp_at_sim cm cur_defs env Henv new_val (Some cmp_ty)) |].
+    intros ? ? new_v _ (-> & -> & <-).
+    eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
+    intros ? ? _ _ (-> & -> & _).
+    eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
+    intros ? ? loaded_v _ (-> & -> & <-).
+    eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
+    intros ? ? dv _ (-> & -> & <-).
+    destruct dv as [db | |];
+      [| apply cfg_local_sim_raise_sync | apply cfg_local_sim_raise_sync].
+    destruct db as [| sz cb | | | | | |];
+      [apply cfg_local_sim_raise_sync | | apply cfg_local_sim_raise_sync
+      | apply cfg_local_sim_raise_sync | apply cfg_local_sim_raise_sync
+      | | apply cfg_local_sim_raise_sync | apply cfg_local_sim_raise_sync].
+    - destruct sz as [p | p |];
+        [apply cfg_local_sim_raise_sync | apply cfg_local_sim_raise_sync |].
+      match goal with |- context [if ?b then _ else _] => destruct b end.
+      + eapply cfg_local_sim_bind; [apply cfg_local_sim_store_sync |].
+        intros ? ? _ _ (-> & -> & _).
+        eapply cfg_local_sim_weaken; [| apply cfg_local_sim_lwrite_both].
+        intros ? ? _ _ (-> & -> & _); split; [reflexivity |].
+        split; [apply (env_matches_cert_add_none_cons cm cur_defs id _ env Ef Henv)
+               | apply fargs_preserved_add].
+      + eapply cfg_local_sim_weaken; [| apply cfg_local_sim_lwrite_both].
+        intros ? ? _ _ (-> & -> & _); split; [reflexivity |].
+        split; [apply (env_matches_cert_add_none_cons cm cur_defs id _ env Ef Henv)
+               | apply fargs_preserved_add].
+    - apply cfg_local_sim_raiseUB_cut.
+  Qed.
+
+  Local Lemma denote_instr_vaarg_sim (cm : rmap const_val) (cur_defs : list raw_id)
+    (iid : instr_id) (t : dtyp) (ptr_exp : exp dtyp) (argty : dtyp)
+    (md : list (metadata dtyp))
+    (va : option (@ptr (@PROV PaV) (@PTR PaV))) (env : @local_env PaV) :
+    check_sccp_instr cm cur_defs (iid, INSTR_VAArg (t, ptr_exp) argty, md) = true ->
+    env_matches_cert cm cur_defs env ->
+    cfg_local_sim
+      (fun e1' e2' _ _ =>
+         e1' = e2' /\
+         env_matches_cert cm
+           (sccp_instr_defs (iid, INSTR_VAArg (t, ptr_exp) argty, md) ++ cur_defs) e1' /\
+         fargs_preserved cm env e1')
+      env env
+      (denote_instr (iid, INSTR_VAArg (t, ptr_exp) argty, md) va)
+      (denote_instr (iid, sccp_rewrite_instr cm cur_defs (INSTR_VAArg (t, ptr_exp) argty), md) va).
+  Proof using.
+    intros Hchk Henv.
+    destruct iid as [id | vid].
+    - cbn [check_sccp_instr] in Hchk.
+      destruct (RM.find id cm) eqn:Ef; [discriminate Hchk |].
+      cbn [sccp_rewrite_instr sccp_instr_defs app];
+        unfold denote_instr; cbv beta iota zeta;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+      eapply cfg_local_sim_bind;
+        [apply (subst_exp_at_sim cm cur_defs env Henv ptr_exp
+                  (Some (DTYPE_Base DTYPE_Pointer))) |].
+      intros ? ? ptr_to_args _ (-> & -> & <-).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
+      intros ? ? vargs _ (-> & -> & <-).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
+      intros ? ? retv _ (-> & -> & <-).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
+      intros ? ? ix _ (-> & -> & <-).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
+      intros ? ? args' _ (-> & -> & <-).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_store_sync |].
+      intros ? ? _ _ (-> & -> & _).
+      eapply cfg_local_sim_weaken; [| apply cfg_local_sim_lwrite_both].
+      intros ? ? _ _ (-> & -> & _); split; [reflexivity |].
+      split; [apply (env_matches_cert_add_none_cons cm cur_defs id retv env Ef Henv)
+             | apply fargs_preserved_add].
+    - cbn [sccp_rewrite_instr sccp_instr_defs app];
+        unfold denote_instr; cbv beta iota zeta;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+      eapply cfg_local_sim_bind;
+        [apply (subst_exp_at_sim cm cur_defs env Henv ptr_exp
+                  (Some (DTYPE_Base DTYPE_Pointer))) |].
+      intros ? ? ptr_to_args _ (-> & -> & <-).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
+      intros ? ? vargs _ (-> & -> & <-).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
+      intros ? ? retv _ (-> & -> & <-).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
+      intros ? ? ix _ (-> & -> & <-).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
+      intros ? ? args' _ (-> & -> & <-).
+      eapply cfg_local_sim_bind; [apply cfg_local_sim_store_sync |].
+      intros ? ? _ _ (-> & -> & _).
+      apply cfg_local_sim_ret;
+        split; [reflexivity | split; [exact Henv | apply fargs_preserved_refl]].
+  Qed.
+
   Lemma denote_instr_sim (cm : rmap const_val) (cur_defs : list raw_id)
     (ii : instr_id * instr dtyp * list (metadata dtyp))
     (va : option (@ptr (@PROV PaV) (@PTR PaV))) (env : @local_env PaV) :
@@ -2173,42 +2364,7 @@ Section SCCPSimulation.
         split; [apply (env_matches_cert_add_none_cons cm cur_defs id uv env Ef Henv)
                | apply fargs_preserved_add].
     - (* INSTR_Call *)
-      destruct iid as [id | vid];
-        cbn [sccp_rewrite_instr]; unfold denote_instr; cbv beta iota zeta;
-        (eapply cfg_local_sim_bind;
-           [apply (denote_call_args_sim cm cur_defs env Henv args _) |];
-         intros ? ? vs _ (-> & -> & <-);
-         eapply cfg_local_sim_bind;
-           [apply (denote_operand_bundles_sim cm cur_defs env Henv _ f obs) |];
-         intros ? ? _ _ (-> & -> & _);
-         eapply cfg_local_sim_bind with
-           (RR := fun e1' e2' r1 r2 => e1' = env /\ e2' = env /\ r1 = r2);
-         [ destruct (intrinsic_exp f) as [s |];
-           [ apply cfg_local_sim_intrinsic_sync
-           | eapply cfg_local_sim_bind; [apply denote_exp'_refl_sim |];
-             intros ? ? fv _ (-> & -> & <-); apply cfg_local_sim_call_sync ]
-         | intros ? ? res _ (-> & -> & <-);
-           eapply cfg_local_sim_bind; [apply cfg_local_sim_check_call_return_sync |];
-           intros ? ? res' _ (-> & -> & <-);
-           destruct res' as [exc | dv];
-           [ eapply cfg_local_sim_bind;
-               [apply cfg_local_sim_raiseLLVM_sync with
-                  (RR := fun _ _ (_ _ : @dvalue PaV) => False) |];
-             intros ? ? ? ? []
-           | eapply cfg_local_sim_bind;
-               [apply cfg_local_sim_ret;
-                instantiate (1 := fun e1' e2' r1 r2 => e1' = env /\ e2' = env /\ r1 = dv /\ r2 = dv);
-                repeat split; reflexivity |];
-             intros ? ? ? ? (-> & -> & -> & ->) ] ]).
-      + cbn [sccp_instr_defs app check_sccp_instr] in Hchk |- *.
-        destruct (RM.find id cm) eqn:Ef; [discriminate Hchk |].
-        eapply cfg_local_sim_weaken; [| apply cfg_local_sim_lwrite_both].
-        intros ? ? _ _ (-> & -> & _); split; [reflexivity |].
-        split; [apply (env_matches_cert_add_none_cons cm cur_defs id dv env Ef Henv)
-               | apply fargs_preserved_add].
-      + cbn [sccp_instr_defs app].
-        apply cfg_local_sim_ret;
-          split; [reflexivity | split; [exact Henv | apply fargs_preserved_refl]].
+      exact (denote_instr_call_sim cm cur_defs iid dt f args anns obs md va env Hchk Henv).
     - (* INSTR_Alloca *)
       destruct iid as [id | vid]; cbn [sccp_rewrite_instr sccp_instr_defs app];
         [| unfold denote_instr; cbv beta iota zeta; apply cfg_local_sim_raise_sync].
@@ -2297,50 +2453,7 @@ Section SCCPSimulation.
         apply cfg_local_sim_ret;
         (split; [reflexivity | split; [exact Henv | apply fargs_preserved_refl]]).
     - (* INSTR_AtomicCmpXchg *)
-      destruct iid as [id | vid];
-        [| cbn [sccp_rewrite_instr]; destruct (c_ptr cpx), (c_cmp cpx), (c_new cpx);
-           unfold denote_instr; cbv beta iota zeta; apply cfg_local_sim_raise_sync].
-      cbn [check_sccp_instr] in Hchk.
-      destruct (RM.find id cm) eqn:Ef; [discriminate Hchk |].
-      destruct cpx as [cw cv_f [ptr_ty ptr_val] [cmp_ty cmp_val] [new_ty new_val] cs_o cso cfo cal].
-      cbn [sccp_rewrite_instr sccp_instr_defs app denote_instr denote_cmpxchg
-           c_ptr c_cmp c_new c_align].
-      destruct (dtyp_eq_dec cmp_ty new_ty) as [<- | _]; [| apply cfg_local_sim_raise_sync].
-      eapply cfg_local_sim_bind;
-        [apply (subst_exp_at_sim cm cur_defs env Henv ptr_val (Some ptr_ty)) |].
-      intros ? ? ptr_v _ (-> & -> & <-).
-      eapply cfg_local_sim_bind;
-        [apply (subst_exp_at_sim cm cur_defs env Henv cmp_val (Some cmp_ty)) |].
-      intros ? ? cmp_v _ (-> & -> & <-).
-      eapply cfg_local_sim_bind;
-        [apply (subst_exp_at_sim cm cur_defs env Henv new_val (Some cmp_ty)) |].
-      intros ? ? new_v _ (-> & -> & <-).
-      eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
-      intros ? ? _ _ (-> & -> & _).
-      eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
-      intros ? ? loaded_v _ (-> & -> & <-).
-      eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
-      intros ? ? dv _ (-> & -> & <-).
-      destruct dv as [db | |];
-        [| apply cfg_local_sim_raise_sync | apply cfg_local_sim_raise_sync].
-      destruct db as [| sz cb | | | | | |];
-        [apply cfg_local_sim_raise_sync | | apply cfg_local_sim_raise_sync
-        | apply cfg_local_sim_raise_sync | apply cfg_local_sim_raise_sync
-        | | apply cfg_local_sim_raise_sync | apply cfg_local_sim_raise_sync].
-      + destruct sz as [p | p |];
-          [apply cfg_local_sim_raise_sync | apply cfg_local_sim_raise_sync |].
-        match goal with |- context [if ?b then _ else _] => destruct b end.
-        * eapply cfg_local_sim_bind; [apply cfg_local_sim_store_sync |].
-          intros ? ? _ _ (-> & -> & _).
-          eapply cfg_local_sim_weaken; [| apply cfg_local_sim_lwrite_both].
-          intros ? ? _ _ (-> & -> & _); split; [reflexivity |].
-          split; [apply (env_matches_cert_add_none_cons cm cur_defs id _ env Ef Henv)
-                 | apply fargs_preserved_add].
-        * eapply cfg_local_sim_weaken; [| apply cfg_local_sim_lwrite_both].
-          intros ? ? _ _ (-> & -> & _); split; [reflexivity |].
-          split; [apply (env_matches_cert_add_none_cons cm cur_defs id _ env Ef Henv)
-                 | apply fargs_preserved_add].
-      + apply cfg_local_sim_raiseUB_cut.
+      exact (denote_instr_cmpxchg_sim cm cur_defs iid cpx md va env Hchk Henv).
     - (* INSTR_AtomicRMW *)
       destruct iid as [id | vid];
         [| cbn [sccp_rewrite_instr]; destruct (a_ptr armw), (a_val armw);
@@ -2370,49 +2483,7 @@ Section SCCPSimulation.
       split; [apply (env_matches_cert_add_none_cons cm cur_defs id loaded_v env Ef Henv)
              | apply fargs_preserved_add].
     - (* INSTR_VAArg *)
-      destruct iid as [id | vid].
-      + cbn [check_sccp_instr] in Hchk.
-        destruct (RM.find id cm) eqn:Ef; [discriminate Hchk |].
-        cbn [sccp_rewrite_instr sccp_instr_defs app];
-          unfold denote_instr; cbv beta iota zeta;
-          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-        eapply cfg_local_sim_bind;
-          [apply (subst_exp_at_sim cm cur_defs env Henv ptr_exp
-                    (Some (DTYPE_Base DTYPE_Pointer))) |].
-        intros ? ? ptr_to_args _ (-> & -> & <-).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
-        intros ? ? vargs _ (-> & -> & <-).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
-        intros ? ? retv _ (-> & -> & <-).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
-        intros ? ? ix _ (-> & -> & <-).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
-        intros ? ? args' _ (-> & -> & <-).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_store_sync |].
-        intros ? ? _ _ (-> & -> & _).
-        eapply cfg_local_sim_weaken; [| apply cfg_local_sim_lwrite_both].
-        intros ? ? _ _ (-> & -> & _); split; [reflexivity |].
-        split; [apply (env_matches_cert_add_none_cons cm cur_defs id retv env Ef Henv)
-               | apply fargs_preserved_add].
-      + cbn [sccp_rewrite_instr sccp_instr_defs app];
-          unfold denote_instr; cbv beta iota zeta;
-          cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-        eapply cfg_local_sim_bind;
-          [apply (subst_exp_at_sim cm cur_defs env Henv ptr_exp
-                    (Some (DTYPE_Base DTYPE_Pointer))) |].
-        intros ? ? ptr_to_args _ (-> & -> & <-).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
-        intros ? ? vargs _ (-> & -> & <-).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_load_sync |].
-        intros ? ? retv _ (-> & -> & <-).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
-        intros ? ? ix _ (-> & -> & <-).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_EOU_sync |].
-        intros ? ? args' _ (-> & -> & <-).
-        eapply cfg_local_sim_bind; [apply cfg_local_sim_store_sync |].
-        intros ? ? _ _ (-> & -> & _).
-        apply cfg_local_sim_ret;
-          split; [reflexivity | split; [exact Henv | apply fargs_preserved_refl]].
+      exact (denote_instr_vaarg_sim cm cur_defs iid t ptr_exp argty md va env Hchk Henv).
     - (* INSTR_LandingPad *)
       destruct iid as [id | vid]; cbn [sccp_rewrite_instr sccp_instr_defs app];
         [| unfold denote_instr; cbv beta iota zeta; apply cfg_local_sim_raise_sync].
@@ -2637,7 +2708,8 @@ Section SCCPSimulation.
            VellvmIntegers.cmp VellvmIntegers.VInt_Bounded
            ExtLib.Structures.Monad.ret EOU_monad List.map snd].
       destruct (@Integers.cmp sz1 Ceq i1 i2).
-      + intros H; inversion H; subst bid; right; left; reflexivity.
+      + intros H; inversion H; subst bid;
+          right; left; reflexivity.
       + intros H; destruct (IH H) as [-> | Hin];
           [left; reflexivity | right; right; exact Hin].
   Qed.
@@ -2767,7 +2839,8 @@ Section SCCPSimulation.
             [| discriminate Etgt].
           destruct (Pos.eq_dec sz 1%positive) as [Heq | _]; [| discriminate Etgt].
           revert Etgt; rewrite <- (sccp_eq_sym_involutive Heq).
-          revert vc Eev; generalize (Logic.eq_sym Heq); clear Heq; intros p; destruct p; intros vc Eev Etgt.
+          revert vc Eev; generalize (Logic.eq_sym Heq); clear Heq;
+            intros p; destruct p; intros vc Eev Etgt.
           cbn [eq_rect eq_sym] in Etgt; inversion Etgt; subst taken; clear Etgt.
           unfold denote_terminator; cbv beta iota zeta.
           eapply evals_local_to_bind_sim_l;

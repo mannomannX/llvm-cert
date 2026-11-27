@@ -87,7 +87,9 @@ Import Logic.
 Set Default Goal Selector "!".
 Unset Implicit Arguments.
 
-From CertPasses Require Export Mem2RegSpec Mem2RegModel Mem2RegMemBase Mem2RegGhostInv Mem2RegExprLift Mem2RegCpsSSA Mem2RegLeafKnot Mem2RegStage2 Mem2RegStage1.
+From CertPasses Require Export
+  Mem2RegSpec Mem2RegModel Mem2RegMemBase Mem2RegGhostInv
+  Mem2RegExprLift Mem2RegCpsSSA Mem2RegLeafKnot Mem2RegStage2 Mem2RegStage1.
 
 #[local] Notation refine_prov_bind := m2r_refine_prov_bind (only parsing).
 
@@ -583,7 +585,8 @@ Section MemoryAndSerialization.
          eapply denote_call_args_stage1_exc_sim; [exact Hinv |];
          intros x Hx; apply Huse_vars;
          cbn [m2r_code_entry_uses full_instr_uses];
-         apply in_app_iff; left; apply in_app_iff; right; apply in_app_iff; left; exact Hx
+         apply in_app_iff; left; apply in_app_iff;
+         right; apply in_app_iff; left; exact Hx
         | intros U1 s1_a vs1 s2_a vs2 _ (-> & -> & -> & <-);
           eapply s1_cps_cfg_exc_bind with
             (RA := fun U' s1' s2' (_ _ : unit) =>
@@ -622,7 +625,8 @@ Section MemoryAndSerialization.
                         (fun '(s2', y2) => Tau (k_c2 (s2', inr y2)));
                  refine (conj Hinv (conj Hgenv (conj _ (conj _ _))));
                  [intros U_c [s1_c rv1] [s2_c rv2] Hinc_c Hpost_c;
-                  apply m2r_paco_fold; eapply RP_TauL; [reflexivity |]; eapply RP_TauR; [reflexivity |];
+                  apply m2r_paco_fold; eapply RP_TauL; [reflexivity |];
+                  eapply RP_TauR; [reflexivity |];
                   apply m2r_paco_unfold;
                   exact (Hk_c U_c (s1_c, inr rv1) (s2_c, inr rv2) Hinc_c Hpost_c)
                  | reflexivity | reflexivity]]
@@ -775,7 +779,10 @@ Section MemoryAndSerialization.
           assert (Hvars1 : forall x, x <> p -> Maps.lookup x (stack_vars sf1_m) = Maps.lookup x (stack_vars sf2_m)).
           { intros x Hne; destruct Hsf_step as [[-> ->] | (id0 & v & _ & -> & ->)];
               [exact (Hvars x Hne) |].
-            cbn [stack_vars upd_local_sf Maps.lookup Maps.add Map_rmap]; destruct (raw_id_eqb x id0) eqn:Ex_id; [apply raw_id_eqb_spec in Ex_id; subst x | apply raw_id_eqb_neq in Ex_id; rename Ex_id into Hx_id];
+            cbn [stack_vars upd_local_sf Maps.lookup Maps.add Map_rmap];
+            destruct (raw_id_eqb x id0) eqn:Ex_id;
+              [ apply raw_id_eqb_spec in Ex_id; subst x
+              | apply raw_id_eqb_neq in Ex_id; rename Ex_id into Hx_id ];
               [rewrite !RMF.F.add_eq_o by reflexivity; reflexivity
               | rewrite !RMF.F.add_neq_o by (intros Heq'; exact (Hx_id (Logic.eq_sym Heq'))); exact (Hvars x Hne)]. }
           assert (Hsplit_rest : blk_code bk = (pre_c ++ [im]) ++ rest ++ post_c)
@@ -905,7 +912,9 @@ Section MemoryAndSerialization.
           assert (Hlv_ne_cur : cur_reg <> lv_reg)
             by (intros Heq; exact (fresh_name_not_in "mlv" (p :: cur_reg :: avoid) (or_intror (or_introl Heq)))).
           assert (Hlv_nin0 : ~ In lv_reg avoid0)
-            by (intros Hin0; exact (fresh_name_not_in "mlv" (p :: cur_reg :: avoid) (or_intror (or_intror (Hinc_av _ Hin0))))).
+            by (intros Hin0;
+                exact (fresh_name_not_in "mlv" (p :: cur_reg :: avoid)
+                         (or_intror (or_intror (Hinc_av _ Hin0))))).
           assert (Hdst_nsafe : ~ In dst safe_no_p).
           { intros Hin_s.
             destruct (unique_alloca_code_def_is_alloca fargs bks dst Hnd_bks (Hsub dst Hin_s)
@@ -927,7 +936,9 @@ Section MemoryAndSerialization.
           * intros U1 s1_m _ s2_m _ _ (dv_ld & -> & _ & _ & -> & ->).
             assert (Hlk_p1 : Maps.lookup p (Maps.add dst dv_ld (stack_vars sf1)) =
                              Some (DVALUE_Base (DVALUE_Pointer (gs_pt gs))))
-              by (cbn [Maps.lookup Maps.add Map_rmap]; rewrite RMF.F.add_neq_o by (intros ->; exact (Hdst_ne_p Logic.eq_refl)); exact Hlk_p).
+              by (cbn [Maps.lookup Maps.add Map_rmap];
+                  rewrite RMF.F.add_neq_o by (intros ->; exact (Hdst_ne_p Logic.eq_refl));
+                  exact Hlk_p).
             assert (Hlk_cur1 : Maps.lookup cur_reg
                                  (Maps.add dst dv_ld
                                     (Maps.add lv_reg (DVALUE_Array true [DVALUE_Base (gs_db gs)]) (stack_vars sf2))) =
@@ -946,7 +957,10 @@ Section MemoryAndSerialization.
                                Maps.lookup x
                                  (Maps.add dst dv_ld
                                     (Maps.add lv_reg (DVALUE_Array true [DVALUE_Base (gs_db gs)]) (stack_vars sf2)))).
-            { intros x Hx Hne; cbn [Maps.lookup Maps.add Map_rmap]; destruct (raw_id_eqb x dst) eqn:Exd; [apply raw_id_eqb_spec in Exd; subst x | apply raw_id_eqb_neq in Exd; rename Exd into Hxd];
+            { intros x Hx Hne; cbn [Maps.lookup Maps.add Map_rmap].
+              destruct (raw_id_eqb x dst) eqn:Exd;
+                [ apply raw_id_eqb_spec in Exd; subst x
+                | apply raw_id_eqb_neq in Exd; rename Exd into Hxd ];
                 [rewrite !RMF.F.add_eq_o by reflexivity; reflexivity
                 | rewrite !RMF.F.add_neq_o
                     by (first [intros Heq'; exact (Hxd (Logic.eq_sym Heq'))
@@ -972,7 +986,9 @@ Section MemoryAndSerialization.
             assert (Hsv_nin0 : ~ In sv_reg avoid0)
               by (intros Hin0; exact (fresh_name_not_in "msv" (p :: avoid) (or_intror (Hinc_av _ Hin0)))).
             assert (Hst_nin0 : ~ In st_reg avoid0)
-              by (intros Hin0; exact (fresh_name_not_in "mst" (p :: sv_reg :: avoid) (or_intror (or_intror (Hinc_av _ Hin0))))).
+              by (intros Hin0;
+                  exact (fresh_name_not_in "mst" (p :: sv_reg :: avoid)
+                           (or_intror (or_intror (Hinc_av _ Hin0))))).
             assert (Hsv_nsafe : ~ In sv_reg safe_no_p)
               by (intros Hin_s; exact (Hsv_nin0 (Hsafe_av0 sv_reg Hin_s))).
             assert (Hst_nsafe : ~ In st_reg safe_no_p)
@@ -981,7 +997,8 @@ Section MemoryAndSerialization.
                       In x (full_exp_uses val_exp) ->
                       Maps.lookup x (stack_vars sf1) = Maps.lookup x (stack_vars sf2)).
             { intros x Hx; apply Hvars.
-              - apply (Hval_av0_fn x (or_introl Logic.eq_refl)); cbn [m2r_code_entry_uses full_instr_uses full_texp_uses snd];
+              - apply (Hval_av0_fn x (or_introl Logic.eq_refl));
+                  cbn [m2r_code_entry_uses full_instr_uses full_texp_uses snd];
                   apply in_app_iff; left; apply in_app_iff; left; exact Hx.
               - intros ->; exact (Hnin_p_val Hx). }
             unfold denote_code; cbn [loop_monad ExtLib.Structures.Monad.bind Monad_itree].
@@ -1065,9 +1082,13 @@ Section MemoryAndSerialization.
                  cbn [stack_vars upd_local_sf Maps.lookup Maps.add Map_rmap]; split;
                    [rewrite RMF.F.add_neq_o by (intros Heq'; exact (Hp_ne_id (Logic.eq_sym Heq'))); exact Hlk_p | split;
                    [rewrite RMF.F.add_neq_o by (intros Heq'; exact (Hcur_ne_id (Logic.eq_sym Heq'))); exact Hlk_cur |]].
-                 intros x Hx Hne; destruct (raw_id_eqb x id0) eqn:Ex_id; [apply raw_id_eqb_spec in Ex_id; subst x | apply raw_id_eqb_neq in Ex_id; rename Ex_id into Hx_id];
-                   [rewrite !RMF.F.add_eq_o by reflexivity; reflexivity
-                   | rewrite !RMF.F.add_neq_o by (intros Heq'; exact (Hx_id (Logic.eq_sym Heq'))); exact (Hvars x Hx Hne)]. }
+                 intros x Hx Hne; destruct (raw_id_eqb x id0) eqn:Ex_id;
+                   [ apply raw_id_eqb_spec in Ex_id; subst x
+                   | apply raw_id_eqb_neq in Ex_id; rename Ex_id into Hx_id ];
+                   [ rewrite !RMF.F.add_eq_o by reflexivity; reflexivity
+                   | rewrite !RMF.F.add_neq_o
+                       by (intros Heq'; exact (Hx_id (Logic.eq_sym Heq')));
+                     exact (Hvars x Hx Hne) ]. }
                destruct Hstep_env as (Hlk_p1 & Hlk_cur1 & Hvars1).
                eapply s1_cps_weaken.
                ++ exact (IH (pre_c ++ [im]) cur_reg avoid rest' er av' U1 P1 gs σ1_m σ2_m sf1_m sf2_m
@@ -1114,7 +1135,9 @@ Section MemoryAndSerialization.
         eapply refine_prov_obs_eq;
           [symmetry; apply interp_cfg_model_non_intr; reflexivity
           | symmetry; apply interp_cfg_model_non_intr; reflexivity |].
-        cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+        cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum
+             ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun
+             inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
         unfold fused_trigger_prov.
         eapply refine_prov_obs_eq;
           [symmetry; apply Eqit.bind_bind | symmetry; apply Eqit.bind_bind |].
@@ -1199,7 +1222,8 @@ Section MemoryAndSerialization.
       apply m2r_nodup_ids_spec in Hnd_bks.
       unfold s1_unprom_loop_inv in Hli; cbn zeta in Hli; fold c fargs safe_locals in Hli.
       destruct Hli as (HincU0 & P & σ1 & σ2 & sf & HincP0 & -> & -> & Hinv & Htf & Hgenv & Hsafe_loc).
-      destruct j as [bf bs]; unfold ocfg_step_body; cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+      destruct j as [bf bs]; unfold ocfg_step_body;
+        cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       rewrite ScopeTheory.ocfg_map_find_block.
       destruct (find_block (blks c) bs) as [bk |] eqn:Efb.
       - destruct (m2r_find_block_some_inv (blks c) bs bk Efb) as [Hin_bk _].
@@ -1448,6 +1472,220 @@ Section MemoryAndSerialization.
                                           (conj Hinv_pop (conj Hfs_pop Hgenv_e))))))).
     Qed.
 
+    Local Lemma s1_prom_non_entry_block_cps
+      (fargs : list local_id) (bks : ocfg dtyp) (bk_cur : block dtyp)
+      (safe_no_p avoid0 : list local_id) (p : local_id) (dt : dtyp) (phi_r : local_id)
+      (av_in : list local_id) (cd_cur' : code dtyp) (end_r : local_id) (av_out : list local_id)
+      (bf2 bs2 : block_id) (end_map : list (block_id * local_id)) (init_reg : local_id)
+      (inc_cur : list (block_id * exp dtyp)) (va : option (@ptr ProvenanceV (@PointerV IP)))
+      (fs0 : @Framestack (@ParamsV IP IPT)) (U0 P0 U P_l : list N)
+      (gs_l : ghost_slot) (G : list ghost_slot) (σ1_l σ2_l : state)
+      (sf1_l sf2_l : @stack_frame (@ParamsV IP IPT)) (fstk1 fstk2 : stack)
+      (Hnd_bks : NoDup (List.map blk_id bks))
+      (Hin_cur : In bk_cur bks)
+      (Hsub_safe : forall q,
+                     In q safe_no_p ->
+                     In q (m2r_collect_unique_allocas (fargs ++ flat_map full_block_defs bks) bks))
+      (Hsafe_av0 : incl safe_no_p avoid0)
+      (Hblk_uses_av0 : forall bk x, In bk bks -> In x (full_block_uses bk) -> In x avoid0)
+      (Hblk_defs_av0 : forall bk x, In bk bks -> In x (full_block_defs bk) -> In x avoid0)
+      (Hp_nd_bk_cur : ~ In p (full_block_defs bk_cur))
+      (Hphi_np : ~ In p (flat_map m2r_phi_entry_uses (blk_phis bk_cur)))
+      (Hcd_cur : forallb (check_code_entry_for_slot true safe_no_p p dt) (blk_code bk_cur) = true)
+      (Htm_np : ~ In p (m2r_term_entry_uses (blk_term bk_cur)))
+      (Hni_cur : m2r_non_invoke_term (snd (fst (blk_term bk_cur))) = true)
+      (Hphi_nin0 : ~ In phi_r avoid0)
+      (Hinc_avin : incl avoid0 av_in)
+      (Erw_cur : rewrite_code_for_slot p dt phi_r av_in (blk_code bk_cur) = (cd_cur', end_r, av_out))
+      (Hsc : is_scalar_dtyp dt = true)
+      (HincU_l : incl U0 U)
+      (HincP_l : incl P0 P_l)
+      (Hdt_l : gs_dt gs_l = dt)
+      (Hlk_p_l : Maps.lookup p (stack_vars sf1_l) =
+                 Some (@DVALUE_Base (@ParamsV IP IPT) (@DVALUE_Pointer (@ParamsV IP IPT) (gs_pt gs_l))))
+      (Hlk_end_l : Maps.lookup (lookup_end_reg end_map bf2 init_reg) (stack_vars sf2_l) =
+                   Some (@DVALUE_Base (@ParamsV IP IPT) (gs_db gs_l)))
+      (Hlk_end_cur : lookup_end_reg end_map bs2 init_reg = end_r)
+      (Hassoc_cur : assoc bf2 inc_cur =
+                    Some (EXP_Ident (ID_Local (lookup_end_reg end_map bf2 init_reg))))
+      (Hinv_l : stage1_mem_inv U P_l (gs_l :: G) σ1_l σ2_l)
+      (Htf_l : top_frame_prom_from fs0 gs_l G (state_memory_stack σ2_l))
+      (Hgenv_l : genv_safe P_l g0)
+      (Hsafe_l : safe_locals_env P_l safe_no_p (stack_vars sf2_l))
+      (Hvars_l : forall x, In x avoid0 -> x <> p ->
+                   Maps.lookup x (stack_vars sf1_l) = Maps.lookup x (stack_vars sf2_l)) :
+      let bk_cur' :=
+        {| blk_id       := blk_id bk_cur;
+           blk_phis     := (phi_r, Phi [] dt inc_cur, []) :: blk_phis bk_cur;
+           blk_code     := cd_cur';
+           blk_term     := blk_term bk_cur;
+           blk_comments := blk_comments bk_cur |} in
+      s1_cps s1_lfp
+        (exc_post (s1_prom_rexc fs0 U0 P0 G fstk1 fstk2)
+           (fun U_bd s1_bd s2_bd bd1 bd2 =>
+              exists (P_cd : list N) gs_cd σ1_cd σ2_cd
+                     (sf1_cd sf2_cd : @stack_frame (@ParamsV IP IPT)),
+                incl U0 U_bd /\
+                incl P0 P_cd /\
+                bd1 = bd2 /\
+                s1_bd = (σ1_cd, ((sf1_cd, fstk1), g0)) /\
+                s2_bd = (σ2_cd, ((sf2_cd, fstk2), g0)) /\
+                gs_dt gs_cd = dt /\
+                Maps.lookup p (stack_vars sf1_cd) =
+                  Some (@DVALUE_Base (@ParamsV IP IPT)
+                          (@DVALUE_Pointer (@ParamsV IP IPT) (gs_pt gs_cd))) /\
+                lookup_end_reg end_map bs2 init_reg = end_r /\
+                Maps.lookup end_r (stack_vars sf2_cd) =
+                  Some (@DVALUE_Base (@ParamsV IP IPT) (gs_db gs_cd)) /\
+                stage1_mem_inv U_bd P_cd (gs_cd :: G) σ1_cd σ2_cd /\
+                top_frame_prom_from fs0 gs_cd G (state_memory_stack σ2_cd) /\
+                genv_safe P_cd g0 /\
+                safe_locals_env P_cd safe_no_p (stack_vars sf2_cd) /\
+                (forall x, In x avoid0 -> x <> p ->
+                   Maps.lookup x (stack_vars sf1_cd) = Maps.lookup x (stack_vars sf2_cd)) /\
+                match bd1 with
+                | inl bid_target => In bid_target (m2r_block_succs bk_cur)
+                | inr _ => True
+                end))
+        U
+        (interp_cfg_exc ctx1 (denote_block bk_cur bf2 va) (σ1_l, ((sf1_l, fstk1), g0)))
+        (interp_cfg_exc ctx2 (denote_block bk_cur' bf2 va) (σ2_l, ((sf2_l, fstk2), g0))).
+    Proof using.
+      intros bk_cur'.
+      assert (Hphi_vars :
+                forall x, In x (flat_map m2r_phi_entry_uses (blk_phis bk_cur)) ->
+                  Maps.lookup x (stack_vars sf1_l) = Maps.lookup x (stack_vars sf2_l)).
+      { intros x Hx; apply Hvars_l;
+          [apply (Hblk_uses_av0 bk_cur x Hin_cur);
+           apply in_flat_map in Hx as (pe & Hpe & Hx_pe);
+           exact (m2r_phi_entry_uses_in_block bk_cur pe x Hpe Hx_pe)
+          | intros ->; exact (Hphi_np Hx)]. }
+      unfold denote_block, bk_cur'; cbn [blk_phis blk_code blk_term].
+      eapply s1_cps_cfg_exc_bind.
+      - apply refine_prov_to_s1_cps.
+        exact (denote_phis_stage1_prom_sim ctx1 ctx2
+                 (s1_prom_rexc fs0 U0 P0 G fstk1 fstk2)
+                 bf2 phi_r (lookup_end_reg end_map bf2 init_reg)
+                 dt inc_cur (blk_phis bk_cur) (DVALUE_Base (gs_db gs_l))
+                 U σ1_l σ2_l sf1_l sf2_l fstk1 fstk2 g0
+                 Hassoc_cur Hlk_end_l Hphi_vars).
+      - intros U_ph s1_ph _ s2_ph _ _ (dvs & -> & _ & _ & Hfst_dvs & -> & ->).
+        assert (Hp_nin_dvs : ~ In p (List.map fst dvs)).
+        { rewrite Hfst_dvs; intros Hp_in; apply Hp_nd_bk_cur.
+          unfold full_block_defs; apply in_app_iff; left; exact Hp_in. }
+        assert (Hphi_nin_dvs : ~ In phi_r (List.map fst dvs)).
+        { rewrite Hfst_dvs; intros Hpr_in; apply Hphi_nin0.
+          apply (Hblk_defs_av0 bk_cur phi_r Hin_cur).
+          unfold full_block_defs; apply in_app_iff; left; exact Hpr_in. }
+        assert (Hlk_p_ph :
+                  Maps.lookup p (write_phi_dvs dvs (stack_vars sf1_l)) =
+                  Some (DVALUE_Base (DVALUE_Pointer (gs_pt gs_l)))).
+        { rewrite (write_phi_dvs_lookup_not_in dvs _ p Hp_nin_dvs); exact Hlk_p_l. }
+        assert (Hlk_phi_ph :
+                  Maps.lookup phi_r
+                    (write_phi_dvs ((phi_r, DVALUE_Base (gs_db gs_l)) :: dvs) (stack_vars sf2_l)) =
+                  Some (DVALUE_Base (gs_db gs_l))).
+        { cbn [write_phi_dvs];
+          rewrite (write_phi_dvs_lookup_not_in dvs _ phi_r Hphi_nin_dvs);
+          cbn [Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity. }
+        assert (Hsafe_ph :
+                  safe_locals_env P_l safe_no_p
+                    (write_phi_dvs ((phi_r, DVALUE_Base (gs_db gs_l)) :: dvs) (stack_vars sf2_l))).
+        { apply write_phi_dvs_safe_locals; [| exact Hsafe_l].
+          intros q Hq [Heq_q | Hin_dvs].
+          - subst q; exact (Hphi_nin0 (Hsafe_av0 _ Hq)).
+          - rewrite Hfst_dvs in Hin_dvs.
+            apply in_map_iff in Hin_dvs as ([[x_ph ph_q] md_q] & <- & Hpe_in).
+            exact (unique_alloca_not_phi_def fargs bks x_ph Hnd_bks
+                     (Hsub_safe x_ph Hq) bk_cur x_ph ph_q md_q Hin_cur Hpe_in Logic.eq_refl). }
+        assert (Hvars_ph :
+                  forall x, In x avoid0 -> x <> p ->
+                    Maps.lookup x (write_phi_dvs dvs (stack_vars sf1_l)) =
+                    Maps.lookup x
+                      (write_phi_dvs ((phi_r, DVALUE_Base (gs_db gs_l)) :: dvs) (stack_vars sf2_l))).
+        { intros x Hx Hne; cbn [write_phi_dvs]; apply write_phi_dvs_lookup_agree.
+          cbn [Maps.lookup Maps.add Map_rmap];
+          rewrite RMF.F.add_neq_o by (intros ->; exact (Hphi_nin0 Hx)).
+          exact (Hvars_l x Hx Hne). }
+        assert (Hsplit_cur : blk_code bk_cur = [] ++ blk_code bk_cur ++ [])
+          by (rewrite app_nil_r; reflexivity).
+        assert (Huses_cur :
+                  forall im0 x, In im0 (blk_code bk_cur) -> In x (m2r_code_entry_uses im0) -> In x avoid0)
+          by (intros im0 x Him0 Hx; apply (Hblk_uses_av0 bk_cur x Hin_cur);
+              eapply m2r_code_entry_uses_in_block; eassumption).
+        assert (Hdefs_cur :
+                  forall im0 x,
+                    In im0 (blk_code bk_cur) -> In x (instr_id_defs (fst (fst im0))) -> In x avoid0).
+        { intros im0 x Him0 Hx; apply (Hblk_defs_av0 bk_cur x Hin_cur).
+          unfold full_block_defs; apply in_app_iff; right; apply in_app_iff; left.
+          apply in_flat_map; exists im0; split;
+            [exact Him0 | destruct im0 as [[? ?] ?]; exact Hx]. }
+        assert (Hp_nd_cd_cur :
+                  ~ In p (flat_map (fun '(iid, _, _) => instr_id_defs iid) (blk_code bk_cur))).
+        { intros Hp_in; apply Hp_nd_bk_cur; unfold full_block_defs;
+          apply in_app_iff; right; apply in_app_iff; left; exact Hp_in. }
+        eapply s1_cps_cfg_exc_bind.
+        + exact (s1_rewrite_code_exc_cps
+                   (s1_prom_rexc fs0 U0 P0 G fstk1 fstk2)
+                   avoid0 fargs bks bk_cur [] (blk_code bk_cur) []
+                   safe_no_p p dt phi_r av_in cd_cur' end_r av_out
+                   va va fs0 U P_l gs_l G σ1_l σ2_l
+                   (upd_local_sf sf1_l (write_phi_dvs dvs (stack_vars sf1_l)))
+                   (upd_local_sf sf2_l
+                      (write_phi_dvs ((phi_r, DVALUE_Base (gs_db gs_l)) :: dvs) (stack_vars sf2_l)))
+                   fstk1 fstk2
+                   Hnd_bks Hin_cur Hsplit_cur Hsub_safe Hsafe_av0
+                   Huses_cur Hdefs_cur Hp_nd_cd_cur Hcd_cur Erw_cur
+                   Hinc_avin Hphi_nin0 Hsc
+                   (fun U_x P_x gs_x σ1_x σ2_x sf1_x sf2_x ex H1 H2 H3 H4 H5 =>
+                      conj Logic.eq_refl
+                        (conj (incl_tran HincU_l H1)
+                           (ex_intro _ P_x (ex_intro _ σ1_x (ex_intro _ σ2_x
+                              (ex_intro _ sf1_x (ex_intro _ sf2_x
+                                 (conj (incl_tran HincP_l H2)
+                                    (conj Logic.eq_refl (conj Logic.eq_refl
+                                       (conj H5 (or_intror (ex_intro _ gs_x (conj H3 H4))))))))))))))
+                   Hdt_l Hlk_p_ph Hlk_phi_ph Hinv_l Htf_l Hgenv_l Hsafe_ph Hvars_ph).
+        + intros U_cd s1_cd _ s2_cd _ _
+            (P_cd & gs_cd & σ1_cd & σ2_cd & sf1_cd & sf2_cd &
+             HincU_cd & HincP_cd & _ & _ & Hdt_cd & Hlk_p_cd & Hlk_er_cd &
+             -> & -> & Hinv_cd & Htf_cd & Hgenv_cd & Hsafe_cd & Hvars_cd).
+          assert (HincU_c : incl U0 U_cd) by (exact (incl_tran HincU_l HincU_cd)).
+          assert (HincP_c : incl P0 P_cd) by (exact (incl_tran HincP_l HincP_cd)).
+          destruct (blk_term bk_cur) as [[iid_tc tm_cur] md_tc] eqn:Etm_cur.
+          cbn [fst snd] in Hni_cur.
+          assert (Htm_vars :
+                    forall x, In x (full_term_uses tm_cur) ->
+                      Maps.lookup x (stack_vars sf1_cd) = Maps.lookup x (stack_vars sf2_cd)).
+          { intros x Hx; apply Hvars_cd.
+            - apply (Hblk_uses_av0 bk_cur x Hin_cur), m2r_term_entry_uses_in_block.
+              rewrite Etm_cur; cbn [m2r_term_entry_uses]; apply in_app_iff; left; exact Hx.
+            - intros ->; apply Htm_np; try rewrite Etm_cur;
+                cbn [m2r_term_entry_uses]; apply in_app_iff; left; exact Hx. }
+          apply refine_prov_to_s1_cps; eapply refine_prov_weaken.
+          * apply (denote_non_invoke_term_exc_sim ctx1 ctx2
+                     (s1_prom_rexc fs0 U0 P0 G fstk1 fstk2)
+                     iid_tc iid_tc tm_cur md_tc md_tc
+                     U_cd σ1_cd σ2_cd sf1_cd sf2_cd fstk1 fstk2 g0
+                     Hni_cur Htm_vars).
+            intros ex; refine (conj Logic.eq_refl (conj HincU_c _)).
+            exists P_cd, σ1_cd, σ2_cd, sf1_cd, sf2_cd.
+            exact (conj HincP_c (conj Logic.eq_refl (conj Logic.eq_refl
+                     (conj Hgenv_cd (or_intror (ex_intro _ gs_cd (conj Hinv_cd Htf_cd))))))).
+          * intros U_t [s1_t res1_t] [s2_t res2_t].
+            destruct res1_t as [ex1 | bd1], res2_t as [ex2 | bd2]; cbn [exc_post];
+              try (intros H; exact H).
+            intros (-> & -> & -> & <- & Hsucc_cur).
+            destruct bd1 as [bid_t | dv_t];
+              [cbn in Hsucc_cur |- *; unfold m2r_block_succs; rewrite Etm_cur |];
+            exists P_cd, gs_cd, σ1_cd, σ2_cd, sf1_cd, sf2_cd;
+            exact (conj HincU_c (conj HincP_c (conj Logic.eq_refl (conj Logic.eq_refl
+                     (conj Logic.eq_refl (conj Hdt_cd (conj Hlk_p_cd
+                       (conj Hlk_end_cur (conj Hlk_er_cd (conj Hinv_cd
+                         (conj Htf_cd (conj Hgenv_cd (conj Hsafe_cd
+                           (conj Hvars_cd Hsucc_cur)))))))))))))).
+    Qed.
+
     Local Lemma s1_prom_block_body_cps
       (sp : s1_prom_static)
       (va : option (@ptr ProvenanceV (@PointerV IP)))
@@ -1514,7 +1752,9 @@ Section MemoryAndSerialization.
         rewrite Efind_cur'.
         pose proof (Hall_p1 bk_cur phi_r cd_cur' end_r Hin_p1_cur)
           as (Hphi_nin0 & Hend_nin0 & Hcur_p1_spec).
-        destruct (raw_id_eqb (blk_id bk_cur) (init c)) eqn:Ecur_id; [apply raw_id_eqb_spec in Ecur_id; rename Ecur_id into Hbad | apply raw_id_eqb_neq in Ecur_id; rename Ecur_id into Hne_cur_id];
+        destruct (raw_id_eqb (blk_id bk_cur) (init c)) eqn:Ecur_id;
+          [ apply raw_id_eqb_spec in Ecur_id; rename Ecur_id into Hbad
+          | apply raw_id_eqb_neq in Ecur_id; rename Ecur_id into Hne_cur_id ];
           [exfalso; congruence |].
         destruct Hcur_p1_spec as (av_in & av_out & Hinc_avin & Erw_cur).
         destruct (Hbks_other bk_cur Hin_cur Hne_cur_id) as [Hbk_cur_chk Hp_nd_bk_cur].
@@ -1523,7 +1763,12 @@ Section MemoryAndSerialization.
         destruct Hbk_cur_chk as (((Hphi_np & Hcd_cur) & Htm_np) & Hni_cur).
         apply in_raw_ids_false in Hphi_np; apply in_raw_ids_false in Htm_np.
         set (preds_cur := List.filter (fun b_p => in_raw_ids (blk_id bk_cur) (m2r_block_succs b_p)) (blks c)).
-        set (inc_cur := List.map (fun b_p => (blk_id b_p, @EXP_Ident dtyp (ID_Local (lookup_end_reg end_map (blk_id b_p) init_reg)))) preds_cur).
+        set (inc_cur :=
+               List.map
+                 (fun b_p =>
+                    (blk_id b_p,
+                     @EXP_Ident dtyp (ID_Local (lookup_end_reg end_map (blk_id b_p) init_reg))))
+                 preds_cur).
         assert (Hassoc_cur :
                   assoc bf2 inc_cur =
                   Some (EXP_Ident (ID_Local (lookup_end_reg end_map bf2 init_reg)))).
@@ -1531,166 +1776,27 @@ Section MemoryAndSerialization.
           - unfold inc_cur; rewrite map_map; cbn [fst].
             exact (m2r_nodup_map_filter blk_id _ (blks c) Hnd_bks).
           - unfold inc_cur; rewrite <- Hid_pred at 1 2.
-            apply (in_map (fun b_p => (blk_id b_p, @EXP_Ident dtyp (ID_Local (lookup_end_reg end_map (blk_id b_p) init_reg))))).
+            apply (in_map
+                     (fun b_p =>
+                        (blk_id b_p,
+                         @EXP_Ident dtyp (ID_Local (lookup_end_reg end_map (blk_id b_p) init_reg))))).
             unfold preds_cur; apply filter_In; split; [exact Hin_pred |].
             rewrite Hid_cur; apply in_raw_ids_spec, Hsucc_pred. }
-        assert (Hphi_vars :
-                  forall x, In x (flat_map m2r_phi_entry_uses (blk_phis bk_cur)) ->
-                    Maps.lookup x (stack_vars sf1_l) = Maps.lookup x (stack_vars sf2_l)).
-        { intros x Hx; apply Hvars_l;
-            [apply (Hblk_uses_av0 bk_cur x Hin_cur);
-             apply in_flat_map in Hx as (pe & Hpe & Hx_pe);
-             exact (m2r_phi_entry_uses_in_block bk_cur pe x Hpe Hx_pe)
-            | intros ->; exact (Hphi_np Hx)]. }
-        unfold denote_block; cbn [blk_phis blk_code blk_term]; fold preds_cur inc_cur.
-        eapply s1_cps_cfg_exc_bind with
-          (RA := fun U_bd s1_bd s2_bd bd1 bd2 =>
-                   exists (P_cd : list N) gs_cd σ1_cd σ2_cd
-                          (sf1_cd sf2_cd : @stack_frame (@ParamsV IP IPT)),
-                     incl U0 U_bd /\
-                     incl P0 P_cd /\
-                     bd1 = bd2 /\
-                     s1_bd = (σ1_cd, ((sf1_cd, fstk1), g0)) /\
-                     s2_bd = (σ2_cd, ((sf2_cd, fstk2), g0)) /\
-                     gs_dt gs_cd = dt /\
-                     Maps.lookup p (stack_vars sf1_cd) =
-                       Some (@DVALUE_Base (@ParamsV IP IPT) (@DVALUE_Pointer (@ParamsV IP IPT) (gs_pt gs_cd))) /\
-                     lookup_end_reg end_map bs2 init_reg = end_r /\
-                     Maps.lookup end_r (stack_vars sf2_cd) =
-                       Some (@DVALUE_Base (@ParamsV IP IPT) (gs_db gs_cd)) /\
-                     stage1_mem_inv U_bd P_cd (gs_cd :: G) σ1_cd σ2_cd /\
-                     top_frame_prom_from fs0 gs_cd G (state_memory_stack σ2_cd) /\
-                     genv_safe P_cd g0 /\
-                     safe_locals_env P_cd safe_no_p (stack_vars sf2_cd) /\
-                     (forall x, In x avoid0 -> x <> p ->
-                        Maps.lookup x (stack_vars sf1_cd) = Maps.lookup x (stack_vars sf2_cd)) /\
-                     match bd1 with
-                     | inl bid_target => In bid_target (m2r_block_succs bk_cur)
-                     | inr _ => True
-                     end).
-        + eapply s1_cps_cfg_exc_bind.
-          * apply refine_prov_to_s1_cps.
-            exact (denote_phis_stage1_prom_sim ctx1 ctx2
-                     (s1_prom_rexc fs0 U0 P0 G fstk1 fstk2)
-                     bf2 phi_r (lookup_end_reg end_map bf2 init_reg)
-                     dt inc_cur (blk_phis bk_cur) (DVALUE_Base (gs_db gs_l))
-                     U σ1_l σ2_l sf1_l sf2_l fstk1 fstk2 g0
-                     Hassoc_cur Hlk_end_l Hphi_vars).
-          * intros U_ph s1_ph _ s2_ph _ _ (dvs & -> & _ & _ & Hfst_dvs & -> & ->).
-            assert (Hp_nin_dvs : ~ In p (List.map fst dvs)).
-            { rewrite Hfst_dvs; intros Hp_in; apply Hp_nd_bk_cur.
-              unfold full_block_defs; apply in_app_iff; left; exact Hp_in. }
-            assert (Hphi_nin_dvs : ~ In phi_r (List.map fst dvs)).
-            { rewrite Hfst_dvs; intros Hpr_in; apply Hphi_nin0.
-              apply (Hblk_defs_av0 bk_cur phi_r Hin_cur).
-              unfold full_block_defs; apply in_app_iff; left; exact Hpr_in. }
-            assert (Hlk_p_ph :
-                      Maps.lookup p (write_phi_dvs dvs (stack_vars sf1_l)) =
-                      Some (DVALUE_Base (DVALUE_Pointer (gs_pt gs_l)))).
-            { rewrite (write_phi_dvs_lookup_not_in dvs _ p Hp_nin_dvs); exact Hlk_p_l. }
-            assert (Hlk_phi_ph :
-                      Maps.lookup phi_r
-                        (write_phi_dvs ((phi_r, DVALUE_Base (gs_db gs_l)) :: dvs) (stack_vars sf2_l)) =
-                      Some (DVALUE_Base (gs_db gs_l))).
-            { cbn [write_phi_dvs];
-                rewrite (write_phi_dvs_lookup_not_in dvs _ phi_r Hphi_nin_dvs);
-                cbn [Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity. }
-            assert (Hsafe_ph :
-                      safe_locals_env P_l safe_no_p
-                        (write_phi_dvs ((phi_r, DVALUE_Base (gs_db gs_l)) :: dvs) (stack_vars sf2_l))).
-            { apply write_phi_dvs_safe_locals; [| exact Hsafe_l].
-              intros q Hq [Heq_q | Hin_dvs].
-              - subst q; exact (Hphi_nin0 (Hsafe_av0 _ Hq)).
-              - rewrite Hfst_dvs in Hin_dvs.
-                apply in_map_iff in Hin_dvs as ([[x_ph ph_q] md_q] & <- & Hpe_in).
-                exact (unique_alloca_not_phi_def fargs (blks c) x_ph Hnd_bks
-                         (Hsub_safe x_ph Hq) bk_cur x_ph ph_q md_q Hin_cur Hpe_in Logic.eq_refl). }
-            assert (Hvars_ph :
-                      forall x, In x avoid0 -> x <> p ->
-                        Maps.lookup x (write_phi_dvs dvs (stack_vars sf1_l)) =
-                        Maps.lookup x (write_phi_dvs ((phi_r, DVALUE_Base (gs_db gs_l)) :: dvs) (stack_vars sf2_l))).
-            { intros x Hx Hne; cbn [write_phi_dvs]; apply write_phi_dvs_lookup_agree.
-              cbn [Maps.lookup Maps.add Map_rmap];
-              rewrite RMF.F.add_neq_o by (intros ->; exact (Hphi_nin0 Hx)).
-              exact (Hvars_l x Hx Hne). }
-            assert (Hsplit_cur : blk_code bk_cur = [] ++ blk_code bk_cur ++ [])
-              by (rewrite app_nil_r; reflexivity).
-            assert (Huses_cur : forall im0 x, In im0 (blk_code bk_cur) -> In x (m2r_code_entry_uses im0) -> In x avoid0)
-              by (intros im0 x Him0 Hx; apply (Hblk_uses_av0 bk_cur x Hin_cur);
-                  eapply m2r_code_entry_uses_in_block; eassumption).
-            assert (Hdefs_cur : forall im0 x, In im0 (blk_code bk_cur) -> In x (instr_id_defs (fst (fst im0))) -> In x avoid0).
-            { intros im0 x Him0 Hx; apply (Hblk_defs_av0 bk_cur x Hin_cur).
-              unfold full_block_defs; apply in_app_iff; right; apply in_app_iff; left.
-              apply in_flat_map; exists im0; split; [exact Him0 | destruct im0 as [[? ?] ?]; exact Hx]. }
-            assert (Hp_nd_cd_cur : ~ In p (flat_map (fun '(iid, _, _) => instr_id_defs iid) (blk_code bk_cur))).
-            { intros Hp_in; apply Hp_nd_bk_cur; unfold full_block_defs;
-                apply in_app_iff; right; apply in_app_iff; left; exact Hp_in. }
-            eapply s1_cps_cfg_exc_bind.
-            -- exact (s1_rewrite_code_exc_cps
-                        (s1_prom_rexc fs0 U0 P0 G fstk1 fstk2)
-                        avoid0 fargs (blks c) bk_cur [] (blk_code bk_cur) []
-                        safe_no_p p dt phi_r av_in cd_cur' end_r av_out
-                        va va fs0 U P_l gs_l G σ1_l σ2_l
-                        (upd_local_sf sf1_l (write_phi_dvs dvs (stack_vars sf1_l)))
-                        (upd_local_sf sf2_l (write_phi_dvs ((phi_r, DVALUE_Base (gs_db gs_l)) :: dvs) (stack_vars sf2_l)))
-                        fstk1 fstk2
-                        Hnd_bks Hin_cur Hsplit_cur Hsub_safe Hsafe_av0
-                        Huses_cur Hdefs_cur Hp_nd_cd_cur Hcd_cur Erw_cur
-                        Hinc_avin Hphi_nin0 Hsc
-                        (fun U_x P_x gs_x σ1_x σ2_x sf1_x sf2_x ex H1 H2 H3 H4 H5 =>
-                           conj Logic.eq_refl
-                             (conj (incl_tran HincU_l H1)
-                                (ex_intro _ P_x (ex_intro _ σ1_x (ex_intro _ σ2_x
-                                   (ex_intro _ sf1_x (ex_intro _ sf2_x
-                                      (conj (incl_tran HincP_l H2)
-                                         (conj Logic.eq_refl (conj Logic.eq_refl
-                                            (conj H5 (or_intror (ex_intro _ gs_x (conj H3 H4))))))))))))))
-                        Hdt_l Hlk_p_ph Hlk_phi_ph Hinv_l Htf_l Hgenv_l Hsafe_ph Hvars_ph).
-            -- intros U_cd s1_cd _ s2_cd _ _
-                 (P_cd & gs_cd & σ1_cd & σ2_cd & sf1_cd & sf2_cd &
-                  HincU_cd & HincP_cd & _ & _ & Hdt_cd & Hlk_p_cd & Hlk_er_cd &
-                  -> & -> & Hinv_cd & Htf_cd & Hgenv_cd & Hsafe_cd & Hvars_cd).
-               assert (HincU_c : incl U0 U_cd) by (exact (incl_tran HincU_l HincU_cd)).
-               assert (HincP_c : incl P0 P_cd) by (exact (incl_tran HincP_l HincP_cd)).
-               assert (Hlk_end_cur : lookup_end_reg end_map bs2 init_reg = end_r).
-               { apply lookup_end_reg_in_nodup; [exact Hnd_end_map |].
-                 unfold end_map, sps_end_map; rewrite <- Hid_cur.
-                 exact (in_map (fun '(bk, _, _, er) => (blk_id bk, er)) _ _ Hin_p1_cur). }
-               destruct (blk_term bk_cur) as [[iid_tc tm_cur] md_tc] eqn:Etm_cur.
-               cbn [fst snd] in Hni_cur.
-               assert (Htm_vars :
-                         forall x, In x (full_term_uses tm_cur) ->
-                           Maps.lookup x (stack_vars sf1_cd) = Maps.lookup x (stack_vars sf2_cd)).
-               { intros x Hx; apply Hvars_cd.
-                 - apply (Hblk_uses_av0 bk_cur x Hin_cur), m2r_term_entry_uses_in_block.
-                   rewrite Etm_cur; cbn [m2r_term_entry_uses]; apply in_app_iff; left; exact Hx.
-                 - intros ->; apply Htm_np; try rewrite Etm_cur;
-                     cbn [m2r_term_entry_uses]; apply in_app_iff; left; exact Hx. }
-               apply refine_prov_to_s1_cps; eapply refine_prov_weaken.
-               ++ apply (denote_non_invoke_term_exc_sim ctx1 ctx2
-                           (s1_prom_rexc fs0 U0 P0 G fstk1 fstk2)
-                           iid_tc iid_tc tm_cur md_tc md_tc
-                           U_cd σ1_cd σ2_cd sf1_cd sf2_cd fstk1 fstk2 g0
-                           Hni_cur Htm_vars).
-                  intros ex; refine (conj Logic.eq_refl (conj HincU_c _)).
-                  exists P_cd, σ1_cd, σ2_cd, sf1_cd, sf2_cd.
-                  exact (conj HincP_c (conj Logic.eq_refl (conj Logic.eq_refl
-                           (conj Hgenv_cd (or_intror (ex_intro _ gs_cd (conj Hinv_cd Htf_cd))))))).
-               ++ intros U_t [s1_t res1_t] [s2_t res2_t].
-                  destruct res1_t as [ex1 | bd1], res2_t as [ex2 | bd2]; cbn [exc_post];
-                    try (intros H; exact H).
-                  intros (-> & -> & -> & <- & Hsucc_cur).
-                  destruct bd1 as [bid_t | dv_t];
-                    [cbn in Hsucc_cur |- *; unfold m2r_block_succs; rewrite Etm_cur |];
-                  exists P_cd, gs_cd, σ1_cd, σ2_cd, sf1_cd, sf2_cd;
-                  exact (conj HincU_c (conj HincP_c (conj Logic.eq_refl (conj Logic.eq_refl
-                           (conj Logic.eq_refl (conj Hdt_cd (conj Hlk_p_cd
-                             (conj Hlk_end_cur (conj Hlk_er_cd (conj Hinv_cd
-                               (conj Htf_cd (conj Hgenv_cd (conj Hsafe_cd
-                                 (conj Hvars_cd Hsucc_cur)))))))))))))).
+        assert (Hlk_end_cur : lookup_end_reg end_map bs2 init_reg = end_r).
+        { apply lookup_end_reg_in_nodup; [exact Hnd_end_map |].
+          unfold end_map, sps_end_map; rewrite <- Hid_cur.
+          exact (in_map (fun '(bk, _, _, er) => (blk_id bk, er)) _ _ Hin_p1_cur). }
+        eapply s1_cps_cfg_exc_bind.
+        + exact (s1_prom_non_entry_block_cps fargs (blks c) bk_cur safe_no_p avoid0 p dt phi_r
+                   av_in cd_cur' end_r av_out bf2 bs2 end_map init_reg inc_cur va
+                   fs0 U0 P0 U P_l gs_l G σ1_l σ2_l sf1_l sf2_l fstk1 fstk2
+                   Hnd_bks Hin_cur Hsub_safe Hsafe_av0 Hblk_uses_av0 Hblk_defs_av0
+                   Hp_nd_bk_cur Hphi_np Hcd_cur Htm_np Hni_cur Hphi_nin0 Hinc_avin Erw_cur
+                   Hsc HincU_l HincP_l Hdt_l Hlk_p_l Hlk_end_l Hlk_end_cur Hassoc_cur
+                   Hinv_l Htf_l Hgenv_l Hsafe_l Hvars_l).
         + intros U_bd s1_bd bd1 s2_bd bd2 _
             (P_cd & gs_cd & σ1_cd & σ2_cd & sf1_cd & sf2_cd &
-             HincU_c & HincP_c & <- & -> & -> & Hdt_cd & Hlk_p_cd & Hlk_end_cur &
+             HincU_c & HincP_c & <- & -> & -> & Hdt_cd & Hlk_p_cd & Hlk_end_c &
              Hlk_er_cd & Hinv_cd & Htf_cd & Hgenv_cd & Hsafe_cd & Hvars_cd & Hsucc_cur).
           destruct bd1 as [bid_tgt | dv_cur].
           * apply refine_prov_to_s1_cps, refine_cfg_exc_ret.
@@ -1702,7 +1808,7 @@ Section MemoryAndSerialization.
             refine (conj Logic.eq_refl (conj Hne_tgt (conj HincU_c (conj _ _)))).
             -- exists bk_cur; exact (conj Hin_cur (conj Hid_cur Hsucc_bk_cur)).
             -- exists P_cd, gs_cd, σ1_cd, σ2_cd, sf1_cd, sf2_cd; cbn [fst]; fold end_map init_reg.
-               rewrite Hlk_end_cur.
+               rewrite Hlk_end_c.
                exact (conj HincP_c (conj Hdt_cd (conj Hlk_p_cd (conj Hlk_er_cd
                         (conj Logic.eq_refl (conj Logic.eq_refl
                           (conj Hinv_cd (conj Htf_cd (conj Hgenv_cd (conj Hsafe_cd Hvars_cd)))))))))).
@@ -1717,6 +1823,473 @@ Section MemoryAndSerialization.
         exists P_l, σ1_l, σ2_l, sf1_l, sf2_l.
         exact (conj HincP_l (conj Logic.eq_refl (conj Logic.eq_refl
                  (conj Hgenv_l (or_intror (ex_intro _ gs_l (conj Hinv_l Htf_l))))))).
+    Qed.
+
+    Local Lemma s1_prom_entry_block_cps
+      (fargs : list local_id) (bks : ocfg dtyp) (b_init : block dtyp)
+      (pre_al post_al : code dtyp) (p : local_id) (dt : dtyp)
+      (anns_al : list (annotation dtyp)) (md_al : list (metadata dtyp))
+      (safe_no_p avoid0 : list local_id)
+      (init_reg : local_id) (avoid2 : list local_id)
+      (post_al' : code dtyp) (init_end_reg : local_id) (avoid3 : list local_id)
+      (bid_from : block_id) (varg1 : @ptr ProvenanceV (@PointerV IP))
+      (fs0 : @Framestack (@ParamsV IP IPT)) (U0 P0 : list N) (pr_va : N) (G : list ghost_slot)
+      (σ1_pf σ2_pf : state) (sf0 : @stack_frame (@ParamsV IP IPT)) (fstk1 fstk2 : stack)
+      (Hnd_bks : NoDup (List.map blk_id bks))
+      (Hin_init : In b_init bks)
+      (Hsplit_init : blk_code b_init = pre_al ++ (IId p, INSTR_Alloca dt anns_al, md_al) :: post_al)
+      (Hphis_init : blk_phis b_init = [])
+      (Hni_init : m2r_non_invoke_term (snd (fst (blk_term b_init))) = true)
+      (Hsc : is_scalar_dtyp dt = true)
+      (Hanns_al : is_only_align_anns anns_al = true)
+      (Hsub_safe : forall q,
+                     In q safe_no_p ->
+                     In q (m2r_collect_unique_allocas (fargs ++ flat_map full_block_defs bks) bks))
+      (Hsafe_av0 : incl safe_no_p avoid0)
+      (Hblk_uses_av0 : forall bk x, In bk bks -> In x (full_block_uses bk) -> In x avoid0)
+      (Hblk_defs_av0 : forall bk x, In bk bks -> In x (full_block_defs bk) -> In x avoid0)
+      (Hp_nd_post : ~ In p (flat_map (fun '(iid, _, _) => instr_id_defs iid) post_al))
+      (Hp_nin_safe : ~ In p safe_no_p)
+      (Hpre_chk : forallb (check_other_instr_for_slot true safe_no_p p) pre_al = true)
+      (Hpost_chk : forallb (check_code_entry_for_slot true safe_no_p p dt) post_al = true)
+      (Hterm_p : ~ In p (m2r_term_entry_uses (blk_term b_init)))
+      (Erw_post : rewrite_code_for_slot p dt init_reg avoid2 post_al = (post_al', init_end_reg, avoid3))
+      (Hinc_av2 : incl avoid0 avoid2)
+      (Hinit_nin0 : ~ In init_reg avoid0)
+      (Hinv_pf : stage1_mem_inv (pr_va :: U0) (pr_va :: P0) G σ1_pf σ2_pf)
+      (Htf_pf : top_frame_unprom_from fs0 G (state_memory_stack σ2_pf))
+      (Hgenv_pf : genv_safe (pr_va :: P0) g0)
+      (Hsafe_sf0 : safe_locals_env (pr_va :: P0) safe_no_p (stack_vars sf0)) :
+      let init_op :=
+        (IId init_reg, INSTR_Op (mk_copy_exp (DTYPE_Base (DTYPE_I 1)) dt EXP_Poison),
+         @nil (metadata dtyp)) in
+      let init_code' := pre_al ++ (IId p, INSTR_Alloca dt anns_al, md_al) :: init_op :: post_al' in
+      let b_init' :=
+        {| blk_id       := blk_id b_init;
+           blk_phis     := blk_phis b_init;
+           blk_code     := init_code';
+           blk_term     := blk_term b_init;
+           blk_comments := blk_comments b_init |} in
+      s1_cps s1_lfp
+        (exc_post (s1_prom_rexc fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2)
+           (fun U_b1 s1_b1 s2_b1 bd1 bd2 =>
+              exists (P_b1 : list N) gs_b1 σ1_b1 σ2_b1
+                     (sf1_b1 sf2_b1 : @stack_frame (@ParamsV IP IPT)),
+                incl (pr_va :: U0) U_b1 /\
+                incl (pr_va :: P0) P_b1 /\
+                bd1 = bd2 /\
+                s1_b1 = (σ1_b1, ((sf1_b1, fstk1), g0)) /\
+                s2_b1 = (σ2_b1, ((sf2_b1, fstk2), g0)) /\
+                gs_dt gs_b1 = dt /\
+                Maps.lookup p (stack_vars sf1_b1) =
+                  Some (@DVALUE_Base (@ParamsV IP IPT)
+                          (@DVALUE_Pointer (@ParamsV IP IPT) (gs_pt gs_b1))) /\
+                Maps.lookup init_end_reg (stack_vars sf2_b1) =
+                  Some (@DVALUE_Base (@ParamsV IP IPT) (gs_db gs_b1)) /\
+                stage1_mem_inv U_b1 P_b1 (gs_b1 :: G) σ1_b1 σ2_b1 /\
+                top_frame_prom_from fs0 gs_b1 G (state_memory_stack σ2_b1) /\
+                genv_safe P_b1 g0 /\
+                safe_locals_env P_b1 safe_no_p (stack_vars sf2_b1) /\
+                (forall x, In x avoid0 -> x <> p ->
+                   Maps.lookup x (stack_vars sf1_b1) = Maps.lookup x (stack_vars sf2_b1)) /\
+                match bd1 with
+                | inl bid_target => In bid_target (m2r_block_succs b_init)
+                | inr _ => True
+                end))
+        (pr_va :: U0)
+        (interp_cfg_exc ctx1 (denote_block b_init bid_from (Some varg1)) (σ1_pf, ((sf0, fstk1), g0)))
+        (interp_cfg_exc ctx2 (denote_block b_init' bid_from (Some varg1)) (σ2_pf, ((sf0, fstk2), g0))).
+    Proof using.
+      intros init_op init_code' b_init'.
+      unfold denote_block, b_init'; cbn [blk_phis blk_code blk_term]; rewrite Hphis_init.
+      eapply s1_cps_obs_eq;
+        [ symmetry;
+          apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (eq_itree_bind_congr_l (denote_phis_nil_eq bid_from)))
+        | symmetry;
+          apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (eq_itree_bind_congr_l (denote_phis_nil_eq bid_from))) |].
+      eapply s1_cps_obs_eq;
+        [ symmetry; apply interp_cfg_exc_obs_eq, Eqit.bind_ret_l
+        | symmetry; apply interp_cfg_exc_obs_eq, Eqit.bind_ret_l |].
+      rewrite Hsplit_init; unfold init_code'.
+      eapply s1_cps_obs_eq;
+        [ symmetry;
+          apply (interp_cfg_exc_obs_eq ctx1 _ _ _
+                   (eq_itree_bind_congr_l (denote_code_app_eq pre_al _ (Some varg1))))
+        | symmetry;
+          apply (interp_cfg_exc_obs_eq ctx2 _ _ _
+                   (eq_itree_bind_congr_l (denote_code_app_eq pre_al _ (Some varg1)))) |].
+      eapply s1_cps_obs_eq;
+        [ symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (Eqit.bind_bind _ _ _))
+        | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
+      eapply s1_cps_cfg_exc_bind.
+      - assert (Hsplit_pre :
+                  blk_code b_init = [] ++ pre_al ++ (IId p, INSTR_Alloca dt anns_al, md_al) :: post_al)
+          by exact Hsplit_init.
+        exact (s1_other_code_exc_cps
+                 (s1_prom_rexc fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2)
+                 (fun s => top_frame_unprom_from fs0 G (state_memory_stack s))
+                 fargs bks b_init [] pre_al
+                 ((IId p, INSTR_Alloca dt anns_al, md_al) :: post_al)
+                 safe_no_p p (Some varg1) (Some varg1)
+                 (pr_va :: U0) (pr_va :: P0) G σ1_pf σ2_pf sf0 sf0 fstk1 fstk2
+                 Hnd_bks Hin_init Hsplit_pre Hsub_safe Hpre_chk
+                 (fun s_a s_b Heq_fs HT => top_frame_unprom_frame_eq fs0 G _ _ (eq_sym Heq_fs) HT)
+                 (fun s_a s_b ptrs Hdisj Heq_fs HT =>
+                    top_frame_unprom_frame_eq fs0 G _ _ (eq_sym Heq_fs)
+                      (top_frame_unprom_add_ptrs fs0 G ptrs _ HT Hdisj))
+                 (fun U_x P_x σ1_x σ2_x sf1_x sf2_x ex H1 H2 H3 H4 H5 =>
+                    conj Logic.eq_refl
+                      (conj H1
+                         (ex_intro _ P_x (ex_intro _ σ1_x (ex_intro _ σ2_x
+                            (ex_intro _ sf1_x (ex_intro _ sf2_x
+                               (conj H2
+                                  (conj Logic.eq_refl (conj Logic.eq_refl
+                                     (conj H5 (or_introl (conj H3 H4)))))))))))))
+                 Hinv_pf Htf_pf Hgenv_pf Hsafe_sf0 (fun _ _ => Logic.eq_refl)).
+      - intros U_pre s1_pre _ s2_pre _ _
+          (P_pre & σ1_pre & σ2_pre & sf1_pre & sf2_pre &
+           HincU_pre & HincP_pre & _ & _ & -> & -> &
+           Hinv_pre & Htf_pre & Hgenv_pre & Hsafe_pre & _ & Heq_sf_pre).
+        pose proof (Heq_sf_pre Logic.eq_refl) as ->.
+        assert (Econs_l :
+                  @denote_code (@ParamsV IP IPT)
+                    ((IId p, INSTR_Alloca dt anns_al, md_al) :: post_al) (Some varg1) ≅
+                  ITree.bind (denote_instr (IId p, INSTR_Alloca dt anns_al, md_al) (Some varg1))
+                    (fun _ => denote_code post_al (Some varg1)))
+          by reflexivity.
+        assert (Econs_r :
+                  @denote_code (@ParamsV IP IPT)
+                    ((IId p, INSTR_Alloca dt anns_al, md_al) :: init_op :: post_al') (Some varg1) ≅
+                  ITree.bind
+                    (ITree.bind (denote_instr (IId p, INSTR_Alloca dt anns_al, md_al) (Some varg1))
+                       (fun _ => denote_instr init_op (Some varg1)))
+                    (fun _ => denote_code post_al' (Some varg1))).
+        { unfold denote_code; cbn [loop_monad]; symmetry; apply Eqit.bind_bind. }
+        eapply s1_cps_obs_eq;
+          [ symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (eq_itree_bind_congr_l Econs_l))
+          | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (eq_itree_bind_congr_l Econs_r)) |].
+        eapply s1_cps_obs_eq;
+          [ symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (Eqit.bind_bind _ _ _))
+          | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
+        eapply s1_cps_cfg_exc_bind.
+        + apply refine_prov_to_s1_cps.
+          exact (stage1_prom_alloca_init_exc_sim ctx1 ctx2
+                   (s1_prom_rexc fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2)
+                   p init_reg dt anns_al md_al (Some varg1) (Some varg1)
+                   fs0 U_pre P_pre G σ1_pre σ2_pre sf2_pre sf2_pre fstk1 fstk2 g0
+                   Hsc Hanns_al Hinv_pre Htf_pre).
+        + intros U_al s1_al _ s2_al _ _
+            (gs0 & σ1_al & σ2_al & _ & -> & _ & _ & Hdt0 & Hdb0 &
+             -> & -> & Hinv_al & Htf_al).
+          assert (HincU_al : incl (pr_va :: U0) (gs_pr gs0 :: U_pre))
+            by (intros x Hx; right; exact (HincU_pre x Hx)).
+          assert (Hlk_p_al :
+                    Maps.lookup p
+                      (Maps.add p (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))) (stack_vars sf2_pre)) =
+                    Some (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))))
+            by (cbn [Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity).
+          assert (Hlk_init_al :
+                    Maps.lookup init_reg
+                      (Maps.add init_reg (DVALUE_Base DVALUE_Poison)
+                         (Maps.add p (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))) (stack_vars sf2_pre))) =
+                    Some (DVALUE_Base (gs_db gs0))).
+          { rewrite Hdb0; cbn [Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity. }
+          assert (Hsafe_al :
+                    safe_locals_env P_pre safe_no_p
+                      (Maps.add init_reg (DVALUE_Base DVALUE_Poison)
+                         (Maps.add p (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))) (stack_vars sf2_pre)))).
+          { apply safe_locals_env_add_other;
+              [intros Hs; exact (Hinit_nin0 (Hsafe_av0 _ Hs)) |].
+            apply safe_locals_env_add_other; [exact Hp_nin_safe | exact Hsafe_pre]. }
+          assert (Hvars_al :
+                    forall x, In x avoid0 -> x <> p ->
+                      Maps.lookup x
+                        (Maps.add p (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))) (stack_vars sf2_pre)) =
+                      Maps.lookup x
+                        (Maps.add init_reg (DVALUE_Base DVALUE_Poison)
+                           (Maps.add p (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))) (stack_vars sf2_pre)))).
+          { intros x Hx _; cbn [Maps.lookup Maps.add Map_rmap]; symmetry;
+            rewrite RMF.F.add_neq_o by (intros ->; exact (Hinit_nin0 Hx)); reflexivity. }
+          assert (Hsplit_post :
+                    blk_code b_init =
+                    (pre_al ++ [(IId p, INSTR_Alloca dt anns_al, md_al)]) ++ post_al ++ [])
+            by (rewrite <- app_assoc, app_nil_r; exact Hsplit_init).
+          assert (Huses_post :
+                    forall im0 x, In im0 post_al -> In x (m2r_code_entry_uses im0) -> In x avoid0).
+          { intros im0 x Him0 Hx; apply (Hblk_uses_av0 b_init x Hin_init).
+            eapply m2r_code_entry_uses_in_block; [| exact Hx].
+            rewrite Hsplit_init; apply in_app_iff; right; right; exact Him0. }
+          assert (Hdefs_post :
+                    forall im0 x,
+                      In im0 post_al -> In x (instr_id_defs (fst (fst im0))) -> In x avoid0).
+          { intros im0 x Him0 Hx; apply (Hblk_defs_av0 b_init x Hin_init).
+            unfold full_block_defs; apply in_app_iff; right; apply in_app_iff; left.
+            rewrite Hsplit_init; apply in_flat_map; exists im0; split;
+              [apply in_app_iff; right; right; exact Him0
+              | destruct im0 as [[? ?] ?]; exact Hx]. }
+          eapply s1_cps_cfg_exc_bind.
+          * exact (s1_rewrite_code_exc_cps
+                     (s1_prom_rexc fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2)
+                     avoid0 fargs bks b_init
+                     (pre_al ++ [(IId p, INSTR_Alloca dt anns_al, md_al)]) post_al []
+                     safe_no_p p dt init_reg avoid2 post_al' init_end_reg avoid3
+                     (Some varg1) (Some varg1) fs0 (gs_pr gs0 :: U_pre) P_pre gs0 G
+                     σ1_al σ2_al
+                     (upd_local_sf sf2_pre
+                        (Maps.add p
+                           (@DVALUE_Base (@ParamsV IP IPT) (@DVALUE_Pointer (@ParamsV IP IPT) (gs_pt gs0)))
+                           (stack_vars sf2_pre)))
+                     (upd_local_sf sf2_pre
+                        (Maps.add init_reg (@DVALUE_Base (@ParamsV IP IPT) DVALUE_Poison)
+                           (Maps.add p
+                              (@DVALUE_Base (@ParamsV IP IPT) (@DVALUE_Pointer (@ParamsV IP IPT) (gs_pt gs0)))
+                              (stack_vars sf2_pre))))
+                     fstk1 fstk2
+                     Hnd_bks Hin_init Hsplit_post Hsub_safe Hsafe_av0
+                     Huses_post Hdefs_post Hp_nd_post Hpost_chk Erw_post
+                     Hinc_av2 Hinit_nin0 Hsc
+                     (fun U_x P_x gs_x σ1_x σ2_x sf1_x sf2_x ex H1 H2 H3 H4 H5 =>
+                        conj Logic.eq_refl
+                          (conj (incl_tran HincU_al H1)
+                             (ex_intro _ P_x (ex_intro _ σ1_x (ex_intro _ σ2_x
+                                (ex_intro _ sf1_x (ex_intro _ sf2_x
+                                   (conj (incl_tran HincP_pre H2)
+                                      (conj Logic.eq_refl (conj Logic.eq_refl
+                                         (conj H5 (or_intror (ex_intro _ gs_x (conj H3 H4))))))))))))))
+                     Hdt0 Hlk_p_al Hlk_init_al
+                     Hinv_al Htf_al Hgenv_pre Hsafe_al Hvars_al).
+          * intros U_post s1_post _ s2_post _ _
+              (P_post & gs_post & σ1_post & σ2_post & sf1_post & sf2_post &
+               HincU_post & HincP_post & _ & _ & Hdt_post & Hlk_p_post & Hlk_er_post &
+               -> & -> & Hinv_post & Htf_post & Hgenv_post & Hsafe_post & Hvars_post).
+            assert (HincU_p : incl (pr_va :: U0) U_post)
+              by (exact (incl_tran HincU_al HincU_post)).
+            assert (HincP_p : incl (pr_va :: P0) P_post)
+              by (exact (incl_tran HincP_pre HincP_post)).
+            destruct (blk_term b_init) as [[iid_tm tm_init] md_tm] eqn:Etm_init.
+            cbn [fst snd] in Hni_init.
+            assert (Htm_vars : forall x,
+                      In x (full_term_uses tm_init) ->
+                      Maps.lookup x (stack_vars sf1_post) = Maps.lookup x (stack_vars sf2_post)).
+            { intros x Hx; apply Hvars_post.
+              - apply (Hblk_uses_av0 b_init x Hin_init), m2r_term_entry_uses_in_block.
+                rewrite Etm_init; cbn [m2r_term_entry_uses]; apply in_app_iff; left; exact Hx.
+              - intros ->; apply Hterm_p; try rewrite Etm_init;
+                  cbn [m2r_term_entry_uses]; apply in_app_iff; left; exact Hx. }
+            apply refine_prov_to_s1_cps; eapply refine_prov_weaken.
+            -- apply (denote_non_invoke_term_exc_sim ctx1 ctx2
+                        (s1_prom_rexc fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2)
+                        iid_tm iid_tm tm_init md_tm md_tm
+                        U_post σ1_post σ2_post sf1_post sf2_post fstk1 fstk2 g0
+                        Hni_init Htm_vars).
+               intros ex; refine (conj Logic.eq_refl (conj HincU_p _)).
+               exists P_post, σ1_post, σ2_post, sf1_post, sf2_post.
+               exact (conj HincP_p (conj Logic.eq_refl (conj Logic.eq_refl
+                        (conj Hgenv_post
+                           (or_intror (ex_intro _ gs_post (conj Hinv_post Htf_post))))))).
+            -- intros U_t [s1_t res1_t] [s2_t res2_t].
+               destruct res1_t as [ex1 | bd1], res2_t as [ex2 | bd2]; cbn [exc_post];
+                 try (intros H; exact H).
+               intros (-> & -> & -> & <- & Hsucc).
+               destruct bd1 as [bid_t | dv_t];
+                 [cbn in Hsucc |- *; unfold m2r_block_succs; rewrite Etm_init |];
+               exists P_post, gs_post, σ1_post, σ2_post, sf1_post, sf2_post;
+               exact (conj HincU_p (conj HincP_p (conj Logic.eq_refl (conj Logic.eq_refl
+                        (conj Logic.eq_refl (conj Hdt_post (conj Hlk_p_post
+                          (conj Hlk_er_post (conj Hinv_post (conj Htf_post
+                            (conj Hgenv_post (conj Hsafe_post (conj Hvars_post Hsucc))))))))))))).
+    Qed.
+
+    Local Lemma s1_prom_cfg_cps
+      (fargs : list local_id) (c : CFG.cfg dtyp) (b_init : block dtyp)
+      (pre_al post_al : code dtyp) (p : local_id) (dt : dtyp)
+      (anns_al : list (annotation dtyp)) (md_al : list (metadata dtyp))
+      (safe_no_p avoid0 : list local_id)
+      (init_reg : local_id) (avoid2 : list local_id)
+      (post_al' : code dtyp) (init_end_reg : local_id) (avoid3 : list local_id)
+      (pass1_out : list (block dtyp * local_id * code dtyp * local_id))
+      (varg1 : @ptr ProvenanceV (@PointerV IP))
+      (fs0 : @Framestack (@ParamsV IP IPT)) (U0 P0 : list N) (pr_va : N) (G : list ghost_slot)
+      (σ1_pf σ2_pf : state) (sf0 : @stack_frame (@ParamsV IP IPT)) (fstk1 fstk2 : stack)
+      (Hnd_bks : NoDup (List.map blk_id (blks c)))
+      (Hno_entry_pred : ~ In (init c) (m2r_all_succs c))
+      (Efind_init : find_block (blks c) (init c) = Some b_init)
+      (Hin_init : In b_init (blks c))
+      (Hid_init : blk_id b_init = init c)
+      (Hphis_init : blk_phis b_init = [])
+      (Hsplit_init : blk_code b_init = pre_al ++ (IId p, INSTR_Alloca dt anns_al, md_al) :: post_al)
+      (Hsc : is_scalar_dtyp dt = true)
+      (Hanns_al : is_only_align_anns anns_al = true)
+      (Hsub_safe : forall q,
+                     In q safe_no_p ->
+                     In q (m2r_collect_unique_allocas
+                             (fargs ++ flat_map full_block_defs (blks c)) (blks c)))
+      (Hp_nin_safe : ~ In p safe_no_p)
+      (Hsafe_av0 : incl safe_no_p avoid0)
+      (Hblk_uses_av0 : forall bk x, In bk (blks c) -> In x (full_block_uses bk) -> In x avoid0)
+      (Hblk_defs_av0 : forall bk x, In bk (blks c) -> In x (full_block_defs bk) -> In x avoid0)
+      (Hp_nd_post : ~ In p (flat_map (fun '(iid, _, _) => instr_id_defs iid) post_al))
+      (Hpre_chk : forallb (check_other_instr_for_slot true safe_no_p p) pre_al = true)
+      (Hpost_chk : forallb (check_code_entry_for_slot true safe_no_p p dt) post_al = true)
+      (Hterm_p : ~ In p (m2r_term_entry_uses (blk_term b_init)))
+      (Hni_init : m2r_non_invoke_term (snd (fst (blk_term b_init))) = true)
+      (Erw_post : rewrite_code_for_slot p dt init_reg avoid2 post_al = (post_al', init_end_reg, avoid3))
+      (Hinc_av2 : incl avoid0 avoid2)
+      (Hinit_nin0 : ~ In init_reg avoid0)
+      (Hbks_p1 : List.map (fun '(bk, _, _, _) => bk) pass1_out = blks c)
+      (Hall_p1 : forall bk phi_r cd' end_r,
+                   In (bk, phi_r, cd', end_r) pass1_out ->
+                   ~ In phi_r avoid0 /\
+                   ~ In end_r avoid0 /\
+                   (if raw_id_eqb (blk_id bk) (init c) then
+                      cd' =
+                      pre_al ++
+                      (IId p, INSTR_Alloca dt anns_al, md_al) ::
+                      (IId init_reg,
+                       INSTR_Op (mk_copy_exp (DTYPE_Base (DTYPE_I 1)) dt EXP_Poison),
+                       @nil (metadata dtyp)) :: post_al' /\
+                      end_r = init_end_reg
+                    else
+                      exists av_in av_out,
+                        incl avoid0 av_in /\
+                        rewrite_code_for_slot p dt phi_r av_in (blk_code bk) = (cd', end_r, av_out)))
+      (Hwf : s1_prom_static_wf
+               {| sps_fargs    := fargs;
+                  sps_c        := c;
+                  sps_b_init   := b_init;
+                  sps_p        := p;
+                  sps_dt       := dt;
+                  sps_init_reg := init_reg;
+                  sps_end_reg0 := init_end_reg;
+                  sps_code0'   := pre_al ++ (IId p, INSTR_Alloca dt anns_al, md_al) ::
+                                  (IId init_reg,
+                                   INSTR_Op (mk_copy_exp (DTYPE_Base (DTYPE_I 1)) dt EXP_Poison),
+                                   @nil (metadata dtyp)) :: post_al';
+                  sps_pass1    := pass1_out |})
+      (Hinv_pf : stage1_mem_inv (pr_va :: U0) (pr_va :: P0) G σ1_pf σ2_pf)
+      (Htf_pf : top_frame_unprom_from fs0 G (state_memory_stack σ2_pf))
+      (Hgenv_pf : genv_safe (pr_va :: P0) g0)
+      (Hsafe_sf0 : safe_locals_env (pr_va :: P0) safe_no_p (stack_vars sf0))
+      (Hsafe_eq : safe_no_p =
+                    List.filter (fun q => negb (raw_id_eqb q p))
+                      (m2r_collect_unique_allocas
+                         (fargs ++ flat_map full_block_defs (blks c)) (blks c)))
+      (Havoid_eq : avoid0 = fargs ++ cfg_all_ids c) :
+      let init_op :=
+        (IId init_reg, INSTR_Op (mk_copy_exp (DTYPE_Base (DTYPE_I 1)) dt EXP_Poison),
+         @nil (metadata dtyp)) in
+      let init_code' := pre_al ++ (IId p, INSTR_Alloca dt anns_al, md_al) :: init_op :: post_al' in
+      let sp :=
+        {| sps_fargs    := fargs;
+           sps_c        := c;
+           sps_b_init   := b_init;
+           sps_p        := p;
+           sps_dt       := dt;
+           sps_init_reg := init_reg;
+           sps_end_reg0 := init_end_reg;
+           sps_code0'   := init_code';
+           sps_pass1    := pass1_out |} in
+      let c' :=
+        {| init := init c;
+           blks := build_promoted_blocks (init c) dt init_reg (blks c) pass1_out;
+           args := CFG.args c |} in
+      s1_cps s1_lfp
+        (exc_post
+           (s1_prom_rexc fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2)
+           (fun U_e s1_e s2_e v1 v2 =>
+              v1 = v2 /\
+              s1_prom_exit_rel fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2 U_e s1_e s2_e))
+        (pr_va :: U0)
+        (interp_cfg_exc ctx1 (denote_cfg_map (ocfg_map (blks c)) c (Some varg1)) (σ1_pf, ((sf0, fstk1), g0)))
+        (interp_cfg_exc ctx2 (denote_cfg_map (ocfg_map (blks c')) c' (Some varg1)) (σ2_pf, ((sf0, fstk2), g0))).
+    Proof using.
+      intros init_op init_code' sp c'.
+      set (end_map := sps_end_map sp).
+      assert (Hnd_end_map : NoDup (List.map fst end_map))
+        by (unfold end_map, sps_end_map, sp; cbn [sps_pass1];
+            rewrite pass1_end_map_fst, Hbks_p1; exact Hnd_bks).
+      pose proof (pass1_find_block_spec (init c) dt init_reg (blks c) pass1_out Hbks_p1)
+        as [_ Hfb_some]; cbv zeta in Hfb_some; fold end_map in Hfb_some.
+      unfold denote_cfg_map; unfold c'; cbn [init blks].
+      change (build_promoted_blocks (init c) dt init_reg (blks c) pass1_out)
+        with (sps_blks' sp).
+      eapply s1_cps_cfg_exc_bind with
+        (RA := s1_prom_rret fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2).
+      - rewrite !denote_ocfg_map_eq_iter.
+        intros k_o1 k_o2 Hk_o.
+        eapply (s1_iter_one_step
+                  (s1_prom_loop_inv sp fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2)
+                  (s1_prom_rexc fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2)
+                  (s1_prom_rret fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2)
+                  (ocfg_step_body (ocfg_map (blks c)) (Some varg1))
+                  (ocfg_step_body (ocfg_map (sps_blks' sp)) (Some varg1))
+                  (pr_va :: U0)
+                  (σ1_pf, ((sf0, fstk1), g0))
+                  (σ2_pf, ((sf0, fstk2), g0))
+                  (init c, init c) k_o1 k_o2).
+        + destruct (Hfb_some (init c) b_init Efind_init)
+            as (phi_init & cd_init & end_init & Hin_p1_init & Efind_init').
+          pose proof (Hall_p1 b_init phi_init cd_init end_init Hin_p1_init)
+            as (_ & _ & Hinit_p1_spec).
+          rewrite Hid_init, raw_id_eqb_refl in Hinit_p1_spec, Efind_init'.
+          destruct Hinit_p1_spec as [-> ->].
+          assert (Hlk_end_init : lookup_end_reg end_map (init c) init_reg = init_end_reg).
+          { apply lookup_end_reg_in_nodup; [exact Hnd_end_map |].
+            unfold end_map, sps_end_map; cbn [sps_pass1]; rewrite <- Hid_init.
+            exact (in_map (fun '(bk, _, _, er) => (blk_id bk, er)) _ _ Hin_p1_init). }
+          unfold ocfg_step_body, sps_blks', sp;
+            cbn [sps_c sps_dt sps_init_reg sps_pass1
+                 ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+          rewrite ScopeTheory.ocfg_map_find_block, Efind_init.
+          rewrite ScopeTheory.ocfg_map_find_block, Efind_init'.
+          eapply s1_cps_cfg_exc_bind.
+          * exact (s1_prom_entry_block_cps fargs (blks c) b_init pre_al post_al p dt
+                     anns_al md_al safe_no_p avoid0 init_reg avoid2 post_al' init_end_reg avoid3
+                     (init c) varg1 fs0 U0 P0 pr_va G σ1_pf σ2_pf sf0 fstk1 fstk2
+                     Hnd_bks Hin_init Hsplit_init Hphis_init Hni_init Hsc Hanns_al
+                     Hsub_safe Hsafe_av0 Hblk_uses_av0 Hblk_defs_av0 Hp_nd_post Hp_nin_safe
+                     Hpre_chk Hpost_chk Hterm_p Erw_post Hinc_av2 Hinit_nin0
+                     Hinv_pf Htf_pf Hgenv_pf Hsafe_sf0).
+          * intros U_b1 s1_b1 bd1 s2_b1 bd2 _
+              (P_b1 & gs_b1 & σ1_b1 & σ2_b1 & sf1_b1 & sf2_b1 &
+               HincU_b1 & HincP_b1 & <- & -> & -> & Hdt_b1 & Hlk_p_b1 & Hlk_er_b1 &
+               Hinv_b1 & Htf_b1 & Hgenv_b1 & Hsafe_b1 & Hvars_b1 & Hsucc_b1).
+            destruct bd1 as [bid_next | dv_ret].
+            -- apply refine_prov_to_s1_cps, refine_cfg_exc_ret.
+               assert (Hsucc_init : In bid_next (m2r_block_succs b_init))
+                 by exact Hsucc_b1.
+               assert (Hne_init : bid_next <> init c).
+               { intros Heq_n; apply Hno_entry_pred; rewrite <- Heq_n.
+                 unfold m2r_all_succs; apply in_flat_map; exists b_init; split; assumption. }
+               refine (conj Logic.eq_refl _).
+               unfold s1_prom_loop_inv; cbn [sps_c sps_dt sps_p sps_init_reg fst snd].
+               unfold sps_safe_no_p, sps_avoid0; cbn [sps_fargs sps_c sps_p].
+               refine (conj Hne_init (conj HincU_b1 (conj _ _))).
+               ++ exists b_init; exact (conj Hin_init (conj Hid_init Hsucc_init)).
+               ++ exists P_b1, gs_b1, σ1_b1, σ2_b1, sf1_b1, sf2_b1.
+                  unfold end_map, sps_end_map, sp in Hlk_end_init; cbn [sps_pass1] in Hlk_end_init.
+                  unfold sps_end_map; cbn [sps_pass1].
+                  rewrite Hlk_end_init, <- Hsafe_eq, <- Havoid_eq.
+                  exact (conj HincP_b1 (conj Hdt_b1 (conj Hlk_p_b1 (conj Hlk_er_b1
+                           (conj Logic.eq_refl (conj Logic.eq_refl
+                             (conj Hinv_b1 (conj Htf_b1 (conj Hgenv_b1
+                               (conj Hsafe_b1 Hvars_b1)))))))))).
+            -- apply refine_prov_to_s1_cps, refine_cfg_exc_ret.
+               refine (conj Logic.eq_refl (conj HincU_b1 _)).
+               exists P_b1, σ1_b1, σ2_b1, sf1_b1, sf2_b1.
+               exact (conj HincP_b1 (conj Logic.eq_refl (conj Logic.eq_refl
+                        (conj Hgenv_b1 (or_intror (ex_intro _ gs_b1 (conj Hinv_b1 Htf_b1))))))).
+        + intros U' s1' s2' j' _ Hli'; apply s1_lfp_fold; right; right.
+          exists sp, (Some varg1), fs0, (pr_va :: U0), (pr_va :: P0), G,
+                 fstk1, fstk2, s1', s2', j', k_o1, k_o2.
+          rewrite !denote_ocfg_map_eq_iter.
+          refine (conj Hwf (conj Hli' (conj Hk_o (conj _ _)))); reflexivity.
+        + exact Hk_o.
+      - intros U_ocfg s1_ocfg r_ocfg1 s2_ocfg r_ocfg2 _ [<- Hexit_ocfg].
+        destruct r_ocfg1 as [bid_miss | uv_ret].
+        + apply refine_prov_to_s1_cps, refine_cfg_exc_raise_both.
+        + apply refine_prov_to_s1_cps, refine_cfg_exc_ret;
+            exact (conj Logic.eq_refl Hexit_ocfg).
     Qed.
 
     Local Lemma s1_prom_denote_function_cps
@@ -1788,7 +2361,9 @@ Section MemoryAndSerialization.
       set (avoid2 := phi_regs ++ avoid1).
       destruct (rewrite_code_for_slot p dt init_reg avoid2 post_al)
         as [[post_al' init_end_reg] avoid3] eqn:Erw_post.
-      set (init_op := (IId init_reg, INSTR_Op (mk_copy_exp (DTYPE_Base (DTYPE_I 1)) dt EXP_Poison), @nil (metadata dtyp))).
+      set (init_op :=
+             (IId init_reg, INSTR_Op (mk_copy_exp (DTYPE_Base (DTYPE_I 1)) dt EXP_Poison),
+              @nil (metadata dtyp))).
       set (init_code' := pre_al ++ (IId p, INSTR_Alloca dt anns_al, md_al) :: init_op :: post_al').
       set (bk_phis := List.combine (blks c) phi_regs).
       destruct (rewrite_non_entry_blocks_pass1 (init c) p dt init_end_reg init_code' avoid3 bk_phis)
@@ -1802,8 +2377,9 @@ Section MemoryAndSerialization.
         rewrite Erw_post; fold init_op init_code' bk_phis.
         rewrite Epass1; reflexivity. }
       assert (Hinit_nin0 : ~ In init_reg avoid0) by apply fresh_name_not_in.
-      assert (Hinc_av2 : incl avoid0 avoid2)
-        by (intros z Hz; unfold avoid2, avoid1; apply in_app_iff; right; right; exact Hz).
+      assert (Hinc_av2 : incl avoid0 avoid2).
+      { intros z Hz; unfold avoid2, avoid1.
+        apply in_app_iff; right; right; exact Hz. }
       destruct (rewrite_code_for_slot_fresh_inv avoid0 p dt init_reg avoid2 post_al
                   post_al' init_end_reg avoid3 Erw_post Hinc_av2 Hinit_nin0)
         as [Hav3 Hinit_er_nin0].
@@ -1831,10 +2407,14 @@ Section MemoryAndSerialization.
       assert (Hwf : s1_prom_static_wf sp).
       { unfold s1_prom_static_wf; cbn [sps_c sps_b_init sps_p sps_dt sps_pass1 sps_code0' sps_end_reg0].
         unfold sps_safe_no_p, sps_avoid0; cbn [sps_fargs sps_c sps_p]; fold all_defs safe_locals safe_no_p avoid0.
-        refine (conj Hnd_bks (conj Hno_entry_pred (conj Hin_init (conj Hid_init (conj Hsc (conj _ (conj Hbks_p1 Hall_p1))))))).
+        refine (conj Hnd_bks
+                  (conj Hno_entry_pred
+                     (conj Hin_init (conj Hid_init (conj Hsc (conj _ (conj Hbks_p1 Hall_p1))))))).
         intros bk Hbk Hne; split.
         - pose proof Ebks_chk as Hb; rewrite forallb_forall in Hb; specialize (Hb bk Hbk).
-          destruct (raw_id_eqb (blk_id bk) (init c)) eqn:Ebad; [apply raw_id_eqb_spec in Ebad; rename Ebad into Hbad | clear Ebad]; [exfalso; exact (Hne Hbad) | exact Hb].
+          destruct (raw_id_eqb (blk_id bk) (init c)) eqn:Ebad;
+            [apply raw_id_eqb_spec in Ebad; rename Ebad into Hbad | clear Ebad];
+            [exfalso; exact (Hne Hbad) | exact Hb].
         - exact (Hp_nd_other bk Hbk (fun Heq => Hne (eq_trans Heq Hid_init))). }
       set (end_map := sps_end_map sp).
       assert (Hnd_end_map : NoDup (List.map fst end_map))
@@ -1898,296 +2478,15 @@ Section MemoryAndSerialization.
                  with (interp_cfg_exc ctx2
                          (denote_cfg_map (ocfg_map (blks c')) c' (Some varg1))
                          (σ2_pf, ((sf0, fstk2), g0))).
-               unfold denote_cfg_map; rewrite Hc'_eq; cbn [init blks].
-               change (build_promoted_blocks (init c) dt init_reg (blks c) pass1_out)
-                 with (sps_blks' sp).
-               eapply s1_cps_cfg_exc_bind with
-                 (RA := s1_prom_rret fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2).
-               ++ rewrite !denote_ocfg_map_eq_iter.
-                  intros k_o1 k_o2 Hk_o.
-                  eapply (s1_iter_one_step
-                            (s1_prom_loop_inv sp fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2)
-                            (s1_prom_rexc fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2)
-                            (s1_prom_rret fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2)
-                            (ocfg_step_body (ocfg_map (blks c)) (Some varg1))
-                            (ocfg_step_body (ocfg_map (sps_blks' sp)) (Some varg1))
-                            (pr_va :: U0)
-                            (σ1_pf, ((sf0, fstk1), g0))
-                            (σ2_pf, ((sf0, fstk2), g0))
-                            (init c, init c) k_o1 k_o2).
-                  ** destruct (Hfb_some (init c) b_init Efind_init)
-                       as (phi_init & cd_init & end_init & Hin_p1_init & Efind_init').
-                     pose proof (Hall_p1 b_init phi_init cd_init end_init Hin_p1_init)
-                       as (_ & _ & Hinit_p1_spec).
-                     rewrite Hid_init, raw_id_eqb_refl in Hinit_p1_spec, Efind_init'.
-                     destruct Hinit_p1_spec as [-> ->].
-                     assert (Hlk_end_init : lookup_end_reg end_map (init c) init_reg = init_end_reg).
-                     { apply lookup_end_reg_in_nodup; [exact Hnd_end_map |].
-                       unfold end_map, sps_end_map; cbn [sps_pass1]; rewrite <- Hid_init.
-                       exact (in_map (fun '(bk, _, _, er) => (blk_id bk, er)) _ _ Hin_p1_init). }
-                     unfold ocfg_step_body, sps_blks', sp; cbn [sps_c sps_dt sps_init_reg sps_pass1 ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
-                     rewrite ScopeTheory.ocfg_map_find_block, Efind_init.
-                     rewrite ScopeTheory.ocfg_map_find_block, Efind_init'.
-                     unfold denote_block; cbn [blk_phis blk_code blk_term]; rewrite Ephis_init.
-                     eapply s1_cps_obs_eq;
-                       [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _
-                                           (eq_itree_bind_congr_l
-                                              (eq_itree_bind_congr_l (denote_phis_nil_eq (init c)))))
-                       | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _
-                                            (eq_itree_bind_congr_l
-                                               (eq_itree_bind_congr_l (denote_phis_nil_eq (init c))))) |].
-                     eapply s1_cps_obs_eq;
-                       [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (Eqit.bind_bind _ _ _))
-                       | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
-                     eapply s1_cps_obs_eq;
-                       [symmetry; apply interp_cfg_exc_obs_eq, Eqit.bind_ret_l
-                       | symmetry; apply interp_cfg_exc_obs_eq, Eqit.bind_ret_l |].
-                     rewrite Hsplit_init; unfold init_code'.
-                     eapply s1_cps_cfg_exc_bind with
-                       (RA := fun U_b1 s1_b1 s2_b1 bd1 bd2 =>
-                                exists (P_b1 : list N) gs_b1 σ1_b1 σ2_b1
-                                       (sf1_b1 sf2_b1 : @stack_frame (@ParamsV IP IPT)),
-                                  incl (pr_va :: U0) U_b1 /\
-                                  incl (pr_va :: P0) P_b1 /\
-                                  bd1 = bd2 /\
-                                  s1_b1 = (σ1_b1, ((sf1_b1, fstk1), g0)) /\
-                                  s2_b1 = (σ2_b1, ((sf2_b1, fstk2), g0)) /\
-                                  gs_dt gs_b1 = dt /\
-                                  Maps.lookup p (stack_vars sf1_b1) =
-                                    Some (@DVALUE_Base (@ParamsV IP IPT) (@DVALUE_Pointer (@ParamsV IP IPT) (gs_pt gs_b1))) /\
-                                  Maps.lookup init_end_reg (stack_vars sf2_b1) =
-                                    Some (@DVALUE_Base (@ParamsV IP IPT) (gs_db gs_b1)) /\
-                                  stage1_mem_inv U_b1 P_b1 (gs_b1 :: G) σ1_b1 σ2_b1 /\
-                                  top_frame_prom_from fs0 gs_b1 G (state_memory_stack σ2_b1) /\
-                                  genv_safe P_b1 g0 /\
-                                  safe_locals_env P_b1 safe_no_p (stack_vars sf2_b1) /\
-                                  (forall x, In x avoid0 -> x <> p ->
-                                     Maps.lookup x (stack_vars sf1_b1) = Maps.lookup x (stack_vars sf2_b1)) /\
-                                  match bd1 with
-                                  | inl bid_target => In bid_target (m2r_block_succs b_init)
-                                  | inr _ => True
-                                  end).
-                     --- eapply s1_cps_obs_eq;
-                           [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _
-                                               (eq_itree_bind_congr_l (denote_code_app_eq pre_al _ (Some varg1))))
-                           | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _
-                                                (eq_itree_bind_congr_l (denote_code_app_eq pre_al _ (Some varg1)))) |].
-                         eapply s1_cps_obs_eq;
-                           [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (Eqit.bind_bind _ _ _))
-                           | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
-                         eapply s1_cps_cfg_exc_bind.
-                         +++ assert (Hsplit_pre :
-                                       blk_code b_init = [] ++ pre_al ++ (IId p, INSTR_Alloca dt anns_al, md_al) :: post_al)
-                               by exact Hsplit_init.
-                             exact (s1_other_code_exc_cps
-                                      (s1_prom_rexc fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2)
-                                      (fun s => top_frame_unprom_from fs0 G (state_memory_stack s))
-                                      fargs (blks c) b_init [] pre_al
-                                      ((IId p, INSTR_Alloca dt anns_al, md_al) :: post_al)
-                                      safe_no_p p (Some varg1) (Some varg1)
-                                      (pr_va :: U0) (pr_va :: P0) G σ1_pf σ2_pf sf0 sf0 fstk1 fstk2
-                                      Hnd_bks Hin_init Hsplit_pre Hsub_safe Hpre_chk
-                                      (fun s_a s_b Heq_fs HT => top_frame_unprom_frame_eq fs0 G _ _ (eq_sym Heq_fs) HT)
-                                      (fun s_a s_b ptrs Hdisj Heq_fs HT =>
-                                         top_frame_unprom_frame_eq fs0 G _ _ (eq_sym Heq_fs)
-                                           (top_frame_unprom_add_ptrs fs0 G ptrs _ HT Hdisj))
-                                      (fun U_x P_x σ1_x σ2_x sf1_x sf2_x ex H1 H2 H3 H4 H5 =>
-                                         conj Logic.eq_refl
-                                           (conj H1
-                                              (ex_intro _ P_x (ex_intro _ σ1_x (ex_intro _ σ2_x
-                                                 (ex_intro _ sf1_x (ex_intro _ sf2_x
-                                                    (conj H2
-                                                       (conj Logic.eq_refl (conj Logic.eq_refl
-                                                          (conj H5 (or_introl (conj H3 H4)))))))))))))
-                                      Hinv_pf Htf_pf Hgenv_pf Hsafe_sf0 (fun _ _ => Logic.eq_refl)).
-                         +++ intros U_pre s1_pre _ s2_pre _ _
-                               (P_pre & σ1_pre & σ2_pre & sf1_pre & sf2_pre &
-                                HincU_pre & HincP_pre & _ & _ & -> & -> &
-                                Hinv_pre & Htf_pre & Hgenv_pre & Hsafe_pre & _ & Heq_sf_pre).
-                             pose proof (Heq_sf_pre Logic.eq_refl) as ->.
-                             assert (Econs_l :
-                                       @denote_code (@ParamsV IP IPT)
-                                         ((IId p, INSTR_Alloca dt anns_al, md_al) :: post_al) (Some varg1) ≅
-                                       ITree.bind (denote_instr (IId p, INSTR_Alloca dt anns_al, md_al) (Some varg1))
-                                         (fun _ => denote_code post_al (Some varg1)))
-                               by reflexivity.
-                             assert (Econs_r :
-                                       @denote_code (@ParamsV IP IPT)
-                                         ((IId p, INSTR_Alloca dt anns_al, md_al) :: init_op :: post_al') (Some varg1) ≅
-                                       ITree.bind
-                                         (ITree.bind (denote_instr (IId p, INSTR_Alloca dt anns_al, md_al) (Some varg1))
-                                            (fun _ => denote_instr init_op (Some varg1)))
-                                         (fun _ => denote_code post_al' (Some varg1))).
-                             { unfold denote_code; cbn [loop_monad]; symmetry; apply Eqit.bind_bind. }
-                             eapply s1_cps_obs_eq;
-                               [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (eq_itree_bind_congr_l Econs_l))
-                               | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (eq_itree_bind_congr_l Econs_r)) |].
-                             eapply s1_cps_obs_eq;
-                               [symmetry; apply (interp_cfg_exc_obs_eq ctx1 _ _ _ (Eqit.bind_bind _ _ _))
-                               | symmetry; apply (interp_cfg_exc_obs_eq ctx2 _ _ _ (Eqit.bind_bind _ _ _)) |].
-                             eapply s1_cps_cfg_exc_bind.
-                             *** apply refine_prov_to_s1_cps.
-                                 exact (stage1_prom_alloca_init_exc_sim ctx1 ctx2
-                                          (s1_prom_rexc fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2)
-                                          p init_reg dt anns_al md_al (Some varg1) (Some varg1)
-                                          fs0 U_pre P_pre G σ1_pre σ2_pre sf2_pre sf2_pre fstk1 fstk2 g0
-                                          Hsc Hanns_al Hinv_pre Htf_pre).
-                             *** intros U_al s1_al _ s2_al _ _
-                                   (gs0 & σ1_al & σ2_al & _ & -> & _ & _ & Hdt0 & Hdb0 &
-                                    -> & -> & Hinv_al & Htf_al).
-                                 assert (HincU_al : incl (pr_va :: U0) (gs_pr gs0 :: U_pre))
-                                   by (intros x Hx; right; exact (HincU_pre x Hx)).
-                                 assert (Hlk_p_al :
-                                           Maps.lookup p (Maps.add p (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))) (stack_vars sf2_pre)) =
-                                           Some (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))))
-                                   by (cbn [Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity).
-                                 assert (Hlk_init_al :
-                                           Maps.lookup init_reg
-                                             (Maps.add init_reg (DVALUE_Base DVALUE_Poison)
-                                                (Maps.add p (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))) (stack_vars sf2_pre))) =
-                                           Some (DVALUE_Base (gs_db gs0)))
-                                   by (rewrite Hdb0; cbn [Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity).
-                                 assert (Hsafe_al :
-                                           safe_locals_env P_pre safe_no_p
-                                             (Maps.add init_reg (DVALUE_Base DVALUE_Poison)
-                                                (Maps.add p (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))) (stack_vars sf2_pre)))).
-                                 { apply safe_locals_env_add_other;
-                                     [intros Hs; exact (Hinit_nin0 (Hsafe_av0 _ Hs)) |].
-                                   apply safe_locals_env_add_other; [exact Hp_nin_safe | exact Hsafe_pre]. }
-                                 assert (Hvars_al :
-                                           forall x, In x avoid0 -> x <> p ->
-                                             Maps.lookup x (Maps.add p (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))) (stack_vars sf2_pre)) =
-                                             Maps.lookup x (Maps.add init_reg (DVALUE_Base DVALUE_Poison)
-                                                              (Maps.add p (DVALUE_Base (DVALUE_Pointer (gs_pt gs0))) (stack_vars sf2_pre))))
-                                   by (intros x Hx _; cbn [Maps.lookup Maps.add Map_rmap]; symmetry;
-                                       rewrite RMF.F.add_neq_o by (intros ->; exact (Hinit_nin0 Hx)); reflexivity).
-                                 assert (Hsplit_post :
-                                           blk_code b_init = (pre_al ++ [(IId p, INSTR_Alloca dt anns_al, md_al)]) ++ post_al ++ [])
-                                   by (rewrite <- app_assoc, app_nil_r; exact Hsplit_init).
-                                 assert (Huses_post : forall im0 x, In im0 post_al -> In x (m2r_code_entry_uses im0) -> In x avoid0).
-                                 { intros im0 x Him0 Hx; apply (Hblk_uses_av0 b_init x Hin_init).
-                                   eapply m2r_code_entry_uses_in_block; [| exact Hx].
-                                   rewrite Hsplit_init; apply in_app_iff; right; right; exact Him0. }
-                                 assert (Hdefs_post : forall im0 x, In im0 post_al -> In x (instr_id_defs (fst (fst im0))) -> In x avoid0).
-                                 { intros im0 x Him0 Hx; apply (Hblk_defs_av0 b_init x Hin_init).
-                                   unfold full_block_defs; apply in_app_iff; right; apply in_app_iff; left.
-                                   rewrite Hsplit_init; apply in_flat_map; exists im0; split;
-                                     [apply in_app_iff; right; right; exact Him0
-                                     | destruct im0 as [[? ?] ?]; exact Hx]. }
-                                 eapply s1_cps_cfg_exc_bind.
-                                 ---- exact (s1_rewrite_code_exc_cps
-                                               (s1_prom_rexc fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2)
-                                               avoid0 fargs (blks c) b_init
-                                               (pre_al ++ [(IId p, INSTR_Alloca dt anns_al, md_al)]) post_al []
-                                               safe_no_p p dt init_reg avoid2 post_al' init_end_reg avoid3
-                                               (Some varg1) (Some varg1) fs0 (gs_pr gs0 :: U_pre) P_pre gs0 G
-                                               σ1_al σ2_al
-                                               (upd_local_sf sf2_pre
-                                                  (Maps.add p (@DVALUE_Base (@ParamsV IP IPT) (@DVALUE_Pointer (@ParamsV IP IPT) (gs_pt gs0))) (stack_vars sf2_pre)))
-                                               (upd_local_sf sf2_pre
-                                                  (Maps.add init_reg (@DVALUE_Base (@ParamsV IP IPT) DVALUE_Poison)
-                                                     (Maps.add p (@DVALUE_Base (@ParamsV IP IPT) (@DVALUE_Pointer (@ParamsV IP IPT) (gs_pt gs0))) (stack_vars sf2_pre))))
-                                               fstk1 fstk2
-                                               Hnd_bks Hin_init Hsplit_post Hsub_safe Hsafe_av0
-                                               Huses_post Hdefs_post Hp_nd_post Hpost_chk Erw_post
-                                               Hinc_av2 Hinit_nin0 Hsc
-                                               (fun U_x P_x gs_x σ1_x σ2_x sf1_x sf2_x ex H1 H2 H3 H4 H5 =>
-                                                  conj Logic.eq_refl
-                                                    (conj (incl_tran HincU_al H1)
-                                                       (ex_intro _ P_x (ex_intro _ σ1_x (ex_intro _ σ2_x
-                                                          (ex_intro _ sf1_x (ex_intro _ sf2_x
-                                                             (conj (incl_tran HincP_pre H2)
-                                                                (conj Logic.eq_refl (conj Logic.eq_refl
-                                                                   (conj H5 (or_intror (ex_intro _ gs_x (conj H3 H4))))))))))))))
-                                               Hdt0 Hlk_p_al Hlk_init_al
-                                               Hinv_al Htf_al Hgenv_pre Hsafe_al Hvars_al).
-                                 ---- intros U_post s1_post _ s2_post _ _
-                                        (P_post & gs_post & σ1_post & σ2_post & sf1_post & sf2_post &
-                                         HincU_post & HincP_post & _ & _ & Hdt_post & Hlk_p_post & Hlk_er_post &
-                                         -> & -> & Hinv_post & Htf_post & Hgenv_post & Hsafe_post & Hvars_post).
-                                      assert (HincU_p : incl (pr_va :: U0) U_post)
-                                        by (exact (incl_tran HincU_al HincU_post)).
-                                      assert (HincP_p : incl (pr_va :: P0) P_post)
-                                        by (exact (incl_tran HincP_pre HincP_post)).
-                                      destruct (blk_term b_init) as [[iid_tm tm_init] md_tm] eqn:Etm_init.
-                                      cbn [fst snd] in Hni_init.
-                                      assert (Htm_vars : forall x,
-                                                In x (full_term_uses tm_init) ->
-                                                Maps.lookup x (stack_vars sf1_post) = Maps.lookup x (stack_vars sf2_post)).
-                                      { intros x Hx; apply Hvars_post.
-                                        - apply (Hblk_uses_av0 b_init x Hin_init), m2r_term_entry_uses_in_block.
-                                          rewrite Etm_init; cbn [m2r_term_entry_uses]; apply in_app_iff; left; exact Hx.
-                                        - intros ->; apply Hterm_p; try rewrite Etm_init;
-                                            cbn [m2r_term_entry_uses]; apply in_app_iff; left; exact Hx. }
-                                      apply refine_prov_to_s1_cps; eapply refine_prov_weaken.
-                                      ++++ apply (denote_non_invoke_term_exc_sim ctx1 ctx2
-                                                    (s1_prom_rexc fs0 (pr_va :: U0) (pr_va :: P0) G fstk1 fstk2)
-                                                    iid_tm iid_tm tm_init md_tm md_tm
-                                                    U_post σ1_post σ2_post sf1_post sf2_post fstk1 fstk2 g0
-                                                    Hni_init Htm_vars).
-                                           intros ex; refine (conj Logic.eq_refl (conj HincU_p _)).
-                                           exists P_post, σ1_post, σ2_post, sf1_post, sf2_post.
-                                           exact (conj HincP_p (conj Logic.eq_refl (conj Logic.eq_refl
-                                                    (conj Hgenv_post (or_intror (ex_intro _ gs_post (conj Hinv_post Htf_post))))))).
-                                      ++++ intros U_t [s1_t res1_t] [s2_t res2_t].
-                                           destruct res1_t as [ex1 | bd1], res2_t as [ex2 | bd2]; cbn [exc_post];
-                                             try (intros H; exact H).
-                                           intros (-> & -> & -> & <- & Hsucc).
-                                           destruct bd1 as [bid_t | dv_t];
-                                             [cbn in Hsucc |- *; unfold m2r_block_succs; rewrite Etm_init |];
-                                           exists P_post, gs_post, σ1_post, σ2_post, sf1_post, sf2_post;
-                                           exact (conj HincU_p (conj HincP_p (conj Logic.eq_refl (conj Logic.eq_refl
-                                                    (conj Logic.eq_refl (conj Hdt_post (conj Hlk_p_post
-                                                      (conj Hlk_er_post (conj Hinv_post (conj Htf_post
-                                                        (conj Hgenv_post (conj Hsafe_post (conj Hvars_post Hsucc))))))))))))).
-                     --- intros U_b1 s1_b1 bd1 s2_b1 bd2 _
-                           (P_b1 & gs_b1 & σ1_b1 & σ2_b1 & sf1_b1 & sf2_b1 &
-                            HincU_b1 & HincP_b1 & <- & -> & -> & Hdt_b1 & Hlk_p_b1 & Hlk_er_b1 &
-                            Hinv_b1 & Htf_b1 & Hgenv_b1 & Hsafe_b1 & Hvars_b1 & Hsucc_b1).
-                         destruct bd1 as [bid_next | dv_ret].
-                         +++ apply refine_prov_to_s1_cps, refine_cfg_exc_ret.
-                             assert (Hsucc_init : In bid_next (m2r_block_succs b_init))
-                               by exact Hsucc_b1.
-                             assert (Hne_init : bid_next <> init c).
-                             { intros Heq_n; apply Hno_entry_pred; rewrite <- Heq_n.
-                               unfold m2r_all_succs; apply in_flat_map; exists b_init; split; assumption. }
-                             refine (conj Logic.eq_refl _).
-                             unfold s1_prom_loop_inv; cbn [sps_c sps_dt sps_p sps_init_reg fst snd].
-                             unfold sps_safe_no_p, sps_avoid0; cbn [sps_fargs sps_c sps_p]; fold all_defs safe_locals safe_no_p avoid0.
-                             refine (conj Hne_init (conj HincU_b1 (conj _ _))).
-                             *** exists b_init; exact (conj Hin_init (conj Hid_init Hsucc_init)).
-                             *** assert (Hlk_end_init' :
-                                           lookup_end_reg
-                                             (sps_end_map
-                                                {| sps_fargs := fargs; sps_c := c; sps_b_init := b_init;
-                                                   sps_p := p; sps_dt := dt; sps_init_reg := init_reg;
-                                                   sps_end_reg0 := init_end_reg;
-                                                   sps_code0' := pre_al ++ (IId p, INSTR_Alloca dt anns_al, md_al) :: init_op :: post_al';
-                                                   sps_pass1 := pass1_out |})
-                                             (init c) init_reg = init_end_reg)
-                                   by exact Hlk_end_init.
-                                 exists P_b1, gs_b1, σ1_b1, σ2_b1, sf1_b1, sf2_b1.
-                                 rewrite Hlk_end_init'.
-                                 exact (conj HincP_b1 (conj Hdt_b1 (conj Hlk_p_b1 (conj Hlk_er_b1
-                                          (conj Logic.eq_refl (conj Logic.eq_refl
-                                            (conj Hinv_b1 (conj Htf_b1 (conj Hgenv_b1
-                                              (conj Hsafe_b1 Hvars_b1)))))))))).
-                         +++ apply refine_prov_to_s1_cps, refine_cfg_exc_ret.
-                             refine (conj Logic.eq_refl (conj HincU_b1 _)).
-                             exists P_b1, σ1_b1, σ2_b1, sf1_b1, sf2_b1.
-                             exact (conj HincP_b1 (conj Logic.eq_refl (conj Logic.eq_refl
-                                      (conj Hgenv_b1 (or_intror (ex_intro _ gs_b1 (conj Hinv_b1 Htf_b1))))))).
-                  ** intros U' s1' s2' j' _ Hli'; apply s1_lfp_fold; right; right.
-                     exists sp, (Some varg1), fs0, (pr_va :: U0), (pr_va :: P0), G,
-                            fstk1, fstk2, s1', s2', j', k_o1, k_o2.
-                     rewrite !denote_ocfg_map_eq_iter.
-                     refine (conj Hwf (conj Hli' (conj Hk_o (conj _ _)))); reflexivity.
-                  ** exact Hk_o.
-               ++ intros U_ocfg s1_ocfg r_ocfg1 s2_ocfg r_ocfg2 _ [<- Hexit_ocfg].
-                  destruct r_ocfg1 as [bid_miss | uv_ret].
-                  ** apply refine_prov_to_s1_cps, refine_cfg_exc_raise_both.
-                  ** apply refine_prov_to_s1_cps, refine_cfg_exc_ret;
-                       exact (conj Logic.eq_refl Hexit_ocfg).
+               rewrite Hc'_eq.
+               exact (s1_prom_cfg_cps fargs c b_init pre_al post_al p dt anns_al md_al
+                        safe_no_p avoid0 init_reg avoid2 post_al' init_end_reg avoid3 pass1_out
+                        varg1 fs0 U0 P0 pr_va G σ1_pf σ2_pf sf0 fstk1 fstk2
+                        Hnd_bks Hno_entry_pred Efind_init Hin_init Hid_init Ephis_init Hsplit_init
+                        Hsc Hanns_al Hsub_safe Hp_nin_safe Hsafe_av0 Hblk_uses_av0 Hblk_defs_av0
+                        Hp_nd_post Hpre_chk Hpost_chk Hterm_p Hni_init Erw_post Hinc_av2 Hinit_nin0
+                        Hbks_p1 Hall_p1 Hwf Hinv_pf Htf_pf Hgenv_pf Hsafe_sf0
+                        Logic.eq_refl Logic.eq_refl).
             -- intros U_rv s1_rv rv1 s2_rv rv2 _ Hrv_post.
                assert (Hrv_unif :
                          rv1 = rv2 /\

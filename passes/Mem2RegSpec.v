@@ -134,8 +134,12 @@ Lemma m2r_count_id_zero (x : raw_id) (xs : list raw_id) :
 Proof using.
   induction xs as [| y ys IH]; cbn.
   - split; [intros _ [] | intros _; reflexivity].
-  - destruct (raw_id_eqb x y) eqn:Exy; cbn; [apply raw_id_eqb_spec in Exy; subst y | apply raw_id_eqb_neq in Exy; rename Exy into Hne].
-    + split; [lia | intros H; exfalso; apply H; left; reflexivity].
+  - destruct (raw_id_eqb x y) eqn:Exy; cbn;
+      [ apply raw_id_eqb_spec in Exy; subst y
+      | apply raw_id_eqb_neq in Exy; rename Exy into Hne ].
+    + split;
+        [ lia
+        | intros H; exfalso; apply H; left; reflexivity ].
     + rewrite IH; split; intros H.
       * intros [Heq | Hin]; [exact (Hne ( eq_sym Heq)) | exact (H Hin)].
       * intros Hin; apply H; right; exact Hin.

@@ -109,8 +109,10 @@ Lemma ident_eqb_spec (x y : ident) :
 Proof.
   destruct x as [gx | lx], y as [gy | ly]; cbn [ident_eqb];
     try (split; intros H; discriminate).
-  - rewrite raw_id_eqb_spec; split; [intros ->; reflexivity | intros H; inversion H; reflexivity].
-  - rewrite raw_id_eqb_spec; split; [intros ->; reflexivity | intros H; inversion H; reflexivity].
+  - rewrite raw_id_eqb_spec; split;
+      [intros ->; reflexivity | intros H; inversion H; reflexivity].
+  - rewrite raw_id_eqb_spec; split;
+      [intros ->; reflexivity | intros H; inversion H; reflexivity].
 Qed.
 
 Definition in_raw_ids (x : raw_id) (xs : list raw_id) : bool :=
@@ -197,7 +199,8 @@ Fixpoint fresh_names (prefix : string) (n : nat) (avoid : list raw_id) : list ra
 Lemma fresh_names_length (prefix : string) (n : nat) (avoid : list raw_id) :
   List.length (fresh_names prefix n avoid) = n.
 Proof.
-  revert avoid; induction n as [| n' IH]; intros avoid; [reflexivity | cbn; rewrite IH; reflexivity].
+  revert avoid; induction n as [| n' IH]; intros avoid;
+    [reflexivity | cbn; rewrite IH; reflexivity].
 Qed.
 
 Lemma fresh_names_disjoint (prefix : string) (n : nat) (avoid : list raw_id) :

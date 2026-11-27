@@ -232,6 +232,44 @@ Proof.
   apply mm_dec_eqb_eq.
 Qed.
 
+Local Ltac mm_eq_iff_1 :=
+  split;
+  [intros ->; reflexivity
+  | let H := fresh "H" in intros H; injection H as ->; reflexivity].
+
+Local Ltac mm_eq_iff_2 :=
+  split;
+  [intros [-> ->]; reflexivity
+  | let H := fresh "H" in intros H; injection H as -> ->; split; reflexivity].
+
+Local Ltac mm_eq_iff_3 :=
+  split;
+  [intros [[-> ->] ->]; reflexivity
+  | let H := fresh "H" in intros H; injection H as -> -> ->; repeat split; reflexivity].
+
+Local Ltac mm_eq_iff_4 :=
+  split;
+  [intros [[[-> ->] ->] ->]; reflexivity
+  | let H := fresh "H" in intros H; injection H as -> -> -> ->; repeat split; reflexivity].
+
+Local Ltac mm_eq_iff_5 :=
+  split;
+  [intros [[[[-> ->] ->] ->] ->]; reflexivity
+  | let H := fresh "H" in
+    intros H; injection H as -> -> -> -> ->; repeat split; reflexivity].
+
+Local Ltac mm_eq_iff_6 :=
+  split;
+  [intros [[[[[-> ->] ->] ->] ->] ->]; reflexivity
+  | let H := fresh "H" in
+    intros H; injection H as -> -> -> -> -> ->; repeat split; reflexivity].
+
+Local Ltac mm_eq_iff_7 :=
+  split;
+  [intros [[[[[[-> ->] ->] ->] ->] ->] ->]; reflexivity
+  | let H := fresh "H" in
+    intros H; injection H as -> -> -> -> -> -> ->; repeat split; reflexivity].
+
 Definition mm_option_eqb {A : Type} (eqA : A -> A -> bool)
   (o1 o2 : option A) : bool :=
   match o1, o2 with
@@ -246,7 +284,7 @@ Lemma mm_option_eqb_eq {A : Type} (eqA : A -> A -> bool)
   mm_option_eqb eqA o1 o2 = true <-> o1 = o2.
 Proof.
   destruct o1 as [x1 |], o2 as [x2 |]; cbn [mm_option_eqb].
-  - rewrite (HA x1 x2); split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+  - rewrite (HA x1 x2); mm_eq_iff_1.
   - split; discriminate.
   - split; discriminate.
   - split; reflexivity.
@@ -268,7 +306,7 @@ Lemma mm_prod_eqb_eq {A B : Type}
 Proof.
   destruct p1 as [a1 b1], p2 as [a2 b2]; cbn [mm_prod_eqb].
   rewrite Bool.andb_true_iff, (HA a1 a2), (HB b1 b2).
-  split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
+  mm_eq_iff_2.
 Qed.
 
 Definition mm_list_eqb {A : Type} (eqA : A -> A -> bool) :
@@ -291,7 +329,7 @@ Proof.
   - rewrite Bool.andb_true_iff.
     rewrite (IH x1 (or_introl Logic.eq_refl) x2).
     rewrite (IHr (fun z Hz => IH z (or_intror Hz)) r2).
-    split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
+    mm_eq_iff_2.
 Qed.
 
 Lemma mm_list_eqb_eq {A : Type} (eqA : A -> A -> bool)
@@ -314,8 +352,8 @@ Lemma mm_instr_id_eqb_eq (x y : instr_id) :
 Proof.
   destruct x as [id1 | n1], y as [id2 | n2]; cbn [mm_instr_id_eqb];
     try (split; discriminate).
-  - rewrite raw_id_eqb_spec; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_Z_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+  - rewrite raw_id_eqb_spec; mm_eq_iff_1.
+  - rewrite mm_Z_eqb_eq; mm_eq_iff_1.
 Qed.
 
 Definition mm_file_info_eqb (f1 f2 : file_info) : bool :=
@@ -390,22 +428,22 @@ Proof.
   apply (@AstLib.typ_ind (fun t1 => forall t2, mm_typ_eqb t1 t2 = true <-> t1 = t2)).
   - intros sz1 [sz2 | | | [|] | | | | | | | | | | | | |]; cbn [mm_typ_eqb];
       try (split; discriminate).
-    rewrite mm_pos_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+    rewrite mm_pos_eqb_eq; mm_eq_iff_1.
   - intros sz1 [| sz2 | | [|] | | | | | | | | | | | | |]; cbn [mm_typ_eqb];
       try (split; discriminate).
-    rewrite mm_pos_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+    rewrite mm_pos_eqb_eq; mm_eq_iff_1.
   - intros [| | | [|] | | | | | | | | | | | | |]; cbn [mm_typ_eqb];
       first [split; reflexivity | split; discriminate].
   - intros u1 IHu [| | | [u2 |] | | | | | | | | | | | | |]; cbn [mm_typ_eqb];
       try (split; discriminate).
-    rewrite (IHu u2); split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+    rewrite (IHu u2); mm_eq_iff_1.
   - intros [| | | [u2 |] | | | | | | | | | | | | |]; cbn [mm_typ_eqb];
       first [split; reflexivity | split; discriminate].
   - intros [| | | [|] | | | | | | | | | | | | |]; cbn [mm_typ_eqb];
       first [split; reflexivity | split; discriminate].
   - intros fp1 [| | | [|] | | fp2 | | | | | | | | | | |]; cbn [mm_typ_eqb];
       try (split; discriminate).
-    rewrite mm_fp_variant_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+    rewrite mm_fp_variant_eqb_eq; mm_eq_iff_1.
   - intros [| | | [|] | | | | | | | | | | | | |]; cbn [mm_typ_eqb];
       first [split; reflexivity | split; discriminate].
   - intros [| | | [|] | | | | | | | | | | | | |]; cbn [mm_typ_eqb];
@@ -417,29 +455,29 @@ Proof.
   - intros sz1 u1 IHu [| | | [|] | | | | | | | sz2 u2 | | | | | |]; cbn [mm_typ_eqb];
       try (split; discriminate).
     rewrite Bool.andb_true_iff, mm_N_eqb_eq, (IHu u2).
-    split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
+    mm_eq_iff_2.
   - intros ret1 args1 va1 IHret IHargs [| | | [|] | | | | | | | | ret2 args2 va2 | | | | |];
       cbn [mm_typ_eqb]; try (split; discriminate).
     rewrite !Bool.andb_true_iff, (IHret ret2),
       (mm_list_eqb_in_eq mm_typ_eqb args1 IHargs args2), mm_bool_eqb_eq.
-    split; [intros [[-> ->] ->]; reflexivity | intros H; injection H as -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_3.
   - intros fs1 IHfs [| | | [|] | | | | | | | | | fs2 | | | |]; cbn [mm_typ_eqb];
       try (split; discriminate).
     rewrite (mm_list_eqb_in_eq mm_typ_eqb fs1 IHfs fs2).
-    split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+    mm_eq_iff_1.
   - intros fs1 IHfs [| | | [|] | | | | | | | | | | fs2 | | |]; cbn [mm_typ_eqb];
       try (split; discriminate).
     rewrite (mm_list_eqb_in_eq mm_typ_eqb fs1 IHfs fs2).
-    split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+    mm_eq_iff_1.
   - intros [| | | [|] | | | | | | | | | | | | |]; cbn [mm_typ_eqb];
       first [split; reflexivity | split; discriminate].
   - intros sz1 u1 IHu [| | | [|] | | | | | | | | | | | | sz2 u2 |]; cbn [mm_typ_eqb];
       try (split; discriminate).
     rewrite Bool.andb_true_iff, mm_N_eqb_eq, (IHu u2).
-    split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
+    mm_eq_iff_2.
   - intros id1 [| | | [|] | | | | | | | | | | | | | id2]; cbn [mm_typ_eqb];
       try (split; discriminate).
-    rewrite ident_eqb_spec; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+    rewrite ident_eqb_spec; mm_eq_iff_1.
 Qed.
 
 Definition mm_linkage_eqb (x y : linkage) : bool :=
@@ -531,7 +569,7 @@ Lemma mm_cconv_ast_eqb_eq (x y : cconv) :
 Proof.
   destruct x, y; cbn [mm_cconv_ast_eqb];
     try solve [split; reflexivity | split; discriminate].
-  rewrite mm_int_syntax_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+  rewrite mm_int_syntax_eqb_eq; mm_eq_iff_1.
 Qed.
 
 Definition mm_param_attr_eqb (x y : param_attr) : bool :=
@@ -585,25 +623,25 @@ Lemma mm_param_attr_eqb_eq (x y : param_attr) :
 Proof.
   destruct x; destruct y; cbn [mm_param_attr_eqb];
     try solve [split; reflexivity | split; discriminate].
-  - rewrite mm_typ_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_typ_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_typ_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_typ_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_typ_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_typ_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_int_syntax_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_int_syntax_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_int_syntax_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_Z_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_int_syntax_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+  - rewrite mm_typ_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_typ_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_typ_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_typ_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_typ_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_typ_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_int_syntax_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_int_syntax_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_int_syntax_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_Z_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_int_syntax_eqb_eq; mm_eq_iff_1.
   - rewrite (mm_option_eqb_eq _ mm_int_syntax_eqb_eq);
-      split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+      mm_eq_iff_1.
   - rewrite !Bool.andb_true_iff, mm_typ_eqb_eq, !mm_int_syntax_eqb_eq;
-      split; [intros [[-> ->] ->]; reflexivity | intros H; injection H as -> -> ->; repeat split; reflexivity].
+      mm_eq_iff_3.
   - rewrite (mm_list_eqb_eq _ (mm_prod_eqb_eq _ _ mm_int_syntax_eqb_eq mm_int_syntax_eqb_eq));
-      split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+      mm_eq_iff_1.
   - rewrite (mm_prod_eqb_eq _ _ (mm_list_eqb_eq _ mm_string_eqb_eq) (mm_list_eqb_eq _ mm_string_eqb_eq));
-      split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+      mm_eq_iff_1.
 Qed.
 
 Definition mm_mem_loc_eqb (x y : mem_loc) : bool :=
@@ -819,21 +857,21 @@ Proof.
   - split; [discriminate | intros ->; congruence].
   - destruct x; try discriminate Ex; destruct y; try discriminate Ey;
       try solve [split; discriminate].
-    + rewrite mm_int_syntax_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-    + rewrite mm_string_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+    + rewrite mm_int_syntax_eqb_eq; mm_eq_iff_1.
+    + rewrite mm_string_eqb_eq; mm_eq_iff_1.
     + rewrite Bool.andb_true_iff, mm_int_syntax_eqb_eq, (mm_option_eqb_eq _ mm_int_syntax_eqb_eq);
-        split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
+        mm_eq_iff_2.
     + rewrite (mm_option_eqb_eq _ mm_bool_eqb_eq);
-        split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+        mm_eq_iff_1.
     + rewrite Bool.andb_true_iff, mm_int_syntax_eqb_eq, (mm_option_eqb_eq _ mm_int_syntax_eqb_eq);
-        split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
-    + rewrite mm_string_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+        mm_eq_iff_2.
+    + rewrite mm_string_eqb_eq; mm_eq_iff_1.
     + rewrite (mm_prod_eqb_eq _ _ mm_string_eqb_eq mm_string_eqb_eq);
-        split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-    + rewrite mm_Z_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+        mm_eq_iff_1.
+    + rewrite mm_Z_eqb_eq; mm_eq_iff_1.
     + rewrite (mm_list_eqb_eq _ (mm_prod_eqb_eq _ _ mm_mem_loc_eqb_eq mm_mem_access_kind_eqb_eq));
-        split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-    + rewrite mm_string_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+        mm_eq_iff_1.
+    + rewrite mm_string_eqb_eq; mm_eq_iff_1.
 Qed.
 
 Definition mm_tls_eqb (x y : thread_local_storage) : bool :=
@@ -926,9 +964,9 @@ Proof.
   destruct x, y; cbn [mm_ibinop_eqb];
     try solve [split; reflexivity | split; discriminate];
     try (rewrite Bool.andb_true_iff, !mm_bool_eqb_eq;
-         split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity]);
+         mm_eq_iff_2);
     (rewrite mm_bool_eqb_eq;
-     split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity]).
+     mm_eq_iff_1).
 Qed.
 
 Definition mm_fbinop_eqb (x y : fbinop) : bool :=
@@ -988,13 +1026,13 @@ Proof.
   destruct x, y; cbn [mm_pure_conv_eqb];
     try solve [split; reflexivity | split; discriminate].
   - rewrite Bool.andb_true_iff, !mm_bool_eqb_eq;
-      split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
-  - rewrite mm_bool_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+      mm_eq_iff_2.
+  - rewrite mm_bool_eqb_eq; mm_eq_iff_1.
   - rewrite (mm_list_eqb_eq _ mm_fast_math_eqb_eq);
-      split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+      mm_eq_iff_1.
   - rewrite (mm_list_eqb_eq _ mm_fast_math_eqb_eq);
-      split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_bool_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+      mm_eq_iff_1.
+  - rewrite mm_bool_eqb_eq; mm_eq_iff_1.
 Qed.
 
 Definition mm_impure_conv_eqb (x y : impure_conversion) : bool :=
@@ -1026,8 +1064,8 @@ Lemma mm_conv_type_eqb_eq (x y : conversion_type) :
 Proof.
   destruct x, y; cbn [mm_conv_type_eqb];
     try solve [split; reflexivity | split; discriminate].
-  - rewrite mm_pure_conv_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_impure_conv_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+  - rewrite mm_pure_conv_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_impure_conv_eqb_eq; mm_eq_iff_1.
 Qed.
 
 Definition mm_gep_flags_eqb (x y : gep_flags) : bool :=
@@ -1040,7 +1078,7 @@ Lemma mm_gep_flags_eqb_eq (x y : gep_flags) :
 Proof.
   destruct x as [i1 s1 u1], y as [i2 s2 u2]; unfold mm_gep_flags_eqb; cbn [gep_inbounds gep_nusw gep_nuw].
   rewrite !Bool.andb_true_iff, !mm_bool_eqb_eq.
-  split; [intros [[-> ->] ->]; reflexivity | intros H; injection H as -> -> ->; repeat split; reflexivity].
+  mm_eq_iff_3.
 Qed.
 
 Definition mm_float_hex_type_eqb (x y : float_hex_type) : bool :=
@@ -1072,9 +1110,9 @@ Lemma mm_float_syntax_eqb_eq (x y : float_syntax) :
   mm_float_syntax_eqb x y = true <-> x = y.
 Proof.
   destruct x, y; cbn [mm_float_syntax_eqb]; try (split; discriminate).
-  - rewrite mm_decimal_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+  - rewrite mm_decimal_eqb_eq; mm_eq_iff_1.
   - rewrite Bool.andb_true_iff, mm_float_hex_type_eqb_eq, mm_hex_uint_eqb_eq;
-      split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
+      mm_eq_iff_2.
 Qed.
 
 Definition mm_texp_list_eqb (eqE : exp dtyp -> exp dtyp -> bool) :
@@ -1099,7 +1137,7 @@ Proof.
   - rewrite !Bool.andb_true_iff, mm_dtyp_eqb_eq.
     pose proof (IH (dt1, e1) (or_introl Logic.eq_refl) e2) as He1; cbn [snd] in He1.
     rewrite He1, (IHr (fun p Hp => IH p (or_intror Hp)) r2).
-    split; [intros [[-> ->] ->]; reflexivity | intros H; injection H as -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_3.
 Qed.
 
 Fixpoint mm_exp_eqb (e1 e2 : exp dtyp) : bool :=
@@ -1203,165 +1241,170 @@ Proof.
            (fun m1 => forall m2, mm_metadata_eqb m1 m2 = true <-> m1 = m2)).
   - (* EXP_Ident *)
     intros id1 e2; destruct e2; cbn [mm_exp_eqb]; try (split; discriminate).
-    rewrite ident_eqb_spec; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+    rewrite ident_eqb_spec; mm_eq_iff_1.
   - (* EXP_Integer *)
     intros x1 e2; destruct e2; cbn [mm_exp_eqb]; try (split; discriminate).
-    rewrite mm_int_syntax_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+    rewrite mm_int_syntax_eqb_eq; mm_eq_iff_1.
   - (* EXP_Float *)
     intros f1 e2; destruct e2; cbn [mm_exp_eqb]; try (split; discriminate).
-    rewrite mm_float_syntax_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+    rewrite mm_float_syntax_eqb_eq; mm_eq_iff_1.
   - (* EXP_Bool *)
     intros b1 e2; destruct e2; cbn [mm_exp_eqb]; try (split; discriminate).
-    rewrite mm_bool_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+    rewrite mm_bool_eqb_eq; mm_eq_iff_1.
   - (* EXP_Null *)
-    intros e2; destruct e2; cbn [mm_exp_eqb]; first [split; reflexivity | split; discriminate].
+    intros e2; destruct e2; cbn [mm_exp_eqb];
+      first [split; reflexivity | split; discriminate].
   - (* EXP_Zero_initializer *)
-    intros e2; destruct e2; cbn [mm_exp_eqb]; first [split; reflexivity | split; discriminate].
+    intros e2; destruct e2; cbn [mm_exp_eqb];
+      first [split; reflexivity | split; discriminate].
   - (* EXP_Cstring *)
     intros elts1 IH e2; destruct e2; cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite (mm_texp_list_eqb_in_eq mm_exp_eqb elts1 IH);
-      split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+      mm_eq_iff_1.
   - (* EXP_Undef *)
-    intros e2; destruct e2; cbn [mm_exp_eqb]; first [split; reflexivity | split; discriminate].
+    intros e2; destruct e2; cbn [mm_exp_eqb];
+      first [split; reflexivity | split; discriminate].
   - (* EXP_Poison *)
-    intros e2; destruct e2; cbn [mm_exp_eqb]; first [split; reflexivity | split; discriminate].
+    intros e2; destruct e2; cbn [mm_exp_eqb];
+      first [split; reflexivity | split; discriminate].
   - (* EXP_Struct *)
     intros fs1 IH e2; destruct e2; cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite (mm_texp_list_eqb_in_eq mm_exp_eqb fs1 IH);
-      split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+      mm_eq_iff_1.
   - (* EXP_Packed_struct *)
     intros fs1 IH e2; destruct e2; cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite (mm_texp_list_eqb_in_eq mm_exp_eqb fs1 IH);
-      split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+      mm_eq_iff_1.
   - (* EXP_Array *)
     intros elts1 IH e2; destruct e2; cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite (mm_texp_list_eqb_in_eq mm_exp_eqb elts1 IH);
-      split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+      mm_eq_iff_1.
   - (* EXP_Vector *)
     intros elts1 IH e2; destruct e2; cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite (mm_texp_list_eqb_in_eq mm_exp_eqb elts1 IH);
-      split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+      mm_eq_iff_1.
   - (* OP_IBinop *)
     intros iop1 t1 v1 w1 IHv IHw e2; destruct e2; cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite !Bool.andb_true_iff, mm_ibinop_eqb_eq, mm_dtyp_eqb_eq, (IHv _), (IHw _).
-    split; [intros [[[-> ->] ->] ->]; reflexivity | intros H; injection H as -> -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_4.
   - (* OP_Fneg *)
     intros fm1 [dt1 v1] IHv e2; cbn [snd] in IHv.
     destruct e2 as [| | | | | | | | | | | | | | | | fm2 [dt2 v2] | | | | | | | | | | | | | | ];
       cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite !Bool.andb_true_iff, (mm_list_eqb_eq _ mm_fast_math_eqb_eq), mm_dtyp_eqb_eq, (IHv v2).
-    split; [intros [[-> ->] ->]; reflexivity | intros H; injection H as -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_3.
   - (* OP_ICmp *)
     intros ss1 cmp1 t1 v1 w1 IHv IHw e2; destruct e2; cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite !Bool.andb_true_iff, mm_bool_eqb_eq, mm_icmp_eqb_eq, mm_dtyp_eqb_eq, (IHv _), (IHw _).
-    split; [intros [[[[-> ->] ->] ->] ->]; reflexivity | intros H; injection H as -> -> -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_5.
   - (* OP_FBinop *)
     intros fop1 fm1 t1 v1 w1 IHv IHw e2; destruct e2; cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite !Bool.andb_true_iff, mm_fbinop_eqb_eq, (mm_list_eqb_eq _ mm_fast_math_eqb_eq),
       mm_dtyp_eqb_eq, (IHv _), (IHw _).
-    split; [intros [[[[-> ->] ->] ->] ->]; reflexivity | intros H; injection H as -> -> -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_5.
   - (* OP_FCmp *)
     intros cmp1 fm1 t1 v1 w1 IHv IHw e2; destruct e2; cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite !Bool.andb_true_iff, mm_fcmp_eqb_eq, (mm_list_eqb_eq _ mm_fast_math_eqb_eq),
       mm_dtyp_eqb_eq, (IHv _), (IHw _).
-    split; [intros [[[[-> ->] ->] ->] ->]; reflexivity | intros H; injection H as -> -> -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_5.
   - (* OP_Conversion *)
     intros c1 tf1 v1 tt1 IHv e2; destruct e2; cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite !Bool.andb_true_iff, mm_conv_type_eqb_eq, !mm_dtyp_eqb_eq, (IHv _).
-    split; [intros [[[-> ->] ->] ->]; reflexivity | intros H; injection H as -> -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_4.
   - (* OP_GetElementPtr *)
     intros fl1 t1 [tp1 ep1] idxs1 IHep IHidxs e2; cbn [snd] in IHep.
     destruct e2 as [| | | | | | | | | | | | | | | | | | | fl2 t2 [tp2 ep2] idxs2 | | | | | | | | | | | ];
       cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite !Bool.andb_true_iff, mm_gep_flags_eqb_eq, !mm_dtyp_eqb_eq, (IHep ep2),
       (mm_texp_list_eqb_in_eq mm_exp_eqb idxs1 IHidxs idxs2).
-    split; [intros [[[[-> ->] ->] ->] ->]; reflexivity | intros H; injection H as -> -> -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_5.
   - (* OP_ExtractElement *)
     intros [tv1 ev1] [ti1 ei1] IHev IHei e2; cbn [snd] in IHev, IHei.
     destruct e2 as [| | | | | | | | | | | | | | | | | | | | [tv2 ev2] [ti2 ei2] | | | | | | | | | | ];
       cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite !Bool.andb_true_iff, !mm_dtyp_eqb_eq, (IHev ev2), (IHei ei2).
-    split; [intros [[[-> ->] ->] ->]; reflexivity | intros H; injection H as -> -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_4.
   - (* OP_InsertElement *)
     intros [tv1 ev1] [te1 ee1] [ti1 ei1] IHev IHee IHei e2; cbn [snd] in IHev, IHee, IHei.
     destruct e2 as [| | | | | | | | | | | | | | | | | | | | | [tv2 ev2] [te2 ee2] [ti2 ei2] | | | | | | | | | ];
       cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite !Bool.andb_true_iff, !mm_dtyp_eqb_eq, (IHev ev2), (IHee ee2), (IHei ei2).
-    split; [intros [[[[[-> ->] ->] ->] ->] ->]; reflexivity | intros H; injection H as -> -> -> -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_6.
   - (* OP_ShuffleVector *)
     intros [ta1 ea1] [tb1 eb1] [tm1 em1] IHea IHeb IHem e2; cbn [snd] in IHea, IHeb, IHem.
     destruct e2 as [| | | | | | | | | | | | | | | | | | | | | | [ta2 ea2] [tb2 eb2] [tm2 em2] | | | | | | | | ];
       cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite !Bool.andb_true_iff, !mm_dtyp_eqb_eq, (IHea ea2), (IHeb eb2), (IHem em2).
-    split; [intros [[[[[-> ->] ->] ->] ->] ->]; reflexivity | intros H; injection H as -> -> -> -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_6.
   - (* OP_ExtractValue *)
     intros [tv1 ev1] idxs1 IHev e2; cbn [snd] in IHev.
     destruct e2 as [| | | | | | | | | | | | | | | | | | | | | | | [tv2 ev2] idxs2 | | | | | | | ];
       cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite !Bool.andb_true_iff, mm_dtyp_eqb_eq, (IHev ev2), (mm_list_eqb_eq _ mm_int_syntax_eqb_eq).
-    split; [intros [[-> ->] ->]; reflexivity | intros H; injection H as -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_3.
   - (* OP_InsertValue *)
     intros [tv1 ev1] [te1 ee1] idxs1 IHev IHee e2; cbn [snd] in IHev, IHee.
     destruct e2 as [| | | | | | | | | | | | | | | | | | | | | | | | [tv2 ev2] [te2 ee2] idxs2 | | | | | | ];
       cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite !Bool.andb_true_iff, !mm_dtyp_eqb_eq, (IHev ev2), (IHee ee2),
       (mm_list_eqb_eq _ mm_int_syntax_eqb_eq).
-    split; [intros [[[[-> ->] ->] ->] ->]; reflexivity | intros H; injection H as -> -> -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_5.
   - (* OP_Select *)
     intros fm1 [tc1 ec1] [ta1 ea1] [tb1 eb1] IHec IHea IHeb e2; cbn [snd] in IHec, IHea, IHeb.
     destruct e2 as [| | | | | | | | | | | | | | | | | | | | | | | | | fm2 [tc2 ec2] [ta2 ea2] [tb2 eb2] | | | | | ];
       cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite !Bool.andb_true_iff, (mm_list_eqb_eq _ mm_fast_math_eqb_eq),
       !mm_dtyp_eqb_eq, (IHec ec2), (IHea ea2), (IHeb eb2).
-    split; [intros [[[[[[-> ->] ->] ->] ->] ->] ->]; reflexivity | intros H; injection H as -> -> -> -> -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_7.
   - (* OP_Freeze *)
     intros [t1 v1] IHv e2; cbn [snd] in IHv.
     destruct e2 as [| | | | | | | | | | | | | | | | | | | | | | | | | | [t2 v2] | | | | ];
       cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite Bool.andb_true_iff, mm_dtyp_eqb_eq, (IHv v2).
-    split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
+    mm_eq_iff_2.
   - (* EXP_Asm *)
     intros s1 a1 i1 u1 tp1 oc1 e2; destruct e2; cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite !Bool.andb_true_iff, !mm_bool_eqb_eq, !mm_string_eqb_eq.
-    split; [intros [[[[[-> ->] ->] ->] ->] ->]; reflexivity | intros H; injection H as -> -> -> -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_6.
   - (* EXP_Metadata *)
     intros m1 IHm e2; destruct e2; cbn [mm_exp_eqb]; try (split; discriminate).
-    rewrite (IHm _); split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+    rewrite (IHm _); mm_eq_iff_1.
   - (* EXP_Splat *)
     intros [t1 v1] IHv e2; cbn [snd] in IHv.
     destruct e2 as [| | | | | | | | | | | | | | | | | | | | | | | | | | | | | [t2 v2] | ];
       cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite Bool.andb_true_iff, mm_dtyp_eqb_eq, (IHv v2).
-    split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
+    mm_eq_iff_2.
   - (* EXP_BlockAddress *)
     intros fn1 blk1 e2; destruct e2; cbn [mm_exp_eqb]; try (split; discriminate).
     rewrite Bool.andb_true_iff, !raw_id_eqb_spec.
-    split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
+    mm_eq_iff_2.
   - (* METADATA_Null *)
-    intros m2; destruct m2; cbn [mm_metadata_eqb]; first [split; reflexivity | split; discriminate].
+    intros m2; destruct m2; cbn [mm_metadata_eqb];
+      first [split; reflexivity | split; discriminate].
   - (* METADATA_Id *)
     intros id1 m2; destruct m2; cbn [mm_metadata_eqb]; try (split; discriminate).
-    rewrite raw_id_eqb_spec; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+    rewrite raw_id_eqb_spec; mm_eq_iff_1.
   - (* METADATA_Const *)
     intros [t1 e1] IHe m2; cbn [snd] in IHe.
     destruct m2 as [| | [t2 e2] | | | |]; cbn [mm_metadata_eqb]; try (split; discriminate).
     rewrite Bool.andb_true_iff, mm_dtyp_eqb_eq, (IHe e2).
-    split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
+    mm_eq_iff_2.
   - (* METADATA_Node *)
     intros ms1 IHms m2; destruct m2; cbn [mm_metadata_eqb]; try (split; discriminate).
     rewrite (mm_list_eqb_in_eq mm_metadata_eqb ms1 IHms);
-      split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+      mm_eq_iff_1.
   - (* METADATA_Pair *)
     intros a1 b1 IHa IHb m2; destruct m2; cbn [mm_metadata_eqb]; try (split; discriminate).
     rewrite Bool.andb_true_iff, (IHa _), (IHb _).
-    split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
+    mm_eq_iff_2.
   - (* METADATA_Debug *)
     intros s1 c1 m2; destruct m2; cbn [mm_metadata_eqb]; try (split; discriminate).
     rewrite Bool.andb_true_iff, !mm_string_eqb_eq.
-    split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
+    mm_eq_iff_2.
   - (* METADATA_File_info *)
     intros f1 m2; destruct m2; cbn [mm_metadata_eqb]; try (split; discriminate).
-    rewrite mm_file_info_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+    rewrite mm_file_info_eqb_eq; mm_eq_iff_1.
 Qed.
 
 Lemma mm_exp_eqb_eq (e1 e2 : exp dtyp) :
@@ -1396,7 +1439,7 @@ Lemma mm_tint_literal_eqb_eq (x y : tint_literal) :
 Proof.
   destruct x as [sz1 v1], y as [sz2 v2]; cbn [mm_tint_literal_eqb].
   rewrite Bool.andb_true_iff, mm_pos_eqb_eq, mm_int_syntax_eqb_eq.
-  split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
+  mm_eq_iff_2.
 Qed.
 
 Definition mm_phi_eqb (x y : phi dtyp) : bool :=
@@ -1413,7 +1456,7 @@ Proof.
   destruct x as [fm1 dt1 args1], y as [fm2 dt2 args2]; cbn [mm_phi_eqb].
   rewrite !Bool.andb_true_iff, (mm_list_eqb_eq _ mm_fast_math_eqb_eq),
     mm_dtyp_eqb_eq, (mm_list_eqb_eq _ (mm_prod_eqb_eq _ _ raw_id_eqb_spec mm_exp_eqb_eq)).
-  split; [intros [[-> ->] ->]; reflexivity | intros H; injection H as -> -> ->; repeat split; reflexivity].
+  mm_eq_iff_3.
 Qed.
 
 Definition mm_ordering_eqb (x y : ordering) : bool :=
@@ -1594,30 +1637,30 @@ Lemma mm_annotation_eqb_eq (x y : annotation dtyp) :
 Proof.
   destruct x; destruct y; cbn [mm_annotation_eqb];
     try solve [split; reflexivity | split; discriminate].
-  - rewrite mm_linkage_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_preemption_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_visibility_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_dll_storage_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_tls_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_unnamed_addr_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_int_syntax_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_string_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_string_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite raw_id_eqb_spec; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_int_syntax_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite (mm_list_eqb_eq _ mm_metadata_eqb_eq); split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_cconv_ast_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_string_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_texp_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_texp_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_texp_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_texp_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_tailcall_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_fast_math_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_param_attr_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_fn_attr_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_string_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_ordering_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+  - rewrite mm_linkage_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_preemption_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_visibility_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_dll_storage_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_tls_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_unnamed_addr_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_int_syntax_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_string_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_string_eqb_eq; mm_eq_iff_1.
+  - rewrite raw_id_eqb_spec; mm_eq_iff_1.
+  - rewrite mm_int_syntax_eqb_eq; mm_eq_iff_1.
+  - rewrite (mm_list_eqb_eq _ mm_metadata_eqb_eq); mm_eq_iff_1.
+  - rewrite mm_cconv_ast_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_string_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_texp_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_texp_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_texp_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_texp_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_tailcall_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_fast_math_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_param_attr_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_fn_attr_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_string_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_ordering_eqb_eq; mm_eq_iff_1.
 Qed.
 
 Definition mm_operand_eqb (x y : @operand dtyp) : bool :=
@@ -1631,8 +1674,8 @@ Lemma mm_operand_eqb_eq (x y : @operand dtyp) :
   mm_operand_eqb x y = true <-> x = y.
 Proof.
   destruct x, y; cbn [mm_operand_eqb]; try (split; discriminate).
-  - rewrite mm_texp_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_metadata_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+  - rewrite mm_texp_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_metadata_eqb_eq; mm_eq_iff_1.
 Qed.
 
 Definition mm_operand_bundle_eqb (x y : @operand_bundle dtyp) : bool :=
@@ -1644,7 +1687,7 @@ Lemma mm_operand_bundle_eqb_eq (x y : @operand_bundle dtyp) :
 Proof.
   destruct x as [t1 o1], y as [t2 o2]; unfold mm_operand_bundle_eqb; cbn [ob_tag ob_ops].
   rewrite Bool.andb_true_iff, mm_string_eqb_eq, (mm_list_eqb_eq _ mm_operand_eqb_eq).
-  split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
+  mm_eq_iff_2.
 Qed.
 
 Definition mm_landingpad_clause_eqb (x y : @landingpad_clause dtyp) : bool :=
@@ -1657,8 +1700,9 @@ Definition mm_landingpad_clause_eqb (x y : @landingpad_clause dtyp) : bool :=
 Lemma mm_landingpad_clause_eqb_eq (x y : @landingpad_clause dtyp) :
   mm_landingpad_clause_eqb x y = true <-> x = y.
 Proof.
-  destruct x, y; cbn [mm_landingpad_clause_eqb]; try (split; discriminate);
-    (rewrite mm_texp_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity]).
+  destruct x, y; cbn [mm_landingpad_clause_eqb];
+    try (split; discriminate);
+    (rewrite mm_texp_eqb_eq; mm_eq_iff_1).
 Qed.
 
 Definition mm_call_arg_eqb :
@@ -1702,30 +1746,30 @@ Lemma mm_instr_eqb_eq (x y : instr dtyp) :
   mm_instr_eqb x y = true <-> x = y.
 Proof.
   destruct x, y; cbn [mm_instr_eqb]; try (split; discriminate).
-  - rewrite mm_string_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_exp_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+  - rewrite mm_string_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_exp_eqb_eq; mm_eq_iff_1.
   - rewrite !Bool.andb_true_iff, mm_texp_eqb_eq,
       (mm_list_eqb_eq _ mm_call_arg_eqb_eq),
       (mm_list_eqb_eq _ mm_annotation_eqb_eq),
       (mm_list_eqb_eq _ mm_operand_bundle_eqb_eq).
-    split; [intros [[[-> ->] ->] ->]; reflexivity | intros H; injection H as -> -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_4.
   - rewrite Bool.andb_true_iff, mm_dtyp_eqb_eq, (mm_list_eqb_eq _ mm_annotation_eqb_eq).
-    split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
+    mm_eq_iff_2.
   - rewrite !Bool.andb_true_iff, mm_dtyp_eqb_eq, mm_texp_eqb_eq,
       (mm_list_eqb_eq _ mm_annotation_eqb_eq).
-    split; [intros [[-> ->] ->]; reflexivity | intros H; injection H as -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_3.
   - rewrite !Bool.andb_true_iff, !mm_texp_eqb_eq,
       (mm_list_eqb_eq _ mm_annotation_eqb_eq).
-    split; [intros [[-> ->] ->]; reflexivity | intros H; injection H as -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_3.
   - rewrite Bool.andb_true_iff, (mm_option_eqb_eq _ mm_string_eqb_eq), mm_ordering_eqb_eq.
-    split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
-  - rewrite mm_cmpxchg_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
-  - rewrite mm_atomicrmw_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+    mm_eq_iff_2.
+  - rewrite mm_cmpxchg_eqb_eq; mm_eq_iff_1.
+  - rewrite mm_atomicrmw_eqb_eq; mm_eq_iff_1.
   - rewrite Bool.andb_true_iff, mm_texp_eqb_eq, mm_dtyp_eqb_eq.
-    split; [intros [-> ->]; reflexivity | intros H; injection H as -> ->; split; reflexivity].
+    mm_eq_iff_2.
   - rewrite !Bool.andb_true_iff, mm_dtyp_eqb_eq, mm_bool_eqb_eq,
       (mm_list_eqb_eq _ mm_landingpad_clause_eqb_eq).
-    split; [intros [[-> ->] ->]; reflexivity | intros H; injection H as -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_3.
 Qed.
 
 Definition mm_terminator_eqb (x y : terminator dtyp) : bool :=
@@ -1759,23 +1803,23 @@ Lemma mm_terminator_eqb_eq (x y : terminator dtyp) :
 Proof.
   destruct x, y; cbn [mm_terminator_eqb];
     try solve [split; reflexivity | split; discriminate].
-  - rewrite mm_texp_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+  - rewrite mm_texp_eqb_eq; mm_eq_iff_1.
   - rewrite !Bool.andb_true_iff, mm_texp_eqb_eq, !raw_id_eqb_spec.
-    split; [intros [[-> ->] ->]; reflexivity | intros H; injection H as -> -> ->; repeat split; reflexivity].
-  - rewrite raw_id_eqb_spec; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+    mm_eq_iff_3.
+  - rewrite raw_id_eqb_spec; mm_eq_iff_1.
   - rewrite !Bool.andb_true_iff, mm_texp_eqb_eq, raw_id_eqb_spec,
       (mm_list_eqb_eq _ (mm_prod_eqb_eq _ _ mm_tint_literal_eqb_eq raw_id_eqb_spec)).
-    split; [intros [[-> ->] ->]; reflexivity | intros H; injection H as -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_3.
   - rewrite !Bool.andb_true_iff, mm_texp_eqb_eq,
       (mm_list_eqb_eq _ raw_id_eqb_spec), (mm_option_eqb_eq _ raw_id_eqb_spec).
-    split; [intros [[-> ->] ->]; reflexivity | intros H; injection H as -> -> ->; repeat split; reflexivity].
-  - rewrite mm_texp_eqb_eq; split; [intros ->; reflexivity | intros H; injection H as ->; reflexivity].
+    mm_eq_iff_3.
+  - rewrite mm_texp_eqb_eq; mm_eq_iff_1.
   - rewrite !Bool.andb_true_iff, mm_texp_eqb_eq,
       (mm_list_eqb_eq _ mm_call_arg_eqb_eq),
       !raw_id_eqb_spec,
       (mm_list_eqb_eq _ mm_annotation_eqb_eq),
       (mm_list_eqb_eq _ mm_operand_bundle_eqb_eq).
-    split; [intros [[[[[-> ->] ->] ->] ->] ->]; reflexivity | intros H; injection H as -> -> -> -> -> ->; repeat split; reflexivity].
+    mm_eq_iff_6.
 Qed.
 
 Definition mm_phi_entry_eqb :

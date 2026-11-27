@@ -160,7 +160,8 @@ Section ModelCombinators.
     - gstep; constructor; gfinal; left; apply CIH.
       eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
       intros x _ <-; apply Hk.
-    - gstep; constructor; intros x; gstep; constructor; gfinal; left; apply CIH, Hk.
+    - gstep; constructor; intros x; gstep;
+      constructor; gfinal; left; apply CIH, Hk.
   Qed.
 
   Lemma interp_mrec_bind_eq {D E : Type -> Type} (ctx : D ~> itree (D +' E)) {R S} :
@@ -211,7 +212,8 @@ Section ModelCombinators.
     ITree.bind (interp_mcfg_model t s) (fun '(s', x) => interp_mcfg_model (k x) s').
   Proof using.
     unfold interp_mcfg_model, interp_intrinsics.
-    rewrite interp_bind, interp_state_bind; eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [s' x] ? <-; cbn [fst snd]; reflexivity].
+    rewrite interp_bind, interp_state_bind; eapply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity | intros [s' x]
+      ? <-; cbn [fst snd]; reflexivity].
   Qed.
 
   Lemma interp_mcfg_model_obs_eq {R}
@@ -314,7 +316,8 @@ Section ModelCombinators.
     refine_prov RR U m1 m2 ->
     refine_prov RR U (Tau m1) (Tau m2).
   Proof using.
-    intros H; pstep; apply RP_Step; cbn; left; exact H.
+    intros H; pstep; apply RP_Step; cbn;
+      left; exact H.
   Qed.
 
   Lemma refine_prov_ub_vis_l {R1 R2} (RR : list N -> R1 -> R2 -> Prop)
@@ -323,7 +326,8 @@ Section ModelCombinators.
     is_ub_prov e = true ->
     refine_prov RR U (Vis e k1) t2.
   Proof using.
-    intros Hub; pstep; apply RP_Step; cbn; left; exact Hub.
+    intros Hub; pstep; apply RP_Step; cbn;
+      left; exact Hub.
   Qed.
 
   Lemma refine_prov_fresh_both {R1 R2} (RR : list N -> R1 -> R2 -> Prop)
@@ -358,18 +362,22 @@ Section ModelCombinators.
     - apply RP_Step; unfold rp_step_body in *.
       destruct (observe t1) as [x1 | m1 | X1 e1 k1].
       + destruct (observe t2); try contradiction; split; assumption.
-      + destruct (observe t2); try contradiction; pclearbot; right; eapply CIH; eassumption.
+      + destruct (observe t2); try contradiction; pclearbot; right; eapply
+        CIH; eassumption.
       + destruct Hstep as [Hub | [Hleft | Hboth]].
         * left; exact Hub.
         * right; left; destruct e1 as [p1 | b1]; [| contradiction]; destruct p1.
-          intros p Hp; specialize (Hleft p Hp); pclearbot; right; eapply CIH; [| exact Hleft].
+          intros p Hp; specialize (Hleft p Hp); pclearbot; right; eapply
+            CIH; [| exact Hleft].
           intros z Hz; right; apply Hincl, Hz.
         * right; right; destruct (observe t2) as [x2 | m2 | X2 e2 k2]; try contradiction.
           destruct e1 as [p1 | b1], e2 as [p2 | b2]; cbn in *; try contradiction.
-          -- destruct p1, p2; intros p Hp; specialize (Hboth p Hp); pclearbot; right; eapply CIH; [| exact Hboth].
+          -- destruct p1, p2; intros p Hp; specialize (Hboth p Hp); pclearbot;
+            right; eapply CIH; [| exact Hboth].
              intros z Hz; right; apply Hincl, Hz.
           -- destruct Hboth as [HE HA]; split; [exact HE |].
-             intros a1 a2 Ha; specialize (HA a1 a2 Ha); pclearbot; right; eapply CIH; [| exact HA].
+             intros a1 a2 Ha; specialize (HA a1 a2 Ha); pclearbot; right; eapply
+               CIH; [| exact HA].
              intros z Hz; apply in_app_iff; right; apply Hincl, Hz.
     - eapply RP_TauL; [exact Ht1 | apply IH, Hincl].
     - eapply RP_TauR; [exact Ht2 | apply IH, Hincl].
@@ -445,7 +453,8 @@ Section ModelCombinators.
     assert (Hr_eq : forall U a1 a1' a2 a2',
                       a1 ≅ a1' -> a2 ≅ a2' -> r_it U a1 a2 -> r_it U a1' a2').
     { intros U a1 a1' a2 a2' E1 E2 (u1 & u2 & Eu1 & Eu2 & Hu).
-      exists u1, u2; split; [etransitivity; eassumption | split; [etransitivity; eassumption | exact Hu]]. }
+      exists u1, u2; split; [etransitivity; eassumption | split;
+        [etransitivity; eassumption | exact Hu]]. }
     assert (Hcore : forall U t1 t2, r_it U t1 t2 -> refine_prov RR U t1 t2).
     { pcofix CIH.
       intros U t1 t2 (u1 & u2 & Eu1 & Eu2 & Hu); pstep.
@@ -606,7 +615,8 @@ Section ModelCombinators.
     assert (Hm : interp_mrec (mrec_ctx ctx) (call dt cc fv vs) ≅
                  Tau (interp_mrec (mrec_ctx ctx) (mrec_ctx ctx _ (Call dt cc fv vs)))).
     { unfold call, trigger, ITree.trigger.
-      cbn [subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1].
+      cbn [subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun
+        case_ Case_sum1 case_sum1].
       rewrite unfold_interp_mrec.
       transitivity (Tau (interp_mrec (mrec_ctx ctx) (ITree.bind (mrec_ctx ctx _ (Call dt cc fv vs)) (fun x => Ret x)))).
       - reflexivity.
@@ -692,7 +702,8 @@ Section ModelCombinators.
            [apply interp_mcfg_model_non_intr; reflexivity | intros ? ? <-; reflexivity]
        end
       | reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat
+      Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity | reflexivity |].
@@ -714,7 +725,8 @@ Section ModelCombinators.
            [apply interp_mcfg_model_non_intr; reflexivity | intros ? ? <-; reflexivity]
        end
       | reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat
+      Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity | reflexivity |].
@@ -744,12 +756,14 @@ Section ModelCombinators.
             eapply eq_itree_clo_bind with (UU := Logic.eq) (k2 := k);
             [apply interp_mcfg_model_non_intr; reflexivity | intros ? ? <-; reflexivity]
         end |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat
+      Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
       | symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
-    pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
+    pstep; apply RP_Step; cbn; right;
+      right; split; [exact I | intros [] [] _].
   Qed.
 
   Lemma refine_cfg_raiseUB_l {X R2}
@@ -768,7 +782,8 @@ Section ModelCombinators.
            [apply interp_cfg_model_non_intr; reflexivity | intros ? ? <-; reflexivity]
        end
       | reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat
+      Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity | reflexivity |].
@@ -791,7 +806,8 @@ Section ModelCombinators.
            [apply interp_cfg_model_non_intr; reflexivity | intros ? ? <-; reflexivity]
        end
       | reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat
+      Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity | reflexivity |].
@@ -822,12 +838,14 @@ Section ModelCombinators.
             eapply eq_itree_clo_bind with (UU := Logic.eq) (k2 := k);
             [apply interp_cfg_model_non_intr; reflexivity | intros ? ? <-; reflexivity]
         end |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat
+      Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_trigger_prov, ITree.trigger.
     eapply refine_prov_obs_eq;
       [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
       | symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
-    pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
+    pstep; apply RP_Step; cbn; right;
+      right; split; [exact I | intros [] [] _].
   Qed.
 
   Lemma refine_mcfg_EOU {A1 A2}
@@ -889,7 +907,8 @@ Section ModelCombinators.
     eapply refine_prov_obs_eq;
       [symmetry; apply interp_mcfg_model_non_intr; reflexivity
       | symmetry; apply interp_mcfg_model_non_intr; reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat
+      Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_memory_prov, on_mem_prov, handle_memory.
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_bind | symmetry; apply Eqit.bind_bind |].
@@ -920,7 +939,8 @@ Section ModelCombinators.
     eapply refine_prov_obs_eq;
       [symmetry; apply interp_cfg_model_non_intr; reflexivity
       | symmetry; apply interp_cfg_model_non_intr; reflexivity |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat
+      Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_memory_prov, on_mem_prov, handle_memory.
     eapply refine_prov_obs_eq;
       [symmetry; apply Eqit.bind_bind | symmetry; apply Eqit.bind_bind |].
@@ -951,7 +971,8 @@ Section ModelCombinators.
     intros Hmem.
     eapply refine_prov_obs_eq;
       [symmetry; apply interp_cfg_model_non_intr; reflexivity | apply Eqit.bind_ret_r |].
-    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+    cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat
+      Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
     unfold fused_memory_prov, on_mem_prov, handle_memory.
     eapply refine_prov_obs_eq; [symmetry; apply Eqit.bind_bind | reflexivity |].
     eapply refine_prov_bind; [exact Hmem |].
@@ -987,7 +1008,8 @@ Section ModelCombinators.
     - gstep; constructor; gfinal; left; apply CIH, Hm.
     - destruct (exc_of_event e) as [x |].
       + gstep; constructor; reflexivity.
-      + gstep; constructor; intros y; gstep; constructor; gfinal; left; apply CIH, Hk.
+      + gstep; constructor; intros y; gstep;
+        constructor; gfinal; left; apply CIH, Hk.
   Qed.
 
   Lemma run_exc_bind_eq {A B} :
@@ -1014,7 +1036,8 @@ Section ModelCombinators.
       destruct (exc_of_event e) as [x |].
       + rewrite Eqit.bind_ret_l; gstep; constructor; reflexivity.
       + rewrite Eqit.bind_vis; gstep; constructor; intros y.
-        rewrite Eqit.bind_tau; gstep; constructor; gfinal; left; apply CIH.
+        rewrite Eqit.bind_tau; gstep; constructor; gfinal;
+          left; apply CIH.
   Qed.
 
   Lemma run_exc_raiseLLVM_eq {A} (x : @exc (@ParamsV IP IPT)) :
@@ -1022,7 +1045,8 @@ Section ModelCombinators.
   Proof using.
     unfold raiseLLVM, trigger_cast, ITree.trigger.
     rewrite unfold_run_exc_obs, observe_bind.
-    cbn [observe exc_of_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1].
+    cbn [observe exc_of_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1
+      Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1].
     reflexivity.
   Qed.
 
@@ -1227,12 +1251,14 @@ Section ModelCombinators.
         eapply refine_prov_obs_eq;
           [symmetry; apply interp_cfg_model_non_intr; reflexivity
           | symmetry; apply interp_cfg_model_non_intr; reflexivity |].
-        cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+        cbn [interp_vellvm_prov_h case_ Case_sum1 case_sum1 subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat
+          Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
         unfold fused_trigger_prov, ITree.trigger.
         eapply refine_prov_obs_eq;
           [symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity
           | symmetry; rewrite !Eqit.bind_bind, Eqit.bind_vis; reflexivity |].
-        pstep; apply RP_Step; cbn; right; right; split; [exact I | intros [] [] _].
+        pstep; apply RP_Step; cbn; right;
+          right; split; [exact I | intros [] [] _].
       + intros _ _ [] _ _ _ _.
     - unfold raiseOOM, trigger_cast, interp_cfg_exc.
       assert (Hoom : run_exc (A := A1)
@@ -1360,7 +1386,8 @@ Section ModelCombinators.
     assert (Hr_eq : forall U a1 a1' a2 a2',
                       a1 ≅ a1' -> a2 ≅ a2' -> r_it U a1 a2 -> r_it U a1' a2').
     { intros U a1 a1' a2 a2' E1 E2 (u1 & u2 & Eu1 & Eu2 & Hu).
-      exists u1, u2; split; [etransitivity; eassumption | split; [etransitivity; eassumption | exact Hu]]. }
+      exists u1, u2; split; [etransitivity; eassumption | split;
+        [etransitivity; eassumption | exact Hu]]. }
     assert (Hcore : forall U t1 t2, r_it U t1 t2 -> refine_prov (exc_post RExc RRet) U t1 t2).
     { pcofix CIH.
       intros U t1 t2 (u1 & u2 & Eu1 & Eu2 & Hu); pstep.

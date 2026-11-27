@@ -371,13 +371,19 @@ Section EventRelations.
     fun _ _ e1 e2 => match e1, e2 with ThrowOOM _, ThrowOOM _ => True end.
 
   Definition EqA_OOM : postrel OOME OOME :=
-    fun _ _ e1 a1 _ _ => match e1 in OOME A' return A' -> Prop with ThrowOOM _ => fun v : void => match v with end end a1.
+    fun _ _ e1 a1 _ _ =>
+      match e1 in OOME A' return A' -> Prop with
+      | ThrowOOM _ => fun v : void => match v with end
+      end a1.
 
   Definition EqE_Exc : prerel LLVMExcE LLVMExcE :=
     fun _ _ e1 e2 => match e1, e2 with LLVMExc x1, LLVMExc x2 => x1 = x2 end.
 
   Definition EqA_Exc : postrel LLVMExcE LLVMExcE :=
-    fun _ _ e1 a1 _ _ => match e1 in LLVMExcE A' return A' -> Prop with LLVMExc _ => fun v : void => match v with end end a1.
+    fun _ _ e1 a1 _ _ =>
+      match e1 in LLVMExcE A' return A' -> Prop with
+      | LLVMExc _ => fun v : void => match v with end
+      end a1.
 
   Definition EqE_UB : prerel UBE UBE :=
     fun _ _ e1 e2 => match e1, e2 with ThrowUB _, ThrowUB _ => True end.
@@ -401,7 +407,10 @@ Section EventRelations.
     fun _ _ e1 e2 => match e1, e2 with Throw _, Throw _ => True end.
 
   Definition EqA_Failure : postrel FailureE FailureE :=
-    fun _ _ e1 a1 _ _ => match e1 in FailureE A' return A' -> Prop with Throw _ => fun v : void => match v with end end a1.
+    fun _ _ e1 a1 _ _ =>
+      match e1 in FailureE A' return A' -> Prop with
+      | Throw _ => fun v : void => match v with end
+      end a1.
 
   Definition EqE_MCFG : prerel MCFGEtop MCFGEtop :=
     sum_prerel_c EqE_ExternalCall
@@ -471,7 +480,8 @@ Section EventRelations.
     EqE_bot A B e1 e2 -> EqE_bot B C e2 e3 -> EqE_bot A C e1 e3.
   Proof using.
     intros H12 H23; destruct_sum3 e1 e2 e3 H12 H23;
-      destruct e1; destruct e2; destruct e3; cbn in *; try contradiction; intuition congruence.
+      destruct e1; destruct e2; destruct e3; cbn in *;
+      try contradiction; intuition congruence.
   Qed.
 
   Lemma EqA_MCFG_eq {A} (e : MCFGEtop A) (a1 a2 : A) :
@@ -536,7 +546,8 @@ Section EventRelations.
     revert t; ginit; gcofix CIH; intros t.
     destruct (observe t) eqn:Hot.
     - gstep; red; rewrite Hot; constructor; reflexivity.
-    - gstep; red; rewrite Hot; constructor; gfinal; left; apply CIH.
+    - gstep; red; rewrite Hot; constructor;
+        gfinal; left; apply CIH.
     - gstep; red; rewrite Hot; constructor.
       + apply EqE_CFG_refl.
       + intros a1 a2 Ha; apply EqA_CFG_eq in Ha; subst a2.
@@ -549,7 +560,8 @@ Section EventRelations.
     revert t; ginit; gcofix CIH; intros t.
     destruct (observe t) eqn:Hot.
     - gstep; red; rewrite Hot; constructor; reflexivity.
-    - gstep; red; rewrite Hot; constructor; gfinal; left; apply CIH.
+    - gstep; red; rewrite Hot; constructor;
+        gfinal; left; apply CIH.
     - gstep; red; rewrite Hot; constructor.
       + apply EqE_MCFG_refl.
       + intros a1 a2 Ha; apply EqA_MCFG_eq in Ha; subst a2.
@@ -625,7 +637,8 @@ Section EventRelations.
     EqE_CFG A B e1 e2 -> exc_of_event e1 = exc_of_event e2.
   Proof using.
     intros HE; destruct_sum2 e1 e2 HE;
-      destruct e1; destruct e2; cbn in HE |- *; try contradiction; try reflexivity; subst; reflexivity.
+      destruct e1; destruct e2; cbn in HE |- *;
+      try contradiction; try reflexivity; subst; reflexivity.
   Qed.
 
   Lemma refine_cfg_run_exc {R1 R2} (RR : R1 -> R2 -> Prop)
@@ -638,12 +651,14 @@ Section EventRelations.
     punfold HR; red in HR.
     induction HR; pclearbot.
     - gstep; constructor; constructor; assumption.
-    - gstep; constructor; gfinal; left; apply CIH; assumption.
+    - gstep; constructor; gfinal;
+        left; apply CIH; assumption.
     - rewrite (EqE_CFG_exc_of_event e1 e2 H).
       destruct (exc_of_event e2) as [x |].
       + gstep; constructor; constructor; reflexivity.
       + gstep; constructor; [exact H |].
-        intros a b Hab; gstep; constructor; gfinal; left; apply CIH, H0, Hab.
+        intros a b Hab; gstep; constructor;
+          gfinal; left; apply CIH, H0, Hab.
     - rewrite tau_euttge, unfold_run_exc_obs; exact IHHR.
     - rewrite tau_euttge, unfold_run_exc_obs; exact IHHR.
     - rewrite (cutUB_exc_none e H); gstep; constructor; exact H.
@@ -713,7 +728,8 @@ Section EventRelations.
         (RR := @Logic.eq (exc + dvalue)).
       { intros ? e Hcut; exact (proj1 (cutUB_cfg_sum e) Hcut). }
       { intros ? e Hcut; exact (proj1 (cutNone_cfg_sum e) Hcut). }
-      { intros * HE; destruct e1 as [c1 | m1], e2 as [c2 | m2]; cbn in HE; try contradiction; constructor; exact HE. }
+      { intros * HE; destruct e1 as [c1 | m1], e2 as [c2 | m2];
+          cbn in HE; try contradiction; constructor; exact HE. }
       { intros * HA; destruct HA; exact H. }
       { intros r1 r2 <-; cbn; reflexivity. }
       eapply ruttc_bind; [apply refine_cfg_refl | intros [] _ <-].
@@ -1640,7 +1656,8 @@ Section ModelSemantics.
     - apply RP_Step; unfold rp_step_body in *.
       destruct (observe t1) as [x1 | m1 | X1 e1 k1].
       + destruct (observe t2); try contradiction; eapply HRR; eassumption.
-      + destruct (observe t2); try contradiction; pclearbot; right; eapply CIH; eassumption.
+      + destruct (observe t2); try contradiction; pclearbot;
+          right; eapply CIH; eassumption.
       + destruct Hstep as [Hub | [Hleft | Hboth]].
         * left; exact Hub.
         * right; left; destruct e1 as [p1 | b1]; [| contradiction]; destruct p1.
@@ -1655,7 +1672,8 @@ Section ModelSemantics.
              specialize (Hboth p HpU); pclearbot; right; eapply CIH; [| exact Hboth].
              intros z [<- | Hz]; [left; reflexivity | right; apply Hincl, Hz].
           -- destruct Hboth as [HE HA]; split; [exact HE |].
-             intros a1 a2 Ha; specialize (HA a1 a2 Ha); pclearbot; right; eapply CIH; [| exact HA].
+             intros a1 a2 Ha; specialize (HA a1 a2 Ha); pclearbot;
+               right; eapply CIH; [| exact HA].
              intros z Hz; apply in_app_iff in Hz; apply in_app_iff.
              destruct Hz as [Hz | Hz]; [left; exact Hz | right; apply Hincl, Hz].
     - eapply RP_TauL; [exact Ht1 | apply IH, Hincl].
@@ -1887,8 +1905,10 @@ Section ModelSemantics.
         rewrite (observe_bind t1 k1), Hot1, (observe_bind t2 k2), Hot2.
         right; eapply CIH; [exact Hstep | exact Hk].
       + destruct Hstep as [Hub | [Hleft | Hboth]].
-        * pstep; apply RP_Step; unfold rp_step_body; rewrite (observe_bind t1 k1), Hot1; left; exact Hub.
-        * pstep; apply RP_Step; unfold rp_step_body; rewrite (observe_bind t1 k1), Hot1; right; left.
+        * pstep; apply RP_Step; unfold rp_step_body;
+            rewrite (observe_bind t1 k1), Hot1; left; exact Hub.
+        * pstep; apply RP_Step; unfold rp_step_body;
+            rewrite (observe_bind t1 k1), Hot1; right; left.
           destruct e1 as [p1 | b1]; [| contradiction]; destruct p1.
           intros p Hp; specialize (Hleft p Hp); pclearbot.
           right; eapply CIH; [exact Hleft |].
@@ -1999,10 +2019,13 @@ Section ModelSemantics.
                        destruct Hs12 as [Hub1 | [Hl1 | Hb1]].
                        +++ left; exact Hub1.
                        +++ right; left; destruct e1 as [p1 | b1]; [| contradiction]; destruct p1.
-                           intros p Hp; specialize (Hl1 p Hp); pclearbot; right; eapply CIH; [exact Hl1 |].
-                           pstep; apply RP_Step; unfold rp_step_body; rewrite Hotm2; left; exact Hub2.
+                           intros p Hp; specialize (Hl1 p Hp); pclearbot;
+                             right; eapply CIH; [exact Hl1 |].
+                           pstep; apply RP_Step; unfold rp_step_body;
+                             rewrite Hotm2; left; exact Hub2.
                        +++ left; destruct e1 as [p1 | b1], e2 as [p2 | b2]; cbn in *; try contradiction;
-                           [destruct p1; discriminate | destruct Hb1 as [HE _]; rewrite (EqE_bot_is_ub _ _ HE); exact Hub2].
+                           [ destruct p1; discriminate
+                           | destruct Hb1 as [HE _]; rewrite (EqE_bot_is_ub _ _ HE); exact Hub2 ].
                    --- eapply RP_TauL; [exact Hm1_ | apply IHm12; assumption].
                 ** punfold Hm12.
                    revert Hotm2 Hl2;
@@ -2014,8 +2037,10 @@ Section ModelSemantics.
                        destruct Hs12 as [Hub1 | [Hl1 | Hb1]].
                        +++ left; exact Hub1.
                        +++ right; left; destruct e1 as [p1 | b1]; [| contradiction]; destruct p1.
-                           intros p Hp; specialize (Hl1 p Hp); pclearbot; right; eapply CIH; [exact Hl1 |].
-                           pstep; apply RP_Step; unfold rp_step_body; rewrite Hotm2; right; left.
+                           intros p Hp; specialize (Hl1 p Hp); pclearbot;
+                             right; eapply CIH; [exact Hl1 |].
+                           pstep; apply RP_Step; unfold rp_step_body;
+                             rewrite Hotm2; right; left.
                            destruct e2 as [p2 | b2]; [| contradiction]; destruct p2.
                            intros q Hq; assert (HqU : ~ In q U) by (intros Hx; apply Hq; right; exact Hx).
                            specialize (Hl2 q HqU); pclearbot; left.
@@ -2055,7 +2080,8 @@ Section ModelSemantics.
                 destruct Hs12 as [Hub1 | [Hl1 | Hb1]].
                 ** left; exact Hub1.
                 ** right; left; destruct e1 as [p1 | b1]; [| contradiction]; destruct p1.
-                   intros p Hp; specialize (Hl1 p Hp); pclearbot; right; eapply CIH; [exact Hl1 |].
+                   intros p Hp; specialize (Hl1 p Hp); pclearbot;
+                     right; eapply CIH; [exact Hl1 |].
                    eapply refine_prov_antitone; [exact HRR_anti | intros z Hz; right; exact Hz |].
                    pstep; apply RP_Step; unfold rp_step_body; rewrite Hotm2, Hot3; exact Hs23.
                 ** destruct Hs23 as [Hub2 | [Hl2 | Hb2]].
@@ -2089,7 +2115,8 @@ Section ModelSemantics.
         * apply RP_Step; unfold rp_step_body; rewrite Hot1; left; exact Hub1.
         * apply RP_Step; unfold rp_step_body; rewrite Hot1; right; left.
           destruct e1 as [p1 | b1]; [| contradiction]; destruct p1.
-          intros p Hp; specialize (Hl1 p Hp); pclearbot; right; eapply CIH; [exact Hl1 |].
+          intros p Hp; specialize (Hl1 p Hp); pclearbot;
+            right; eapply CIH; [exact Hl1 |].
           eapply refine_prov_antitone; [exact HRR_anti | intros z Hz; right; exact Hz | exact H23].
         * destruct (observe t2) as [r2 | m2 | X2 e2 k2] eqn:Hot2; try contradiction.
           punfold H23.
@@ -2171,20 +2198,32 @@ Section ModelSemantics.
         apply interp_vellvm_prov_h_refines_same.
     - destruct e1, e2; cbn in HE; subst;
         apply interp_vellvm_prov_h_refines_same.
-    - destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_]; unfold fused_trigger_prov, ITree.trigger.
-      pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; left; reflexivity.
+    - destruct e1, e2; unfold interp_vellvm_prov_h;
+        cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_];
+        unfold fused_trigger_prov, ITree.trigger.
+      pstep; apply RP_Step; unfold rp_step_body;
+        rewrite !observe_bind; cbn; left; reflexivity.
     - destruct e1, e2; cbn in HE; subst;
         apply interp_vellvm_prov_h_refines_same.
-    - destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_]; unfold fused_trigger_prov, ITree.trigger.
-      pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; left; reflexivity.
-    - destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_]; unfold fused_trigger_prov, ITree.trigger.
+    - destruct e1, e2; unfold interp_vellvm_prov_h;
+        cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_];
+        unfold fused_trigger_prov, ITree.trigger.
+      pstep; apply RP_Step; unfold rp_step_body;
+        rewrite !observe_bind; cbn; left; reflexivity.
+    - destruct e1, e2; unfold interp_vellvm_prov_h;
+        cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_];
+        unfold fused_trigger_prov, ITree.trigger.
       pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn.
       right; right; split; [exact I | intros [] [] _].
       left; eapply refine_prov_obs_eq;
         [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
       pstep; apply RP_Step; cbn; split; reflexivity.
-    - destruct e1, e2; unfold interp_vellvm_prov_h; cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_]; unfold fused_trigger_prov, ITree.trigger.
-      pstep; apply RP_Step; unfold rp_step_body; rewrite !observe_bind; cbn; right; right; split; [exact I | intros [] [] _].
+    - destruct e1, e2; unfold interp_vellvm_prov_h;
+        cbn [case_ Case_sum1 case_sum1 Case_sum1_Handler Handler.case_];
+        unfold fused_trigger_prov, ITree.trigger.
+      pstep; apply RP_Step; unfold rp_step_body;
+        rewrite !observe_bind; cbn;
+        right; right; split; [exact I | intros [] [] _].
   Qed.
 
   Definition model_step_state (R : Type) : Type :=
@@ -2321,7 +2360,9 @@ Section ModelSemantics.
     assert (Hr_eq : forall U0 a1 a1' a2 a2',
               a1 ≅ a1' -> a2 ≅ a2' -> r_rel U0 a1 a2 -> r_rel U0 a1' a2').
     { intros U0 a1 a1' a2 a2' Ea1 Ea2 (v1 & v2 & Ev1 & Ev2 & Hv).
-      exists v1, v2; split; [etransitivity; [exact Ev1 | exact Ea1] | split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv]]. }
+      exists v1, v2; split;
+        [ etransitivity; [exact Ev1 | exact Ea1]
+        | split; [etransitivity; [exact Ev2 | exact Ea2] | exact Hv] ]. }
     eapply refine_prov__mon with (r := r_rel);
       [| intros U0 a1 a2 (v1 & v2 & Ev1 & Ev2 & Hv);
          right; eapply CIH; [exact Ev1 | exact Ev2 | exact Hv]].
@@ -2341,7 +2382,8 @@ Section ModelSemantics.
           rewrite (observe_bind w1 (model_cont R1)), How1,
                   (observe_bind w2 (model_cont R2)), How2; cbn.
           destruct (ruttc_model_step_decomp RR u1' u2' HR' s1 U) as (v1 & v2 & Ev1 & Ev2 & Hv).
-          exists v1, v2; split; [symmetry; exact Ev1 | split; [symmetry; exact Ev2 | exact Hv]].
+          exists v1, v2; split;
+            [symmetry; exact Ev1 | split; [symmetry; exact Ev2 | exact Hv]].
       + destruct (observe w2) as [x2 | mw2 | X2 ev2 kw2] eqn:How2; try contradiction; pclearbot.
         apply RP_Step; unfold rp_step_body.
         rewrite (observe_bind w1 (model_cont R1)), How1,

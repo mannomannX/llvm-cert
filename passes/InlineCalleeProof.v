@@ -103,7 +103,8 @@ Section InliningSemantics.
   #[local] Ltac try_cfg_raise :=
     lazymatch goal with
     | |- cfg_inline_sim _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) => apply cfg_inline_sim_raise; reflexivity
-    | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) => apply cfg_inline_sim_raise; reflexivity
+    | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) =>
+        apply cfg_inline_sim_raise; reflexivity
     | _ => idtac
     end.
 
@@ -121,14 +122,16 @@ Section InliningSemantics.
     | |- cfg_inline_sim _ _ _ _ _ (@raiseUB _ _ _ _) _ => apply cfg_inline_sim_raiseUB
     | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raiseUB _ _ _ _) _ => apply cfg_inline_sim_raiseUB
     | |- cfg_inline_sim _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) => apply cfg_inline_sim_raise; reflexivity
-    | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) => apply cfg_inline_sim_raise; reflexivity
+    | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) =>
+        apply cfg_inline_sim_raise; reflexivity
     | _ => idtac
     end.
 
   #[local] Ltac try_mcfg_raise :=
     lazymatch goal with
     | |- mcfg_inline_sim _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) => apply mcfg_inline_sim_raise; reflexivity
-    | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) => apply mcfg_inline_sim_raise; reflexivity
+    | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) =>
+        apply mcfg_inline_sim_raise; reflexivity
     | _ => idtac
     end.
 
@@ -210,7 +213,8 @@ Section InliningSemantics.
     unfold local_id in *; intros Hbound x Hx.
     destruct (Hbound x Hx) as (vx & Hlk1 & Hlk2).
     assert (Hne : z <> ren_l x) by (intros ->; exact (Hother x Hx Logic.eq_refl)).
-    exists vx; split; [exact Hlk1 | cbn [Maps.lookup Maps.add Map_rmap]; rewrite RMF.F.add_neq_o by exact Hne; exact Hlk2].
+    exists vx; split;
+      [exact Hlk1 | cbn [Maps.lookup Maps.add Map_rmap]; rewrite RMF.F.add_neq_o by exact Hne; exact Hlk2].
   Qed.
 
   Lemma ren_exp_id {T : Set} (e : exp T) :
@@ -259,7 +263,8 @@ Section InliningSemantics.
     loop_monad f (xs ++ ys) ≅
     ITree.bind (loop_monad f xs) (fun _ => loop_monad f ys).
   Proof.
-    induction xs as [| x xs' IH]; cbn [app loop_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+    induction xs as [| x xs' IH];
+      cbn [app loop_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
     - rewrite Eqit.bind_ret_l; reflexivity.
     - rewrite Eqit.bind_bind.
       apply eq_itree_clo_bind with (UU := Logic.eq); [reflexivity |].
@@ -305,7 +310,8 @@ Section InliningSemantics.
     unfold lread; try unfold trigger; unfold ITree.trigger.
     pstep; apply GIS_Step; unfold gis_step_body;
       try unfold subevent, resum;
-      cbn [observe gis_vis_both as_local_mcfg ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1];
+      cbn [observe gis_vis_both as_local_mcfg ReSum_id ReSum_sum ReSum_inl ReSum_inr
+           cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun case_ Case_sum1 case_sum1];
       try unfold resum, ReSum_id, id_, Id_IFun.
     right; right; left.
     split; [reflexivity | split; [exact Hlk |]].
@@ -360,7 +366,8 @@ Section InliningSemantics.
     unfold stack_push; try unfold trigger_cast; try unfold trigger; unfold ITree.trigger.
     pstep; apply GIS_Step; unfold gis_step_body; rewrite ?observe_bind;
       norm_subevent; cbn [observe gis_vis_both as_stack_cfg as_stack_mcfg].
-    right; right; right; split; [reflexivity | split; [reflexivity |]].
+    right; right; right;
+      split; [reflexivity | split; [reflexivity |]].
     exists (Ret tt), (Ret tt).
     split; [apply ITS_Refl | split; [apply ITS_Refl |]].
     left; apply gen_inline_sim_ret; auto.
@@ -633,21 +640,25 @@ Section InliningSemantics.
         [apply IHe1; intros x Hx; apply Hvar, in_or_app; left; exact Hx | intros ? v1 _ [-> <-]].
       eapply gen_inline_sim_bind.
       + eapply gen_inline_sim_bind;
-          [apply IHe2; intros x Hx; apply Hvar, in_or_app; right; apply in_or_app; left; exact Hx
-          | intros ? v2 _ [-> <-]; apply mcfg_inline_sim_EOU, Hact].
+          [ apply IHe2; intros x Hx; apply Hvar, in_or_app;
+              right; apply in_or_app; left; exact Hx
+          | intros ? v2 _ [-> <-]; apply mcfg_inline_sim_EOU, Hact ].
       + intros ? b2 _ [-> <-].
         eapply gen_inline_sim_bind;
-          [apply IHe3; intros x Hx; apply Hvar, in_or_app; right; apply in_or_app; right; exact Hx
-          | intros ? v3 _ [-> <-]; apply mcfg_inline_sim_EOU, Hact].
+          [ apply IHe3; intros x Hx; apply Hvar, in_or_app;
+              right; apply in_or_app; right; exact Hx
+          | intros ? v3 _ [-> <-]; apply mcfg_inline_sim_EOU, Hact ].
     - (* OP_ShuffleVector *)
       eapply gen_inline_sim_bind;
         [apply IHe1; intros x Hx; apply Hvar, in_or_app; left; exact Hx | intros ? v1 _ [-> <-]].
       eapply gen_inline_sim_bind;
-        [apply IHe2; intros x Hx; apply Hvar, in_or_app; right; apply in_or_app; left; exact Hx
-        | intros ? v2 _ [-> <-]].
+        [ apply IHe2; intros x Hx; apply Hvar, in_or_app;
+            right; apply in_or_app; left; exact Hx
+        | intros ? v2 _ [-> <-] ].
       eapply gen_inline_sim_bind;
-        [apply IHe3; intros x Hx; apply Hvar, in_or_app; right; apply in_or_app; right; exact Hx
-        | intros ? v3 _ [-> <-]; apply mcfg_inline_sim_EOU, Hact].
+        [ apply IHe3; intros x Hx; apply Hvar, in_or_app;
+            right; apply in_or_app; right; exact Hx
+        | intros ? v3 _ [-> <-]; apply mcfg_inline_sim_EOU, Hact ].
     - (* OP_ExtractValue *)
       eapply gen_inline_sim_bind; [apply IHe, Hvar | intros ? v1 _ [-> <-]].
       apply mcfg_inline_sim_EOU, Hact.
@@ -661,11 +672,13 @@ Section InliningSemantics.
       eapply gen_inline_sim_bind;
         [apply IHe1; intros x Hx; apply Hvar, in_or_app; left; exact Hx | intros ? v1 _ [-> <-]].
       eapply gen_inline_sim_bind;
-        [apply IHe2; intros x Hx; apply Hvar, in_or_app; right; apply in_or_app; left; exact Hx
-        | intros ? v2 _ [-> <-]].
+        [ apply IHe2; intros x Hx; apply Hvar, in_or_app;
+            right; apply in_or_app; left; exact Hx
+        | intros ? v2 _ [-> <-] ].
       eapply gen_inline_sim_bind;
-        [apply IHe3; intros x Hx; apply Hvar, in_or_app; right; apply in_or_app; right; exact Hx
-        | intros ? v3 _ [-> <-]; apply mcfg_inline_sim_EOU, Hact].
+        [ apply IHe3; intros x Hx; apply Hvar, in_or_app;
+            right; apply in_or_app; right; exact Hx
+        | intros ? v3 _ [-> <-]; apply mcfg_inline_sim_EOU, Hact ].
     - (* OP_Freeze *)
       eapply gen_inline_sim_bind; [apply IHe, Hvar | intros ? dv _ [-> <-]].
       apply mcfg_inline_sim_freeze, Hact.
@@ -786,7 +799,8 @@ Section InliningSemantics.
     destruct (existsb attr_is_noundef attrs && negb (dvalue_well_defined vp))%bool.
     - cbn [EOU_to_itree ExtLib.Structures.Monad.bind Monad_itree].
       unfold raiseUB, trigger_cast, ITree.trigger.
-      pstep; apply GIS_Step; unfold gis_step_body; rewrite !observe_bind; cbn [observe]; left; reflexivity.
+      pstep; apply GIS_Step; unfold gis_step_body;
+        rewrite !observe_bind; cbn [observe]; left; reflexivity.
     - cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       eapply gen_inline_sim_obs_eq;
         [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
@@ -844,7 +858,8 @@ Section InliningSemantics.
     - destruct (existsb fn_attr_is_nounwind fattrs).
       + cbn [EOU_to_itree ExtLib.Structures.Monad.bind Monad_itree].
         unfold raiseUB, trigger_cast, ITree.trigger.
-        pstep; apply GIS_Step; unfold gis_step_body; rewrite observe_bind; cbn [observe]; left; reflexivity.
+        pstep; apply GIS_Step; unfold gis_step_body;
+          rewrite observe_bind; cbn [observe]; left; reflexivity.
       + cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
         eapply gen_inline_sim_obs_eq;
           [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
@@ -852,13 +867,15 @@ Section InliningSemantics.
     - destruct (existsb fn_attr_is_noreturn fattrs).
       + cbn [EOU_to_itree ExtLib.Structures.Monad.bind Monad_itree].
         unfold raiseUB, trigger_cast, ITree.trigger.
-        pstep; apply GIS_Step; unfold gis_step_body; rewrite observe_bind; cbn [observe]; left; reflexivity.
+        pstep; apply GIS_Step; unfold gis_step_body;
+          rewrite observe_bind; cbn [observe]; left; reflexivity.
       + destruct (existsb fn_attr_is_nocreateundeforpoison fattrs
                   && forallb dvalue_well_defined args
                   && negb (dvalue_well_defined v))%bool.
         * cbn [EOU_to_itree ExtLib.Structures.Monad.bind Monad_itree].
           unfold raiseUB, trigger_cast, ITree.trigger.
-          pstep; apply GIS_Step; unfold gis_step_body; rewrite observe_bind; cbn [observe]; left; reflexivity.
+          pstep; apply GIS_Step; unfold gis_step_body;
+          rewrite observe_bind; cbn [observe]; left; reflexivity.
         * cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
           eapply gen_inline_sim_obs_eq;
             [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
@@ -881,16 +898,20 @@ Section InliningSemantics.
            (List.map (fun '(v, b) => (v, ren_b b)) sws) = raise_ret (ren_b b)).
   Proof.
     induction sws as [| [v id] rest IH]; cbn [List.map select_switch snd].
-    - right; exists def_b; split; [left; reflexivity | split; reflexivity].
+    - right; exists def_b;
+        split; [left; reflexivity | split; reflexivity].
     - destruct val as [db1 | |];
-        [| left; eexists; split; reflexivity | left; eexists; split; reflexivity].
+        [| left; eexists; split; reflexivity
+         | left; eexists; split; reflexivity].
       destruct db1; try (left; eexists; split; reflexivity).
       destruct v as [db2 | |];
-        [| left; eexists; split; reflexivity | left; eexists; split; reflexivity].
+        [| left; eexists; split; reflexivity
+         | left; eexists; split; reflexivity].
       destruct db2; try (left; eexists; split; reflexivity).
       destruct (Pos.eq_dec sz sz0) as [<- | _]; [cbn | left; eexists; split; reflexivity].
       match goal with |- context [if ?b then _ else _] => destruct b end.
-      + right; exists id; split; [right; left; reflexivity | split; reflexivity].
+      + right; exists id;
+          split; [right; left; reflexivity | split; reflexivity].
       + destruct IH as [(msg & E1 & E2) | (b & Hb & E1 & E2)].
         * left; exists msg; split; assumption.
         * right; exists b; split.
@@ -950,14 +971,18 @@ Section InliningSemantics.
       - right; exists []; split; [reflexivity | split; reflexivity].
       - destruct (coerce_integer_to_int (Some sz) (denote_int_syntax x)) as [m | m | m | s];
           cbn [EOU_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret].
-        + left; exists (raise_error m); split; [intros ?; discriminate | split; reflexivity].
-        + left; exists (raise_oom m); split; [intros ?; discriminate | split; reflexivity].
-        + left; exists (raise_ub m); split; [intros ?; discriminate | split; reflexivity].
+        + left; exists (raise_error m);
+            split; [intros ?; discriminate | split; reflexivity].
+        + left; exists (raise_oom m);
+            split; [intros ?; discriminate | split; reflexivity].
+        + left; exists (raise_ub m);
+            split; [intros ?; discriminate | split; reflexivity].
         + destruct IH as [(err_sw & Hnr & E1 & E2) | (sws & Hsnd & E1 & E2)];
             cbn [EOU_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret] in E1, E2.
           * rewrite E1, E2.
             destruct err_sw as [m | m | m | l0]; [| | | exfalso; exact (Hnr l0 Logic.eq_refl)];
-              (cbn; left; eexists; split; [| split; reflexivity]; intros ?; discriminate).
+              (cbn; left; eexists;
+               split; [| split; reflexivity]; intros ?; discriminate).
           * rewrite E1, E2; cbn [EOU_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret List.map].
             right; exists ((DVALUE_Base s, id) :: sws).
             cbn [List.map snd]; rewrite Hsnd; split; [reflexivity | split; reflexivity]. }
@@ -965,12 +990,15 @@ Section InliningSemantics.
     destruct Hmap as [(err_sw & Hnr & E1 & E2) | (sws & Hsnd & E1 & E2)].
     - rewrite E1, E2.
       destruct err_sw as [m | m | m | l0]; [| | | exfalso; exact (Hnr l0 Logic.eq_refl)];
-        (cbn; left; eexists; split; [| split; reflexivity]; intros ?; discriminate).
+        (cbn; left; eexists;
+         split; [| split; reflexivity]; intros ?; discriminate).
     - rewrite E1, E2; cbn [EOU_monad ExtLib.Structures.Monad.bind].
       destruct (select_switch_ren_b ren_b val def_b sws)
         as [(msg & Es1 & Es2) | (b & Hb & Es1 & Es2)].
-      + left; exists (raise_error msg); split; [intros ?; discriminate | split; assumption].
-      + right; exists b; rewrite <- Hsnd; split; [exact Hb | split; assumption].
+      + left; exists (raise_error msg);
+          split; [intros ?; discriminate | split; assumption].
+      + right; exists b; rewrite <- Hsnd;
+          split; [exact Hb | split; assumption].
   Qed.
 
   Lemma map_id_pairs {A B : Type} (xs : list (A * B)) :
@@ -1208,8 +1236,13 @@ Section InliningSemantics.
     - cbn [List.map denote_phis map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       rewrite app_nil_r.
       eapply gen_inline_sim_obs_eq;
-        [symmetry; rewrite !Eqit.bind_ret_l; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; rewrite !Eqit.bind_ret_l; reflexivity
-        | symmetry; rewrite !Eqit.bind_ret_l; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; rewrite !Eqit.bind_ret_l; reflexivity |].
+        [ symmetry; rewrite !Eqit.bind_ret_l;
+          cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+          rewrite !Eqit.bind_ret_l; reflexivity
+        | symmetry; rewrite !Eqit.bind_ret_l;
+          cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+          rewrite !Eqit.bind_ret_l; reflexivity
+        | ].
       apply gen_inline_sim_ret; split; [reflexivity | split; [reflexivity | exists e1, e2; auto]].
     - subst b_from2; unfold denote_phis.
       assert (Heval :
@@ -1261,7 +1294,8 @@ Section InliningSemantics.
             eapply gen_inline_sim_bind; [apply (IH Hrest_lbls) |].
             intros ? dvs1 dvs2 (-> & Hfst & ->).
             apply gen_inline_sim_ret;
-              split; [reflexivity | split; [cbn; f_equal; exact Hfst | cbn; reflexivity]]. }
+              split;
+              [reflexivity | split; [cbn; f_equal; exact Hfst | cbn; reflexivity]]. }
       assert (Hwrites :
         forall (dvs : list (local_id * @dvalue PaV)) (d_cur : list raw_id) (ea1 ea2 : @local_env PaV),
           incl d_cur l_origs ->
@@ -1403,7 +1437,8 @@ Section InliningSemantics.
     assert (Hd0_dom : incl (lookup_def_set in_map (blk_id bk)) l_origs).
     { intros z Hz; apply Hdin_dom, Hd0_in, Hz. }
     assert (Hp_defs_dom : incl (List.map (fun '(x, _, _) => x) (blk_phis bk)) l_origs).
-    { intros z Hz; apply Hdefs_dom; unfold full_block_defs; apply in_or_app; left; exact Hz. }
+    { intros z Hz; apply Hdefs_dom; unfold full_block_defs;
+        apply in_or_app; left; exact Hz. }
     assert (Hcd_defs_dom : incl (flat_map (fun '(iid, _, _) => instr_id_defs iid) (blk_code bk)) l_origs).
     { intros z Hz; apply Hdefs_dom; unfold full_block_defs;
         apply in_or_app; right; apply in_or_app; left; exact Hz. }
@@ -1472,13 +1507,15 @@ Section InliningSemantics.
       + (* TERM_Ret (dt, op) *)
         eapply gen_inline_sim_obs_eq.
         * reflexivity.
-        * symmetry; cbn [ExtLib.Structures.Monad.bind Monad_itree]; rewrite denote_code_app_eq, Eqit.bind_bind; reflexivity.
+        * symmetry; cbn [ExtLib.Structures.Monad.bind Monad_itree];
+            rewrite denote_code_app_eq, Eqit.bind_bind; reflexivity.
         * eapply gen_inline_sim_bind.
           -- apply (denote_code_callee_sim opt_call1 g0 l_origs all_fresh ren_l va1 va2
                       Hinj_l Hfresh_l (blk_code bk) _ d_out stk ce1 e1_p e2_p
                       Hcode_leaf Hchk_cd Hd_phi_dom Hcd_defs_dom Hbound_p0 Hagree_p).
           -- intros ? [] [] (_ & _ & e1_c & e2_c & -> & Hbound_c & Hagree_c).
-             cbn [denote_code loop_monad denote_instr denote_terminator ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+             cbn [denote_code loop_monad denote_instr denote_terminator
+                  ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
              eapply gen_inline_sim_obs_eq with
                (t1 := ITree.bind (denote_exp' (Some dt) op) (fun dv => Ret (inr dv)))
                (t2 := ITree.bind (denote_exp' (Some dt) (ren_exp ren_l op))
@@ -1511,7 +1548,9 @@ Section InliningSemantics.
                        split; [reflexivity | split; [reflexivity | split; [reflexivity | split]]].
                        +++ apply env_agree_outside_add_fresh_r; [exact Hrtmp_fresh | exact Hagree_c].
                        +++ destruct opt_ret_dt as [rdt |]; [| exact I].
-                           split; [exists (dt, op); reflexivity | cbn [Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity].
+                           split;
+                             [ exists (dt, op); reflexivity
+                             | cbn [Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity ].
       + (* TERM_Ret_void *)
         destruct opt_ret_dt as [rdt |]; [discriminate Htm_ok |].
         eapply gen_inline_sim_bind.
@@ -1716,14 +1755,16 @@ Section InliningSemantics.
                 ** intros z Hz.
                    assert (Hne_p : ren_l p <> z) by (intros Heq; apply Hz; left; exact Heq).
                    assert (Hnin_ps : ~ In z (List.map ren_l ps)) by (intros Hin; apply Hz; right; exact Hin).
-                   unfold local_id in *; rewrite (Hpres z Hnin_ps); cbn [Maps.lookup Maps.add Map_rmap]; rewrite RMF.F.add_neq_o by exact Hne_p; reflexivity.
+                   unfold local_id in *; rewrite (Hpres z Hnin_ps);
+                     cbn [Maps.lookup Maps.add Map_rmap]; rewrite RMF.F.add_neq_o by exact Hne_p; reflexivity.
                 ** intros q w [Heq | Hin].
                    --- injection Heq as <- <-.
                        assert (Hnin_ren_ps : ~ In (ren_l p) (List.map ren_l ps)).
                        { intros Hin; apply in_map_iff in Hin as [q [Heq Hq]].
                          apply Hnin_p; replace p with q; [exact Hq |].
                          apply Hinj_l; [apply Hps_dom, Hq | exact Hp_dom | exact Heq]. }
-                       unfold local_id in *; rewrite (Hpres (ren_l p) Hnin_ren_ps); cbn [Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity.
+                       unfold local_id in *; rewrite (Hpres (ren_l p) Hnin_ren_ps);
+                         cbn [Maps.lookup Maps.add Map_rmap]; apply RMF.F.add_eq_o; reflexivity.
                    --- apply Hlk_ps, Hin.
   Qed.
 

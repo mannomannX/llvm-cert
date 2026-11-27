@@ -151,7 +151,9 @@ Proof.
   - rewrite in_remove_raw_id, IH; cbn [In].
     split.
     + intros [Hne [Hnin Hs]]; split; [intros [<- | Hin]; contradiction | exact Hs].
-    + intros [Hnin Hs]; split; [intros ->; apply Hnin; left; reflexivity | split; [intros Hin; apply Hnin; right; exact Hin | exact Hs]].
+    + intros [Hnin Hs]; split;
+        [intros ->; apply Hnin; left; reflexivity
+        | split; [intros Hin; apply Hnin; right; exact Hin | exact Hs]].
 Qed.
 
 Definition raw_ids_subset (s1 s2 : list raw_id) : bool :=

@@ -104,7 +104,8 @@ Section InliningSemantics.
   #[local] Ltac try_cfg_raise :=
     lazymatch goal with
     | |- cfg_inline_sim _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) => apply cfg_inline_sim_raise; reflexivity
-    | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) => apply cfg_inline_sim_raise; reflexivity
+    | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) =>
+        apply cfg_inline_sim_raise; reflexivity
     | _ => idtac
     end.
 
@@ -122,14 +123,16 @@ Section InliningSemantics.
     | |- cfg_inline_sim _ _ _ _ _ (@raiseUB _ _ _ _) _ => apply cfg_inline_sim_raiseUB
     | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raiseUB _ _ _ _) _ => apply cfg_inline_sim_raiseUB
     | |- cfg_inline_sim _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) => apply cfg_inline_sim_raise; reflexivity
-    | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) => apply cfg_inline_sim_raise; reflexivity
+    | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) =>
+        apply cfg_inline_sim_raise; reflexivity
     | _ => idtac
     end.
 
   #[local] Ltac try_mcfg_raise :=
     lazymatch goal with
     | |- mcfg_inline_sim _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) => apply mcfg_inline_sim_raise; reflexivity
-    | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) => apply mcfg_inline_sim_raise; reflexivity
+    | |- gen_inline_sim _ _ _ _ _ _ _ _ _ _ _ _ (@raise _ _ _ _) (@raise _ _ _ _) =>
+        apply mcfg_inline_sim_raise; reflexivity
     | _ => idtac
     end.
 
@@ -355,11 +358,15 @@ Section InliningSemantics.
     - intros ? ptr_v _ [-> <-].
       eapply gen_inline_sim_bind.
       + apply (denote_exp'_caller_sim opt_call1 g0 fresh_set stk e1 e2 (Some cmp_ty) cmp_val);
-          [intros x Hx; apply Huses, in_or_app; right; apply in_or_app; left; exact Hx | exact Hagree].
+          [ intros x Hx; apply Huses, in_or_app;
+              right; apply in_or_app; left; exact Hx
+          | exact Hagree ].
       + intros ? cmp_v _ [-> <-].
         eapply gen_inline_sim_bind.
         * apply (denote_exp'_caller_sim opt_call1 g0 fresh_set stk e1 e2 (Some cmp_ty) new_val);
-            [intros x Hx; apply Huses, in_or_app; right; apply in_or_app; right; exact Hx | exact Hagree].
+            [ intros x Hx; apply Huses, in_or_app;
+                right; apply in_or_app; right; exact Hx
+            | exact Hagree ].
         * intros ? new_v _ [-> <-].
           eapply gen_inline_sim_bind; [apply cfg_inline_sim_EOU; reflexivity | intros ? [] _ [-> _]].
           eapply gen_inline_sim_bind;
@@ -509,7 +516,8 @@ Section InliningSemantics.
          eapply gen_inline_sim_bind;
          [apply (denote_operand_bundles_caller_sim opt_call1 g0 fresh_set stk e1 e2 _ _ f obs);
             [intros x Hx; apply Huses, in_or_app; left; cbn [full_instr_uses];
-             apply in_or_app; right; apply in_or_app; right; apply in_or_app; right; exact Hx
+               apply in_or_app; right; apply in_or_app;
+               right; apply in_or_app; right; exact Hx
             | exact Hagree]
          | intros ? [] _ (-> & _ & _);
            eapply gen_inline_sim_bind with
@@ -530,8 +538,10 @@ Section InliningSemantics.
              [eapply gen_inline_sim_bind with (RA := fun _ _ _ => False);
               [apply cfg_inline_sim_raiseLLVM; reflexivity | intros ? ? ? []]
              | eapply gen_inline_sim_obs_eq;
-               [cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; symmetry; apply Eqit.bind_ret_l
-               | cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; symmetry; apply Eqit.bind_ret_l |]]]]]);
+               [ cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+                 symmetry; apply Eqit.bind_ret_l
+               | cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+                 symmetry; apply Eqit.bind_ret_l | ]]]]]);
       [(eapply gen_inline_sim_weaken;
         [| apply (cfg_inline_sim_lwrite_lr opt_call1 g0 false
                     (IC_Synced stk e1 e2)
@@ -776,10 +786,16 @@ Section InliningSemantics.
       (denote_phis b_from2 (remap_phis_pred call_bid post_bid phis)).
   Proof.
     destruct Hentry_or_remap as [-> | (Hne_cp & Hne_fp & -> & Hnin_pb)].
-    - cbn [remap_phis_pred List.map denote_phis map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
+    - cbn [remap_phis_pred List.map denote_phis map_monad
+           ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
       eapply gen_inline_sim_obs_eq;
-        [symmetry; rewrite !Eqit.bind_ret_l; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; rewrite !Eqit.bind_ret_l; reflexivity
-        | symmetry; rewrite !Eqit.bind_ret_l; cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; rewrite !Eqit.bind_ret_l; reflexivity |].
+        [ symmetry; rewrite !Eqit.bind_ret_l;
+          cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+          rewrite !Eqit.bind_ret_l; reflexivity
+        | symmetry; rewrite !Eqit.bind_ret_l;
+          cbn [map_monad ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+          rewrite !Eqit.bind_ret_l; reflexivity
+        | ].
       apply gen_inline_sim_ret; split; [reflexivity | split; [reflexivity | exists e1, e2; auto]].
     - unfold denote_phis.
       assert (Heval :
@@ -816,7 +832,8 @@ Section InliningSemantics.
             eapply gen_inline_sim_bind.
             * apply (denote_exp'_caller_sim opt_call1 g0 fresh_set stk e1 e2 (Some dt) op);
                 [| exact Hagree].
-              intros z Hz; apply Hu, in_or_app; left; apply in_or_app; left; cbn [full_phi_uses].
+              intros z Hz; apply Hu, in_or_app; left;
+                apply in_or_app; left; cbn [full_phi_uses].
               apply in_flat_map; exists (b_from1, op); split; assumption.
             * intros ? uv _ [-> <-]; apply gen_inline_sim_ret; split; reflexivity.
           + intros ? p1 _ [-> <-].
@@ -876,7 +893,8 @@ Section InliningSemantics.
           eapply gen_inline_sim_bind.
           * apply (denote_exp'_caller_sim opt_call1 g0 fresh_set stk e1 e2 (Some dt) op);
               [| exact Hagree].
-            intros z Hz; apply Hu, in_or_app; left; apply in_or_app; left; cbn [full_phi_uses].
+            intros z Hz; apply Hu, in_or_app; left;
+              apply in_or_app; left; cbn [full_phi_uses].
             apply in_flat_map; exists (b_from, op); split; assumption.
           * intros ? uv _ [-> <-]; apply gen_inline_sim_ret; split; reflexivity.
         + intros ? p1 _ [-> <-].
@@ -936,14 +954,24 @@ Section InliningSemantics.
         * destruct sz as [? | ? |]; cbv beta iota zeta;
             try_cfg_raise.
           lazymatch goal with | |- context [VellvmIntegers.equ ?a ?b] => destruct (VellvmIntegers.equ a b) end.
-          -- apply gen_inline_sim_ret.
-             split; [reflexivity | split; [intros ? H; injection H as <-; left; reflexivity | exists e1, e2; auto]].
-          -- apply gen_inline_sim_ret.
-             split; [reflexivity | split; [intros ? H; injection H as <-; right; left; reflexivity | exists e1, e2; auto]].
+          -- apply gen_inline_sim_ret;
+               split;
+               [ reflexivity
+               | split;
+                   [intros ? H; injection H as <-; left; reflexivity | exists e1, e2; auto] ].
+          -- apply gen_inline_sim_ret;
+               split;
+               [ reflexivity
+               | split;
+                   [ intros ? H; injection H as <-; right; left; reflexivity
+                   | exists e1, e2; auto ] ].
         * apply cfg_inline_sim_raiseUB.
     - (* TERM_Br_1 *)
-      apply gen_inline_sim_ret.
-      split; [reflexivity | split; [intros ? H; injection H as <-; left; reflexivity | exists e1, e2; auto]].
+      apply gen_inline_sim_ret;
+        split;
+        [ reflexivity
+        | split;
+            [intros ? H; injection H as <-; left; reflexivity | exists e1, e2; auto] ].
     - (* TERM_Switch *)
       eapply gen_inline_sim_bind.
       + apply (denote_exp'_caller_sim opt_call1 g0 fresh_set stk e1 e2 (Some dt) ex);
@@ -965,8 +993,9 @@ Section InliningSemantics.
         * rewrite E1; cbn [EOU_to_itree ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree].
           eapply gen_inline_sim_obs_eq;
             [symmetry; apply Eqit.bind_ret_l | symmetry; apply Eqit.bind_ret_l |].
-          apply gen_inline_sim_ret.
-          split; [reflexivity | split; [intros ? H; injection H as <-; exact Hb | exists e1, e2; auto]].
+          apply gen_inline_sim_ret;
+            split;
+            [reflexivity | split; [intros ? H; injection H as <-; exact Hb | exists e1, e2; auto]].
     - (* TERM_IndirectBr *)
       eapply gen_inline_sim_bind.
       + apply (denote_exp'_caller_sim opt_call1 g0 fresh_set stk e1 e2 (Some t) addr);
@@ -996,8 +1025,9 @@ Section InliningSemantics.
         destruct (indirectbr_target z (combine brs addrs)) as [b |] eqn:Eib;
           [| apply cfg_inline_sim_raiseUB].
         assert (Hb_in : In b brs) by (eapply indirectbr_target_In; exact Eib).
-        apply gen_inline_sim_ret.
-        split; [reflexivity | split; [intros ? H; injection H as <-; exact Hb_in | exists e1, e2; auto]].
+        apply gen_inline_sim_ret;
+          split;
+          [reflexivity | split; [intros ? H; injection H as <-; exact Hb_in | exists e1, e2; auto]].
     - (* TERM_Resume *)
       eapply gen_inline_sim_bind.
       + apply (denote_exp'_caller_sim opt_call1 g0 fresh_set stk e1 e2 (Some t) expr);
@@ -1014,7 +1044,8 @@ Section InliningSemantics.
         * apply (denote_operand_bundles_caller_sim opt_call1 g0 fresh_set stk e1 e2 _ _ fnptrval obs);
             [| exact Hagree].
           intros x Hx; apply Huses, in_or_app; left; cbn [full_term_uses].
-          apply in_or_app; right; apply in_or_app; right; apply in_or_app; right; exact Hx.
+          apply in_or_app; right; apply in_or_app;
+            right; apply in_or_app; right; exact Hx.
         * intros ? [] _ (-> & _ & _).
           eapply gen_inline_sim_bind.
           -- apply (denote_exp'_caller_sim opt_call1 g0 fresh_set stk e1 e2 None fnptrval);
@@ -1033,8 +1064,11 @@ Section InliningSemantics.
                   [unfold stack_raise, trigger_cast; apply cfg_inline_sim_trigger_refl; reflexivity
                   | intros ? [] _ [-> _]].
                 apply gen_inline_sim_ret.
-                split; [reflexivity | split;
-                  [intros ? H; injection H as <-; right; left; reflexivity | exists e1, e2; auto]].
+                split;
+                  [ reflexivity
+                  | split;
+                      [ intros ? H; injection H as <-; right; left; reflexivity
+                   | exists e1, e2; auto ] ].
              ++ destruct tiid as [id | vn].
                 ** eapply gen_inline_sim_bind.
                    --- apply (cfg_inline_sim_lwrite_lr opt_call1 g0 false
@@ -1047,8 +1081,10 @@ Section InliningSemantics.
                          [intros ? H; injection H as <-; left; reflexivity
                          | eexists _, _; split; [reflexivity | apply env_agree_outside_add_both, Hagree]]].
                 ** eapply gen_inline_sim_obs_eq;
-                     [cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; symmetry; apply Eqit.bind_ret_l
-                     | cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree]; symmetry; apply Eqit.bind_ret_l |].
+                     [ cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+                       symmetry; apply Eqit.bind_ret_l
+                     | cbn [ExtLib.Structures.Monad.bind ExtLib.Structures.Monad.ret Monad_itree];
+                       symmetry; apply Eqit.bind_ret_l | ].
                    apply gen_inline_sim_ret.
                    split; [reflexivity | split;
                      [intros ? H; injection H as <-; left; reflexivity | exists e1, e2; auto]].
@@ -1571,7 +1607,9 @@ Section InliningSemantics.
       eapply gen_inline_sim__obs_eq;
         [reflexivity | symmetry; apply (run_exc_tau_eq _ _ Hou2) |].
       eapply GIS_TauR; [reflexivity | apply IH, Hic].
-    - assert (Eb1 : ITree.bind a1 k1 ≅ ITree.bind (ITree.trigger (subevent _ (LocalRead x))) (fun y => ITree.bind (fa1 y) k1)).
+    - assert (Eb1 : ITree.bind a1 k1 ≅
+                    ITree.bind (ITree.trigger (subevent _ (LocalRead x)))
+                      (fun y => ITree.bind (fa1 y) k1)).
       { rewrite Ha1, Eqit.bind_bind; reflexivity. }
       assert (El1 : run_exc (ITree.bind a1 k1) ≅
                     ITree.bind (ITree.trigger (subevent _ (LocalRead x)))
@@ -1580,7 +1618,9 @@ Section InliningSemantics.
         rewrite run_exc_bind_trigger_none_eq by reflexivity; reflexivity. }
       eapply GIS_ReadL; [exact He1 | exact El1 | exact Hlk |].
       eapply GIS_TauL; [reflexivity | apply IH, Hic].
-    - assert (Eb2 : ITree.bind a2 k2 ≅ ITree.bind (ITree.trigger (subevent _ (LocalRead x))) (fun y => ITree.bind (fa2 y) k2)).
+    - assert (Eb2 : ITree.bind a2 k2 ≅
+                    ITree.bind (ITree.trigger (subevent _ (LocalRead x)))
+                      (fun y => ITree.bind (fa2 y) k2)).
       { rewrite Ha2, Eqit.bind_bind; reflexivity. }
       assert (Er2 : run_exc (ITree.bind a2 k2) ≅
                     ITree.bind (ITree.trigger (subevent _ (LocalRead x)))
@@ -1592,7 +1632,9 @@ Section InliningSemantics.
     - assert (Hic' : ic_synced_stk stk ic').
       { destruct Hic as (env1' & env2' & ->); cbn in Hw1; injection Hw1 as <-.
         eexists _, _; reflexivity. }
-      assert (Eb1 : ITree.bind a1 k1 ≅ ITree.bind (ITree.trigger (subevent _ (LocalWrite x v))) (fun y => ITree.bind (fa1 y) k1)).
+      assert (Eb1 : ITree.bind a1 k1 ≅
+                    ITree.bind (ITree.trigger (subevent _ (LocalWrite x v)))
+                      (fun y => ITree.bind (fa1 y) k1)).
       { rewrite Ha1, Eqit.bind_bind; reflexivity. }
       assert (El1 : run_exc (ITree.bind a1 k1) ≅
                     ITree.bind (ITree.trigger (subevent _ (LocalWrite x v)))
@@ -1604,7 +1646,9 @@ Section InliningSemantics.
     - assert (Hic' : ic_synced_stk stk ic').
       { destruct Hic as (env1' & env2' & ->); cbn in Hw2; injection Hw2 as <-.
         eexists _, _; reflexivity. }
-      assert (Eb2 : ITree.bind a2 k2 ≅ ITree.bind (ITree.trigger (subevent _ (LocalWrite x v))) (fun y => ITree.bind (fa2 y) k2)).
+      assert (Eb2 : ITree.bind a2 k2 ≅
+                    ITree.bind (ITree.trigger (subevent _ (LocalWrite x v)))
+                      (fun y => ITree.bind (fa2 y) k2)).
       { rewrite Ha2, Eqit.bind_bind; reflexivity. }
       assert (Er2 : run_exc (ITree.bind a2 k2) ≅
                     ITree.bind (ITree.trigger (subevent _ (LocalWrite x v)))
@@ -1613,7 +1657,9 @@ Section InliningSemantics.
         rewrite run_exc_bind_trigger_none_eq by reflexivity; reflexivity. }
       eapply GIS_WriteR; [exact Hw2 | exact Er2 |].
       eapply GIS_TauR; [reflexivity | apply IH, Hic'].
-    - assert (Eb1 : ITree.bind a1 k1 ≅ ITree.bind (ITree.trigger (subevent _ (GlobalRead k))) (fun y => ITree.bind (fa1 y) k1)).
+    - assert (Eb1 : ITree.bind a1 k1 ≅
+                    ITree.bind (ITree.trigger (subevent _ (GlobalRead k)))
+                      (fun y => ITree.bind (fa1 y) k1)).
       { rewrite Ha1, Eqit.bind_bind; reflexivity. }
       assert (El1 : run_exc (ITree.bind a1 k1) ≅
                     ITree.bind (ITree.trigger (subevent _ (GlobalRead k)))
@@ -1776,7 +1822,9 @@ Section InliningSemantics.
       eapply gen_inline_sim__obs_eq;
         [reflexivity | symmetry; apply (run_exc_tau_eq _ _ Hou2) |].
       eapply GIS_TauR; [reflexivity | apply IH, Hic].
-    - assert (Eb1 : ITree.bind a1 k1 ≅ ITree.bind (ITree.trigger (subevent _ (LocalRead x))) (fun y => ITree.bind (fa1 y) k1)).
+    - assert (Eb1 : ITree.bind a1 k1 ≅
+                    ITree.bind (ITree.trigger (subevent _ (LocalRead x)))
+                      (fun y => ITree.bind (fa1 y) k1)).
       { rewrite Ha1, Eqit.bind_bind; reflexivity. }
       assert (El1 : ITree.bind (run_exc (ITree.bind a1 k1)) K1 ≅
                     ITree.bind (ITree.trigger (subevent _ (LocalRead x)))
@@ -1787,7 +1835,9 @@ Section InliningSemantics.
         rewrite Eqit.bind_tau; reflexivity. }
       eapply GIS_ReadL; [exact He1 | exact El1 | exact Hlk |].
       eapply GIS_TauL; [reflexivity | apply IH, Hic].
-    - assert (Eb2 : ITree.bind a2 k2 ≅ ITree.bind (ITree.trigger (subevent _ (LocalRead x))) (fun y => ITree.bind (fa2 y) k2)).
+    - assert (Eb2 : ITree.bind a2 k2 ≅
+                    ITree.bind (ITree.trigger (subevent _ (LocalRead x)))
+                      (fun y => ITree.bind (fa2 y) k2)).
       { rewrite Ha2, Eqit.bind_bind; reflexivity. }
       assert (Er2 : run_exc (ITree.bind a2 k2) ≅
                     ITree.bind (ITree.trigger (subevent _ (LocalRead x)))
@@ -1798,7 +1848,9 @@ Section InliningSemantics.
       eapply GIS_TauR; [reflexivity | apply IH, Hic].
     - assert (Hic' : is_ic_inlined ic' = true).
       { destruct ic; try discriminate Hic; cbn in Hw1; injection Hw1 as <-; reflexivity. }
-      assert (Eb1 : ITree.bind a1 k1 ≅ ITree.bind (ITree.trigger (subevent _ (LocalWrite x v))) (fun y => ITree.bind (fa1 y) k1)).
+      assert (Eb1 : ITree.bind a1 k1 ≅
+                    ITree.bind (ITree.trigger (subevent _ (LocalWrite x v)))
+                      (fun y => ITree.bind (fa1 y) k1)).
       { rewrite Ha1, Eqit.bind_bind; reflexivity. }
       assert (El1 : ITree.bind (run_exc (ITree.bind a1 k1)) K1 ≅
                     ITree.bind (ITree.trigger (subevent _ (LocalWrite x v)))
@@ -1811,7 +1863,9 @@ Section InliningSemantics.
       eapply GIS_TauL; [reflexivity | apply IH, Hic'].
     - assert (Hic' : is_ic_inlined ic' = true).
       { destruct ic; try discriminate Hic; cbn in Hw2; injection Hw2 as <-; reflexivity. }
-      assert (Eb2 : ITree.bind a2 k2 ≅ ITree.bind (ITree.trigger (subevent _ (LocalWrite x v))) (fun y => ITree.bind (fa2 y) k2)).
+      assert (Eb2 : ITree.bind a2 k2 ≅
+                    ITree.bind (ITree.trigger (subevent _ (LocalWrite x v)))
+                      (fun y => ITree.bind (fa2 y) k2)).
       { rewrite Ha2, Eqit.bind_bind; reflexivity. }
       assert (Er2 : run_exc (ITree.bind a2 k2) ≅
                     ITree.bind (ITree.trigger (subevent _ (LocalWrite x v)))
@@ -1820,7 +1874,9 @@ Section InliningSemantics.
         rewrite run_exc_bind_trigger_none_eq by reflexivity; reflexivity. }
       eapply GIS_WriteR; [exact Hw2 | exact Er2 |].
       eapply GIS_TauR; [reflexivity | apply IH, Hic'].
-    - assert (Eb1 : ITree.bind a1 k1 ≅ ITree.bind (ITree.trigger (subevent _ (GlobalRead k))) (fun y => ITree.bind (fa1 y) k1)).
+    - assert (Eb1 : ITree.bind a1 k1 ≅
+                    ITree.bind (ITree.trigger (subevent _ (GlobalRead k)))
+                      (fun y => ITree.bind (fa1 y) k1)).
       { rewrite Ha1, Eqit.bind_bind; reflexivity. }
       assert (El1 : ITree.bind (run_exc (ITree.bind a1 k1)) K1 ≅
                     ITree.bind (ITree.trigger (subevent _ (GlobalRead k)))

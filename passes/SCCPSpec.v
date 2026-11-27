@@ -174,7 +174,9 @@ Lemma sccp_edge_eqb_spec (e1 e2 : cfg_edge) :
 Proof.
   destruct e1 as [a1 b1], e2 as [a2 b2]; unfold sccp_edge_eqb; cbn [fst snd].
   rewrite Bool.andb_true_iff, !raw_id_eqb_spec.
-  split; [intros [-> ->]; reflexivity | intros H; inversion H; split; reflexivity].
+  split;
+    [intros [-> ->]; reflexivity
+    | intros H; inversion H; split; reflexivity].
 Qed.
 
 Definition sccp_in_edges (e : cfg_edge) (es : list cfg_edge) : bool :=
