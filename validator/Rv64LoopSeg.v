@@ -423,14 +423,20 @@ Lemma rv_sym_step_one_wf :
 Proof.
   intros allowed dec pc sp_off vrf astk ret_w res Hrw Hnmul Hrng Hsp2 Hwf Hstk Hstep.
   unfold rv_sym_step_one in Hstep.
-  destruct (dri_inst dec) as [| rd imm | op is_word rd rs1 imm | op is_word rd rs1 rs2 | sz is_signed rd rs1 imm | sz rs1 rs2 imm | cond rs1 rs2 rel | rel |] eqn:Ed.
-  - inversion Hstep; subst; split; [exact Hrng | split; [exact Hsp2 | split; [exact Hwf | exact Hstk]]].
+  destruct (dri_inst dec) as
+    [| rd imm | op is_word rd rs1 imm | op is_word rd rs1 rs2
+     | sz is_signed rd rs1 imm | sz rs1 rs2 imm | cond rs1 rs2 rel | rel |] eqn:Ed.
+  - inversion Hstep; subst; split;
+      [exact Hrng | split; [exact Hsp2 | split; [exact Hwf | exact Hstk]]].
   - destruct (rv_sym_step_write rd (MSV_Expr (ce_bv_z 64%positive imm)) sp_off vrf astk)
       as [[[sp_off' vrf'] astk'] |] eqn:Est; [| discriminate Hstep].
     inversion Hstep; subst; clear Hstep.
     destruct (rv_sym_step_write_sp _ _ _ _ _ _ _ _ Hrng Hsp2 Est) as [Hrng' Hsp2'].
     unfold rv_sym_step_write in Est; destruct (N.eqb rd 2%N); [discriminate Est |].
-    inversion Est; subst; split; [exact Hrng' | split; [exact Hsp2' | split; [apply rv_val_regs_wf_write; [exact Hwf | apply wf_sym_bv_z] | exact Hstk]]].
+    inversion Est; subst; split;
+      [exact Hrng' | split;
+        [exact Hsp2' | split;
+          [apply rv_val_regs_wf_write; [exact Hwf | apply wf_sym_bv_z] | exact Hstk]]].
   - set (sv_opt := match op, is_word, rv_val_read rs1 vrf with
       | RAI_Addi, false, MSV_StackPtr base_off =>
           if Z.leb (- mc_frame_cap) (base_off + imm) && Z.leb (base_off + imm) 0%Z
@@ -444,18 +450,22 @@ Proof.
     assert (Hsv_wf : mc_sym_val_wf allowed sv).
     { subst sv_opt; destruct (rv_val_read rs1 vrf) as [| e1 | r0 | base_off] eqn:Er1.
       - destruct op, is_word; discriminate Esv.
-      - assert (He_eq : sv = MSV_Expr (sym_alu_imm op is_word e1 imm)) by (destruct op, is_word; inversion Esv; reflexivity).
+      - assert (He_eq : sv = MSV_Expr (sym_alu_imm op is_word e1 imm))
+          by (destruct op, is_word; inversion Esv; reflexivity).
         rewrite He_eq; apply wf_sym_alu_imm; pose proof (Hwf rs1) as H1; rewrite Er1 in H1; exact H1.
-      - destruct op, is_word; try discriminate Esv; destruct (Z.eqb imm 0%Z); try discriminate Esv; inversion Esv; exact I.
+      - destruct op, is_word; try discriminate Esv;
+          destruct (Z.eqb imm 0%Z); try discriminate Esv; inversion Esv; exact I.
       - destruct op, is_word; try discriminate Esv; cbv zeta in Esv.
         destruct (Z.leb (- mc_frame_cap) (base_off + imm) && Z.leb (base_off + imm) 0%Z) eqn:Eb; try discriminate Esv.
-        apply andb_true_iff in Eb as [E1 E2]; apply Z.leb_le in E1; apply Z.leb_le in E2; inversion Esv; cbn [mc_sym_val_wf]; lia. }
+        apply andb_true_iff in Eb as [E1 E2]; apply Z.leb_le in E1; apply Z.leb_le in E2;
+          inversion Esv; cbn [mc_sym_val_wf]; lia. }
     destruct (rv_sym_step_write_sp _ _ _ _ _ _ _ _ Hrng Hsp2 Est) as [Hrng' Hsp2'].
     split; [exact Hrng' | split; [exact Hsp2' | split]]; unfold rv_sym_step_write in Est; destruct (N.eqb rd 2%N).
     + destruct sv; try discriminate Est; destruct (Z.leb (- mc_frame_cap) off && Z.leb off 0%Z); try discriminate Est.
       inversion Est; subst; apply rv_val_regs_wf_write; assumption.
     + inversion Est; subst; apply rv_val_regs_wf_write; assumption.
-    + destruct sv; try discriminate Est; destruct (Z.leb (- mc_frame_cap) off && Z.leb off 0%Z) eqn:Eb; try discriminate Est.
+    + destruct sv; try discriminate Est;
+        destruct (Z.leb (- mc_frame_cap) off && Z.leb off 0%Z) eqn:Eb; try discriminate Est.
       apply andb_true_iff in Eb as [E1 E2]; apply Z.leb_le in E1; apply Z.leb_le in E2.
       inversion Est; subst; eapply mc_sym_stk_prune_wf; [lia | exact Hstk].
     + inversion Est; subst; exact Hstk.
@@ -473,21 +483,26 @@ Proof.
     assert (Hsv_wf : mc_sym_val_wf allowed sv).
     { destruct is_mv eqn:Emv.
       - subst sv_opt; cbn [fst snd] in Esv; destruct (N.eqb rs1 0%N).
-        + destruct (rv_val_read rs2 vrf) eqn:Er2; try discriminate Esv; inversion Esv; subst sv; pose proof (Hwf rs2) as H2; rewrite Er2 in H2; exact H2.
-        + destruct (rv_val_read rs1 vrf) eqn:Er1; try discriminate Esv; inversion Esv; subst sv; pose proof (Hwf rs1) as H1; rewrite Er1 in H1; exact H1.
+        + destruct (rv_val_read rs2 vrf) eqn:Er2; try discriminate Esv;
+            inversion Esv; subst sv; pose proof (Hwf rs2) as H2; rewrite Er2 in H2; exact H2.
+        + destruct (rv_val_read rs1 vrf) eqn:Er1; try discriminate Esv;
+            inversion Esv; subst sv; pose proof (Hwf rs1) as H1; rewrite Er1 in H1; exact H1.
       - subst sv_opt; destruct (rv_val_read rs1 vrf) as [| e1 | |] eqn:Er1; try discriminate Esv.
         destruct (rv_val_read rs2 vrf) as [| e2 | |] eqn:Er2; try discriminate Esv; inversion Esv; subst sv; clear Esv.
         assert (Hok_m : is_word = false \/ (op <> RAR_Mulh /\ op <> RAR_Mulhsu /\ op <> RAR_Mulhu)).
         { destruct is_word; [| left; reflexivity].
           right; unfold inst_no_word_mulh in Hnmul; rewrite Ed in Hnmul.
           destruct op; repeat split; intro C; discriminate C || discriminate Hnmul. }
-        apply wf_sym_alu_reg; [exact Hok_m | pose proof (Hwf rs1) as H1; rewrite Er1 in H1; exact H1 | pose proof (Hwf rs2) as H2; rewrite Er2 in H2; exact H2]. }
+        apply wf_sym_alu_reg;
+          [exact Hok_m | pose proof (Hwf rs1) as H1; rewrite Er1 in H1; exact H1
+           | pose proof (Hwf rs2) as H2; rewrite Er2 in H2; exact H2]. }
     destruct (rv_sym_step_write_sp _ _ _ _ _ _ _ _ Hrng Hsp2 Est) as [Hrng' Hsp2'].
     split; [exact Hrng' | split; [exact Hsp2' | split]]; unfold rv_sym_step_write in Est; destruct (N.eqb rd 2%N).
     + destruct sv; try discriminate Est; destruct (Z.leb (- mc_frame_cap) off && Z.leb off 0%Z); try discriminate Est.
       inversion Est; subst; apply rv_val_regs_wf_write; assumption.
     + inversion Est; subst; apply rv_val_regs_wf_write; assumption.
-    + destruct sv; try discriminate Est; destruct (Z.leb (- mc_frame_cap) off && Z.leb off 0%Z) eqn:Eb; try discriminate Est.
+    + destruct sv; try discriminate Est;
+        destruct (Z.leb (- mc_frame_cap) off && Z.leb off 0%Z) eqn:Eb; try discriminate Est.
       apply andb_true_iff in Eb as [E1 E2]; apply Z.leb_le in E1; apply Z.leb_le in E2.
       inversion Est; subst; eapply mc_sym_stk_prune_wf; [lia | exact Hstk].
     + inversion Est; subst; exact Hstk.
@@ -502,14 +517,21 @@ Proof.
     + destruct sv; try discriminate Est; destruct (Z.leb (- mc_frame_cap) off && Z.leb off 0%Z); try discriminate Est.
       inversion Est; subst; apply rv_val_regs_wf_write; assumption.
     + inversion Est; subst; apply rv_val_regs_wf_write; assumption.
-    + destruct sv; try discriminate Est; destruct (Z.leb (- mc_frame_cap) off && Z.leb off 0%Z) eqn:Eb; try discriminate Est.
+    + destruct sv; try discriminate Est;
+        destruct (Z.leb (- mc_frame_cap) off && Z.leb off 0%Z) eqn:Eb; try discriminate Est.
       apply andb_true_iff in Eb as [E1 E2]; apply Z.leb_le in E1; apply Z.leb_le in E2.
       inversion Est; subst; eapply mc_sym_stk_prune_wf; [lia | exact Hstk].
     + inversion Est; subst; exact Hstk.
   - destruct (rv_val_read rs1 vrf) as [| | | base_off]; try discriminate Hstep.
     destruct (mc_slot_in_frame sp_off (base_off + imm) sz) eqn:Eslot; [| discriminate Hstep].
-    destruct (match rv_val_read rs2 vrf with MSV_Undef => false | MSV_Expr _ => true | MSV_SavedReg _ | MSV_StackPtr _ => mc_mem_size_eqb sz MS_8 end); [| discriminate Hstep].
-    inversion Hstep; subst; split; [exact Hrng | split; [exact Hsp2 | split; [exact Hwf | exact (mc_sym_stk_store_wf _ _ _ _ _ _ Eslot (Hwf rs2) Hstk)]]].
+    destruct (match rv_val_read rs2 vrf with
+              | MSV_Undef => false
+              | MSV_Expr _ => true
+              | MSV_SavedReg _ | MSV_StackPtr _ => mc_mem_size_eqb sz MS_8
+              end); [| discriminate Hstep].
+    inversion Hstep; subst; split;
+      [exact Hrng | split;
+        [exact Hsp2 | split; [exact Hwf | exact (mc_sym_stk_store_wf _ _ _ _ _ _ Eslot (Hwf rs2) Hstk)]]].
   - destruct (rv_val_read rs1 vrf) as [| e1 | |] eqn:Er1; try discriminate Hstep.
     destruct (rv_val_read rs2 vrf) as [| e2 | |] eqn:Er2; try discriminate Hstep.
     destruct (add_rel_off pc rel); [| discriminate Hstep].
@@ -517,7 +539,8 @@ Proof.
     pose proof (Hwf rs1) as H1; rewrite Er1 in H1; pose proof (Hwf rs2) as H2; rewrite Er2 in H2.
     destruct cond; apply wf_sym_icmp; assumption.
   - destruct (add_rel_off pc rel); [| discriminate Hstep].
-    inversion Hstep; subst; split; [exact Hrng | split; [exact Hsp2 | split; [exact Hwf | exact Hstk]]].
+    inversion Hstep; subst; split;
+      [exact Hrng | split; [exact Hsp2 | split; [exact Hwf | exact Hstk]]].
   - destruct (rv_sym_epilogue_ok sp_off vrf); [| discriminate Hstep].
     destruct (rv_val_read 10%N vrf) as [| e_ret | |] eqn:Er10; try discriminate Hstep.
     inversion Hstep; subst; clear Hstep.
@@ -573,7 +596,8 @@ Proof.
      | rel
      | ] eqn:Ed;
     try (unfold rv_exec_one_nonret; rewrite Ed).
-  - inversion Hstep; subst; exists rf, mstk; repeat split; try lia; assumption.
+  - inversion Hstep; subst; exists rf, mstk;
+      repeat split; try lia; assumption.
   - destruct (rv_sym_step_write rd (MSV_Expr (ce_bv_z 64%positive imm)) sp_off vrf astk)
       as [[[sp_off' vrf'] astk'] |] eqn:Est; [| discriminate Hstep].
     inversion Hstep; subst; clear Hstep.
@@ -597,16 +621,20 @@ Proof.
                         sv (rv_eval_alu_imm op is_word (rv_read_reg rs1 rf) imm)).
     { subst sv_opt; destruct (rv_val_read rs1 vrf) as [| e1 | r0 | base_off] eqn:Er1.
       - destruct op, is_word; discriminate Esv.
-      - assert (He_eq : sv = MSV_Expr (sym_alu_imm op is_word e1 imm)) by (destruct op, is_word; inversion Esv; reflexivity).
-        rewrite He_eq; cbn [mc_sym_val_agrees]; apply eval_sym_alu_imm_sound; pose proof (Hag rs1) as H1; rewrite Er1 in H1; exact H1.
+      - assert (He_eq : sv = MSV_Expr (sym_alu_imm op is_word e1 imm))
+          by (destruct op, is_word; inversion Esv; reflexivity).
+        rewrite He_eq; cbn [mc_sym_val_agrees]; apply eval_sym_alu_imm_sound;
+          pose proof (Hag rs1) as H1; rewrite Er1 in H1; exact H1.
       - destruct op, is_word; try discriminate Esv; destruct (Z.eqb imm 0%Z) eqn:Ez0; [| discriminate Esv].
         apply Z.eqb_eq in Ez0; subst imm; inversion Esv; subst sv; clear Esv.
         pose proof (Hag rs1) as H1; rewrite Er1 in H1; cbn [mc_sym_val_agrees] in H1 |- *;
           cbn [rv_eval_alu_imm rv_eval_alu_imm_raw]; rewrite H1, mc_add_ptr_zero; reflexivity.
       - destruct op, is_word; try discriminate Esv; cbv zeta in Esv.
         destruct (Z.leb (- mc_frame_cap) (base_off + imm) && Z.leb (base_off + imm) 0%Z) eqn:Erng; [| discriminate Esv].
-        apply andb_true_iff in Erng as [Er1' Er2']; apply Z.leb_le in Er1'; apply Z.leb_le in Er2'; inversion Esv; subst sv; clear Esv.
-        pose proof (Hag rs1) as H1; rewrite Er1 in H1; cbn [mc_sym_val_agrees] in H1 |- *; destruct H1 as [_ Hptr]; split; [lia |].
+        apply andb_true_iff in Erng as [Er1' Er2'];
+          apply Z.leb_le in Er1'; apply Z.leb_le in Er2'; inversion Esv; subst sv; clear Esv.
+        pose proof (Hag rs1) as H1; rewrite Er1 in H1;
+          cbn [mc_sym_val_agrees] in H1 |- *; destruct H1 as [_ Hptr]; split; [lia |].
         cbn [rv_eval_alu_imm rv_eval_alu_imm_raw]; rewrite Hptr, mc_add_ptr_off; reflexivity. }
     destruct (rv_sym_step_write_sp _ _ _ _ _ _ _ _ Hrng Hsp2 Est) as [Hrng' Hsp2'].
     destruct (rv_sym_step_write_sound penv foracle rf0 (rv_read_reg 2%N rf0)
@@ -628,16 +656,24 @@ Proof.
                         sv (rv_eval_alu_reg op is_word (rv_read_reg rs1 rf) (rv_read_reg rs2 rf))).
     { destruct is_mv eqn:Emv.
       - subst is_mv; apply andb_true_iff in Emv as [Hopm Hz].
-        destruct op; try discriminate Hopm; destruct is_word; try discriminate Hopm; cbn [rv_eval_alu_reg rv_eval_alu_reg_raw].
+        destruct op; try discriminate Hopm;
+          destruct is_word; try discriminate Hopm; cbn [rv_eval_alu_reg rv_eval_alu_reg_raw].
         destruct (N.eqb rs1 0%N) eqn:Ez1.
-        + apply N.eqb_eq in Ez1; subst rs1; replace (rv_read_reg 0%N rf) with (@Integers.zero 64%positive) by reflexivity; rewrite (@Integers.add_zero_l 64%positive).
-          destruct (rv_val_read rs2 vrf) eqn:Er2; try discriminate Esv; inversion Esv; subst sv; pose proof (Hag rs2) as H2; rewrite Er2 in H2; exact H2.
-        + cbn [orb] in Hz; apply N.eqb_eq in Hz; subst rs2; replace (rv_read_reg 0%N rf) with (@Integers.zero 64%positive) by reflexivity; rewrite (@Integers.add_zero 64%positive).
-          destruct (rv_val_read rs1 vrf) eqn:Er1; try discriminate Esv; inversion Esv; subst sv; pose proof (Hag rs1) as H1; rewrite Er1 in H1; exact H1.
+        + apply N.eqb_eq in Ez1; subst rs1;
+            replace (rv_read_reg 0%N rf) with (@Integers.zero 64%positive) by reflexivity;
+            rewrite (@Integers.add_zero_l 64%positive).
+          destruct (rv_val_read rs2 vrf) eqn:Er2; try discriminate Esv;
+            inversion Esv; subst sv; pose proof (Hag rs2) as H2; rewrite Er2 in H2; exact H2.
+        + cbn [orb] in Hz; apply N.eqb_eq in Hz; subst rs2;
+            replace (rv_read_reg 0%N rf) with (@Integers.zero 64%positive) by reflexivity;
+            rewrite (@Integers.add_zero 64%positive).
+          destruct (rv_val_read rs1 vrf) eqn:Er1; try discriminate Esv;
+            inversion Esv; subst sv; pose proof (Hag rs1) as H1; rewrite Er1 in H1; exact H1.
       - subst sv_opt; cbn [fst snd] in Esv.
         destruct (rv_val_read rs1 vrf) as [| e1 | |] eqn:Er1; try discriminate Esv.
         destruct (rv_val_read rs2 vrf) as [| e2 | |] eqn:Er2; try discriminate Esv; inversion Esv; subst sv; clear Esv.
-        pose proof (Hag rs1) as H1; rewrite Er1 in H1; pose proof (Hag rs2) as H2; rewrite Er2 in H2; cbn [mc_sym_val_agrees] in H1, H2 |- *.
+        pose proof (Hag rs1) as H1; rewrite Er1 in H1;
+          pose proof (Hag rs2) as H2; rewrite Er2 in H2; cbn [mc_sym_val_agrees] in H1, H2 |- *.
         assert (Hok_m : is_word = false \/ (op <> RAR_Mulh /\ op <> RAR_Mulhsu /\ op <> RAR_Mulhu)).
         { destruct is_word; [| left; reflexivity].
           right; unfold inst_no_word_mulh in Hnmul; rewrite Ed in Hnmul.
@@ -659,7 +695,8 @@ Proof.
     pose proof (Hag 2%N) as H2; rewrite Hsp2 in H2; cbn [mc_sym_val_agrees] in H2; destruct H2 as [_ Hptr2].
     destruct Hsp0 as [Hsp0_cap _].
     assert (Hoff_eq : mc_addr_to_off (rv_read_reg 2%N rf0)
-                        (@Integers.add 64%positive (rv_read_reg rs1 rf) (@Integers.repr 64%positive imm)) = (base_off + imm)%Z)
+                        (@Integers.add 64%positive (rv_read_reg rs1 rf) (@Integers.repr 64%positive imm)) =
+                      (base_off + imm)%Z)
       by (rewrite Hptr1, mc_add_ptr_off; apply mc_addr_to_off_add; [exact Hsp0_cap | lia]).
     assert (Hsp_eq : mc_addr_to_off (rv_read_reg 2%N rf0) (rv_read_reg 2%N rf) = sp_off)
       by (rewrite Hptr2; apply mc_addr_to_off_add; [exact Hsp0_cap | exact Hrng]).
@@ -673,7 +710,11 @@ Proof.
     eexists _, _; repeat split; try lia; assumption.
   - destruct (rv_val_read rs1 vrf) as [| | | base_off] eqn:Er1; try discriminate Hstep.
     destruct (mc_slot_in_frame sp_off (base_off + imm) sz) eqn:Eslot; [| discriminate Hstep].
-    destruct (match rv_val_read rs2 vrf with MSV_Undef => false | MSV_Expr _ => true | MSV_SavedReg _ | MSV_StackPtr _ => mc_mem_size_eqb sz MS_8 end) eqn:Esvok; [| discriminate Hstep].
+    destruct (match rv_val_read rs2 vrf with
+              | MSV_Undef => false
+              | MSV_Expr _ => true
+              | MSV_SavedReg _ | MSV_StackPtr _ => mc_mem_size_eqb sz MS_8
+              end) eqn:Esvok; [| discriminate Hstep].
     inversion Hstep; subst; clear Hstep.
     pose proof (mc_slot_in_frame_bounds _ _ _ Eslot) as (Hb1 & Hb2 & Hb3 & _).
     assert (Hsz_pos : (1 <= mc_mem_bytes_Z sz)%Z) by (destruct sz; cbn; lia).
@@ -681,7 +722,8 @@ Proof.
     pose proof (Hag 2%N) as H2; rewrite Hsp2 in H2; cbn [mc_sym_val_agrees] in H2; destruct H2 as [_ Hptr2].
     destruct Hsp0 as [Hsp0_cap _].
     assert (Hoff_eq : mc_addr_to_off (rv_read_reg 2%N rf0)
-                        (@Integers.add 64%positive (rv_read_reg rs1 rf) (@Integers.repr 64%positive imm)) = (base_off + imm)%Z)
+                        (@Integers.add 64%positive (rv_read_reg rs1 rf) (@Integers.repr 64%positive imm)) =
+                      (base_off + imm)%Z)
       by (rewrite Hptr1, mc_add_ptr_off; apply mc_addr_to_off_add; [exact Hsp0_cap | lia]).
     assert (Hsp_eq : mc_addr_to_off (rv_read_reg 2%N rf0) (rv_read_reg 2%N rf) = sp_off)
       by (rewrite Hptr2; apply mc_addr_to_off_add; [exact Hsp0_cap | exact Hrng]).
@@ -700,10 +742,12 @@ Proof.
     pose proof (Hag rs2) as H2; rewrite Er2 in H2; cbn [mc_sym_val_agrees] in H2.
     exists (rv_eval_br_cond cond (rv_read_reg rs1 rf) (rv_read_reg rs2 rf)); split.
     + exact (eval_sym_br_cond_sound penv foracle cond e1 e2 (rv_read_reg rs1 rf) (rv_read_reg rs2 rf) H1 H2).
-    + cbv zeta iota; destruct (rv_eval_br_cond cond (rv_read_reg rs1 rf) (rv_read_reg rs2 rf)); try rewrite Erel; reflexivity.
+    + cbv zeta iota; destruct (rv_eval_br_cond cond (rv_read_reg rs1 rf) (rv_read_reg rs2 rf));
+        try rewrite Erel; reflexivity.
   - destruct (add_rel_off pc rel) as [tgt_pc |] eqn:Erel; [| discriminate Hstep].
     inversion Hstep; subst; clear Hstep.
-    eexists _, _; repeat split; try lia; try (cbv zeta iota; try rewrite Erel; reflexivity); assumption.
+    eexists _, _; repeat split;
+      try lia; try (cbv zeta iota; try rewrite Erel; reflexivity); assumption.
   - destruct (rv_sym_epilogue_ok sp_off vrf) eqn:Eep; [| discriminate Hstep].
     destruct (rv_val_read 10%N vrf) as [| e_ret | |] eqn:Er10; try discriminate Hstep.
     inversion Hstep; subst; clear Hstep.
@@ -747,7 +791,8 @@ Fixpoint summarize_rv64_seg_at
                 match summarize_rv64_seg_at seg_name fuel' im cut_pc false visited' tgt_pc sp_off vrf astk ret_w with
                 | inl err => inl err
                 | inr dt =>
-                    match summarize_rv64_seg_at seg_name fuel' im cut_pc false visited' next_pc sp_off vrf astk ret_w with
+                    match summarize_rv64_seg_at seg_name fuel' im cut_pc false
+                            visited' next_pc sp_off vrf astk ret_w with
                     | inl err => inl err
                     | inr df => inr (RST_Branch cond dt df)
                     end
@@ -784,23 +829,29 @@ Proof.
            Hrw Hnmul Hrng Hsp2 Hwf Hstk Hsum;
     cbn [summarize_rv64_seg_at] in Hsum.
   - destruct (negb req_step && N.eqb pc cut_pc).
-    + inversion Hsum; subst; split; [exact Hrng | split; [exact Hsp2 | split; [exact Hwf | exact Hstk]]].
+    + inversion Hsum; subst; split;
+        [exact Hrng | split; [exact Hsp2 | split; [exact Hwf | exact Hstk]]].
     + destruct (pt_has_n pc visited); discriminate Hsum.
   - destruct (negb req_step && N.eqb pc cut_pc).
-    + inversion Hsum; subst; split; [exact Hrng | split; [exact Hsp2 | split; [exact Hwf | exact Hstk]]].
+    + inversion Hsum; subst; split;
+        [exact Hrng | split; [exact Hsp2 | split; [exact Hwf | exact Hstk]]].
     + destruct (pt_has_n pc visited); [discriminate Hsum |].
       destruct (pt_get (N.succ_pos pc) im) as [dec |] eqn:Elook; [| discriminate Hsum].
       rewrite Him in Elook.
       assert (Hdec_mulh : inst_no_word_mulh dec = true).
       { clear -Elook Hnmul; induction insts as [| d rest IHl]; cbn in *; [discriminate |].
-        apply andb_true_iff in Hnmul as [Hd Hr]; destruct (N.eqb (dri_off d) pc); [inversion Elook; subst; exact Hd | exact (IHl Hr Elook)]. }
+        apply andb_true_iff in Hnmul as [Hd Hr]; destruct (N.eqb (dri_off d) pc);
+          [inversion Elook; subst; exact Hd | exact (IHl Hr Elook)]. }
       destruct (rv_sym_step_one dec pc sp_off vrf astk ret_w) as [res |] eqn:Est; [| discriminate Hsum].
-      pose proof (rv_sym_step_one_wf allowed dec pc sp_off vrf astk ret_w res Hrw Hdec_mulh Hrng Hsp2 Hwf Hstk Est) as Hres.
+      pose proof (rv_sym_step_one_wf allowed dec pc sp_off vrf astk ret_w res
+                    Hrw Hdec_mulh Hrng Hsp2 Hwf Hstk Est) as Hres.
       destruct res.
       * destruct Hres as (Hrng' & Hsp2' & Hwf' & Hstk').
         exact (IH _ _ _ _ _ _ _ _ _ _ Hrw Hnmul Hrng' Hsp2' Hwf' Hstk' Hsum).
-      * destruct (summarize_rv64_seg_at seg_name fuel' im cut_pc false (pt_add_n pc visited) tgt_pc sp_off vrf astk ret_w) as [| dt] eqn:Edt; [discriminate Hsum |].
-        destruct (summarize_rv64_seg_at seg_name fuel' im cut_pc false (pt_add_n pc visited) next_pc sp_off vrf astk ret_w) as [| df] eqn:Edf; [discriminate Hsum |].
+      * destruct (summarize_rv64_seg_at seg_name fuel' im cut_pc false (pt_add_n pc visited)
+                    tgt_pc sp_off vrf astk ret_w) as [| dt] eqn:Edt; [discriminate Hsum |].
+        destruct (summarize_rv64_seg_at seg_name fuel' im cut_pc false (pt_add_n pc visited)
+                    next_pc sp_off vrf astk ret_w) as [| df] eqn:Edf; [discriminate Hsum |].
         inversion Hsum; subst; split;
           [exact Hres
           | split; [exact (IH _ _ _ _ _ _ _ _ _ _ Hrw Hnmul Hrng Hsp2 Hwf Hstk Edt)
@@ -865,10 +916,13 @@ Proof.
   induction t as [sp_off' vrf' astk' | ret_e | cond dt IHt df IHf]; cbn [rv_seg_exec_spec] in *.
   - destruct Hspec as (n & rf' & mstk' & _ & Hn & Hrng & Hsp & Hag & Hastk).
     exists (1 + n)%nat, rf', mstk';
-      split; [intro; lia | split; [exact (rv_exec_steps_trans _ _ _ _ _ _ _ _ _ _ _ H1 Hn) | split; [exact Hrng | split; [exact Hsp | split; [exact Hag | exact Hastk]]]]].
+      split; [intro; lia | split;
+        [exact (rv_exec_steps_trans _ _ _ _ _ _ _ _ _ _ _ H1 Hn)
+         | split; [exact Hrng | split; [exact Hsp | split; [exact Hag | exact Hastk]]]]].
   - destruct Hspec as (fuel_end & rf_end & mstk_end & Hm & Hcs & Hra & Hev).
     exists (1 + fuel_end)%nat, rf_end, mstk_end;
-      split; [exact (rv_exec_steps_to_exec_mem _ _ _ _ _ _ _ _ _ _ _ H1 Hm) | split; [exact Hcs | split; [exact Hra | exact Hev]]].
+      split; [exact (rv_exec_steps_to_exec_mem _ _ _ _ _ _ _ _ _ _ _ H1 Hm)
+              | split; [exact Hcs | split; [exact Hra | exact Hev]]].
   - destruct Hspec as [b [Hbc Hsub]]; exists b; split; [exact Hbc |].
     destruct b; [exact (IHt Hsub) | exact (IHf Hsub)].
 Qed.
@@ -898,19 +952,24 @@ Proof.
     + apply andb_true_iff in Ecut as [Hreq Hpc]; apply N.eqb_eq in Hpc; subst pc.
       destruct req_step; [discriminate Hreq |].
       inversion Hsum; subst seg; clear Hsum.
-      exists 0%nat, rf, mstk; split; [intro C; discriminate C | split; [reflexivity | split; [exact Hrng | split; [exact Hsp2 | split; [exact Hag | exact Hastk]]]]].
+      exists 0%nat, rf, mstk; split;
+        [intro C; discriminate C | split;
+          [reflexivity | split; [exact Hrng | split; [exact Hsp2 | split; [exact Hag | exact Hastk]]]]].
     + destruct (pt_has_n pc visited); discriminate Hsum.
   - destruct (negb req_step && N.eqb pc cut_pc) eqn:Ecut.
     + apply andb_true_iff in Ecut as [Hreq Hpc]; apply N.eqb_eq in Hpc; subst pc.
       destruct req_step; [discriminate Hreq |].
       inversion Hsum; subst seg; clear Hsum.
-      exists 0%nat, rf, mstk; split; [intro C; discriminate C | split; [reflexivity | split; [exact Hrng | split; [exact Hsp2 | split; [exact Hag | exact Hastk]]]]].
+      exists 0%nat, rf, mstk; split;
+        [intro C; discriminate C | split;
+          [reflexivity | split; [exact Hrng | split; [exact Hsp2 | split; [exact Hag | exact Hastk]]]]].
     + destruct (pt_has_n pc visited); [discriminate Hsum |].
       destruct (pt_get (N.succ_pos pc) im) as [dec |] eqn:Elook; [| discriminate Hsum].
       rewrite Him in Elook.
       assert (Hdec_mulh : inst_no_word_mulh dec = true).
       { clear -Elook Hnmul; induction insts as [| d rest IHl]; cbn in *; [discriminate |].
-        apply andb_true_iff in Hnmul as [Hd Hr]; destruct (N.eqb (dri_off d) pc); [inversion Elook; subst; exact Hd | exact (IHl Hr Elook)]. }
+        apply andb_true_iff in Hnmul as [Hd Hr]; destruct (N.eqb (dri_off d) pc);
+          [inversion Elook; subst; exact Hd | exact (IHl Hr Elook)]. }
       destruct (rv_sym_step_one dec pc sp_off vrf astk ret_w) as [res |] eqn:Est; [| discriminate Hsum].
       pose proof (rv_sym_step_one_sound dec pc sp_off vrf astk ret_w res penv foracle rf0 rf mstk
                     Hrw Hdec_mulh Hsp0 Hrng Hsp2 Hag Hastk Est) as Hres.
@@ -920,12 +979,15 @@ Proof.
           by (cbn [rv_exec_steps]; rewrite Elook, Hone; reflexivity).
         exact (rv_seg_exec_spec_step_front _ _ _ _ _ _ _ _ _ _ _ _ _ _ H1
                  (IH _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hrw Hnmul Hsp0 Hrng' Hsp2' Hag' Hastk' Hsum)).
-      * destruct (summarize_rv64_seg_at seg_name fuel' im cut_pc false (pt_add_n pc visited) tgt_pc sp_off vrf astk ret_w) as [| dt] eqn:Edt; [discriminate Hsum |].
-        destruct (summarize_rv64_seg_at seg_name fuel' im cut_pc false (pt_add_n pc visited) next_pc sp_off vrf astk ret_w) as [| df] eqn:Edf; [discriminate Hsum |].
+      * destruct (summarize_rv64_seg_at seg_name fuel' im cut_pc false (pt_add_n pc visited)
+                    tgt_pc sp_off vrf astk ret_w) as [| dt] eqn:Edt; [discriminate Hsum |].
+        destruct (summarize_rv64_seg_at seg_name fuel' im cut_pc false (pt_add_n pc visited)
+                    next_pc sp_off vrf astk ret_w) as [| df] eqn:Edf; [discriminate Hsum |].
         inversion Hsum; subst seg; clear Hsum.
         destruct Hres as [b [Hbc Hone]].
         cbn [rv_seg_exec_spec]; exists b; split; [exact Hbc |].
-        assert (H1 : rv_exec_steps 1 insts (rv_read_reg 2%N rf0) pc rf mstk = Some ((if b then tgt_pc else next_pc), rf, mstk))
+        assert (H1 : rv_exec_steps 1 insts (rv_read_reg 2%N rf0) pc rf mstk =
+                     Some ((if b then tgt_pc else next_pc), rf, mstk))
           by (cbn [rv_exec_steps]; rewrite Elook, Hone; reflexivity).
         eapply rv_seg_exec_spec_step_front; [exact H1 |].
         destruct b;

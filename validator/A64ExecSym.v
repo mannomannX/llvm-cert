@@ -486,7 +486,9 @@ Fixpoint a64_exec_mem
                 if mc_slot_in_frame (mc_addr_to_off sp0 sp_chk) off sz then
                   let '(rf1, mstk1) :=
                     if is_load then
-                      (a64_write_reg rt (a64_ldst_apply_load is_signed sf_dst (mc_stk_load mstk off sz is_signed)) rf, mstk)
+                      (a64_write_reg rt
+                         (a64_ldst_apply_load is_signed sf_dst (mc_stk_load mstk off sz is_signed)) rf,
+                       mstk)
                     else (rf, mc_stk_store mstk off sz (a64_read_reg rt rf))
                   in
                   let '(rf2, sp2) :=
@@ -1008,7 +1010,9 @@ Definition a64_is_orr_mov64
   (match sh with ASH_Lsl => true | _ => false end).
 
 Definition a64_callee_saved_list : list N :=
-  [19; 20; 21; 22; 23; 24; 25; 26; 27; 28; 29; 30]%N.
+  [19; 20; 21; 22;
+   23; 24; 25; 26;
+   27; 28; 29; 30]%N.
 
 Definition a64_sym_epilogue_ok (sp_off : Z) (vrf : a64_val_regs) : bool :=
   Z.eqb sp_off 0%Z &&
@@ -1057,7 +1061,9 @@ Fixpoint summarize_a64_dag_at
     ("a64 at pc=" ++ diag_N_hex pc ++ " sp-off=" ++ diag_Z_dec sp_off)%string
   in
   if pt_has_n pc visited then
-    inl (diag "mc-exec" ("cycle/loop detected in a64 acyclic DAG mode (" ++ loc tt ++ "); provide a (loop ...) certificate"))
+    inl (diag "mc-exec"
+      ("cycle/loop detected in a64 acyclic DAG mode (" ++ loc tt ++
+       "); provide a (loop ...) certificate"))
   else
     match fuel with
     | O => inl (diag "mc-exec" ("a64 symbolic execution fuel exhausted (" ++ loc tt ++ ")"))
@@ -1093,7 +1099,9 @@ Fixpoint summarize_a64_dag_at
                   | Some sv =>
                       match a64_val_write_sp rd sv sp_off vrf astk with
                       | None =>
-                          inl (diag "mc-frame" ("invalid sp update or frame bound violation in a64 add/sub-imm (" ++ loc tt ++ ")"))
+                          inl (diag "mc-frame"
+                            ("invalid sp update or frame bound violation in a64 add/sub-imm (" ++
+                             loc tt ++ ")"))
                       | Some (sp_off', vrf', astk') =>
                           summarize_a64_dag_at fuel' im visited' next_pc sp_off' vrf' astk' sfl fl_def ret_w
                       end
@@ -1103,7 +1111,9 @@ Fixpoint summarize_a64_dag_at
                 else
                   match a64_val_read_expr_w sf rn vrf with
                   | None =>
-                      inl (diag "mc-exec" ("undefined/non-expression operand x" ++ diag_N_dec rn ++ " in a64 add/sub-imm (" ++ loc tt ++ ")"))
+                      inl (diag "mc-exec"
+                        ("undefined/non-expression operand x" ++ diag_N_dec rn ++
+                         " in a64 add/sub-imm (" ++ loc tt ++ ")"))
                   | Some lhs =>
                       let rhs := ce_bv_z (a64_w sf) (Z.of_N imm) in
                       let '(res, sfl') := a64_sym_add_sub (a64_w sf) is_sub lhs rhs in
@@ -1119,7 +1129,9 @@ Fixpoint summarize_a64_dag_at
                     summarize_a64_dag_at fuel' im visited' next_pc sp_off
                       (a64_val_write_w sf rd res vrf) astk
                       (if set_fl then sfl' else sfl) (set_fl || fl_def) ret_w
-                | _, _ => inl (diag "mc-exec" ("undefined/non-expression operand in a64 add/sub-shift (" ++ loc tt ++ ")"))
+                | _, _ =>
+                    inl (diag "mc-exec"
+                      ("undefined/non-expression operand in a64 add/sub-shift (" ++ loc tt ++ ")"))
                 end
             | A64_AddSubExt sf is_sub set_fl rd rn rm ext amt =>
                 if N.eqb rn 31%N || (negb set_fl && N.eqb rd 31%N) then
@@ -1132,14 +1144,19 @@ Fixpoint summarize_a64_dag_at
                       summarize_a64_dag_at fuel' im visited' next_pc sp_off
                         (a64_val_write_w sf rd res vrf) astk
                         (if set_fl then sfl' else sfl) (set_fl || fl_def) ret_w
-                  | _, _ => inl (diag "mc-exec" ("undefined/non-expression operand in a64 add/sub-ext (" ++ loc tt ++ ")"))
+                  | _, _ =>
+                      inl (diag "mc-exec"
+                        ("undefined/non-expression operand in a64 add/sub-ext (" ++ loc tt ++ ")"))
                   end
             | A64_LogicalImm sf op set_fl rd rn mask =>
                 if negb set_fl && N.eqb rd 31%N then
                   inl (diag "mc-frame" ("disallowed sp write in a64 logical-imm (" ++ loc tt ++ ")"))
                 else
                   match a64_val_read_expr_w sf rn vrf with
-                  | None => inl (diag "mc-exec" ("undefined/non-expression operand x" ++ diag_N_dec rn ++ " in a64 logical-imm (" ++ loc tt ++ ")"))
+                  | None =>
+                      inl (diag "mc-exec"
+                        ("undefined/non-expression operand x" ++ diag_N_dec rn ++
+                         " in a64 logical-imm (" ++ loc tt ++ ")"))
                   | Some lhs =>
                       let rhs := ce_bv_z (a64_w sf) (Z.of_N mask) in
                       let res := a64_sym_logic_op (a64_w sf) op lhs rhs in
@@ -1150,7 +1167,9 @@ Fixpoint summarize_a64_dag_at
             | A64_LogicalShift sf op inv_rm set_fl rd rn rm sh amt =>
                 if a64_is_orr_mov64 sf op inv_rm set_fl rn sh amt then
                   match a64_val_read rm vrf with
-                  | MSV_Undef => inl (diag "mc-exec" ("mov source x" ++ diag_N_dec rm ++ " is undefined in a64 (" ++ loc tt ++ ")"))
+                  | MSV_Undef =>
+                      inl (diag "mc-exec"
+                        ("mov source x" ++ diag_N_dec rm ++ " is undefined in a64 (" ++ loc tt ++ ")"))
                   | sv =>
                       summarize_a64_dag_at fuel' im visited' next_pc sp_off
                         (a64_val_write rd sv vrf) astk sfl fl_def ret_w
@@ -1164,7 +1183,9 @@ Fixpoint summarize_a64_dag_at
                       let sfl' := if set_fl then a64_sym_logic_flags (a64_w sf) res else sfl in
                       summarize_a64_dag_at fuel' im visited' next_pc sp_off
                         (a64_val_write_w sf rd res vrf) astk sfl' (set_fl || fl_def) ret_w
-                  | _, _ => inl (diag "mc-exec" ("undefined/non-expression operand in a64 logical-shift (" ++ loc tt ++ ")"))
+                  | _, _ =>
+                      inl (diag "mc-exec"
+                        ("undefined/non-expression operand in a64 logical-shift (" ++ loc tt ++ ")"))
                   end
             | A64_MoveWide sf kind rd imm16 shift =>
                 let w := a64_w sf in
@@ -1178,7 +1199,10 @@ Fixpoint summarize_a64_dag_at
                       (a64_val_write_w sf rd (a64_sym_not w imm_e) vrf) astk sfl fl_def ret_w
                 | AMW_Movk =>
                     match a64_val_read_expr_w sf rd vrf with
-                    | None => inl (diag "mc-exec" ("undefined destination x" ++ diag_N_dec rd ++ " in a64 movk (" ++ loc tt ++ ")"))
+                    | None =>
+                        inl (diag "mc-exec"
+                          ("undefined destination x" ++ diag_N_dec rd ++
+                           " in a64 movk (" ++ loc tt ++ ")"))
                     | Some cur =>
                         let clr := a64_sym_not w (ce_bv_z w (Z.of_N (N.shiftl 65535%N shift))) in
                         let res := CE_BinOp CB_Or w no_binop_flags
@@ -1219,7 +1243,9 @@ Fixpoint summarize_a64_dag_at
                     let res := CE_BinOp (if is_sub then CB_Sub else CB_Add) w no_binop_flags ea p in
                     summarize_a64_dag_at fuel' im visited' next_pc sp_off
                       (a64_val_write_w sf rd res vrf) astk sfl fl_def ret_w
-                | _, _, _ => inl (diag "mc-exec" ("undefined/non-expression operand in a64 mul-add/sub (" ++ loc tt ++ ")"))
+                | _, _, _ =>
+                    inl (diag "mc-exec"
+                      ("undefined/non-expression operand in a64 mul-add/sub (" ++ loc tt ++ ")"))
                 end
             | A64_MulWidening sgn is_sub rd rn rm ra =>
                 match a64_val_read_expr_w false rn vrf,
@@ -1233,7 +1259,9 @@ Fixpoint summarize_a64_dag_at
                     let res := CE_BinOp (if is_sub then CB_Sub else CB_Add) 64%positive no_binop_flags ea p in
                     summarize_a64_dag_at fuel' im visited' next_pc sp_off
                       (a64_val_write rd (MSV_Expr res) vrf) astk sfl fl_def ret_w
-                | _, _, _ => inl (diag "mc-exec" ("undefined/non-expression operand in a64 widening mul (" ++ loc tt ++ ")"))
+                | _, _, _ =>
+                    inl (diag "mc-exec"
+                      ("undefined/non-expression operand in a64 widening mul (" ++ loc tt ++ ")"))
                 end
             | A64_DataProc2 sf op rd rn rm =>
                 match a64_val_read_expr_w sf rn vrf, a64_val_read_expr_w sf rm vrf with
@@ -1270,7 +1298,10 @@ Fixpoint summarize_a64_dag_at
                   inl (diag "mc-exec" ("undefined NZCV flags read by a64 ccmp-imm (" ++ loc tt ++ ")"))
                 else
                   match a64_val_read_expr_w sf rn vrf with
-                  | None => inl (diag "mc-exec" ("undefined/non-expression operand x" ++ diag_N_dec rn ++ " in a64 ccmp-imm (" ++ loc tt ++ ")"))
+                  | None =>
+                      inl (diag "mc-exec"
+                        ("undefined/non-expression operand x" ++ diag_N_dec rn ++
+                         " in a64 ccmp-imm (" ++ loc tt ++ ")"))
                   | Some en =>
                       let '(_, csfl) := a64_sym_add_sub (a64_w sf) is_sub en (ce_bv_z (a64_w sf) (Z.of_N imm5)) in
                       let sfl' := a64_sym_ite_flags (a64_sym_cond cond sfl) csfl (a64_sym_flags_of_imm4 nzcv) in
@@ -1290,7 +1321,9 @@ Fixpoint summarize_a64_dag_at
                         end
                       in
                       if negb wb_ok then
-                        inl (diag "mc-frame" ("out-of-frame writeback sp+" ++ diag_Z_dec wb_off ++ " in a64 ldst-imm (" ++ loc tt ++ ")"))
+                        inl (diag "mc-frame"
+                          ("out-of-frame writeback sp+" ++ diag_Z_dec wb_off ++
+                           " in a64 ldst-imm (" ++ loc tt ++ ")"))
                       else
                         let '(off, sp_chk) :=
                           match mode with
@@ -1338,7 +1371,9 @@ Fixpoint summarize_a64_dag_at
                             ("a64 ldst-imm at sp+" ++ diag_Z_dec off ++ " (size " ++ diag_Z_dec (mc_mem_bytes_Z sz) ++
                              ") out of frame bounds (" ++ loc tt ++ ")"))
                   | _ =>
-                      inl (diag "mc-frame" ("a64 ldst-imm base register x" ++ diag_N_dec rn ++ " is not a stack pointer (" ++ loc tt ++ ")"))
+                      inl (diag "mc-frame"
+                        ("a64 ldst-imm base register x" ++ diag_N_dec rn ++
+                         " is not a stack pointer (" ++ loc tt ++ ")"))
                   end
             | A64_LdStPair is_load sf mode rt1 rt2 rn imm =>
                 if (if N.eqb rn 31%N then negb (mc_sp_aligned16 sp_off) else false)
@@ -1354,7 +1389,9 @@ Fixpoint summarize_a64_dag_at
                         end
                       in
                       if negb wb_ok then
-                        inl (diag "mc-frame" ("out-of-frame writeback sp+" ++ diag_Z_dec wb_off ++ " in a64 ldst-pair (" ++ loc tt ++ ")"))
+                        inl (diag "mc-frame"
+                          ("out-of-frame writeback sp+" ++ diag_Z_dec wb_off ++
+                           " in a64 ldst-pair (" ++ loc tt ++ ")"))
                       else
                         let '(off, sp_chk) :=
                           match mode with
@@ -1404,7 +1441,9 @@ Fixpoint summarize_a64_dag_at
                           inl (diag "mc-frame"
                             ("a64 ldst-pair at sp+" ++ diag_Z_dec off ++ " out of frame bounds (" ++ loc tt ++ ")"))
                   | _ =>
-                      inl (diag "mc-frame" ("a64 ldst-pair base register x" ++ diag_N_dec rn ++ " is not a stack pointer (" ++ loc tt ++ ")"))
+                      inl (diag "mc-frame"
+                        ("a64 ldst-pair base register x" ++ diag_N_dec rn ++
+                         " is not a stack pointer (" ++ loc tt ++ ")"))
                   end
             | A64_B rel =>
                 match add_rel_off pc rel with
@@ -1431,7 +1470,10 @@ Fixpoint summarize_a64_dag_at
                   end
             | A64_Cbz sf is_nz rt rel =>
                 match a64_val_read_expr_w sf rt vrf with
-                | None => inl (diag "mc-exec" ("undefined/non-expression operand x" ++ diag_N_dec rt ++ " in a64 cbz/cbnz (" ++ loc tt ++ ")"))
+                | None =>
+                    inl (diag "mc-exec"
+                      ("undefined/non-expression operand x" ++ diag_N_dec rt ++
+                       " in a64 cbz/cbnz (" ++ loc tt ++ ")"))
                 | Some rt_e =>
                     match add_rel_off pc rel with
                     | None => inl (diag "mc-exec" ("negative a64 cbz/cbnz target (" ++ loc tt ++ ")"))
@@ -1468,7 +1510,10 @@ Fixpoint summarize_a64_dag_at
                             end
                         end
                     end
-                | _ => inl (diag "mc-exec" ("undefined/non-expression operand x" ++ diag_N_dec rt ++ " in a64 tbz/tbnz (" ++ loc tt ++ ")"))
+                | _ =>
+                    inl (diag "mc-exec"
+                      ("undefined/non-expression operand x" ++ diag_N_dec rt ++
+                       " in a64 tbz/tbnz (" ++ loc tt ++ ")"))
                 end
             | A64_Ret =>
                 if a64_sym_epilogue_ok sp_off vrf then
@@ -1476,7 +1521,9 @@ Fixpoint summarize_a64_dag_at
                   | MSV_Expr e_ret =>
                       inr (CD_RetScalar ret_w (rv_trunc_ret_expr ret_w e_ret))
                   | _ =>
-                      inl (diag "mc-exec" ("return register x0 does not hold a value expression at a64 ret (" ++ loc tt ++ ")"))
+                      inl (diag "mc-exec"
+                        ("return register x0 does not hold a value expression at a64 ret (" ++
+                         loc tt ++ ")"))
                   end
                 else
                   inl (diag "mc-frame"

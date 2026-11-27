@@ -556,7 +556,8 @@ Proof.
   - destruct (cert_fn_matches_raw_id fn_name (dc_name (df_prototype d0))); [discriminate H |].
     exact (IH (Some f) d H).
   - destruct (cert_fn_matches_raw_id fn_name (dc_name (df_prototype d0))) eqn:Em.
-    + specialize (IH (Some d0) d H); cbn in IH; subst d0; split; [left; reflexivity | exact Em].
+    + specialize (IH (Some d0) d H); cbn in IH; subst d0;
+        split; [left; reflexivity | exact Em].
     + destruct (IH None d H) as [Hin Hmatch]; split; [right; exact Hin | exact Hmatch].
 Qed.
 
@@ -668,7 +669,8 @@ Lemma check_memory_invariant_valid_diag_sound :
     check_memory_invariant_valid_diag blk_name idx allowed ctx mi = inr tt ->
     check_memory_invariant_valid allowed ctx mi = true.
 Proof.
-  intros blk_name idx allowed ctx mi H; unfold check_memory_invariant_valid_diag in H; unfold check_memory_invariant_valid.
+  intros blk_name idx allowed ctx mi H;
+    unfold check_memory_invariant_valid_diag in H; unfold check_memory_invariant_valid.
   destruct (wf_memory_invariant mi); cbn [guard_err bind_err] in H; [| discriminate H].
   destruct mi; repeat match type of H with
   | bind_err (guard_err ?c _) _ = inr tt =>
@@ -801,7 +803,8 @@ Definition summarize_cfg_dag_with_uas_diag
 
 Lemma summarize_ocfg_dag_diag_sound :
   forall side fuel blk_uas uf params src_pnames defs bmap is_entry bid_from bid_cur smap seen d,
-    summarize_ocfg_dag_diag side fuel blk_uas uf params src_pnames defs bmap is_entry bid_from bid_cur smap seen = inr d ->
+    summarize_ocfg_dag_diag side fuel blk_uas uf params src_pnames defs bmap
+      is_entry bid_from bid_cur smap seen = inr d ->
     summarize_ocfg_dag fuel blk_uas uf params src_pnames defs bmap is_entry bid_from bid_cur smap seen = Some d.
 Proof.
   intros side fuel; induction fuel as [| fuel' IH];
@@ -830,20 +833,24 @@ Proof.
         | Some (_, ce_cond, seen_br) =>
             match try_const_i1 ce_cond with
             | Some true =>
-                match summarize_ocfg_dag_diag side fuel' blk_uas uf params src_pnames defs bmap false bid_cur br1 smap_c seen_br with
+                match summarize_ocfg_dag_diag side fuel' blk_uas uf params src_pnames defs bmap
+                        false bid_cur br1 smap_c seen_br with
                 | inr d_t => inr (CD_Eval 1%positive ce_cond d_t)
                 | inl err => inl err
                 end
             | Some false =>
-                match summarize_ocfg_dag_diag side fuel' blk_uas uf params src_pnames defs bmap false bid_cur br2 smap_c seen_br with
+                match summarize_ocfg_dag_diag side fuel' blk_uas uf params src_pnames defs bmap
+                        false bid_cur br2 smap_c seen_br with
                 | inr d_f => inr (CD_Eval 1%positive ce_cond d_f)
                 | inl err => inl err
                 end
             | None =>
-                match summarize_ocfg_dag_diag side fuel' blk_uas uf params src_pnames defs bmap false bid_cur br1 smap_c seen_br with
+                match summarize_ocfg_dag_diag side fuel' blk_uas uf params src_pnames defs bmap
+                        false bid_cur br1 smap_c seen_br with
                 | inl err => inl err
                 | inr d_t =>
-                    match summarize_ocfg_dag_diag side fuel' blk_uas uf params src_pnames defs bmap false bid_cur br2 smap_c seen_br with
+                    match summarize_ocfg_dag_diag side fuel' blk_uas uf params src_pnames defs bmap
+                            false bid_cur br2 smap_c seen_br with
                     | inl err => inl err
                     | inr d_f => inr (CD_Branch ce_cond d_t d_f)
                     end
@@ -866,17 +873,21 @@ Proof.
     destruct (reify_exp uf params src_pnames defs smap_c seen_c (Some (DTYPE_Base (DTYPE_I 1%positive))) op_b)
       as [[[? ce_cond] seen_br] |]; [| discriminate H].
     destruct (try_const_i1 ce_cond) as [[|] |].
-    + destruct (summarize_ocfg_dag_diag side fuel' blk_uas uf params src_pnames defs bmap false bid_cur br1 smap_c seen_br)
+    + destruct (summarize_ocfg_dag_diag side fuel' blk_uas uf params src_pnames defs bmap
+                  false bid_cur br1 smap_c seen_br)
         as [| dt] eqn:Et; [discriminate H |].
       rewrite (IH _ _ _ _ _ _ _ _ _ _ _ _ Et).
       subst d_term_res; cbn in H; injection H as <-; reflexivity.
-    + destruct (summarize_ocfg_dag_diag side fuel' blk_uas uf params src_pnames defs bmap false bid_cur br2 smap_c seen_br)
+    + destruct (summarize_ocfg_dag_diag side fuel' blk_uas uf params src_pnames defs bmap
+                  false bid_cur br2 smap_c seen_br)
         as [| df] eqn:Ef; [discriminate H |].
       rewrite (IH _ _ _ _ _ _ _ _ _ _ _ _ Ef).
       subst d_term_res; cbn in H; injection H as <-; reflexivity.
-    + destruct (summarize_ocfg_dag_diag side fuel' blk_uas uf params src_pnames defs bmap false bid_cur br1 smap_c seen_br)
+    + destruct (summarize_ocfg_dag_diag side fuel' blk_uas uf params src_pnames defs bmap
+                  false bid_cur br1 smap_c seen_br)
         as [| dt] eqn:Et; [discriminate H |].
-      destruct (summarize_ocfg_dag_diag side fuel' blk_uas uf params src_pnames defs bmap false bid_cur br2 smap_c seen_br)
+      destruct (summarize_ocfg_dag_diag side fuel' blk_uas uf params src_pnames defs bmap
+                  false bid_cur br2 smap_c seen_br)
         as [| df] eqn:Ef; [discriminate H |].
       rewrite (IH _ _ _ _ _ _ _ _ _ _ _ _ Et), (IH _ _ _ _ _ _ _ _ _ _ _ _ Ef).
       subst d_term_res; cbn in H; injection H as <-; reflexivity.
@@ -928,7 +939,9 @@ Fixpoint check_dag_refines_cert_path_diag
                 check_dag_refines_cert_path_diag fuel' allowed ctx' path_ctx ro opt_pf
                   src_evals src_br_conds next_s d_tgt
             | None =>
-                inl (diag "ir-ub" "block UB assumptions in certificate could not be justified by prior source evaluations")
+                inl (diag "ir-ub"
+                  ("block UB assumptions in certificate could not be justified " ++
+                   "by prior source evaluations"))
             end
         | None =>
             match as_block_assume d_tgt with
@@ -987,7 +1000,8 @@ Fixpoint check_dag_refines_cert_path_diag
                                     match check_dag_refines_cert_path_diag fuel' allowed ctx_t ((cs, true) :: path_ctx)
                                             ro opt_pf (cs :: src_evals) (cs :: src_br_conds) ts tb with
                                     | inr tt =>
-                                        match check_dag_refines_cert_path_diag fuel' allowed ctx_f ((cs, false) :: path_ctx)
+                                        match check_dag_refines_cert_path_diag fuel' allowed
+                                                ctx_f ((cs, false) :: path_ctx)
                                                 ro opt_pf (cs :: src_evals) (cs :: src_br_conds) fs ft with
                                         | inr tt => true
                                         | inl _ => false
@@ -999,17 +1013,21 @@ Fixpoint check_dag_refines_cert_path_diag
                                 if aligned_ok then inr tt
                                 else
                                   bind_err
-                                    (check_dag_refines_cert_path_diag fuel' allowed ctx_t ((cs, true) :: path_ctx) ro opt_pf
+                                    (check_dag_refines_cert_path_diag fuel' allowed
+                                       ctx_t ((cs, true) :: path_ctx) ro opt_pf
                                        (cs :: src_evals) (cs :: src_br_conds) ts d_tgt)
                                     (fun _ =>
-                                      check_dag_refines_cert_path_diag fuel' allowed ctx_f ((cs, false) :: path_ctx) ro opt_pf
+                                      check_dag_refines_cert_path_diag fuel' allowed
+                                        ctx_f ((cs, false) :: path_ctx) ro opt_pf
                                         (cs :: src_evals) (cs :: src_br_conds) fs d_tgt)
                             | CD_RetScalar _ _ | CD_RetVoid =>
                                 bind_err
-                                  (check_dag_refines_cert_path_diag fuel' allowed ctx_t ((cs, true) :: path_ctx) ro opt_pf
+                                  (check_dag_refines_cert_path_diag fuel' allowed
+                                     ctx_t ((cs, true) :: path_ctx) ro opt_pf
                                      (cs :: src_evals) (cs :: src_br_conds) ts d_tgt)
                                   (fun _ =>
-                                    check_dag_refines_cert_path_diag fuel' allowed ctx_f ((cs, false) :: path_ctx) ro opt_pf
+                                    check_dag_refines_cert_path_diag fuel' allowed
+                                      ctx_f ((cs, false) :: path_ctx) ro opt_pf
                                       (cs :: src_evals) (cs :: src_br_conds) fs d_tgt)
                             | _ =>
                                 inl (diag "ir-refine" "incompatible source branch and target CFG DAG shape")
@@ -1018,9 +1036,13 @@ Fixpoint check_dag_refines_cert_path_diag
                           match ro with
                           | RO_VoidEquiv =>
                               guard_err (tgt_dag_void_safe ctx src_evals src_br_conds d_tgt)
-                                (fun _ => diag "ir-refine" "target void-return DAG may introduce UB/poison not present in source")
+                                (fun _ => diag "ir-refine"
+                                  ("target void-return DAG may introduce UB/poison " ++
+                                   "not present in source"))
                           | _ =>
-                              inl (diag "ir-refine" "certificate return obligation is not void-equiv for ret void function")
+                              inl (diag "ir-refine"
+                                ("certificate return obligation is not void-equiv " ++
+                                 "for ret void function"))
                           end
                       | CD_RetScalar ws es =>
                           match d_tgt with
@@ -1029,7 +1051,9 @@ Fixpoint check_dag_refines_cert_path_diag
                                 check_dag_refines_cert_path_diag fuel' allowed ctx path_ctx ro opt_pf
                                   src_evals src_br_conds d_src next_t
                               else
-                                inl (diag "ir-ub" "target evaluation before return may introduce UB/poison not present in source")
+                                inl (diag "ir-ub"
+                                  ("target evaluation before return may introduce " ++
+                                   "UB/poison not present in source"))
                           | CD_RetScalar wt et =>
                               match ro with
                               | RO_ScalarRefines w _ _ _ =>
@@ -1045,10 +1069,14 @@ Fixpoint check_dag_refines_cert_path_diag
                                         ("target return width i" ++ diag_pos_dec wt ++
                                          " disagrees with certificate scalar-refines width i" ++ diag_pos_dec w)))
                                     (fun _ =>
-                                  guard_err (check_expr_refines_with_lrat ctx es (simplify_expr_with_path ctx path_ctx et) opt_pf)
+                                  guard_err
+                                    (check_expr_refines_with_lrat ctx es
+                                       (simplify_expr_with_path ctx path_ctx et) opt_pf)
                                     refine_fail_msg))
                               | _ =>
-                                  inl (diag "ir-refine" "certificate return obligation is void-equiv for non-void scalar function")
+                                  inl (diag "ir-refine"
+                                    ("certificate return obligation is void-equiv " ++
+                                     "for non-void scalar function"))
                               end
                           | _ =>
                               inl (diag "ir-refine" "incompatible source return and target CFG DAG shape")
@@ -1226,8 +1254,10 @@ Definition check_loop_cutpoint_cfg_diag
                               (fun _ => diag "ir-ub" "target loop backedge phi value may introduce UB/poison"))
                             (fun _ =>
                           bind_err
-                            (guard_err (check_pevals_refine ctx_cont opt_pf pspecs (nls_next_pevals s_s) (nls_next_pevals s_t))
-                              (proof_err "ir-loop" "loop backedge phi step preservation"))
+                            (guard_err
+                               (check_pevals_refine ctx_cont opt_pf pspecs
+                                  (nls_next_pevals s_s) (nls_next_pevals s_t))
+                               (proof_err "ir-loop" "loop backedge phi step preservation"))
                             (fun _ =>
                           let ctx_exit_0 :=
                             extract_branch_cond_assumptions
@@ -1260,7 +1290,9 @@ Definition check_loop_cutpoint_cfg_diag
                                               (nls_ce_ret s_t :: nls_evals_exit s_t))
                                       (fun _ => diag "ir-ub" "target loop exit evaluation may introduce UB/poison"))
                                     (fun _ =>
-                                  guard_err (check_expr_refines_with_lrat ctx_exit (nls_ce_ret s_s) (nls_ce_ret s_t) opt_pf)
+                                  guard_err
+                                    (check_expr_refines_with_lrat ctx_exit
+                                       (nls_ce_ret s_s) (nls_ce_ret s_t) opt_pf)
                                     (proof_err "ir-loop" "loop exit return refinement"))))
                               end
                           end)))
@@ -1385,8 +1417,10 @@ Definition check_cert_cfg_with_proto_lrat_diag
       match summarize_cfg_dag_with_uas_diag "source" blk_uas false src_cfg src_pnames with
       | inl err => inl err
       | inr d_src =>
-          match summarize_ocfg_dag_diag "target" (default_cfg_dag_fuel tgt_cfg) (fun _ => []) true (args tgt_cfg) src_pnames
-                  (defined_ids_of_cfg tgt_cfg) (ocfg_map (blks tgt_cfg)) true (init tgt_cfg) (init tgt_cfg) (RM.empty _) []
+          match summarize_ocfg_dag_diag "target" (default_cfg_dag_fuel tgt_cfg)
+                  (fun _ => []) true (args tgt_cfg) src_pnames
+                  (defined_ids_of_cfg tgt_cfg) (ocfg_map (blks tgt_cfg))
+                  true (init tgt_cfg) (init tgt_cfg) (RM.empty _) []
           with
           | inl err => inl err
           | inr d_tgt =>
@@ -1443,12 +1477,14 @@ Proof.
                       (check_memory_invariant_valid
                          (used_src_param_vars src_cfg ++
                           fst match opt_proto with
-                              | Some (p_dtys, s_pattrs) => seed_proto_param_ctx (List.map cert_reg_name (args src_cfg)) p_dtys s_pattrs
+                              | Some (p_dtys, s_pattrs) =>
+                                  seed_proto_param_ctx (List.map cert_reg_name (args src_cfg)) p_dtys s_pattrs
                               | None => ([], [])
                               end)
                          (bc_ub_assumptions bc ++
                           snd match opt_proto with
-                              | Some (p_dtys, s_pattrs) => seed_proto_param_ctx (List.map cert_reg_name (args src_cfg)) p_dtys s_pattrs
+                              | Some (p_dtys, s_pattrs) =>
+                                  seed_proto_param_ctx (List.map cert_reg_name (args src_cfg)) p_dtys s_pattrs
                               | None => ([], [])
                               end))
                       (bc_memory_invariants bc))

@@ -581,7 +581,8 @@ Section OpenWorldEvents.
         * cbn [default_draw_val]; rewrite Esz; apply DVALUE_Array_typ.
           -- exact Hnv.
           -- cbn; rewrite (well_defined_not_poison _ Hdw); reflexivity.
-          -- constructor; [exact Hdt | apply Forall_forall; intros z Hz; apply repeat_spec in Hz; subst; exact Hdt].
+          -- constructor;
+               [exact Hdt | apply Forall_forall; intros z Hz; apply repeat_spec in Hz; subst; exact Hdt].
           -- rewrite repeat_length, Esz; reflexivity.
         * cbn [default_draw_val dvalue_well_defined]; rewrite Esz; cbn; rewrite Hdw; cbn.
           rewrite forallb_forall; intros z Hz; apply repeat_spec in Hz; subst; exact Hdw.
@@ -686,7 +687,10 @@ Section OpenWorldEvents.
     end.
   Proof using Type.
     unfold observe at 1; cbn; destruct (observe t) as [r | t' | X e k]; [reflexivity | reflexivity |].
-    destruct (classify_ow_event e) as [dt | op w args | X' de']; [reflexivity | destruct (pure_int_intrinsic_fn op w args); reflexivity | reflexivity].
+    destruct (classify_ow_event e) as [dt | op w args | X' de'];
+      [reflexivity
+      | destruct (pure_int_intrinsic_fn op w args); reflexivity
+      | reflexivity].
   Qed.
 
 (** ** 2. Deterministic Open-World Refinement [det_ref] & Relational [DrawE] ([F-44]) *)
@@ -949,30 +953,46 @@ Section OpenWorldEvents.
                                                 | inr1 e2 =>
                                                     match e1 with
                                                     | inl1 o1 =>
-                                                        match e2 with inl1 o2 => sync_oom r o1 k1 o2 k2 | inr1 _ => False end
+                                                        match e2 with
+                                                        | inl1 o2 => sync_oom r o1 k1 o2 k2
+                                                        | inr1 _ => False
+                                                        end
                                                     | inr1 e1 =>
                                                         match e2 with
                                                         | inl1 _ => False
                                                         | inr1 e2 =>
                                                             match e1 with
                                                             | inl1 x1 =>
-                                                                match e2 with inl1 x2 => sync_llvmexc r x1 k1 x2 k2 | inr1 _ => False end
+                                                                match e2 with
+                                                                | inl1 x2 => sync_llvmexc r x1 k1 x2 k2
+                                                                | inr1 _ => False
+                                                                end
                                                             | inr1 e1 =>
                                                                 match e2 with
                                                                 | inl1 _ => False
                                                                 | inr1 e2 =>
                                                                     match e1 with
                                                                     | inl1 u1 =>
-                                                                        match e2 with inl1 u2 => sync_ub r u1 k1 u2 k2 | inr1 _ => False end
+                                                                        match e2 with
+                                                                        | inl1 u2 => sync_ub r u1 k1 u2 k2
+                                                                        | inr1 _ => False
+                                                                        end
                                                                     | inr1 e1 =>
                                                                         match e2 with
                                                                         | inl1 _ => False
                                                                         | inr1 e2 =>
                                                                             match e1 with
                                                                             | inl1 d1 =>
-                                                                                match e2 with inl1 d2 => sync_debug r d1 k1 d2 k2 | inr1 _ => False end
+                                                                                match e2 with
+                                                                                | inl1 d2 => sync_debug r d1 k1 d2 k2
+                                                                                | inr1 _ => False
+                                                                                end
                                                                             | inr1 f1 =>
-                                                                                match e2 with inl1 _ => False | inr1 f2 => sync_failure r f1 k1 f2 k2 end
+                                                                                match e2 with
+                                                                                | inl1 _ => False
+                                                                                | inr1 f2 =>
+                                                                                    sync_failure r f1 k1 f2 k2
+                                                                                end
                                                                             end
                                                                         end
                                                                     end
@@ -1009,7 +1029,8 @@ Section OpenWorldEvents.
                try (cbn; intros; contradiction)
            end;
       cbn;
-      try (destruct x1, x2; cbn; try (intros; contradiction); intros H; intuition auto);
+      try (destruct x1, x2; cbn;
+           try (intros; contradiction); intros H; intuition auto);
       destruct e1, e2; cbn; intros H; intuition auto.
   Qed.
 
@@ -1094,7 +1115,8 @@ Section OpenWorldEvents.
                try (cbn; intros; contradiction)
            end;
       cbn;
-      try (destruct x1, x2; cbn; try (intros; contradiction); intros H; intuition auto);
+      try (destruct x1, x2; cbn;
+           try (intros; contradiction); intros H; intuition auto);
       destruct e1, e2; cbn; intros H; intuition auto.
   Qed.
 
@@ -1237,7 +1259,8 @@ Section OpenWorldEvents.
       destruct (observe t1) as [| m1 | X1 e1 k1] eqn:Ho1; try contradiction.
       + pclearbot; eapply det_ref_tau_l; [exact Ho1 | exact Hs].
       + destruct Hs as [Hub | []].
-        pstep; apply DR_Step; unfold det_step_body; rewrite Ho1; left; exact Hub.
+        pstep; apply DR_Step; unfold det_step_body;
+          rewrite Ho1; left; exact Hub.
     - eapply det_ref_tau_l; [exact Ho1 | exact (IH m2 Ho)].
     - rewrite Ho in Ho2'; injection Ho2' as <-; pstep; exact Hsub.
   Qed.
@@ -1589,7 +1612,8 @@ Section OpenWorldEvents.
                         VisF (@subevent DrawE OW_E _ dvalue (Draw dt)) (fun x => Ret x))
         by reflexivity.
       rewrite Ho_draw;
-        cbn [classify_ow_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
+        cbn [classify_ow_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+             cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun].
       unfold sigma_tgt'; cbn [prepend_draws].
       destruct (dtyp_eq_dec dt dt) as [_ | Hneq]; [reflexivity | exfalso; exact (Hneq eq_refl)]. }
     eapply det_ref_obs_eq; [reflexivity | apply observe_run_draws_bind_ret |].
@@ -1635,7 +1659,8 @@ Section OpenWorldEvents.
                        (ow_freeze (DTYPE_Base (DTYPE_I w)) (DVALUE_Base DVALUE_Poison))) =
                      TauF (run_draws default_draw_strat (Ret v1))).
     { rewrite observe_run_draws; unfold ow_freeze; rewrite observe_freeze_poison;
-        cbn [classify_ow_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun];
+        cbn [classify_ow_event subevent resum ReSum_id ReSum_sum ReSum_inl ReSum_inr
+             cat Cat_IFun inl_ inr_ Inl_sum1 Inr_sum1 id_ Id_IFun];
         unfold sigma1; cbn [prepend_draws].
       destruct (dtyp_eq_dec (DTYPE_Base (DTYPE_I w)) (DTYPE_Base (DTYPE_I w))) as [_ | Hneq];
         [reflexivity | exfalso; exact (Hneq eq_refl)]. }
@@ -1874,7 +1899,8 @@ Section OpenWorldEvents.
   Proof using Type.
     intros sigma env t1 t2 sigma' env' r Ho H.
     inversion H; subst;
-      [apply CSR_Ret | eapply CSR_Tau | eapply CSR_LocalRead | eapply CSR_LocalWrite | eapply CSR_Draw | eapply CSR_PureIntrinsic];
+      [apply CSR_Ret | eapply CSR_Tau | eapply CSR_LocalRead | eapply CSR_LocalWrite
+      | eapply CSR_Draw | eapply CSR_PureIntrinsic];
       try (rewrite <- Ho; eassumption); eassumption.
   Qed.
 
@@ -1886,7 +1912,8 @@ Section OpenWorldEvents.
   Proof using Type.
     intros sigma env t1 t2 Ho H.
     inversion H; subst;
-      [eapply CSU_UB | eapply CSU_Tau | eapply CSU_LocalRead | eapply CSU_LocalWrite | eapply CSU_Draw | eapply CSU_PureIntrinsic];
+      [eapply CSU_UB | eapply CSU_Tau | eapply CSU_LocalRead | eapply CSU_LocalWrite
+      | eapply CSU_Draw | eapply CSU_PureIntrinsic];
       try (rewrite <- Ho; eassumption); eassumption.
   Qed.
 
@@ -2209,10 +2236,13 @@ Lemma raw_id_in_list_spec : forall r xs,
 Proof.
   intros r xs; induction xs as [| x rx IH]; cbn; [split; [discriminate | contradiction] |].
   destruct (raw_id_eqb r x) eqn:E.
-  - apply raw_id_eqb_eq in E; subst; split; [intros _; left; reflexivity | intros _; reflexivity].
-  - rewrite IH; split; [intros H; right; exact H | intros [-> | H]; [
-      assert (Hr : raw_id_eqb r r = true) by (apply raw_id_eqb_eq; reflexivity);
-      rewrite Hr in E; discriminate | exact H]].
+  - apply raw_id_eqb_eq in E; subst; split;
+      [intros _; left; reflexivity | intros _; reflexivity].
+  - rewrite IH; split;
+      [intros H; right; exact H
+      | intros [-> | H];
+          [assert (Hr : raw_id_eqb r r = true) by (apply raw_id_eqb_eq; reflexivity);
+           rewrite Hr in E; discriminate | exact H]].
 Qed.
 
 Fixpoint find_raw_id_index_from (r : raw_id) (xs : list raw_id) (idx : nat)
@@ -2418,10 +2448,13 @@ Lemma param_use_in_spec : forall u us, param_use_in u us = true <-> In u us.
 Proof.
   intros u us; induction us as [| x rx IH]; cbn; [split; [discriminate | contradiction] |].
   destruct (param_use_eqb u x) eqn:E.
-  - apply param_use_eqb_eq in E; subst; split; [intros _; left; reflexivity | intros _; reflexivity].
-  - rewrite IH; split; [intros H; right; exact H | intros [-> | H]; [
-      assert (Hr : param_use_eqb u u = true) by (apply param_use_eqb_eq; reflexivity);
-      rewrite Hr in E; discriminate | exact H]].
+  - apply param_use_eqb_eq in E; subst; split;
+      [intros _; left; reflexivity | intros _; reflexivity].
+  - rewrite IH; split;
+      [intros H; right; exact H
+      | intros [-> | H];
+          [assert (Hr : param_use_eqb u u = true) by (apply param_use_eqb_eq; reflexivity);
+           rewrite Hr in E; discriminate | exact H]].
 Qed.
 
 Definition cfg_param_dtyp_compatible (G : CFG.cfg dtyp) (arg_dtys : list dtyp) : bool :=

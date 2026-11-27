@@ -529,25 +529,34 @@ Proof.
       exists op0, w0, fl0, l; split; [exact Hop | split; [exact Hdef |]].
       cbn [is_syntactic_subexpr]; rewrite cert_expr_eqb_refl; reflexivity.
     + destruct (IHl Hl) as (op & w & fl & lhs & Hop & Hdef & Hsub).
-      exists op, w, fl, lhs; split; [exact Hop | split; [exact Hdef | cbn [is_syntactic_subexpr]; rewrite !orb_true_iff; auto]].
+      exists op, w, fl, lhs; split;
+        [exact Hop | split; [exact Hdef | cbn [is_syntactic_subexpr]; rewrite !orb_true_iff; auto]].
     + destruct (IHr Hr) as (op & w & fl & lhs & Hop & Hdef & Hsub).
-      exists op, w, fl, lhs; split; [exact Hop | split; [exact Hdef | cbn [is_syntactic_subexpr]; rewrite !orb_true_iff; auto]].
+      exists op, w, fl, lhs; split;
+        [exact Hop | split; [exact Hdef | cbn [is_syntactic_subexpr]; rewrite !orb_true_iff; auto]].
   - apply orb_true_iff in H as [Hl | Hr].
     + destruct (IHl Hl) as (op & w & fl & lhs & Hop & Hdef & Hsub).
-      exists op, w, fl, lhs; split; [exact Hop | split; [exact Hdef | cbn [is_syntactic_subexpr]; rewrite !orb_true_iff; auto]].
+      exists op, w, fl, lhs; split;
+        [exact Hop | split; [exact Hdef | cbn [is_syntactic_subexpr]; rewrite !orb_true_iff; auto]].
     + destruct (IHr Hr) as (op & w & fl & lhs & Hop & Hdef & Hsub).
-      exists op, w, fl, lhs; split; [exact Hop | split; [exact Hdef | cbn [is_syntactic_subexpr]; rewrite !orb_true_iff; auto]].
+      exists op, w, fl, lhs; split;
+        [exact Hop | split; [exact Hdef | cbn [is_syntactic_subexpr]; rewrite !orb_true_iff; auto]].
   - destruct (IHo H) as (op & w & fl & lhs & Hop & Hdef & Hsub).
-    exists op, w, fl, lhs; split; [exact Hop | split; [exact Hdef | cbn [is_syntactic_subexpr]; rewrite !orb_true_iff; auto]].
+    exists op, w, fl, lhs; split;
+      [exact Hop | split; [exact Hdef | cbn [is_syntactic_subexpr]; rewrite !orb_true_iff; auto]].
   - rewrite !orb_true_iff in H; destruct H as [[Hc | Ht] | Hf].
     + destruct (IHc Hc) as (op & w & fl & lhs & Hop & Hdef & Hsub).
-      exists op, w, fl, lhs; split; [exact Hop | split; [exact Hdef | cbn [is_syntactic_subexpr]; rewrite !orb_true_iff; auto]].
+      exists op, w, fl, lhs; split;
+        [exact Hop | split; [exact Hdef | cbn [is_syntactic_subexpr]; rewrite !orb_true_iff; auto]].
     + destruct (IHt Ht) as (op & w & fl & lhs & Hop & Hdef & Hsub).
-      exists op, w, fl, lhs; split; [exact Hop | split; [exact Hdef | cbn [is_syntactic_subexpr]; rewrite !orb_true_iff; auto]].
+      exists op, w, fl, lhs; split;
+        [exact Hop | split; [exact Hdef | cbn [is_syntactic_subexpr]; rewrite !orb_true_iff; auto]].
     + destruct (IHf Hf) as (op & w & fl & lhs & Hop & Hdef & Hsub).
-      exists op, w, fl, lhs; split; [exact Hop | split; [exact Hdef | cbn [is_syntactic_subexpr]; rewrite !orb_true_iff; auto]].
+      exists op, w, fl, lhs; split;
+        [exact Hop | split; [exact Hdef | cbn [is_syntactic_subexpr]; rewrite !orb_true_iff; auto]].
   - destruct (IHo H) as (op & w & fl & lhs & Hop & Hdef & Hsub).
-    exists op, w, fl, lhs; split; [exact Hop | split; [exact Hdef | cbn [is_syntactic_subexpr]; rewrite !orb_true_iff; auto]].
+    exists op, w, fl, lhs; split;
+      [exact Hop | split; [exact Hdef | cbn [is_syntactic_subexpr]; rewrite !orb_true_iff; auto]].
 Qed.
 
 Fixpoint expr_has_sdiv_pair (el er : cert_expr) (e : cert_expr) {struct e} : bool :=
@@ -1399,9 +1408,11 @@ Proof.
       assert (Hpc : wf_param_env_for (collect_free_vars [] c) penv)
         by (intros x wx Hx; apply Hpenv, in_app_iff; left; exact Hx).
       assert (Hpt : wf_param_env_for (collect_free_vars [] t) penv)
-        by (intros x wx Hx; apply Hpenv, in_app_iff; right; apply in_app_iff; left; exact Hx).
+        by (intros x wx Hx; apply Hpenv, in_app_iff; right;
+            apply in_app_iff; left; exact Hx).
       assert (Hpf : wf_param_env_for (collect_free_vars [] f) penv)
-        by (intros x wx Hx; apply Hpenv, in_app_iff; right; apply in_app_iff; right; exact Hx).
+        by (intros x wx Hx; apply Hpenv, in_app_iff; right;
+            apply in_app_iff; right; exact Hx).
       unfold eval_closed_cert_expr in Hev; cbn [eval_cert_expr] in Hev.
       destruct (eval_cert_expr penv [] foracle c) as [| | sc | vc] eqn:Ec;
         cbn [eou_bind] in Hev; try discriminate Hev.

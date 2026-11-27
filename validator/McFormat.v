@@ -589,7 +589,8 @@ Proof.
   rewrite (check_forall_idx_diag_acc_sound _ _ _ _ (check_mc_loop_slot_bind_diag_sound arch (ml_sp_off ls)) Hslots).
   rewrite (check_intervals_disjoint_diag_sound _ Hdisj).
   rewrite (check_mc_loop_inv_diag_sound _ H).
-  destruct arch; cbn in Hpc; cbn; rewrite Hpc; rewrite !Bool.andb_true_r; reflexivity.
+  destruct arch; cbn in Hpc; cbn;
+    rewrite Hpc, !Bool.andb_true_r; reflexivity.
 Qed.
 
 Definition check_mc_callee_arg_diag (cname : string) (idx : nat) (sp : rv_arg_spec) : string + unit :=
@@ -779,7 +780,8 @@ Definition parse_rv_arg_ext_sexp (sx : sexp) : string + rv_arg_ext :=
       if String.eqb s "none" then inr RAE_None
       else if String.eqb s "signext" then inr RAE_SignExt
       else if String.eqb s "zeroext" then inr RAE_ZeroExt
-      else inl (diag "mc-cert-parse" ("unknown argument extension mode '" ++ s ++ "' (expected 'none', 'signext', or 'zeroext')"))
+      else inl (diag "mc-cert-parse"
+        ("unknown argument extension mode '" ++ s ++ "' (expected 'none', 'signext', or 'zeroext')"))
   | _ => inl (diag "mc-cert-parse" "expected atom for argument extension mode")
   end.
 
@@ -819,7 +821,8 @@ Definition parse_mc_args_sexp (sx : sexp) : string + list rv_arg_spec :=
   | inl err => inl err
   | inr specs =>
       if Nat.leb (List.length specs) 8 then inr specs
-      else inl (diag "mc-cert-parse" ("too many arguments in mc-cert-v1 (" ++ diag_nat_dec (List.length specs) ++ " > 8)"))
+      else inl (diag "mc-cert-parse"
+        ("too many arguments in mc-cert-v1 (" ++ diag_nat_dec (List.length specs) ++ " > 8)"))
   end.
 
 Lemma parse_mc_args_wf : forall sx specs,
@@ -852,7 +855,8 @@ Definition parse_mc_Z_sexp (ctx : string) (sx : sexp) : string + Z :=
       if Nat.eqb (Ascii.nat_of_ascii c) 45 then
         match parse_pos_str rest with
         | Some p => inr (Z.neg p)
-        | None => inl (diag "mc-cert-parse" ("expected canonical negative integer for " ++ ctx ++ ", got '" ++ s ++ "'"))
+        | None => inl (diag "mc-cert-parse"
+            ("expected canonical negative integer for " ++ ctx ++ ", got '" ++ s ++ "'"))
         end
       else
         match parse_canonical_N s with
@@ -1192,7 +1196,8 @@ Definition parse_mc_cert_sexp (root : sexp) : string + mc_certificate :=
         | _, _, _, _, inl err, _ => inl err
         | _, _, _, _, _, inl err => inl err
         end
-      else inl (diag "mc-cert-parse" ("unsupported MC certificate schema tag '" ++ schema_tag ++ "' (expected 'mc-cert-v1')"))
+      else inl (diag "mc-cert-parse"
+        ("unsupported MC certificate schema tag '" ++ schema_tag ++ "' (expected 'mc-cert-v1')"))
   | _ => inl (diag "mc-cert-parse" "malformed mc-cert-v1 root S-expression")
   end.
 

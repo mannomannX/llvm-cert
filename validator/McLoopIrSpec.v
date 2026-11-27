@@ -187,7 +187,8 @@ Proof.
   intros penv foracle hi_e lo32_e rk vlo Hhi Hlo Htrunc; unfold combine_hi32_expr.
   assert (Hz : eval_closed_cert_expr penv foracle
                  (CE_Cast CCK_ZExt 32%positive 64%positive no_cast_flags lo32_e) =
-               raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive (@Integers.repr 64%positive (@Integers.unsigned 32%positive vlo)))))
+               raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive
+                 (@Integers.repr 64%positive (@Integers.unsigned 32%positive vlo)))))
     by (apply eval_ce_zext; [reflexivity | exact Hlo]).
   assert (Ha : eval_closed_cert_expr penv foracle
                  (CE_BinOp CB_And 64%positive no_binop_flags hi_e (CE_BvConst 64%positive mc_hi32_mask)) =
@@ -265,7 +266,8 @@ Proof.
   - apply String.eqb_eq in Ex; subst x; inversion Hlk; subst w2 e2.
     destruct Hin as [Heq | Hinr].
     + inversion Heq; split; reflexivity.
-    + exfalso; apply Hnin; apply in_map_iff; exists (nm, w1, e1); split; [reflexivity | exact Hinr].
+    + exfalso; apply Hnin; apply in_map_iff;
+        exists (nm, w1, e1); split; [reflexivity | exact Hinr].
   - destruct Hin as [Heq | Hinr].
     + inversion Heq; subst; rewrite String.eqb_refl in Ex; discriminate Ex.
     + exact (IH _ _ _ _ Hnd' Hinr Hlk).
@@ -431,7 +433,8 @@ Proof.
   - rewrite !andb_true_iff in Hlf; destruct Hlf as [[Hlfc Hlft] Hlff].
     rewrite (IHc Hlfc (fun x wx Hx => Hag x wx (in_or_app _ _ _ (or_introl Hx)))),
             (IHt Hlft (fun x wx Hx => Hag x wx (in_or_app _ _ _ (or_intror (in_or_app _ _ _ (or_introl Hx)))))),
-            (IHf Hlff (fun x wx Hx => Hag x wx (in_or_app _ _ _ (or_intror (in_or_app _ _ _ (or_intror Hx)))))); reflexivity.
+            (IHf Hlff (fun x wx Hx =>
+              Hag x wx (in_or_app _ _ _ (or_intror (in_or_app _ _ _ (or_intror Hx)))))); reflexivity.
   - rewrite (IHo Hlf Hag).
     destruct (eval_cert_expr penv_src [] foracle (subst_cert_expr sub o)); cbn [eou_bind]; try reflexivity.
     match goal with d : @dvalue Pa |- _ => destruct d; try reflexivity end.
@@ -610,7 +613,8 @@ Fixpoint reify_ir_seg
                                 else inl (diag "mc-loop-ir" ("non-UB-free return expression in " ++ loc tt))
                             | None => inl (diag "mc-loop-ir" ("unsupported return operand in " ++ loc tt))
                             end
-                          else inl (diag "mc-loop-ir" ("unsupported return width i" ++ diag_pos_dec rw ++ " in " ++ loc tt))
+                          else inl (diag "mc-loop-ir"
+                            ("unsupported return width i" ++ diag_pos_dec rw ++ " in " ++ loc tt))
                       | TERM_Br_1 next_bid =>
                           reify_ir_seg phase fuel' bmap hdr_id hdr_phis false visited' cur_bid next_bid lmap2
                       | TERM_Br (DTYPE_Base (DTYPE_I 1%positive), op) br1 br2 =>
@@ -619,10 +623,12 @@ Fixpoint reify_ir_seg
                               if negb (ub_free_expr cond_e) then
                                 inl (diag "mc-loop-ir" ("non-UB-free branch condition in " ++ loc tt))
                               else
-                                match reify_ir_seg phase fuel' bmap hdr_id hdr_phis false visited' cur_bid br1 lmap2 with
+                                match reify_ir_seg phase fuel' bmap hdr_id hdr_phis
+                                        false visited' cur_bid br1 lmap2 with
                                 | inl err => inl err
                                 | inr dt =>
-                                    match reify_ir_seg phase fuel' bmap hdr_id hdr_phis false visited' cur_bid br2 lmap2 with
+                                    match reify_ir_seg phase fuel' bmap hdr_id hdr_phis
+                                            false visited' cur_bid br2 lmap2 with
                                     | inl err => inl err
                                     | inr df => inr (IST_Branch cond_e dt df)
                                     end
@@ -737,7 +743,8 @@ Proof.
     + constructor 2; exact (IH Hin).
   - intros [v Hf]; pose proof (RM.elements_1 (RM.find_2 Hf)) as Hina.
     apply in_map_iff; induction Hina as [[k' v'] rest [Heqk Heqv] | [k' v'] rest _ IH].
-    + cbn in Heqk, Heqv; subst k' v'; exists (r, v); split; [reflexivity | left; reflexivity].
+    + cbn in Heqk, Heqv; subst k' v';
+        exists (r, v); split; [reflexivity | left; reflexivity].
     + destruct IH as [[k0 v0] [Hk0 Hin0]]; exists (k0, v0); split; [exact Hk0 | right; exact Hin0].
 Qed.
 
@@ -749,7 +756,8 @@ Proof.
   rewrite RM.fold_1 in Hf.
   remember (RM.elements l1) as xs.
   assert (Hspec : forall init,
-    (forall r0 w0 e0, RM.find r0 init = Some (w0, e0) -> RM.find r0 l1 = Some (w0, e0) /\ RM.find r0 l2 = Some (w0, e0)) ->
+    (forall r0 w0 e0, RM.find r0 init = Some (w0, e0) ->
+       RM.find r0 l1 = Some (w0, e0) /\ RM.find r0 l2 = Some (w0, e0)) ->
     (forall k v, In (k, v) xs -> RM.find k l1 = Some v) ->
     RM.find r (List.fold_left (fun acc p =>
       (fun k '(w1, e1) acc0 =>
@@ -764,7 +772,8 @@ Proof.
       intros r0 w0 e0 Hr0; cbn [fst snd] in Hr0.
       destruct (RM.find k l2) as [[w2 e2] |] eqn:Hl2; [| exact (Hinit r0 w0 e0 Hr0)].
       destruct (Pos.eqb w1 w2 && cert_expr_eqb e1 e2) eqn:Eeq; [| exact (Hinit r0 w0 e0 Hr0)].
-      apply andb_true_iff in Eeq as [Hw_eq He_eq]; apply Pos.eqb_eq in Hw_eq; apply cert_expr_eqb_eq in He_eq; subst w2 e2.
+      apply andb_true_iff in Eeq as [Hw_eq He_eq];
+        apply Pos.eqb_eq in Hw_eq; apply cert_expr_eqb_eq in He_eq; subst w2 e2.
       destruct (RawIDOrd.eq_dec k r0) as [-> | Hneq].
       + rewrite RMF.F.add_eq_o in Hr0 by reflexivity; inversion Hr0; subst w0 e0.
         split; [exact (Hxs r0 (w1, e1) (or_introl eq_refl)) | exact Hl2].
@@ -773,7 +782,8 @@ Proof.
   - intros r0 w0 e0 H0; rewrite RMF.F.empty_o in H0; discriminate H0.
   - intros k v Hk; rewrite Heqxs in Hk; apply RM.find_1, RM.elements_2.
     clear -Hk; induction (RM.elements l1) as [| [k' v'] rest IH]; [contradiction |].
-    destruct Hk as [Heq | Hk]; [inversion Heq; constructor 1; split; reflexivity | constructor 2; exact (IH Hk)].
+    destruct Hk as [Heq | Hk];
+      [inversion Heq; constructor 1; split; reflexivity | constructor 2; exact (IH Hk)].
 Qed.
 
 Lemma common_cut_lmap_in : forall base lms lm,
@@ -800,9 +810,13 @@ Proof.
     assert (Hmono : wf_pure_lmap (allowed ++ (mc_cut_var_name idx, w) :: cut_vars_from (S idx) rest)
                       (wrap_cut_mc_at (S idx) lmap rest)).
     { intros r wr cer Hr; destruct (Hrec r wr cer Hr) as (Hwt & Hbw & Hlf & Hfv); repeat split; try assumption.
-      eapply incl_tran; [exact Hfv | intros [x wx] Hx; apply in_app_iff in Hx as [Hx | Hx]; apply in_app_iff; [left; exact Hx | right; right; exact Hx]]. }
+      eapply incl_tran;
+        [exact Hfv
+        | intros [x wx] Hx; apply in_app_iff in Hx as [Hx | Hx];
+          apply in_app_iff; [left; exact Hx | right; right; exact Hx]]. }
     apply wf_pure_lmap_add; try assumption; try reflexivity.
-    intros [x wx] [Hx | []]; inversion Hx; subst; apply in_app_iff; right; left; reflexivity.
+    intros [x wx] [Hx | []]; inversion Hx; subst;
+      apply in_app_iff; right; left; reflexivity.
 Qed.
 
 Lemma wrap_cut_mc_at_preserves : forall idx lmap hspecs id,
@@ -866,7 +880,8 @@ Proof.
   intros phase fuel; induction fuel as [| fuel' IH];
     intros bmap hdr_id hdr_phis req_step visited bid_from cur_bid lmap allowed t Hlmap Hr;
     cbn [reify_ir_seg] in Hr.
-  - destruct (negb req_step && raw_id_eqb cur_bid hdr_id); [| destruct (raw_id_in_list cur_bid visited); discriminate Hr].
+  - destruct (negb req_step && raw_id_eqb cur_bid hdr_id);
+      [| destruct (raw_id_in_list cur_bid visited); discriminate Hr].
     destruct (RM.find cur_bid bmap) as [b_hdr |] eqn:Ebh; [| discriminate Hr].
     destruct (reify_pure_phis bid_from lmap (blk_phis b_hdr)) as [pevals |] eqn:Erp; [| discriminate Hr].
     destruct (check_list_eq_id_w (List.map (fun '(id, w, _) => (id, w)) pevals) hdr_phis) eqn:Eids;
@@ -875,7 +890,8 @@ Proof.
     apply check_list_eq_id_w_spec in Eids.
     inversion Hr; subst t; clear Hr.
     split; [intros lm [<- | []]; exact Hlmap |].
-    rewrite <- Eids; exact (pevals_to_ist_cut_wf pevals allowed Eub (reify_pure_phis_typing (blk_phis b_hdr) allowed bid_from lmap pevals Hlmap Erp)).
+    rewrite <- Eids; exact (pevals_to_ist_cut_wf pevals allowed Eub
+      (reify_pure_phis_typing (blk_phis b_hdr) allowed bid_from lmap pevals Hlmap Erp)).
   - destruct (negb req_step && raw_id_eqb cur_bid hdr_id).
     + destruct (RM.find cur_bid bmap) as [b_hdr |] eqn:Ebh; [| discriminate Hr].
       destruct (reify_pure_phis bid_from lmap (blk_phis b_hdr)) as [pevals |] eqn:Erp; [| discriminate Hr].
@@ -885,7 +901,8 @@ Proof.
       apply check_list_eq_id_w_spec in Eids.
       inversion Hr; subst t; clear Hr.
       split; [intros lm [<- | []]; exact Hlmap |].
-      rewrite <- Eids; exact (pevals_to_ist_cut_wf pevals allowed Eub (reify_pure_phis_typing (blk_phis b_hdr) allowed bid_from lmap pevals Hlmap Erp)).
+      rewrite <- Eids; exact (pevals_to_ist_cut_wf pevals allowed Eub
+        (reify_pure_phis_typing (blk_phis b_hdr) allowed bid_from lmap pevals Hlmap Erp)).
     + destruct (raw_id_in_list cur_bid visited); [discriminate Hr |].
       destruct (RM.find cur_bid bmap) as [b |] eqn:Efb; [| discriminate Hr].
       match type of Hr with
@@ -903,23 +920,34 @@ Proof.
       destruct term; try discriminate Hr.
       * destruct v as [[[rw | | | | | | | | | |] | |] op]; try discriminate Hr.
         destruct (is_supported_bit_width rw) eqn:Esup; [| discriminate Hr].
-        destruct (reify_pure_exp lmap2 (Some (DTYPE_Base (DTYPE_I rw))) op) as [[rw0 ret_e] |] eqn:Ere; [| discriminate Hr].
+        destruct (reify_pure_exp lmap2 (Some (DTYPE_Base (DTYPE_I rw))) op)
+          as [[rw0 ret_e] |] eqn:Ere; [| discriminate Hr].
         destruct (ub_free_expr ret_e) eqn:Eub; inversion Hr; subst t; clear Hr.
         pose proof (check_opt_int_width_some_inv _ _ (reify_pure_exp_top_width _ _ _ _ _ Ere)) as ->.
-        destruct (reify_pure_exp_typing op allowed lmap2 (Some (DTYPE_Base (DTYPE_I rw))) rw ret_e Hlmap2 Ere) as (_ & Hwt & Hbw & Hlf & Hfv).
+        destruct (reify_pure_exp_typing op allowed lmap2 (Some (DTYPE_Base (DTYPE_I rw))) rw ret_e Hlmap2 Ere)
+          as (_ & Hwt & Hbw & Hlf & Hfv).
         split; [intros lm Hlm; contradiction | repeat split; assumption].
-      * match goal with x : texp dtyp |- _ => destruct x as [[[rw | | | | | | | | | |] | |] e_cond] end; try discriminate Hr.
+      * match goal with
+        | x : texp dtyp |- _ => destruct x as [[[rw | | | | | | | | | |] | |] e_cond]
+        end; try discriminate Hr.
         destruct rw; try discriminate Hr.
-        destruct (reify_pure_exp lmap2 (Some (DTYPE_Base (DTYPE_I 1%positive))) e_cond) as [[cw cond_e] |] eqn:Ercd; [| discriminate Hr].
+        destruct (reify_pure_exp lmap2 (Some (DTYPE_Base (DTYPE_I 1%positive))) e_cond)
+          as [[cw cond_e] |] eqn:Ercd; [| discriminate Hr].
         destruct (ub_free_expr cond_e) eqn:Eub; [cbn [negb] in Hr | discriminate Hr].
-        destruct (reify_ir_seg phase fuel' bmap hdr_id hdr_phis false (cur_bid :: visited) cur_bid br1 lmap2) as [| dt] eqn:Hdt; [discriminate Hr |].
-        destruct (reify_ir_seg phase fuel' bmap hdr_id hdr_phis false (cur_bid :: visited) cur_bid br2 lmap2) as [| df] eqn:Hdf; [discriminate Hr |].
+        destruct (reify_ir_seg phase fuel' bmap hdr_id hdr_phis false (cur_bid :: visited) cur_bid br1 lmap2)
+          as [| dt] eqn:Hdt; [discriminate Hr |].
+        destruct (reify_ir_seg phase fuel' bmap hdr_id hdr_phis false (cur_bid :: visited) cur_bid br2 lmap2)
+          as [| df] eqn:Hdf; [discriminate Hr |].
         inversion Hr; subst t; clear Hr.
         pose proof (check_opt_int_width_some_inv _ _ (reify_pure_exp_top_width _ _ _ _ _ Ercd)) as ->.
-        destruct (reify_pure_exp_typing e_cond allowed lmap2 (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive cond_e Hlmap2 Ercd) as (_ & Hwt & Hbw & Hlf & Hfv).
+        destruct (reify_pure_exp_typing e_cond allowed lmap2
+                    (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive cond_e Hlmap2 Ercd)
+          as (_ & Hwt & Hbw & Hlf & Hfv).
         destruct (IH _ _ _ _ _ _ _ _ _ _ Hlmap2 Hdt) as [Hlms_t Hwf_t].
         destruct (IH _ _ _ _ _ _ _ _ _ _ Hlmap2 Hdf) as [Hlms_f Hwf_f].
-        split; [intros lm Hin; apply in_app_iff in Hin as [Hin | Hin]; [exact (Hlms_t lm Hin) | exact (Hlms_f lm Hin)] | repeat split; assumption].
+        split;
+          [intros lm Hin; apply in_app_iff in Hin as [Hin | Hin]; [exact (Hlms_t lm Hin) | exact (Hlms_f lm Hin)]
+          | repeat split; assumption].
       * exact (IH _ _ _ _ _ _ _ _ _ _ Hlmap2 Hr).
       * inversion Hr; subst t; split; [intros lm Hlm; contradiction | exact I].
 Qed.
@@ -960,7 +988,8 @@ Fixpoint ir_seg_eval_spec {Pa : Params}
           raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive
             (if b then @Integers.one 1%positive else @Integers.zero 1%positive))) /\
         (forall r, In r wr_keep -> RM.find r env_mid = RM.find r env0) /\
-        ir_seg_eval_spec bmap hdr_id hdr_phis wr_keep penv env_mid bid_step (if b then br_t else br_f) (if b then dt else df)
+        ir_seg_eval_spec bmap hdr_id hdr_phis wr_keep penv env_mid bid_step
+          (if b then br_t else br_f) (if b then dt else df)
   end.
 
 Lemma ir_seg_eval_spec_step_front {Pa : Params} :
@@ -1097,15 +1126,20 @@ Proof.
       rewrite ir_seg_written_ids_acc_shift in Hwr.
       destruct (ir_seg_written_ids_acc phase fuel' bmap hdr_id false (cur_bid :: visited) br2 []);
         cbn [mc_sum_map] in Hwr; [discriminate Hwr |].
-      inversion Hwr; subst wr_all; intros x Hx; apply in_app_iff; right; apply in_app_iff; right; exact Hx.
+      inversion Hwr; subst wr_all;
+        intros x Hx; apply in_app_iff; right;
+        apply in_app_iff; right; exact Hx.
     - rewrite ir_seg_written_ids_acc_shift in Hwr.
       destruct (ir_seg_written_ids_acc phase fuel' bmap hdr_id false (cur_bid :: visited) br []);
         cbn [mc_sum_map] in Hwr; [discriminate Hwr |].
-      inversion Hwr; subst wr_all; intros x Hx; apply in_app_iff; right; exact Hx.
+      inversion Hwr; subst wr_all;
+        intros x Hx; apply in_app_iff; right; exact Hx.
     - inversion Hwr; subst; apply incl_refl. }
   split.
-  - intro Hrs; intro Hin; apply Hnin, Hsub; unfold acc0; rewrite Hrs, code_written_ids_acc_in; right; rewrite push_phi_ids_acc_in; left; exact Hin.
-  - intro Hin; apply Hnin, Hsub; unfold acc0; rewrite code_written_ids_acc_in; left; exact Hin.
+  - intro Hrs; intro Hin; apply Hnin, Hsub; unfold acc0;
+      rewrite Hrs, code_written_ids_acc_in; right; rewrite push_phi_ids_acc_in; left; exact Hin.
+  - intro Hin; apply Hnin, Hsub; unfold acc0;
+      rewrite code_written_ids_acc_in; left; exact Hin.
 Qed.
 
 Lemma reify_pure_phis_ids : forall phis bid_from lmap pevals,
@@ -1133,9 +1167,48 @@ Lemma phi_matches_to_ist_cut {Pa : Params} :
     Forall2 (fun '(id, _) '(id', _) => id' = id) hdr_phis dvs.
 Proof.
   intros penv pevals dvs hdr_phis Heq Hfa2; subst hdr_phis; split.
-  - induction Hfa2 as [| [[id w] ce] [id' dv] rp rd Hpair Hr IH]; cbn; [constructor | constructor; [exact (proj2 Hpair) | exact IH]].
-  - induction Hfa2 as [| [[id w] ce] [id' dv] rp rd Hpair Hr IH]; cbn; [constructor | constructor; [exact (proj1 Hpair) | exact IH]].
+  - induction Hfa2 as [| [[id w] ce] [id' dv] rp rd Hpair Hr IH];
+      cbn; [constructor | constructor; [exact (proj2 Hpair) | exact IH]].
+  - induction Hfa2 as [| [[id w] ce] [id' dv] rp rd Hpair Hr IH];
+      cbn; [constructor | constructor; [exact (proj1 Hpair) | exact IH]].
 Qed.
+
+Local Lemma reify_ir_seg_header_cut_sound {Pa : Params} :
+  forall bmap hdr_id hdr_phis bid_from lmap wr_keep
+         (penv : param_env Pa) env_prev b_hdr pevals,
+    lmap_matches_env penv lmap env_prev ->
+    RM.find hdr_id bmap = Some b_hdr ->
+    reify_pure_phis bid_from lmap (blk_phis b_hdr) = Some pevals ->
+    List.map (fun '(id, w, _) => (id, w)) pevals = hdr_phis ->
+    ir_seg_eval_spec bmap hdr_id hdr_phis wr_keep penv env_prev bid_from hdr_id
+      (IST_Cut lmap (List.map (fun '(_, w, ce) => (w, ce)) pevals)).
+Proof.
+  intros bmap hdr_id hdr_phis bid_from lmap wr_keep penv env_prev b_hdr pevals
+         Henv Ebh Erp Eids.
+  cbn [ir_seg_eval_spec].
+  destruct (pure_phis_denote_step (blk_phis b_hdr) penv bid_from lmap env_prev pevals Henv Erp)
+    as [[Hub _] | [dvs [Hpm Hstp]]].
+  - left; intro sigma; eapply denote_cfg_from_block_ub; [exact Ebh |].
+    unfold denote_block; apply cfg_steps_to_ub_bind_l; exact (Hub sigma).
+  - right; destruct (phi_matches_to_ist_cut penv pevals dvs hdr_phis Eids Hpm) as [Hph1 Hph2].
+    exists env_prev, bid_from, b_hdr, dvs;
+      split; [left; repeat split; reflexivity
+             | split; [exact Ebh | split; [exact Henv
+             | split; [intros r0 _; reflexivity
+             | split; [exact Hph1 | split; [exact Hph2 | exact Hstp]]]]]].
+Qed.
+
+Local Ltac solve_reify_ir_seg_header_cut bmap hdr_id hdr_phis bid_from lmap wr_keep
+                                       penv env_prev t Henv Hr :=
+  destruct (RM.find hdr_id bmap) as [b_hdr |] eqn:Ebh; [| discriminate Hr];
+  destruct (reify_pure_phis bid_from lmap (blk_phis b_hdr)) as [pevals |] eqn:Erp;
+    [| discriminate Hr];
+  destruct (check_list_eq_id_w (List.map (fun '(id, w, _) => (id, w)) pevals) hdr_phis)
+    eqn:Eids; cbn [negb] in Hr; [| discriminate Hr];
+  destruct (pevals_ub_free pevals) eqn:Eub; cbn [negb] in Hr; [| discriminate Hr];
+  apply check_list_eq_id_w_spec in Eids; inversion Hr; subst t; clear Hr;
+  exact (reify_ir_seg_header_cut_sound bmap hdr_id hdr_phis bid_from lmap wr_keep
+           penv env_prev b_hdr pevals Henv Ebh Erp Eids).
 
 Lemma reify_ir_seg_sound {Pa : Params} :
   forall phase fuel bmap hdr_id hdr_phis req_step visited bid_from cur_bid lmap
@@ -1159,45 +1232,24 @@ Proof.
     cbn [reify_ir_seg ir_seg_written_ids] in Hr, Hwr.
   - destruct (negb req_step && raw_id_eqb cur_bid hdr_id) eqn:Estp;
       [| destruct (raw_id_in_list cur_bid visited); discriminate Hr].
-    apply andb_true_iff in Estp as [Hnr Hhd]; apply negb_true_iff in Hnr; apply raw_id_eqb_eq in Hhd; subst cur_bid req_step.
+    apply andb_true_iff in Estp as [Hnr Hhd];
+      apply negb_true_iff in Hnr; apply raw_id_eqb_eq in Hhd; subst cur_bid req_step.
     destruct Hinit as [-> Henv].
-    destruct (RM.find hdr_id bmap) as [b_hdr |] eqn:Ebh; [| discriminate Hr].
-    destruct (reify_pure_phis bid_from lmap (blk_phis b_hdr)) as [pevals |] eqn:Erp; [| discriminate Hr].
-    destruct (check_list_eq_id_w (List.map (fun '(id, w, _) => (id, w)) pevals) hdr_phis) eqn:Eids;
-      cbn [negb] in Hr; [| discriminate Hr].
-    destruct (pevals_ub_free pevals) eqn:Eub; cbn [negb] in Hr; [| discriminate Hr].
-    apply check_list_eq_id_w_spec in Eids.
-    inversion Hr; subst t; clear Hr; cbn [ir_seg_eval_spec].
-    destruct (pure_phis_denote_step (blk_phis b_hdr) penv bid_from lmap env_prev pevals Henv Erp)
-      as [[Hub _] | [dvs [Hpm Hstp]]].
-    + left; intro sigma; eapply denote_cfg_from_block_ub; [exact Ebh |].
-      unfold denote_block; apply cfg_steps_to_ub_bind_l; exact (Hub sigma).
-    + right; destruct (phi_matches_to_ist_cut penv pevals dvs hdr_phis Eids Hpm) as [Hph1 Hph2].
-      exists env_prev, bid_from, b_hdr, dvs;
-        split; [left; repeat split; reflexivity | split; [exact Ebh | split; [exact Henv | split; [intros r0 _; reflexivity | split; [exact Hph1 | split; [exact Hph2 | exact Hstp]]]]]].
+    solve_reify_ir_seg_header_cut bmap hdr_id hdr_phis bid_from lmap wr_keep
+      penv env_prev t Henv Hr.
   - destruct (negb req_step && raw_id_eqb cur_bid hdr_id) eqn:Estp.
-    + apply andb_true_iff in Estp as [Hnr Hhd]; apply negb_true_iff in Hnr; apply raw_id_eqb_eq in Hhd; subst cur_bid req_step.
+    + apply andb_true_iff in Estp as [Hnr Hhd];
+        apply negb_true_iff in Hnr; apply raw_id_eqb_eq in Hhd; subst cur_bid req_step.
       destruct Hinit as [-> Henv].
-      destruct (RM.find hdr_id bmap) as [b_hdr |] eqn:Ebh; [| discriminate Hr].
-      destruct (reify_pure_phis bid_from lmap (blk_phis b_hdr)) as [pevals |] eqn:Erp; [| discriminate Hr].
-      destruct (check_list_eq_id_w (List.map (fun '(id, w, _) => (id, w)) pevals) hdr_phis) eqn:Eids;
-        cbn [negb] in Hr; [| discriminate Hr].
-      destruct (pevals_ub_free pevals) eqn:Eub; cbn [negb] in Hr; [| discriminate Hr].
-      apply check_list_eq_id_w_spec in Eids.
-      inversion Hr; subst t; clear Hr; cbn [ir_seg_eval_spec].
-      destruct (pure_phis_denote_step (blk_phis b_hdr) penv bid_from lmap env_prev pevals Henv Erp)
-        as [[Hub _] | [dvs [Hpm Hstp]]].
-      * left; intro sigma; eapply denote_cfg_from_block_ub; [exact Ebh |].
-        unfold denote_block; apply cfg_steps_to_ub_bind_l; exact (Hub sigma).
-      * right; destruct (phi_matches_to_ist_cut penv pevals dvs hdr_phis Eids Hpm) as [Hph1 Hph2].
-        exists env_prev, bid_from, b_hdr, dvs;
-          split; [left; repeat split; reflexivity | split; [exact Ebh | split; [exact Henv | split; [intros r0 _; reflexivity | split; [exact Hph1 | split; [exact Hph2 | exact Hstp]]]]]].
+      solve_reify_ir_seg_header_cut bmap hdr_id hdr_phis bid_from lmap wr_keep
+        penv env_prev t Henv Hr.
     + destruct (raw_id_in_list cur_bid visited) eqn:Evis; [discriminate Hr |].
       destruct (RM.find cur_bid bmap) as [b |] eqn:Efb; [| discriminate Hr].
       assert (Hblk_disj : forall r, In r wr_keep ->
                 (req_step = false -> ~ In r (List.map (fun '(id, _, _) => id) (blk_phis b))) /\
                 ~ In r (code_written_ids (blk_code b))).
-      { intros r Hrk; eapply (ir_seg_written_disjoint_block phase (S fuel') bmap hdr_id req_step visited cur_bid wr_all r);
+      { intros r Hrk;
+          eapply (ir_seg_written_disjoint_block phase (S fuel') bmap hdr_id req_step visited cur_bid wr_all r);
           [exact Hwr | exact (disjoint_raw_ids_spec _ _ r Hdisj Hrk) | exact Estp | exact Evis | exact Efb]. }
       match type of Hr with
       | match ?x with inl _ => _ | inr _ => _ end = _ => destruct x as [| lmap1] eqn:El1
@@ -1236,11 +1288,15 @@ Proof.
           destruct (is_supported_bit_width rw); [| discriminate Hr].
           destruct (reify_pure_exp lmap2 _ op) as [[? ret_e] |]; [| discriminate Hr].
           destruct (ub_free_expr ret_e); inversion Hr; left; exact Hub_ph.
-        - match goal with x : texp dtyp |- _ => destruct x as [[[rw | | | | | | | | | |] | |] e_cond] end; try discriminate Hr; destruct rw; try discriminate Hr.
+        - match goal with
+          | x : texp dtyp |- _ => destruct x as [[[rw | | | | | | | | | |] | |] e_cond]
+          end; try discriminate Hr; destruct rw; try discriminate Hr.
           destruct (reify_pure_exp lmap2 _ e_cond) as [[? cond_e] |]; [| discriminate Hr].
           destruct (ub_free_expr cond_e); cbn [negb] in Hr; [| discriminate Hr].
-          destruct (reify_ir_seg phase fuel' bmap hdr_id hdr_phis false (cur_bid :: visited) cur_bid br1 lmap2); [discriminate Hr |].
-          destruct (reify_ir_seg phase fuel' bmap hdr_id hdr_phis false (cur_bid :: visited) cur_bid br2 lmap2); inversion Hr; left; exact Hub_ph.
+          destruct (reify_ir_seg phase fuel' bmap hdr_id hdr_phis false (cur_bid :: visited) cur_bid br1 lmap2);
+            [discriminate Hr |].
+          destruct (reify_ir_seg phase fuel' bmap hdr_id hdr_phis false (cur_bid :: visited) cur_bid br2 lmap2);
+            inversion Hr; left; exact Hub_ph.
         - destruct t; cbn [ir_seg_eval_spec]; exact Hub_ph || (left; exact Hub_ph).
         - inversion Hr; exact Hub_ph. }
       destruct (eval_reified_pure_code (blk_code b) None penv lmap1 env1 cevals lmap2 Henv1 Erc)
@@ -1255,11 +1311,15 @@ Proof.
           destruct (is_supported_bit_width rw); [| discriminate Hr].
           destruct (reify_pure_exp lmap2 _ op) as [[? ret_e] |]; [| discriminate Hr].
           destruct (ub_free_expr ret_e); inversion Hr; left; exact Hub_all.
-        - match goal with x : texp dtyp |- _ => destruct x as [[[rw | | | | | | | | | |] | |] e_cond] end; try discriminate Hr; destruct rw; try discriminate Hr.
+        - match goal with
+          | x : texp dtyp |- _ => destruct x as [[[rw | | | | | | | | | |] | |] e_cond]
+          end; try discriminate Hr; destruct rw; try discriminate Hr.
           destruct (reify_pure_exp lmap2 _ e_cond) as [[? cond_e] |]; [| discriminate Hr].
           destruct (ub_free_expr cond_e); cbn [negb] in Hr; [| discriminate Hr].
-          destruct (reify_ir_seg phase fuel' bmap hdr_id hdr_phis false (cur_bid :: visited) cur_bid br1 lmap2); [discriminate Hr |].
-          destruct (reify_ir_seg phase fuel' bmap hdr_id hdr_phis false (cur_bid :: visited) cur_bid br2 lmap2); inversion Hr; left; exact Hub_all.
+          destruct (reify_ir_seg phase fuel' bmap hdr_id hdr_phis false (cur_bid :: visited) cur_bid br1 lmap2);
+            [discriminate Hr |].
+          destruct (reify_ir_seg phase fuel' bmap hdr_id hdr_phis false (cur_bid :: visited) cur_bid br2 lmap2);
+            inversion Hr; left; exact Hub_all.
         - destruct t; cbn [ir_seg_eval_spec]; exact Hub_all || (left; exact Hub_all).
         - inversion Hr; exact Hub_all. }
       assert (Hpres12 : forall r, In r wr_keep -> RM.find r env2 = RM.find r env_prev).
@@ -1267,7 +1327,8 @@ Proof.
       destruct term; try discriminate Hr.
       * destruct v as [[[rw | | | | | | | | | |] | |] op]; try discriminate Hr.
         destruct (is_supported_bit_width rw) eqn:Esup; [| discriminate Hr].
-        destruct (reify_pure_exp lmap2 (Some (DTYPE_Base (DTYPE_I rw))) op) as [[rw0 ret_e] |] eqn:Ere; [| discriminate Hr].
+        destruct (reify_pure_exp lmap2 (Some (DTYPE_Base (DTYPE_I rw))) op)
+          as [[rw0 ret_e] |] eqn:Ere; [| discriminate Hr].
         destruct (ub_free_expr ret_e); inversion Hr; subst t; clear Hr; cbn [ir_seg_eval_spec].
         pose proof (check_opt_int_width_some_inv _ _ (reify_pure_exp_top_width _ _ _ _ _ Ere)) as ->.
         destruct (eval_reified_pure_exp op penv lmap2 env2 (Some (DTYPE_Base (DTYPE_I rw))) rw ret_e Henv2 Ere)
@@ -1284,20 +1345,27 @@ Proof.
            eapply pure_cfg_steps_bind; [exact Hst_c |].
            cbn [denote_terminator]; eapply pure_cfg_steps_bind;
              [exact (pure_mcfg_to_pure_cfg _ _ _ _ Hst_r) | apply PCS_Ret; reflexivity].
-      * match goal with x : texp dtyp |- _ => destruct x as [[[rw | | | | | | | | | |] | |] e_cond] end; try discriminate Hr; destruct rw; try discriminate Hr.
-        destruct (reify_pure_exp lmap2 (Some (DTYPE_Base (DTYPE_I 1%positive))) e_cond) as [[cw cond_e] |] eqn:Ercd; [| discriminate Hr].
+      * match goal with
+        | x : texp dtyp |- _ => destruct x as [[[rw | | | | | | | | | |] | |] e_cond]
+        end; try discriminate Hr; destruct rw; try discriminate Hr.
+        destruct (reify_pure_exp lmap2 (Some (DTYPE_Base (DTYPE_I 1%positive))) e_cond)
+          as [[cw cond_e] |] eqn:Ercd; [| discriminate Hr].
         destruct (ub_free_expr cond_e); cbn [negb] in Hr; [| discriminate Hr].
-        destruct (reify_ir_seg phase fuel' bmap hdr_id hdr_phis false (cur_bid :: visited) cur_bid br1 lmap2) as [| dt] eqn:Hdt; [discriminate Hr |].
-        destruct (reify_ir_seg phase fuel' bmap hdr_id hdr_phis false (cur_bid :: visited) cur_bid br2 lmap2) as [| df] eqn:Hdf; [discriminate Hr |].
+        destruct (reify_ir_seg phase fuel' bmap hdr_id hdr_phis false (cur_bid :: visited) cur_bid br1 lmap2)
+          as [| dt] eqn:Hdt; [discriminate Hr |].
+        destruct (reify_ir_seg phase fuel' bmap hdr_id hdr_phis false (cur_bid :: visited) cur_bid br2 lmap2)
+          as [| df] eqn:Hdf; [discriminate Hr |].
         inversion Hr; subst t; clear Hr; cbn [ir_seg_eval_spec].
         pose proof (check_opt_int_width_some_inv _ _ (reify_pure_exp_top_width _ _ _ _ _ Ercd)) as ->.
-        destruct (eval_reified_pure_exp e_cond penv lmap2 env2 (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive cond_e Henv2 Ercd)
+        destruct (eval_reified_pure_exp e_cond penv lmap2 env2
+                    (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive cond_e Henv2 Ercd)
           as [[Hub_cd _] | [dv_cd [Hev_cd [Hsc_cd Hst_cd]]]].
         -- left; intro sigma; eapply denote_cfg_from_block_ub; [exact Efb |].
            unfold denote_block; rewrite Etm.
            eapply cfg_steps_to_ub_bind_r; [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ Hstp_ph) |].
            eapply cfg_steps_to_ub_bind_r; [exact (pure_cfg_to_cfg_ret sigma _ _ _ _ Hst_c) |].
-           cbn [denote_terminator]; unfold denote_exp'; apply cfg_steps_to_ub_bind_l, mcfg_to_cfg_steps_ub; exact (Hub_cd sigma).
+           cbn [denote_terminator]; unfold denote_exp';
+             apply cfg_steps_to_ub_bind_l, mcfg_to_cfg_steps_ub; exact (Hub_cd sigma).
         -- destruct Hsc_cd as [-> | [cbit ->]].
            ++ left; intro sigma; eapply denote_cfg_from_block_ub; [exact Efb |].
               unfold denote_block; rewrite Etm.
@@ -1320,37 +1388,45 @@ Proof.
               ** split; [| split; [exact Hpres12 |]].
                  --- destruct ((@Integers.unsigned 1%positive cbit =? 1)%Z) eqn:Eb.
                      +++ assert (Hcbit : @Integers.one 1%positive = cbit).
-                         { apply Integers.same_bits_eq; intros i Hi; change (@Integers.zwordsize 1%positive) with 1%Z in Hi.
+                         { apply Integers.same_bits_eq; intros i Hi;
+                             change (@Integers.zwordsize 1%positive) with 1%Z in Hi.
                            assert (Hi0 : i = 0%Z) by lia; subst i.
                            apply Z.eqb_eq in Eb; unfold Integers.testbit; rewrite Eb; reflexivity. }
                          rewrite Hcbit; exact Hev_cd.
                      +++ assert (Hcbit : @Integers.zero 1%positive = cbit).
-                         { pose proof (@Integers.unsigned_range 1%positive cbit) as Hrng1; change (@Integers.modulus 1%positive) with 2%Z in Hrng1.
+                         { pose proof (@Integers.unsigned_range 1%positive cbit) as Hrng1;
+                             change (@Integers.modulus 1%positive) with 2%Z in Hrng1.
                            apply Z.eqb_neq in Eb; assert (Hz0 : @Integers.unsigned 1%positive cbit = 0%Z) by lia.
-                           apply Integers.same_bits_eq; intros i Hi; change (@Integers.zwordsize 1%positive) with 1%Z in Hi.
+                           apply Integers.same_bits_eq; intros i Hi;
+                             change (@Integers.zwordsize 1%positive) with 1%Z in Hi.
                            assert (Hi0 : i = 0%Z) by lia; subst i; unfold Integers.testbit; rewrite Hz0; reflexivity. }
                          rewrite Hcbit; exact Hev_cd.
                  --- rewrite ir_seg_written_ids_acc_shift in Hwr.
-                     destruct (ir_seg_written_ids_acc phase fuel' bmap hdr_id false (cur_bid :: visited) br1 []) as [| wr1] eqn:Ewr1;
-                       cbn [mc_sum_map] in Hwr; [discriminate Hwr |].
+                     destruct (ir_seg_written_ids_acc phase fuel' bmap hdr_id false (cur_bid :: visited) br1 [])
+                       as [| wr1] eqn:Ewr1; cbn [mc_sum_map] in Hwr; [discriminate Hwr |].
                      rewrite ir_seg_written_ids_acc_shift in Hwr.
-                     destruct (ir_seg_written_ids_acc phase fuel' bmap hdr_id false (cur_bid :: visited) br2 []) as [| wr2] eqn:Ewr2;
-                       cbn [mc_sum_map] in Hwr; [discriminate Hwr |].
+                     destruct (ir_seg_written_ids_acc phase fuel' bmap hdr_id false (cur_bid :: visited) br2 [])
+                       as [| wr2] eqn:Ewr2; cbn [mc_sum_map] in Hwr; [discriminate Hwr |].
                      inversion Hwr; subst wr_all; clear Hwr.
                      assert (Hdisj1 : disjoint_raw_ids wr_keep wr1 = true).
                      { unfold disjoint_raw_ids in *; rewrite forallb_forall in *; intros x Hx.
                        pose proof (Hdisj x Hx) as Hnx; apply negb_true_iff in Hnx; apply negb_true_iff.
                        destruct (raw_id_in_list x wr1) eqn:Ex1; [| reflexivity].
                        exfalso; rewrite raw_id_in_list_spec in Ex1.
-                       assert (Htru : raw_id_in_list x (wr2 ++ wr1 ++ code_written_ids_acc (blk_code b) (if req_step then [] else push_phi_ids_acc (blk_phis b) [])) = true)
-                         by (apply raw_id_in_list_spec; apply in_app_iff; right; apply in_app_iff; left; exact Ex1).
+                       assert (Htru : raw_id_in_list x
+                         (wr2 ++ wr1 ++ code_written_ids_acc (blk_code b)
+                            (if req_step then [] else push_phi_ids_acc (blk_phis b) [])) = true)
+                         by (apply raw_id_in_list_spec; apply in_app_iff; right;
+                             apply in_app_iff; left; exact Ex1).
                        rewrite Htru in Hnx; discriminate Hnx. }
                      assert (Hdisj2 : disjoint_raw_ids wr_keep wr2 = true).
                      { unfold disjoint_raw_ids in *; rewrite forallb_forall in *; intros x Hx.
                        pose proof (Hdisj x Hx) as Hnx; apply negb_true_iff in Hnx; apply negb_true_iff.
                        destruct (raw_id_in_list x wr2) eqn:Ex2; [| reflexivity].
                        exfalso; rewrite raw_id_in_list_spec in Ex2.
-                       assert (Htru : raw_id_in_list x (wr2 ++ wr1 ++ code_written_ids_acc (blk_code b) (if req_step then [] else push_phi_ids_acc (blk_phis b) [])) = true)
+                       assert (Htru : raw_id_in_list x
+                         (wr2 ++ wr1 ++ code_written_ids_acc (blk_code b)
+                            (if req_step then [] else push_phi_ids_acc (blk_phis b) [])) = true)
                          by (apply raw_id_in_list_spec; apply in_app_iff; left; exact Ex2).
                        rewrite Htru in Hnx; discriminate Hnx. }
                      destruct (@Integers.unsigned 1%positive cbit =? 1)%Z;
@@ -1365,7 +1441,9 @@ Proof.
           pose proof (Hdisj x Hx) as Hnx; apply negb_true_iff in Hnx; apply negb_true_iff.
           destruct (raw_id_in_list x wr_n) eqn:Exn; [| reflexivity].
           exfalso; rewrite raw_id_in_list_spec in Exn.
-          assert (Htru : raw_id_in_list x (wr_n ++ code_written_ids_acc (blk_code b) (if req_step then [] else push_phi_ids_acc (blk_phis b) [])) = true)
+          assert (Htru : raw_id_in_list x
+            (wr_n ++ code_written_ids_acc (blk_code b)
+               (if req_step then [] else push_phi_ids_acc (blk_phis b) [])) = true)
             by (apply raw_id_in_list_spec; apply in_app_iff; left; exact Exn).
           rewrite Htru in Hnx; discriminate Hnx. }
         assert (Htau_j : pure_cfg_steps_to_tau env_prev (@denote_cfg_from Pa bmap None (bid_from, cur_bid))

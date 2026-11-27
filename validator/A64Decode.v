@@ -586,7 +586,8 @@ Proof.
   destruct (N.eqb (bit_slice w 24%N 5%N) 17%N).
   { destruct (N.leb 2%N (bit_slice w 22%N 2%N) ||
               (if N.eqb (bit_slice w 31%N 1%N) 1%N && negb (N.eqb (bit_slice w 29%N 1%N) 1%N) then false
-               else N.eqb (bit_slice w 5%N 5%N) 31%N || (negb (N.eqb (bit_slice w 29%N 1%N) 1%N) && N.eqb (bit_slice w 0%N 5%N) 31%N)));
+               else N.eqb (bit_slice w 5%N 5%N) 31%N ||
+                    (negb (N.eqb (bit_slice w 29%N 1%N) 1%N) && N.eqb (bit_slice w 0%N 5%N) 31%N)));
       [discriminate H | inversion H; subst; reflexivity]. }
   destruct (N.eqb (bit_slice w 23%N 6%N) 36%N).
   { destruct (negb (N.eqb (bit_slice w 31%N 1%N) 1%N) && N.eqb (bit_slice w 22%N 1%N) 1%N);
@@ -621,7 +622,8 @@ Proof.
   { destruct (N.eqb (bit_slice w 21%N 1%N) 1%N) eqn:E21; cbn [negb] in H.
     - destruct (N.eqb (bit_slice w 22%N 2%N) 0%N && N.leb (bit_slice w 10%N 3%N) 4%N) eqn:Eand;
         cbn [negb orb] in H; [| discriminate H].
-      destruct (N.eqb (bit_slice w 5%N 5%N) 31%N || (negb (N.eqb (bit_slice w 29%N 1%N) 1%N) && N.eqb (bit_slice w 0%N 5%N) 31%N));
+      destruct (N.eqb (bit_slice w 5%N 5%N) 31%N ||
+                (negb (N.eqb (bit_slice w 29%N 1%N) 1%N) && N.eqb (bit_slice w 0%N 5%N) 31%N));
         cbn [orb] in H; [discriminate H |].
       apply andb_true_iff in Eand as [_ He4]; inversion H; subst; cbn [a64_inst_valid dai_inst]; exact He4.
     - destruct (N.eqb (bit_slice w 22%N 2%N) 3%N) eqn:Esh3,

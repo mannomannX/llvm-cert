@@ -559,7 +559,8 @@ Fixpoint parse_cert_expr_fueled (fuel : nat) (let_env : list (string * positive)
             end
           else if String.eqb tag "binop" then
             match args with
-            | [op_sx; w_sx; SList (SAtom f_tag :: [nuw_sx; nsw_sx; ex_sx; dj_sx]);
+            | [op_sx; w_sx;
+               SList (SAtom f_tag :: [nuw_sx; nsw_sx; ex_sx; dj_sx]);
                lhs_sx; rhs_sx] =>
                 if String.eqb f_tag "flags" then
                   match parse_cert_binop op_sx, parse_bit_width_sexp w_sx,
@@ -612,7 +613,8 @@ Fixpoint parse_cert_expr_fueled (fuel : nat) (let_env : list (string * positive)
             end
           else if String.eqb tag "cast" then
             match args with
-            | [k_sx; fw_sx; tw_sx; SList (SAtom f_tag :: [nn_sx; nuw_sx; nsw_sx]); op_sx] =>
+            | [k_sx; fw_sx; tw_sx;
+               SList (SAtom f_tag :: [nn_sx; nuw_sx; nsw_sx]); op_sx] =>
                 if String.eqb f_tag "flags" then
                   match parse_cert_cast_kind k_sx,
                         parse_bit_width_sexp fw_sx, parse_bit_width_sexp tw_sx,
@@ -1109,7 +1111,8 @@ Qed.
 
 Definition parse_value_equiv_sexp (sx : sexp) : string + value_equivalence :=
   match sx with
-  | SList [SAtom tag; sr_sx; tr_sx; w_sx; se_sx; te_sx] =>
+  | SList [SAtom tag; sr_sx; tr_sx;
+           w_sx; se_sx; te_sx] =>
       if String.eqb tag "equiv" then
         match parse_nonempty_str sr_sx, parse_nonempty_str tr_sx,
               parse_bit_width_sexp w_sx,
@@ -1257,7 +1260,8 @@ Definition parse_block_cert_kind (sx : sexp) : string + block_cert_kind :=
 
 Definition parse_block_cert_sexp (sx : sexp) : string + block_certificate :=
   match sx with
-  | SList [SAtom tag; src_sx; tgt_sx; kind_sx; ub_sx; eq_sx; mem_sx] =>
+  | SList [SAtom tag; src_sx; tgt_sx; kind_sx;
+           ub_sx; eq_sx; mem_sx] =>
       if String.eqb tag "block" then
         match parse_tagged_nonempty_str_sexp "src-bb" src_sx,
               parse_tagged_nonempty_str_sexp "tgt-bb" tgt_sx,
@@ -1304,7 +1308,8 @@ Qed.
 
 Definition parse_cutpoint_inv_sexp (sx : sexp) : string + loop_cutpoint_invariant :=
   match sx with
-  | SList [SAtom tag; sh_sx; th_sx; g_sx; eq_sx; mem_sx] =>
+  | SList [SAtom tag; sh_sx; th_sx; g_sx;
+           eq_sx; mem_sx] =>
       if String.eqb tag "cutpoint-inv" then
         match parse_tagged_nonempty_str_sexp "src-hdr" sh_sx,
               parse_tagged_nonempty_str_sexp "tgt-hdr" th_sx,

@@ -119,7 +119,8 @@ Definition mc_mem_size_eqb (a b : mc_mem_size) : bool :=
 
 Lemma mc_mem_size_eqb_eq : forall a b, mc_mem_size_eqb a b = true <-> a = b.
 Proof.
-  intros [] []; cbn; split; intro H; try reflexivity; discriminate H.
+  intros [] []; cbn; split; intro H;
+    try reflexivity; discriminate H.
 Qed.
 
 Definition mc_frame_cap : Z := 65536%Z.
@@ -369,22 +370,28 @@ Proof.
   destruct sz.
   - rewrite Hmod1.
     cbn [mc_mem_bits].
-    assert (Heq : @Integers.repr 8%positive (Z.of_N (Z.to_N (@Integers.unsigned 64%positive v) mod Z.to_N (@Integers.modulus 8%positive))) =
-                  @Integers.repr 8%positive (@Integers.unsigned 64%positive v)).
+    assert (Heq :
+      @Integers.repr 8%positive
+        (Z.of_N (Z.to_N (@Integers.unsigned 64%positive v) mod Z.to_N (@Integers.modulus 8%positive))) =
+      @Integers.repr 8%positive (@Integers.unsigned 64%positive v)).
     { rewrite N2Z.inj_mod, !Z2N.id by (try pose proof (@Integers.modulus_pos 8%positive); lia).
       apply Integers.eqm_samerepr, Integers.eqm_sym, Integers.eqmod_mod. }
     rewrite Heq; reflexivity.
   - rewrite Hmod2.
     cbn [mc_mem_bits].
-    assert (Heq : @Integers.repr 16%positive (Z.of_N (Z.to_N (@Integers.unsigned 64%positive v) mod Z.to_N (@Integers.modulus 16%positive))) =
-                  @Integers.repr 16%positive (@Integers.unsigned 64%positive v)).
+    assert (Heq :
+      @Integers.repr 16%positive
+        (Z.of_N (Z.to_N (@Integers.unsigned 64%positive v) mod Z.to_N (@Integers.modulus 16%positive))) =
+      @Integers.repr 16%positive (@Integers.unsigned 64%positive v)).
     { rewrite N2Z.inj_mod, !Z2N.id by (try pose proof (@Integers.modulus_pos 16%positive); lia).
       apply Integers.eqm_samerepr, Integers.eqm_sym, Integers.eqmod_mod. }
     rewrite Heq; reflexivity.
   - rewrite Hmod4.
     cbn [mc_mem_bits].
-    assert (Heq : @Integers.repr 32%positive (Z.of_N (Z.to_N (@Integers.unsigned 64%positive v) mod Z.to_N (@Integers.modulus 32%positive))) =
-                  @Integers.repr 32%positive (@Integers.unsigned 64%positive v)).
+    assert (Heq :
+      @Integers.repr 32%positive
+        (Z.of_N (Z.to_N (@Integers.unsigned 64%positive v) mod Z.to_N (@Integers.modulus 32%positive))) =
+      @Integers.repr 32%positive (@Integers.unsigned 64%positive v)).
     { rewrite N2Z.inj_mod, !Z2N.id by (try pose proof (@Integers.modulus_pos 32%positive); lia).
       apply Integers.eqm_samerepr, Integers.eqm_sym, Integers.eqmod_mod. }
     rewrite Heq; reflexivity.
@@ -503,7 +510,8 @@ Definition mc_sym_stack_agrees {Pa : Params}
              | MS_8 => v64
              | _ =>
                  let w := mc_mem_bits s in
-                 @Integers.repr 64%positive (@Integers.unsigned w (@Integers.repr w (@Integers.unsigned 64%positive v64)))
+                 @Integers.repr 64%positive
+                   (@Integers.unsigned w (@Integers.repr w (@Integers.unsigned 64%positive v64)))
              end) /\
           mc_stk_load mstk o s true =
             (match s with
@@ -599,12 +607,25 @@ Proof.
           exists v64,
             eval_closed_cert_expr penv foracle e = raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive v64)) /\
             mc_stk_load (mc_stk_store mstk off sz v) o s false =
-              (match s with MS_8 => v64 | _ => @Integers.repr 64%positive (@Integers.unsigned (mc_mem_bits s) (@Integers.repr (mc_mem_bits s) (@Integers.unsigned 64%positive v64))) end) /\
+              (match s with
+               | MS_8 => v64
+               | _ =>
+                   @Integers.repr 64%positive
+                     (@Integers.unsigned (mc_mem_bits s)
+                       (@Integers.repr (mc_mem_bits s) (@Integers.unsigned 64%positive v64)))
+               end) /\
             mc_stk_load (mc_stk_store mstk off sz v) o s true =
-              (match s with MS_8 => v64 | _ => @Integers.repr 64%positive (@Integers.signed (mc_mem_bits s) (@Integers.repr (mc_mem_bits s) (@Integers.unsigned 64%positive v64))) end)
+              (match s with
+               | MS_8 => v64
+               | _ =>
+                   @Integers.repr 64%positive
+                     (@Integers.signed (mc_mem_bits s)
+                       (@Integers.repr (mc_mem_bits s) (@Integers.unsigned 64%positive v64)))
+               end)
       | MSV_SavedReg r => s = MS_8 /\ mc_stk_load (mc_stk_store mstk off sz v) o MS_8 false = read_init r
       | MSV_StackPtr p => s = MS_8 /\ (- mc_frame_cap <= p <= 0)%Z /\
-          mc_stk_load (mc_stk_store mstk off sz v) o MS_8 false = @Integers.add 64%positive sp0 (@Integers.repr 64%positive p)
+          mc_stk_load (mc_stk_store mstk off sz v) o MS_8 false =
+          @Integers.add 64%positive sp0 (@Integers.repr 64%positive p)
       end)
       (List.filter (fun '(o, s, _) => mc_intervals_disjoint off sz o s) astk)).
   { apply Forall_forall; intros [[o s] sv0] Hin.
@@ -690,7 +711,8 @@ Proof.
     destruct Hentry as (v64 & He & Hlu & Hls).
     cbn [mc_sym_val_agrees].
     rewrite (mc_sym_load_expr_sound penv foracle sz is_signed e v64 He).
-    destruct sz; destruct is_signed; try (rewrite Hlu; reflexivity); try (rewrite Hls; reflexivity).
+    destruct sz; destruct is_signed;
+      try (rewrite Hlu; reflexivity); try (rewrite Hls; reflexivity).
   - destruct sz; try discriminate Hld; inversion Hld; subst sv.
     rewrite (mc_stk_load_ms8_signed_irrel mstk off is_signed false).
     destruct Hentry as [_ Hmv]; exact Hmv.

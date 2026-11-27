@@ -344,7 +344,8 @@ Lemma ibinop_to_cert_roundtrip : forall iop op fl,
   ibinop_to_cert iop = (op, fl) ->
   cert_to_ibinop op fl = iop /\ wf_binop_flags_for op fl = true.
 Proof.
-  intros iop op fl H; destruct iop; inversion H; subst; cbn; auto.
+  intros iop op fl H;
+    destruct iop; inversion H; subst; cbn; auto.
 Qed.
 
 Definition cert_to_icmp (pr : cert_icmp_pred) : LLVMAst.icmp :=
@@ -836,7 +837,8 @@ Proof.
   destruct db as [| sz i | | | | | |]; try discriminate.
   - destruct (Pos.eqb sz w) eqn:E; [| discriminate].
     apply Pos.eqb_eq in E; subst sz.
-    inversion H; subst; split; [reflexivity | right; exists i; reflexivity].
+    inversion H; subst;
+      split; [reflexivity | right; exists i; reflexivity].
   - inversion H; subst; split; [reflexivity | left; reflexivity].
 Qed.
 
@@ -1078,9 +1080,12 @@ Proof.
       try (left; eexists; reflexivity);
       (right; exists (DVALUE_Base DVALUE_Poison); split; [reflexivity | left; reflexivity]).
   - destruct op; cbn;
-      try (right; exists (DVALUE_Base DVALUE_Poison); split; [reflexivity | left; reflexivity]);
+      try (right; exists (DVALUE_Base DVALUE_Poison);
+           split; [reflexivity | left; reflexivity]);
       (destruct (Z.eq_dec (@Integers.signed w ir) (-1)%Z); cbn;
-       [left; eexists; reflexivity | right; exists (DVALUE_Base DVALUE_Poison); split; [reflexivity | left; reflexivity]]).
+       [left; eexists; reflexivity
+       | right; exists (DVALUE_Base DVALUE_Poison);
+         split; [reflexivity | left; reflexivity]]).
   - destruct op; cbn;
       try (left; eexists; reflexivity);
       (right; exists (DVALUE_Base DVALUE_Poison); split; [reflexivity | left; reflexivity]).
@@ -1091,7 +1096,8 @@ Proof.
              end;
       cbn;
       try (left; eexists; reflexivity);
-      (right; eexists; split; [reflexivity | first [left; reflexivity | right; eexists; reflexivity]]).
+      (right; eexists; split;
+       [reflexivity | first [left; reflexivity | right; eexists; reflexivity]]).
 Qed.
 
 Lemma eval_icmp_wf_scalar :
@@ -1112,7 +1118,8 @@ Proof.
       repeat match goal with
              | |- context [if ?b then _ else _] => destruct b
              end;
-      cbn; (eexists; split; [reflexivity | first [left; reflexivity | right; eexists; reflexivity]]).
+      cbn; (eexists; split;
+            [reflexivity | first [left; reflexivity | right; eexists; reflexivity]]).
 Qed.
 
 Lemma eval_cast_wf_scalar :
@@ -1211,7 +1218,8 @@ Lemma string_in_list_spec : forall s xs,
 Proof.
   intros s xs; induction xs as [| x rest IH]; cbn; [split; [discriminate | contradiction] |].
   destruct (String.eqb s x) eqn:E.
-  - apply String.eqb_eq in E; subst; split; [intros _; left; reflexivity | intros _; reflexivity].
+  - apply String.eqb_eq in E; subst; split;
+      [intros _; left; reflexivity | intros _; reflexivity].
   - apply String.eqb_neq in E; destruct IH as [IH1 IH2]; split.
     + intros H; right; exact (IH1 H).
     + intros [Hx | H]; [exfalso; apply E; symmetry; exact Hx | exact (IH2 H)].
@@ -1227,7 +1235,8 @@ Proof.
         [discriminate | intros H; exfalso; apply H; left; reflexivity].
     + apply String.eqb_neq in E; destruct (IH nm) as [IH1 IH2]; split.
       * intros Hnot [Hk | Hr]; [apply E, Hk | exact (IH1 Hnot Hr)].
-      * intros Hnot; apply IH2; intros Hr; apply Hnot; right; exact Hr.
+      * intros Hnot; apply IH2; intros Hr;
+          apply Hnot; right; exact Hr.
 Qed.
 
 Theorem eval_cert_expr_totality :
@@ -1252,7 +1261,8 @@ Proof.
     | w o IHo
     | bs body IHbs IHb ] using cert_expr_ind_nested;
     intros let_widths penv lenv foracle Hwt Hlenv Hpenv.
-  - right; eexists; split; [reflexivity | right; eexists; reflexivity].
+  - right; eexists;
+      split; [reflexivity | right; eexists; reflexivity].
   - right; eexists; split; [reflexivity | left; reflexivity].
   - cbn [wt_cert_expr eval_cert_expr cert_expr_bit_width] in *.
     pose proof (Hlenv nm) as Hlnm.
@@ -1313,9 +1323,11 @@ Proof.
     assert (Hpc : wf_param_env_for (collect_free_vars (List.map fst let_widths) c) penv)
       by (intros x wx Hx; apply Hpenv, in_app_iff; left; exact Hx).
     assert (Hpt : wf_param_env_for (collect_free_vars (List.map fst let_widths) t) penv)
-      by (intros x wx Hx; apply Hpenv, in_app_iff; right; apply in_app_iff; left; exact Hx).
+      by (intros x wx Hx; apply Hpenv, in_app_iff; right;
+          apply in_app_iff; left; exact Hx).
     assert (Hpf : wf_param_env_for (collect_free_vars (List.map fst let_widths) f) penv)
-      by (intros x wx Hx; apply Hpenv, in_app_iff; right; apply in_app_iff; right; exact Hx).
+      by (intros x wx Hx; apply Hpenv, in_app_iff; right;
+          apply in_app_iff; right; exact Hx).
     destruct (IHc _ penv lenv foracle Hwtc Hlenv Hpc) as [[msgc ->] | [vc [-> Hwfc]]];
       [left; exists msgc; reflexivity | cbn [eou_bind]].
     destruct (IHt _ penv lenv foracle Hwtt Hlenv Hpt) as [[msgt ->] | [vt [-> Hwft]]];
@@ -1331,7 +1343,8 @@ Proof.
       [left; exists msgo; reflexivity | cbn [eou_bind]].
     rewrite Hwo in Hwfo.
     destruct Hwfo as [-> | [io ->]];
-      (right; eexists; split; [reflexivity | right; eexists; reflexivity]).
+      (right; eexists;
+       split; [reflexivity | right; eexists; reflexivity]).
   - cbn [wt_cert_expr collect_free_vars eval_cert_expr cert_expr_bit_width] in *.
     destruct (wf_let_binds_step wt_cert_expr let_widths [] bs) as [env' |] eqn:Hbs;
       [| discriminate].
@@ -1362,7 +1375,8 @@ Proof.
         destruct (collect_bind_vars collect_free_vars (bnm :: List.map fst cur_lw) rx)
           as [b_end vs_rx] eqn:Hbv.
         assert (Hp_be : wf_param_env_for (collect_free_vars (List.map fst cur_lw) be) penv).
-        { intros x wx Hx; apply Hcp; rewrite <- app_assoc; apply in_app_iff; left; exact Hx. }
+        { intros x wx Hx; apply Hcp; rewrite <- app_assoc;
+            apply in_app_iff; left; exact Hx. }
         cbn [eval_let_binds].
         destruct (IHbe cur_lw penv cur_le foracle Hwt_be Hcle Hp_be)
           as [[msg_be ->] | [dv_be [-> Hwf_dv]]];
@@ -1372,7 +1386,8 @@ Proof.
         + intros q; cbn [lookup_let_width lookup_let_val].
           destruct (String.eqb bnm q); [exact Hwf_dv | exact (Hcle q)].
         + cbn [List.map fst]; rewrite Hbv.
-          intros x wx Hx; apply Hcp; rewrite <- app_assoc; apply in_app_iff; right; exact Hx. }
+          intros x wx Hx; apply Hcp; rewrite <- app_assoc;
+            apply in_app_iff; right; exact Hx. }
     destruct (Hstep let_widths [] lenv Hbs Hlenv Hpenv)
       as [[msg ->] | [lenv' [-> [Hlenv' Hpenv']]]];
       [left; exists msg; reflexivity | cbn [eou_bind]].
@@ -1450,7 +1465,8 @@ Proof.
     destruct (eval_cert_expr penv lenv foracle o) as [| | | vo] eqn:Eo; [discriminate.. |].
     cbn [eou_bind] in Hev.
     pose proof (IHo _ _ _ _ _ Hwto Eo) as Hwfo; rewrite Hwo in Hwfo.
-    destruct Hwfo as [-> | [io ->]]; inversion Hev; subst; right; eexists; reflexivity.
+    destruct Hwfo as [-> | [io ->]]; inversion Hev; subst;
+      right; eexists; reflexivity.
   - cbn [wt_cert_expr eval_cert_expr cert_expr_bit_width] in *.
     destruct (wf_let_binds_step wt_cert_expr let_widths [] bs) as [env' |] eqn:Hbs;
       [| discriminate].
@@ -1542,7 +1558,8 @@ Proof.
       repeat match goal with
              | |- context [if ?b then _ else _] => destruct b
              end;
-      cbn; (eexists; split; [reflexivity | first [left; reflexivity | right; eexists; reflexivity]]).
+      cbn; (eexists; split;
+            [reflexivity | first [left; reflexivity | right; eexists; reflexivity]]).
 Qed.
 
 Lemma check_scalar_width_not_ub :
@@ -2184,8 +2201,10 @@ Proof.
   - exact (IHo m V Hm He).
   - apply incl_app; [| apply incl_app].
     + apply (IHc m V Hm); intros x Hx; apply He, in_app_iff; left; exact Hx.
-    + apply (IHt m V Hm); intros x Hx; apply He, in_app_iff; right; apply in_app_iff; left; exact Hx.
-    + apply (IHf m V Hm); intros x Hx; apply He, in_app_iff; right; apply in_app_iff; right; exact Hx.
+    + apply (IHt m V Hm); intros x Hx; apply He, in_app_iff; right;
+        apply in_app_iff; left; exact Hx.
+    + apply (IHf m V Hm); intros x Hx; apply He, in_app_iff; right;
+        apply in_app_iff; right; exact Hx.
   - exact (IHo m V Hm He).
   - assert (Hstep :
       forall cur_m,
@@ -2201,12 +2220,14 @@ Proof.
       - destruct (collect_bind_vars collect_free_vars (bnm :: List.map fst cur_m) rx)
           as [b_end vs_rx] eqn:Hbv.
         assert (Hbe_incl : incl (collect_free_vars (List.map fst cur_m) be) V).
-        { intros x Hx; apply Hce; rewrite <- app_assoc; apply in_app_iff; left; exact Hx. }
+        { intros x Hx; apply Hce; rewrite <- app_assoc;
+            apply in_app_iff; left; exact Hx. }
         pose proof (IHbe cur_m V Hcm Hbe_incl) as Hexp_be.
         apply (IHrx ((bnm, expand_lets_with cur_m be) :: cur_m)).
         + intros k ce [Heq | Hin]; [inversion Heq; subst; exact Hexp_be | exact (Hcm k ce Hin)].
         + cbn [List.map fst]; rewrite Hbv.
-          intros x Hx; apply Hce; rewrite <- app_assoc; apply in_app_iff; right; exact Hx. }
+          intros x Hx; apply Hce; rewrite <- app_assoc;
+            apply in_app_iff; right; exact Hx. }
     destruct (collect_bind_vars collect_free_vars (List.map fst m) bs) as [b' vs_bs] eqn:Hbv.
     assert (He' : incl (let '(b0, vs0) := collect_bind_vars collect_free_vars (List.map fst m) bs in
                         vs0 ++ collect_free_vars b0 body) V)
@@ -2345,9 +2366,11 @@ Proof.
     assert (Hpc : wf_param_env_for (collect_free_vars (List.map fst lw) c) penv)
       by (intros x wx Hx; apply Hpenv, in_app_iff; left; exact Hx).
     assert (Hpt : wf_param_env_for (collect_free_vars (List.map fst lw) t) penv)
-      by (intros x wx Hx; apply Hpenv, in_app_iff; right; apply in_app_iff; left; exact Hx).
+      by (intros x wx Hx; apply Hpenv, in_app_iff; right;
+          apply in_app_iff; left; exact Hx).
     assert (Hpf : wf_param_env_for (collect_free_vars (List.map fst lw) f) penv)
-      by (intros x wx Hx; apply Hpenv, in_app_iff; right; apply in_app_iff; right; exact Hx).
+      by (intros x wx Hx; apply Hpenv, in_app_iff; right;
+          apply in_app_iff; right; exact Hx).
     apply eou_bind_equiv_cong; [exact (IHc lw penv lenv foracle Hwtc Hdc Hsync Hpc) | intros vc].
     apply eou_bind_equiv_cong; [exact (IHt lw penv lenv foracle Hwtt Hdt Hsync Hpt) | intros vt].
     apply eou_bind_equiv_cong; [exact (IHf lw penv lenv foracle Hwtf Hdf Hsync Hpf) | intros vf].
@@ -2415,7 +2438,8 @@ Proof.
         intros cur_lw seen cur_le Hs Hd Hsy Hcp;
         cbn [wf_let_binds_step] in Hs; cbn [wf_let_dag_binds] in Hd.
       - inversion Hs; subst cur_lw; cbn in Hcp.
-        right; exists cur_le; split; [reflexivity | split; [reflexivity | split; [exact Hsy | exact Hcp]]].
+        right; exists cur_le; split;
+          [reflexivity | split; [reflexivity | split; [exact Hsy | exact Hcp]]].
       - cbn in IHbe.
         destruct (is_dollar_let_name bnm && negb (string_in_list bnm seen) &&
                   wt_cert_expr cur_lw be) eqn:Hok; [| discriminate].
@@ -2425,7 +2449,8 @@ Proof.
         destruct (collect_bind_vars collect_free_vars (bnm :: List.map fst cur_lw) rx)
           as [b_end vs_rx] eqn:Hbv.
         assert (Hp_be : wf_param_env_for (collect_free_vars (List.map fst cur_lw) be) penv).
-        { intros x wx Hx; apply Hcp; rewrite <- app_assoc; apply in_app_iff; left; exact Hx. }
+        { intros x wx Hx; apply Hcp; rewrite <- app_assoc;
+            apply in_app_iff; left; exact Hx. }
         pose proof (IHbe cur_lw penv cur_le foracle Hwt_be Hd_be Hsy Hp_be) as Heq_be.
         destruct Hsy as (Hval_c & Hsub_c & Hev_c & Hfv_c).
         destruct (expand_lets_with_typing be cur_lw (let_val_exprs cur_le) Hwt_be Hsub_c)
@@ -2468,7 +2493,8 @@ Proof.
                   rewrite (proj1 Hsub_c); exact Hp_be.
                ++ exact (Hfv_c k ce Hin_k).
           * cbn [List.map fst]; rewrite Hbv.
-            intros x wx Hx; apply Hcp; rewrite <- app_assoc; apply in_app_iff; right; exact Hx. }
+            intros x wx Hx; apply Hcp; rewrite <- app_assoc;
+              apply in_app_iff; right; exact Hx. }
     destruct (Hstep lw [] lenv Hbs Hdag_bs Hsync Hpenv)
       as [[msg_l [msg_r [-> ->]]] | [lenv' [-> [Hle_exprs [Hsync' Hpenv']]]]].
     + cbn; exact I.

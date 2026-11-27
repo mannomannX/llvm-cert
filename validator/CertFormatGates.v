@@ -76,7 +76,8 @@ Local Open Scope bool_scope.
 Local Open Scope string_scope.
 Local Open Scope list_scope.
 
-(** ** 6. Syntax & Prototype Contract Soundness Gates ([F-17], [F-18], [F-19], [F-21], [F-30], [F-31], [F-32], [F-34]) *)
+(** ** 6. Syntax & Prototype Contract Soundness Gates
+       ([F-17], [F-18], [F-19], [F-21], [F-30], [F-31], [F-32], [F-34]) *)
 
 (** *** 6.1 Structural Comparators on Vellvm Types & Expressions *)
 
@@ -107,7 +108,8 @@ Lemma ident_eqb_eq : forall i1 i2, ident_eqb i1 i2 = true <-> i1 = i2.
 Proof.
   intros [r1 | r1] [r2 | r2]; cbn;
     try (split; intros; discriminate);
-    (rewrite raw_id_eqb_eq; split; intros H; [subst; reflexivity | inversion H; reflexivity]).
+    (rewrite raw_id_eqb_eq; split;
+     intros H; [subst; reflexivity | inversion H; reflexivity]).
 Qed.
 
 Definition fp_variant_eqb (f1 f2 : floating_point_variant) : bool :=
@@ -115,7 +117,8 @@ Definition fp_variant_eqb (f1 f2 : floating_point_variant) : bool :=
 
 Lemma fp_variant_eqb_eq : forall f1 f2, fp_variant_eqb f1 f2 = true <-> f1 = f2.
 Proof.
-  intros [] []; cbn; split; intros H; try reflexivity; discriminate.
+  intros [] []; cbn; split;
+    intros H; try reflexivity; discriminate.
 Qed.
 
 Fixpoint typ_eqb (t1 t2 : typ) {struct t1} : bool :=
@@ -210,14 +213,17 @@ Proof.
     | sz1 u1 IHu1
     | id1 ] using AstLib.typ_ind; intros t2; split; intros H;
     try (subst; apply typ_eqb_refl).
-  - destruct t2; cbn in H; try discriminate; apply Pos.eqb_eq in H; subst; reflexivity.
-  - destruct t2; cbn in H; try discriminate; apply Pos.eqb_eq in H; subst; reflexivity.
+  - destruct t2; cbn in H; try discriminate;
+      apply Pos.eqb_eq in H; subst; reflexivity.
+  - destruct t2; cbn in H; try discriminate;
+      apply Pos.eqb_eq in H; subst; reflexivity.
   - destruct t2; cbn in H; try discriminate; reflexivity.
   - destruct t2 as [| | | [u2 |] | | | | | | | | | | | | |]; cbn in H; try discriminate.
     apply IHu1 in H; subst; reflexivity.
   - destruct t2 as [| | | [u2 |] | | | | | | | | | | | | |]; cbn in H; try discriminate; reflexivity.
   - destruct t2; cbn in H; try discriminate; reflexivity.
-  - destruct t2; cbn in H; try discriminate; apply fp_variant_eqb_eq in H; subst; reflexivity.
+  - destruct t2; cbn in H; try discriminate;
+      apply fp_variant_eqb_eq in H; subst; reflexivity.
   - destruct t2; cbn in H; try discriminate; reflexivity.
   - destruct t2; cbn in H; try discriminate; reflexivity.
   - destruct t2; cbn in H; try discriminate; reflexivity.
@@ -244,7 +250,8 @@ Proof.
   - destruct t2; cbn in H; try discriminate; reflexivity.
   - destruct t2; cbn in H; try discriminate.
     apply andb_true_iff in H as [Hn Ht]; apply N.eqb_eq in Hn; apply IHu1 in Ht; subst; reflexivity.
-  - destruct t2; cbn in H; try discriminate; apply ident_eqb_eq in H; subst; reflexivity.
+  - destruct t2; cbn in H; try discriminate;
+      apply ident_eqb_eq in H; subst; reflexivity.
 Qed.
 
 Definition dtyp_eqb (d1 d2 : dtyp) : bool :=
@@ -467,7 +474,8 @@ Definition block_no_concurrency {T : Set} (b : block T) : bool :=
 Definition cfg_no_concurrency {T : Set} (G : CFG.cfg T) : bool :=
   forallb block_no_concurrency (blks G).
 
-(** *** 6.4 [F-19], [F-32] & [F-60]: Prototype Contract, Calling Conventions, ABI Parameter Attributes, and Function Attributes *)
+(** *** 6.4 [F-19], [F-32] & [F-60]: Prototype Contract, Calling Conventions,
+       ABI Parameter Attributes, and Function Attributes *)
 
 Fixpoint forallb2 {A B : Type} (f : A -> B -> bool) (xs : list A) (ys : list B) {struct xs} : bool :=
   match xs, ys with
@@ -789,7 +797,8 @@ Proof.
   intros src_fattrs tgt_fattrs H; unfold check_fn_attrs_contract in H.
   rewrite !andb_true_iff in H.
   destruct H as (((((Hu1 & Hu2) & Hsem) & Hnr) & Hnuw) & Hnc).
-  repeat split; try assumption; intros Hx; rewrite Hx in *; cbn in *; assumption.
+  repeat split; try assumption;
+    intros Hx; rewrite Hx in *; cbn in *; assumption.
 Qed.
 
 Definition decl_ann_supported {T : Set} (a : annotation T) : bool :=
@@ -1804,7 +1813,8 @@ Definition check_mcfg_identified_typs_defined_diag (side : string) (M : CFG.mcfg
       (fun _ dc =>
         guard_err (decl_identified_defined env dc)
           (fun _ => diag "ir-type"
-            ("undefined identified type referenced by " ++ side ++ " declaration '" ++ cf_raw_id_str (dc_name dc) ++ "'")))
+            ("undefined identified type referenced by " ++ side ++
+             " declaration '" ++ cf_raw_id_str (dc_name dc) ++ "'")))
       0 (m_declarations M))
     (fun _ =>
   cf_check_idx_diag_acc
@@ -1825,19 +1835,22 @@ Proof.
               (fun _ p =>
                 guard_err (typ_identified_defined (m_type_defs M) (snd p))
                   (fun _ => diag "ir-type"
-                    ("undefined identified type referenced by " ++ side ++ " type def '" ++ cf_ident_str (fst p) ++ "'")))
+                    ("undefined identified type referenced by " ++ side ++
+                     " type def '" ++ cf_ident_str (fst p) ++ "'")))
               0 (m_type_defs M)) as [| []] eqn:E1; cbn [bind_err] in H; [discriminate H |].
   destruct (cf_check_idx_diag_acc
               (fun _ g =>
                 guard_err (global_identified_defined (m_type_defs M) g)
                   (fun _ => diag "ir-type"
-                    ("undefined identified type referenced by " ++ side ++ " global '" ++ cf_raw_id_str (g_ident g) ++ "'")))
+                    ("undefined identified type referenced by " ++ side ++
+                     " global '" ++ cf_raw_id_str (g_ident g) ++ "'")))
               0 (m_globals M)) as [| []] eqn:E2; cbn [bind_err] in H; [discriminate H |].
   destruct (cf_check_idx_diag_acc
               (fun _ dc =>
                 guard_err (decl_identified_defined (m_type_defs M) dc)
                   (fun _ => diag "ir-type"
-                    ("undefined identified type referenced by " ++ side ++ " declaration '" ++ cf_raw_id_str (dc_name dc) ++ "'")))
+                    ("undefined identified type referenced by " ++ side ++
+                     " declaration '" ++ cf_raw_id_str (dc_name dc) ++ "'")))
               0 (m_declarations M)) as [| []] eqn:E3; cbn [bind_err] in H; [discriminate H |].
   pose proof (cf_check_idx_diag_acc_sound _ (fun p => typ_identified_defined (m_type_defs M) (snd p)) _ _
                 (fun _ p Ht => guard_err_inr _ _ Ht) E1) as Ht1.

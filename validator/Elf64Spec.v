@@ -73,8 +73,8 @@ Definition elf_length_tr {A : Type} (xs : list A) : nat :=
 Lemma elf_length_tr_acc_eq : forall {A : Type} (acc : nat) (xs : list A),
   elf_length_tr_acc acc xs = (acc + List.length xs)%nat.
 Proof.
-  intros A acc xs; revert acc; induction xs as [| x rest IH]; intro acc; cbn;
-    [lia | rewrite IH; lia].
+  intros A acc xs; revert acc; induction xs as [| x rest IH];
+  intro acc; cbn; [lia | rewrite IH; lia].
 Qed.
 
 Lemma elf_length_tr_eq : forall {A : Type} (xs : list A),
@@ -250,7 +250,8 @@ Lemma length_firstn_le_exact : forall (A : Type) (n : nat) (xs : list A),
   n <= List.length xs ->
   List.length (firstn n xs) = n.
 Proof.
-  intros A n; induction n as [| n' IH]; intros [| x xs'] Hle; cbn in *; try lia; try reflexivity.
+  intros A n; induction n as [| n' IH]; intros [| x xs'] Hle;
+  cbn in *; try lia; try reflexivity.
   f_equal; apply IH; lia.
 Qed.
 
@@ -350,7 +351,8 @@ Definition elf_arch_eqb (a b : elf_arch) : bool :=
 
 Lemma elf_arch_eqb_eq : forall a b, elf_arch_eqb a b = true <-> a = b.
 Proof.
-  intros [] []; cbn; split; intro H; try reflexivity; discriminate H.
+  intros [] []; cbn; split; intro H;
+  try reflexivity; discriminate H.
 Qed.
 
 Variant elf_kind : Set :=
@@ -368,7 +370,8 @@ Definition elf_kind_eqb (a b : elf_kind) : bool :=
 
 Lemma elf_kind_eqb_eq : forall a b, elf_kind_eqb a b = true <-> a = b.
 Proof.
-  intros [] []; cbn; split; intro H; try reflexivity; discriminate H.
+  intros [] []; cbn; split; intro H;
+  try reflexivity; discriminate H.
 Qed.
 
 Definition elf_arch_name (a : elf_arch) : string :=
@@ -547,7 +550,9 @@ Definition parse_elf64_header (raw : list N) : string + elf64_hdr :=
           | None, _ =>
               inl (diag "elf-hdr" ("unsupported e_type=" ++ diag_N_dec e_type ++ " (expected ET_REL/ET_EXEC/ET_DYN)"))
           | _, None =>
-              inl (diag "elf-hdr" ("unsupported e_machine=" ++ diag_N_dec e_machine ++ " (expected EM_RISCV/EM_AARCH64)"))
+              inl (diag "elf-hdr"
+                     ("unsupported e_machine=" ++ diag_N_dec e_machine ++
+                      " (expected EM_RISCV/EM_AARCH64)"))
           end
     | _, _, _, _, _, _, _, _, _, _, _ =>
         inl (diag "elf-hdr" "truncated ELF64 header fields")
@@ -1310,12 +1315,15 @@ Fixpoint collect_call_rela_entries_acc
   match rs with
   | [] => inr (elf_rev_tr acc_rev)
   | r :: rest =>
-      match check_and_collect_call_rela_entry arch kind shdrs syms syms_len rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees r with
+      match check_and_collect_call_rela_entry arch kind shdrs syms syms_len
+              rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees r with
       | inl err => inl err
       | inr None =>
-          collect_call_rela_entries_acc arch kind shdrs syms syms_len rela_shndx rela_info target_shndx (S entry_idx) fn_lo fn_hi allowed_callees acc_rev rest
+          collect_call_rela_entries_acc arch kind shdrs syms syms_len
+            rela_shndx rela_info target_shndx (S entry_idx) fn_lo fn_hi allowed_callees acc_rev rest
       | inr (Some p) =>
-          collect_call_rela_entries_acc arch kind shdrs syms syms_len rela_shndx rela_info target_shndx (S entry_idx) fn_lo fn_hi allowed_callees (p :: acc_rev) rest
+          collect_call_rela_entries_acc arch kind shdrs syms syms_len
+            rela_shndx rela_info target_shndx (S entry_idx) fn_lo fn_hi allowed_callees (p :: acc_rev) rest
       end
   end.
 
@@ -1324,7 +1332,8 @@ Definition collect_call_rela_entries
   (syms : list elf64_sym) (syms_len : N) (rela_shndx rela_info target_shndx : nat)
   (fn_lo fn_hi : N) (allowed_callees : list string) (rs : list elf64_rela)
   : string + list (N * string) :=
-  collect_call_rela_entries_acc arch kind shdrs syms syms_len rela_shndx rela_info target_shndx 0 fn_lo fn_hi allowed_callees [] rs.
+  collect_call_rela_entries_acc arch kind shdrs syms syms_len
+    rela_shndx rela_info target_shndx 0 fn_lo fn_hi allowed_callees [] rs.
 
 Definition collect_one_rela_section
   (raw : list N) (arch : elf_arch) (kind : elf_kind) (shdrs : list elf64_shdr)
@@ -1361,7 +1370,8 @@ Definition collect_one_rela_section
                 | None =>
                     inl (diag "elf-reloc" ("truncated SHT_RELA entries in shdr#" ++ diag_nat_dec (esh_idx sh)))
                 | Some rs =>
-                    collect_call_rela_entries arch kind shdrs syms syms_len (esh_idx sh) (esh_info sh) target_shndx fn_lo fn_hi allowed_callees rs
+                    collect_call_rela_entries arch kind shdrs syms syms_len
+                      (esh_idx sh) (esh_info sh) target_shndx fn_lo fn_hi allowed_callees rs
                 end
           | _, _ =>
               inl (diag "elf-reloc"
@@ -1377,7 +1387,8 @@ Fixpoint collect_all_call_relocs_acc
   match rem_shdrs with
   | [] => inr (elf_rev_tr acc_rev)
   | sh :: rest =>
-      match collect_one_rela_section raw arch kind all_shdrs syms syms_len target_shndx fn_lo fn_hi allowed_callees sh with
+      match collect_one_rela_section raw arch kind all_shdrs syms syms_len
+              target_shndx fn_lo fn_hi allowed_callees sh with
       | inl err => inl err
       | inr xs =>
           collect_all_call_relocs_acc raw arch kind all_shdrs syms syms_len target_shndx fn_lo fn_hi allowed_callees
@@ -1389,7 +1400,8 @@ Definition collect_all_call_relocs
   (raw : list N) (arch : elf_arch) (kind : elf_kind) (all_shdrs rem_shdrs : list elf64_shdr)
   (syms : list elf64_sym) (syms_len : N) (target_shndx : nat) (fn_lo fn_hi : N)
   (allowed_callees : list string) : string + list (N * string) :=
-  collect_all_call_relocs_acc raw arch kind all_shdrs syms syms_len target_shndx fn_lo fn_hi allowed_callees [] rem_shdrs.
+  collect_all_call_relocs_acc raw arch kind all_shdrs syms syms_len
+    target_shndx fn_lo fn_hi allowed_callees [] rem_shdrs.
 
 Fixpoint collect_exec_callee_addrs_acc
   (kind : elf_kind) (shdrs : list elf64_shdr) (syms : list elf64_sym)
@@ -1487,20 +1499,24 @@ Definition elf64_extract_func_with_calls
                                     match eh_kind hdr with
                                     | EK_Rel =>
                                         let syms_len := N.of_nat (elf_length_tr syms) in
-                                        match collect_all_call_relocs raw (eh_arch hdr) EK_Rel shdrs shdrs syms syms_len (esym_shndx sym) rlo rhi allowed_callees with
+                                        match collect_all_call_relocs raw (eh_arch hdr) EK_Rel shdrs shdrs
+                                                syms syms_len (esym_shndx sym) rlo rhi allowed_callees with
                                         | inl err => inl err
                                         | inr rels =>
                                             if negb (elf_no_dup_N (elf_map_tr fst rels)) then
                                               inl (diag "elf-reloc"
-                                                     ("duplicate call relocation offset inside slice of '" ++ fn_name ++ "'"))
+                                                     ("duplicate call relocation offset inside slice of '" ++
+                                                      fn_name ++ "'"))
                                             else
                                               inr (sl, mk_elf_call_info rels [])
                                         end
                                     | EK_Exec | EK_Dyn =>
-                                        match check_exec_relocations_diag raw (eh_arch hdr) shdrs (esym_shndx sym) rlo rhi with
+                                        match check_exec_relocations_diag raw (eh_arch hdr) shdrs
+                                                (esym_shndx sym) rlo rhi with
                                         | inl err => inl err
                                         | inr tt =>
-                                            match collect_exec_callee_addrs (eh_kind hdr) shdrs syms allowed_callees with
+                                            match collect_exec_callee_addrs (eh_kind hdr) shdrs syms
+                                                    allowed_callees with
                                             | inl err => inl err
                                             | inr addrs => inr (sl, mk_elf_call_info [] addrs)
                                             end
@@ -1521,7 +1537,8 @@ Definition elf64_extract_func_with_calls
 
 Lemma check_and_collect_call_rela_entry_sound :
   forall arch kind shdrs syms syms_len rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees r opt_p,
-    check_and_collect_call_rela_entry arch kind shdrs syms syms_len rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees r = inr opt_p ->
+    check_and_collect_call_rela_entry arch kind shdrs syms syms_len
+      rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees r = inr opt_p ->
     rela_info = target_shndx ->
     (fn_lo <= fn_hi)%N ->
     forall rel_off cname,
@@ -1540,7 +1557,8 @@ Lemma check_and_collect_call_rela_entry_sound :
         nth_error shdrs (esym_shndx csym) = Some csh /\
         exists r_, compute_func_slice_offsets EK_Rel csh csym = inr r_.
 Proof.
-  intros arch kind shdrs syms syms_len rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees r opt_p H Hi Hlohi rel_off cname Hop.
+  intros arch kind shdrs syms syms_len rela_shndx rela_info target_shndx
+    entry_idx fn_lo fn_hi allowed_callees r opt_p H Hi Hlohi rel_off cname Hop.
   unfold check_and_collect_call_rela_entry in H.
   destruct (elf_arch_eqb arch EA_Riscv64 && (N.eqb (er_type r) R_RISCV_RELAX || N.eqb (er_type r) R_RISCV_ALIGN));
     [discriminate H |].
@@ -1579,27 +1597,33 @@ Qed.
 
 Lemma check_and_collect_call_rela_entry_disallows_relax :
   forall arch kind shdrs syms syms_len rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees r opt_p,
-    check_and_collect_call_rela_entry arch kind shdrs syms syms_len rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees r = inr opt_p ->
+    check_and_collect_call_rela_entry arch kind shdrs syms syms_len
+      rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees r = inr opt_p ->
     (elf_arch_eqb arch EA_Riscv64 && (N.eqb (er_type r) R_RISCV_RELAX || N.eqb (er_type r) R_RISCV_ALIGN)) = false.
 Proof.
-  intros arch kind shdrs syms syms_len rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees r opt_p H.
+  intros arch kind shdrs syms syms_len rela_shndx rela_info target_shndx
+    entry_idx fn_lo fn_hi allowed_callees r opt_p H.
   unfold check_and_collect_call_rela_entry in H.
   destruct (elf_arch_eqb arch EA_Riscv64 && (N.eqb (er_type r) R_RISCV_RELAX || N.eqb (er_type r) R_RISCV_ALIGN));
     [discriminate H | reflexivity].
 Qed.
 
 Lemma collect_call_rela_entries_acc_to_exec_check :
-  forall arch kind shdrs syms syms_len rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees acc_rev rs rels,
-    collect_call_rela_entries_acc arch kind shdrs syms syms_len rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees acc_rev rs = inr rels ->
+  forall arch kind shdrs syms syms_len rela_shndx rela_info target_shndx
+    entry_idx fn_lo fn_hi allowed_callees acc_rev rs rels,
+    collect_call_rela_entries_acc arch kind shdrs syms syms_len
+      rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees acc_rev rs = inr rels ->
     (kind = EK_Exec \/ kind = EK_Dyn) ->
     rels = elf_rev_tr acc_rev /\
     forallb (rela_entry_allowed arch rela_info target_shndx fn_lo fn_hi) rs = true.
 Proof.
-  intros arch kind shdrs syms syms_len rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees acc_rev rs.
+  intros arch kind shdrs syms syms_len rela_shndx rela_info target_shndx
+    entry_idx fn_lo fn_hi allowed_callees acc_rev rs.
   revert entry_idx acc_rev; induction rs as [| r rest IH]; intros entry_idx acc_rev rels H Hkind;
     cbn [collect_call_rela_entries_acc] in H.
   - inversion H; subst; split; reflexivity.
-  - destruct (check_and_collect_call_rela_entry arch kind shdrs syms syms_len rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees r)
+  - destruct (check_and_collect_call_rela_entry arch kind shdrs syms syms_len
+                rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees r)
       as [| opt_p] eqn:He; [discriminate H |].
     assert (Hnot_rel : rela_entry_allowed arch rela_info target_shndx fn_lo fn_hi r = true /\ opt_p = None).
     { unfold check_and_collect_call_rela_entry in He; unfold rela_entry_allowed.
@@ -1616,19 +1640,23 @@ Qed.
 
 Lemma collect_call_rela_entries_to_exec_check :
   forall arch kind shdrs syms syms_len rela_shndx rela_info target_shndx fn_lo fn_hi allowed_callees rs rels,
-    collect_call_rela_entries arch kind shdrs syms syms_len rela_shndx rela_info target_shndx fn_lo fn_hi allowed_callees rs = inr rels ->
+    collect_call_rela_entries arch kind shdrs syms syms_len
+      rela_shndx rela_info target_shndx fn_lo fn_hi allowed_callees rs = inr rels ->
     (kind = EK_Exec \/ kind = EK_Dyn) ->
     rels = [] /\
     forallb (rela_entry_allowed arch rela_info target_shndx fn_lo fn_hi) rs = true.
 Proof.
   intros arch kind shdrs syms syms_len rela_shndx rela_info target_shndx fn_lo fn_hi allowed_callees rs rels H Hkind.
-  exact (collect_call_rela_entries_acc_to_exec_check arch kind shdrs syms syms_len rela_shndx rela_info target_shndx 0 fn_lo fn_hi allowed_callees [] rs rels H Hkind).
+  exact (collect_call_rela_entries_acc_to_exec_check arch kind shdrs syms syms_len
+           rela_shndx rela_info target_shndx 0 fn_lo fn_hi allowed_callees [] rs rels H Hkind).
 Qed.
 
 Lemma collect_call_rela_entries_acc_rel_sound :
-  forall arch shdrs syms syms_len rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees acc_rev rs rels,
+  forall arch shdrs syms syms_len rela_shndx rela_info target_shndx
+    entry_idx fn_lo fn_hi allowed_callees acc_rev rs rels,
     (fn_lo <= fn_hi)%N ->
-    collect_call_rela_entries_acc arch EK_Rel shdrs syms syms_len rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees acc_rev rs = inr rels ->
+    collect_call_rela_entries_acc arch EK_Rel shdrs syms syms_len
+      rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees acc_rev rs = inr rels ->
     forall rel_off cname,
       In (rel_off, cname) rels ->
       In (rel_off, cname) acc_rev \/
@@ -1652,7 +1680,8 @@ Proof.
     cbn [collect_call_rela_entries_acc] in H.
   - inversion H; subst rels; clear H.
     rewrite elf_rev_tr_eq, <- in_rev in Hin; left; exact Hin.
-  - destruct (check_and_collect_call_rela_entry arch EK_Rel shdrs syms syms_len rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees r)
+  - destruct (check_and_collect_call_rela_entry arch EK_Rel shdrs syms syms_len
+                rela_shndx rela_info target_shndx entry_idx fn_lo fn_hi allowed_callees r)
       as [| [[ro cn] |]] eqn:He; [discriminate H | |].
     + destruct (IH (S entry_idx) ((ro, cn) :: acc_rev) rels Hlohi H rel_off cname Hin)
         as [[Heq | Hacc] | (Hlt & Hcn & [r0 [csym [csh [Hin0 Hr_ok]]]])].
@@ -1665,7 +1694,8 @@ Proof.
         destruct (check_and_collect_call_rela_entry_sound _ _ _ _ _ _ _ _ _ _ _ _ _ _ He Hinfo Hlohi _ _ eq_refl)
           as (_ & Hlt & Hoff & Hty & Hadd & Hcn & [csym [csh Hrest]]).
         split; [exact Hlt | split; [exact Hcn |]].
-        exists r, csym, csh; repeat split; try (left; reflexivity); try assumption; tauto.
+        exists r, csym, csh; repeat split;
+          try (left; reflexivity); try assumption; tauto.
       * left; exact Hacc.
       * right; split; [exact Hlt | split; [exact Hcn |]].
         exists r0, csym, csh; split; [right; exact Hin0 | exact Hr_ok].
@@ -1679,7 +1709,8 @@ Qed.
 Lemma collect_call_rela_entries_rel_sound :
   forall arch shdrs syms syms_len rela_shndx rela_info target_shndx fn_lo fn_hi allowed_callees rs rels,
     (fn_lo <= fn_hi)%N ->
-    collect_call_rela_entries arch EK_Rel shdrs syms syms_len rela_shndx rela_info target_shndx fn_lo fn_hi allowed_callees rs = inr rels ->
+    collect_call_rela_entries arch EK_Rel shdrs syms syms_len
+      rela_shndx rela_info target_shndx fn_lo fn_hi allowed_callees rs = inr rels ->
     forall rel_off cname,
       In (rel_off, cname) rels ->
       (rel_off < fn_hi - fn_lo)%N /\
@@ -1697,15 +1728,19 @@ Lemma collect_call_rela_entries_rel_sound :
         nth_error shdrs (esym_shndx csym) = Some csh /\
         exists r_, compute_func_slice_offsets EK_Rel csh csym = inr r_.
 Proof.
-  intros arch shdrs syms syms_len rela_shndx rela_info target_shndx fn_lo fn_hi allowed_callees rs rels Hlohi H rel_off cname Hin.
-  destruct (collect_call_rela_entries_acc_rel_sound arch shdrs syms syms_len rela_shndx rela_info target_shndx 0 fn_lo fn_hi allowed_callees [] rs rels Hlohi H rel_off cname Hin)
+  intros arch shdrs syms syms_len rela_shndx rela_info target_shndx
+    fn_lo fn_hi allowed_callees rs rels Hlohi H rel_off cname Hin.
+  destruct (collect_call_rela_entries_acc_rel_sound arch shdrs syms syms_len
+              rela_shndx rela_info target_shndx 0 fn_lo fn_hi allowed_callees [] rs rels
+              Hlohi H rel_off cname Hin)
     as [[] | Hres]; exact Hres.
 Qed.
 
 Lemma collect_all_call_relocs_acc_rel_sound :
   forall raw arch all_shdrs syms syms_len target_shndx fn_lo fn_hi allowed_callees acc_rev rem_shdrs rels,
     (fn_lo <= fn_hi)%N ->
-    collect_all_call_relocs_acc raw arch EK_Rel all_shdrs syms syms_len target_shndx fn_lo fn_hi allowed_callees acc_rev rem_shdrs = inr rels ->
+    collect_all_call_relocs_acc raw arch EK_Rel all_shdrs syms syms_len
+      target_shndx fn_lo fn_hi allowed_callees acc_rev rem_shdrs = inr rels ->
     forall rel_off cname,
       In (rel_off, cname) rels ->
       In (rel_off, cname) acc_rev \/
@@ -1723,7 +1758,8 @@ Proof.
     cbn [collect_all_call_relocs_acc] in H.
   - inversion H; subst rels; clear H.
     rewrite elf_rev_tr_eq, <- in_rev in Hin; left; exact Hin.
-  - destruct (collect_one_rela_section raw arch EK_Rel all_shdrs syms syms_len target_shndx fn_lo fn_hi allowed_callees sh)
+  - destruct (collect_one_rela_section raw arch EK_Rel all_shdrs syms syms_len
+                target_shndx fn_lo fn_hi allowed_callees sh)
       as [| xs] eqn:Hx; [discriminate H |].
     destruct (IH (List.rev_append xs acc_rev) rels Hlohi H rel_off cname Hin) as [Hrev | Hres];
       [| right; exact Hres].
@@ -1733,7 +1769,8 @@ Proof.
       destruct (N.eqb (esh_type sh) SHT_RELA); cbn [negb] in Hx; [| inversion Hx; subst; contradiction Hx_rev].
       destruct (nth_error all_shdrs (esh_info sh)); [| discriminate Hx].
       destruct (bit_is_set (esh_flags e) 2%N); cbn [negb] in Hx; [| inversion Hx; subst; contradiction Hx_rev].
-      destruct (N.eqb (esh_entsize sh) 24%N && N.eqb (N.modulo (esh_size sh) 24%N) 0%N); cbn [negb] in Hx; [| discriminate Hx].
+      destruct (N.eqb (esh_entsize sh) 24%N && N.eqb (N.modulo (esh_size sh) 24%N) 0%N);
+        cbn [negb] in Hx; [| discriminate Hx].
       destruct (n_to_nat_checked (elf_length_tr raw) (esh_offset sh)); [| discriminate Hx].
       destruct (n_to_nat_checked (elf_length_tr raw) (esh_size sh)); [| discriminate Hx].
       destruct (Nat.leb (n + Nat.div n0 24 * 24) (elf_length_tr raw)); cbn [negb] in Hx; [| discriminate Hx].
@@ -1748,7 +1785,8 @@ Qed.
 Lemma collect_all_call_relocs_rel_sound :
   forall raw arch all_shdrs rem_shdrs syms syms_len target_shndx fn_lo fn_hi allowed_callees rels,
     (fn_lo <= fn_hi)%N ->
-    collect_all_call_relocs raw arch EK_Rel all_shdrs rem_shdrs syms syms_len target_shndx fn_lo fn_hi allowed_callees = inr rels ->
+    collect_all_call_relocs raw arch EK_Rel all_shdrs rem_shdrs syms syms_len
+      target_shndx fn_lo fn_hi allowed_callees = inr rels ->
     forall rel_off cname,
       In (rel_off, cname) rels ->
       (rel_off < fn_hi - fn_lo)%N /\
@@ -1760,8 +1798,10 @@ Lemma collect_all_call_relocs_rel_sound :
         nth_error all_shdrs (esym_shndx csym) = Some csh /\
         compute_func_slice_offsets EK_Rel csh csym = inr r_.
 Proof.
-  intros raw arch all_shdrs rem_shdrs syms syms_len target_shndx fn_lo fn_hi allowed_callees rels Hlohi H rel_off cname Hin.
-  destruct (collect_all_call_relocs_acc_rel_sound raw arch all_shdrs syms syms_len target_shndx fn_lo fn_hi allowed_callees [] rem_shdrs rels Hlohi H rel_off cname Hin)
+  intros raw arch all_shdrs rem_shdrs syms syms_len target_shndx
+    fn_lo fn_hi allowed_callees rels Hlohi H rel_off cname Hin.
+  destruct (collect_all_call_relocs_acc_rel_sound raw arch all_shdrs syms syms_len
+              target_shndx fn_lo fn_hi allowed_callees [] rem_shdrs rels Hlohi H rel_off cname Hin)
     as [[] | Hres]; exact Hres.
 Qed.
 
@@ -1895,12 +1935,14 @@ Proof.
   inversion Esn as [Hfsz]; clear Esn.
   assert (Hpos_sz : 0 < N.to_nat (esym_size sym)) by lia.
   destruct (eh_kind hdr) eqn:Ehk; cbn zeta in H.
-  - destruct (collect_all_call_relocs raw (eh_arch hdr) EK_Rel shdrs shdrs syms (N.of_nat (elf_length_tr syms)) (esym_shndx sym) rlo rhi allowed_callees)
+  - destruct (collect_all_call_relocs raw (eh_arch hdr) EK_Rel shdrs shdrs syms
+                (N.of_nat (elf_length_tr syms)) (esym_shndx sym) rlo rhi allowed_callees)
       as [| rels] eqn:Erels; [discriminate H |].
     destruct (elf_no_dup_N (elf_map_tr fst rels)) eqn:End; cbn [negb] in H; [| discriminate H].
     rewrite elf_map_tr_eq in End.
     inversion H; subst sl ci; clear H.
-    cbn [efs_arch efs_kind efs_shndx efs_file_off efs_size efs_bytes efs_range_lo efs_range_hi eci_relocs eci_sym_addrs].
+    cbn [efs_arch efs_kind efs_shndx efs_file_off efs_size efs_bytes
+         efs_range_lo efs_range_hi eci_relocs eci_sym_addrs].
     rewrite Ea, Ek in *.
     split; [reflexivity |].
     split; [reflexivity |].
@@ -1924,7 +1966,8 @@ Proof.
     destruct (collect_exec_callee_addrs EK_Exec shdrs syms allowed_callees) as [| addrs] eqn:Ead;
       [discriminate H |].
     inversion H; subst sl ci; clear H.
-    cbn [efs_arch efs_kind efs_shndx efs_file_off efs_size efs_bytes efs_range_lo efs_range_hi eci_relocs eci_sym_addrs].
+    cbn [efs_arch efs_kind efs_shndx efs_file_off efs_size efs_bytes
+         efs_range_lo efs_range_hi eci_relocs eci_sym_addrs].
     rewrite Ea, Ek in *.
     split; [reflexivity |].
     split; [reflexivity |].
@@ -1945,7 +1988,8 @@ Proof.
     destruct (collect_exec_callee_addrs EK_Dyn shdrs syms allowed_callees) as [| addrs] eqn:Ead;
       [discriminate H |].
     inversion H; subst sl ci; clear H.
-    cbn [efs_arch efs_kind efs_shndx efs_file_off efs_size efs_bytes efs_range_lo efs_range_hi eci_relocs eci_sym_addrs].
+    cbn [efs_arch efs_kind efs_shndx efs_file_off efs_size efs_bytes
+         efs_range_lo efs_range_hi eci_relocs eci_sym_addrs].
     rewrite Ea, Ek in *.
     split; [reflexivity |].
     split; [reflexivity |].

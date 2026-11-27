@@ -315,7 +315,8 @@ Proof.
   intros Pa penv foracle rf r Hm Hlt.
   unfold rv_sym_read, rv_oracle_srf.
   destruct (N.eqb r 0%N) eqn:Er0.
-  - apply N.eqb_eq in Er0; subst r; unfold rv_read_reg; cbn [N.eqb]; rewrite eval_ce_const, repr_zero_N; reflexivity.
+  - apply N.eqb_eq in Er0; subst r; unfold rv_read_reg;
+      cbn [N.eqb]; rewrite eval_ce_const, repr_zero_N; reflexivity.
   - apply N.eqb_neq in Er0; assert (Hr : (1 <= r < 32)%N) by lia.
     unfold eval_closed_cert_expr; cbn [eval_cert_expr]; rewrite (Hm r Hr);
       cbn [lookup_let_val check_scalar_width Pos.eqb]; reflexivity.
@@ -342,7 +343,8 @@ Theorem rv_step_sym_oracle_sound :
        | RV_AluReg op is_word rd' rs1 rs2 =>
            rd = rd' /\
            eval_closed_cert_expr penv foracle e =
-             raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive (rv_eval_alu_reg op is_word (rv_read_reg rs1 rf) (rv_read_reg rs2 rf))))
+             raise_ret (DVALUE_Base (@DVALUE_I Pa 64%positive
+               (rv_eval_alu_reg op is_word (rv_read_reg rs1 rf) (rv_read_reg rs2 rf))))
        | _ => False
        end) /\
     (forall cond rs1 rs2 rel,
@@ -357,9 +359,13 @@ Proof.
   intros Pa rvc code dec out penv foracle rf Hdec Hso Hm.
   pose proof (decode_rv64_bytes_single_regs_lt32 rvc code dec Hdec) as [Hreg Hnmul].
   unfold rv_step_sym_oracle in Hso; rewrite Hdec in Hso.
-  destruct (dri_inst dec) as [| rd imm | op is_word rd rs1 imm | op is_word rd rs1 rs2 | sz sgn rd rs1 imm | sz rs1 rs2 imm | cond rs1 rs2 rel | rel |] eqn:Ed;
+  destruct (dri_inst dec) as
+    [| rd imm | op is_word rd rs1 imm | op is_word rd rs1 rs2
+     | sz sgn rd rs1 imm | sz rs1 rs2 imm | cond rs1 rs2 rel | rel |] eqn:Ed;
     cbn [rv_inst_regs_lt32] in Hreg; unfold inst_no_word_mulh in Hnmul; rewrite Ed in Hnmul.
-  - inversion Hso; subst out; repeat split; intros; try discriminate; match goal with H : _ = RV_Branch _ _ _ _ |- _ => discriminate H end.
+  - inversion Hso; subst out;
+      repeat split; intros; try discriminate;
+      match goal with H : _ = RV_Branch _ _ _ _ |- _ => discriminate H end.
   - inversion Hso; subst out; cbn [rso_len rso_rd_write rso_pc_kind rso_br_cond rso_rel_bytes].
     split; [reflexivity | split].
     + intros rd0 e H; unfold rv_oracle_wr in H; destruct (N.eqb rd 0%N);
@@ -378,7 +384,8 @@ Proof.
       { destruct is_word; [| left; reflexivity].
         right; destruct op; repeat split; intro C; discriminate C || discriminate Hnmul. }
       split; [lia | split; [reflexivity |]].
-      apply eval_sym_alu_reg_sound; [exact Hok_m | apply rv_oracle_srf_eval; [exact Hm | lia] | apply rv_oracle_srf_eval; [exact Hm | lia]].
+      apply eval_sym_alu_reg_sound;
+        [exact Hok_m | apply rv_oracle_srf_eval; [exact Hm | lia] | apply rv_oracle_srf_eval; [exact Hm | lia]].
     + intros ? ? ? ? Hbr; discriminate Hbr.
   - discriminate Hso.
   - discriminate Hso.
@@ -387,8 +394,12 @@ Proof.
     intros cond' rs1' rs2' rel' Hbr; inversion Hbr; subst.
     split; [reflexivity | split; [reflexivity | eexists; split; [reflexivity |]]].
     apply eval_sym_br_cond_sound; apply rv_oracle_srf_eval; [exact Hm | lia | exact Hm | lia].
-  - inversion Hso; subst out; repeat split; intros; try discriminate; match goal with H : _ = RV_Branch _ _ _ _ |- _ => discriminate H end.
-  - inversion Hso; subst out; repeat split; intros; try discriminate; match goal with H : _ = RV_Branch _ _ _ _ |- _ => discriminate H end.
+  - inversion Hso; subst out;
+      repeat split; intros; try discriminate;
+      match goal with H : _ = RV_Branch _ _ _ _ |- _ => discriminate H end.
+  - inversion Hso; subst out;
+      repeat split; intros; try discriminate;
+      match goal with H : _ = RV_Branch _ _ _ _ |- _ => discriminate H end.
 Qed.
 
 Lemma sail_divrem_128_width_reduce :
@@ -434,13 +445,21 @@ Proof.
   assert (Hmaxw : @Integers.max_signed w = (@Integers.half_modulus w - 1)%Z) by reflexivity.
   assert (Hmod_half : @Integers.modulus w = (2 * @Integers.half_modulus w)%Z)
     by (rewrite Integers.half_modulus_modulus; reflexivity).
-  assert (Hua128 : @Integers.signed 128%positive (@Integers.repr 128%positive (@Integers.unsigned w a)) = @Integers.unsigned w a)
+  assert (Hua128 :
+    @Integers.signed 128%positive (@Integers.repr 128%positive (@Integers.unsigned w a)) =
+    @Integers.unsigned w a)
     by (apply (@Integers.signed_repr 128%positive); lia).
-  assert (Hub128 : @Integers.signed 128%positive (@Integers.repr 128%positive (@Integers.unsigned w b)) = @Integers.unsigned w b)
+  assert (Hub128 :
+    @Integers.signed 128%positive (@Integers.repr 128%positive (@Integers.unsigned w b)) =
+    @Integers.unsigned w b)
     by (apply (@Integers.signed_repr 128%positive); lia).
-  assert (Hsa128 : @Integers.signed 128%positive (@Integers.repr 128%positive (@Integers.signed w a)) = @Integers.signed w a)
+  assert (Hsa128 :
+    @Integers.signed 128%positive (@Integers.repr 128%positive (@Integers.signed w a)) =
+    @Integers.signed w a)
     by (apply (@Integers.signed_repr 128%positive); lia).
-  assert (Hsb128 : @Integers.signed 128%positive (@Integers.repr 128%positive (@Integers.signed w b)) = @Integers.signed w b)
+  assert (Hsb128 :
+    @Integers.signed 128%positive (@Integers.repr 128%positive (@Integers.signed w b)) =
+    @Integers.signed w b)
     by (apply (@Integers.signed_repr 128%positive); lia).
   assert (Hsbnz : (@Integers.signed w b <> 0)%Z).
   { intro Hz; apply Hbnz; unfold Integers.signed in Hz.
@@ -469,9 +488,13 @@ Proof.
            { intro Heq; rewrite Heq, Hbm1, !Z.eqb_refl in Hov; discriminate Hov. }
            rewrite Hbm1; change (-1)%Z with (Z.opp 1%Z); rewrite Z.quot_opp_r, Z.quot_1_r by discriminate; lia.
         -- assert (Habsb : (2 <= Z.abs (@Integers.signed w b))%Z) by lia.
-           assert (Habsq : (Z.abs (Z.quot (@Integers.signed w a) (@Integers.signed w b)) <= @Integers.half_modulus w / 2)%Z).
+           assert (Habsq :
+             (Z.abs (Z.quot (@Integers.signed w a) (@Integers.signed w b)) <=
+              @Integers.half_modulus w / 2)%Z).
            { rewrite <- Z.quot_abs, Z.quot_div_nonneg by lia.
-             assert (Hd1 : (Z.abs (@Integers.signed w a) / Z.abs (@Integers.signed w b) <= Z.abs (@Integers.signed w a) / 2)%Z)
+             assert (Hd1 :
+               (Z.abs (@Integers.signed w a) / Z.abs (@Integers.signed w b) <=
+                Z.abs (@Integers.signed w a) / 2)%Z)
                by (apply Z.div_le_compat_l; lia).
              assert (Hd2 : (Z.abs (@Integers.signed w a) / 2 <= @Integers.half_modulus w / 2)%Z)
                by (apply Z.div_le_mono; lia).

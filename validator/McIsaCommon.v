@@ -381,7 +381,8 @@ Qed.
 Lemma eval_ce_select_int :
   forall {Pa : Params} (penv : param_env Pa) foracle w c t f (b : bool) vt vf,
     eval_closed_cert_expr penv foracle c =
-      raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if b then @Integers.one 1%positive else @Integers.zero 1%positive))) ->
+      raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive
+        (if b then @Integers.one 1%positive else @Integers.zero 1%positive))) ->
     eval_closed_cert_expr penv foracle t = raise_ret (DVALUE_Base (@DVALUE_I Pa w vt)) ->
     eval_closed_cert_expr penv foracle f = raise_ret (DVALUE_Base (@DVALUE_I Pa w vf)) ->
     eval_closed_cert_expr penv foracle (CE_Select w c t f) =
@@ -492,7 +493,10 @@ Proof.
   - subst v; apply (unsigned_half_modulus_signed_min w _); reflexivity.
   - reflexivity.
   - discriminate H.
-  - exfalso; apply Hsp; rewrite <- (@Integers.repr_unsigned w v), <- (@Integers.repr_unsigned w (@Integers.repr w (@Integers.min_signed w))); f_equal.
+  - exfalso; apply Hsp;
+      rewrite <- (@Integers.repr_unsigned w v),
+        <- (@Integers.repr_unsigned w (@Integers.repr w (@Integers.min_signed w)));
+      f_equal.
     apply (unsigned_half_modulus_signed_min w v); exact H.
 Qed.
 
@@ -524,7 +528,8 @@ Proof.
   apply Integers.same_bits_eq; intros i Hi.
   rewrite !(@Integers.testbit_repr _ _ i Hi).
   assert (Hi64 : (0 <= i < 64)%Z) by (replace 64%Z with (@Integers.zwordsize 64%positive) by reflexivity; exact Hi).
-  rewrite (@Integers.unsigned_repr 128%positive (Z.shiftr (@Integers.unsigned 128%positive (@Integers.repr 128%positive p)) 64%Z)).
+  rewrite (@Integers.unsigned_repr 128%positive
+    (Z.shiftr (@Integers.unsigned 128%positive (@Integers.repr 128%positive p)) 64%Z)).
   - rewrite !Z.shiftr_spec by lia.
     rewrite (@Integers.unsigned_repr_eq 128%positive p).
     change (@Integers.modulus 128%positive) with (2 ^ 128)%Z.
@@ -567,7 +572,8 @@ Definition wf_sym_expr (allowed : list (string * positive)) (w : positive) (e : 
 Lemma wf_sym_bv_const : forall allowed w v,
   wf_sym_expr allowed w (CE_BvConst w v).
 Proof.
-  intros; repeat split; try reflexivity; cbn; rewrite Pos.eqb_refl; reflexivity.
+  intros; repeat split; try reflexivity;
+    cbn; rewrite Pos.eqb_refl; reflexivity.
 Qed.
 
 Lemma wf_sym_bv_z : forall allowed w z,

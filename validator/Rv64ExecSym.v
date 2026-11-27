@@ -464,7 +464,10 @@ Definition rv_val_write (r : N) (sv : mc_sym_val) (vrf : rv_val_regs) : rv_val_r
   if N.eqb r 0%N then vrf else fun r' => if N.eqb r' r then sv else vrf r'.
 
 Definition rv_preserved_non_sp_regs : list N :=
-  [1; 8; 9; 18; 19; 20; 21; 22; 23; 24; 25; 26; 27]%N.
+  [1; 8; 9; 18;
+   19; 20; 21; 22;
+   23; 24; 25; 26;
+   27]%N.
 
 Definition rv_sym_epilogue_ok (sp_off : Z) (vrf : rv_val_regs) : bool :=
   Z.eqb sp_off 0%Z &&
@@ -528,7 +531,9 @@ Fixpoint summarize_rv64_dag_at
     ("rv64 at pc=" ++ diag_N_hex pc ++ " sp-off=" ++ diag_Z_dec sp_off)%string
   in
   if pt_has_n pc visited then
-    inl (diag "mc-exec" ("cycle/loop detected in rv64 acyclic DAG mode (" ++ loc tt ++ "); provide a (loop ...) certificate"))
+    inl (diag "mc-exec"
+      ("cycle/loop detected in rv64 acyclic DAG mode (" ++ loc tt ++
+       "); provide a (loop ...) certificate"))
   else
     match fuel with
     | O => inl (diag "mc-exec" ("rv64 symbolic execution fuel exhausted (" ++ loc tt ++ ")"))
@@ -569,7 +574,8 @@ Fixpoint summarize_rv64_dag_at
                 | Some sv =>
                     match rv_sym_step_write rd sv sp_off vrf astk with
                     | None =>
-                        inl (diag "mc-frame" ("invalid sp update or frame bound violation in rv64 alu-imm (" ++ loc tt ++ ")"))
+                        inl (diag "mc-frame"
+                          ("invalid sp update or frame bound violation in rv64 alu-imm (" ++ loc tt ++ ")"))
                     | Some (sp_off', vrf', astk') =>
                         summarize_rv64_dag_at fuel' im visited' next_pc sp_off' vrf' astk' ret_w
                     end
@@ -606,7 +612,9 @@ Fixpoint summarize_rv64_dag_at
                     if mc_slot_in_frame sp_off off sz then
                       match mc_sym_stk_load off sz is_signed astk with
                       | None =>
-                          inl (diag "mc-frame" ("rv64 load from uninitialized stack slot sp+" ++ diag_Z_dec off ++ " (" ++ loc tt ++ ")"))
+                          inl (diag "mc-frame"
+                            ("rv64 load from uninitialized stack slot sp+" ++ diag_Z_dec off ++
+                             " (" ++ loc tt ++ ")"))
                       | Some sv =>
                           match rv_sym_step_write rd sv sp_off vrf astk with
                           | None =>
@@ -620,7 +628,9 @@ Fixpoint summarize_rv64_dag_at
                         ("rv64 load at sp+" ++ diag_Z_dec off ++ " (size " ++ diag_Z_dec (mc_mem_bytes_Z sz) ++
                          ") out of frame bounds (" ++ loc tt ++ ")"))
                 | _ =>
-                    inl (diag "mc-frame" ("rv64 load base register x" ++ diag_N_dec rs1 ++ " is not a stack pointer (" ++ loc tt ++ ")"))
+                    inl (diag "mc-frame"
+                      ("rv64 load base register x" ++ diag_N_dec rs1 ++
+                       " is not a stack pointer (" ++ loc tt ++ ")"))
                 end
             | RV_Store sz rs1 rs2 imm =>
                 match rv_val_read rs1 vrf with
@@ -647,7 +657,9 @@ Fixpoint summarize_rv64_dag_at
                         ("rv64 store at sp+" ++ diag_Z_dec off ++ " (size " ++ diag_Z_dec (mc_mem_bytes_Z sz) ++
                          ") out of frame bounds (" ++ loc tt ++ ")"))
                 | _ =>
-                    inl (diag "mc-frame" ("rv64 store base register x" ++ diag_N_dec rs1 ++ " is not a stack pointer (" ++ loc tt ++ ")"))
+                    inl (diag "mc-frame"
+                      ("rv64 store base register x" ++ diag_N_dec rs1 ++
+                       " is not a stack pointer (" ++ loc tt ++ ")"))
                 end
             | RV_Jal0 rel =>
                 match add_rel_off pc rel with
@@ -679,7 +691,9 @@ Fixpoint summarize_rv64_dag_at
                   | MSV_Expr e_ret =>
                       inr (CD_RetScalar ret_w (rv_trunc_ret_expr ret_w e_ret))
                   | _ =>
-                      inl (diag "mc-exec" ("return register a0/x10 does not hold a value expression at rv64 ret (" ++ loc tt ++ ")"))
+                      inl (diag "mc-exec"
+                        ("return register a0/x10 does not hold a value expression at rv64 ret (" ++
+                         loc tt ++ ")"))
                   end
                 else
                   inl (diag "mc-frame"

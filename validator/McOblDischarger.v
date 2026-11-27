@@ -134,7 +134,8 @@ Definition pevals_ub_free (pevals : list (raw_id * positive * cert_expr)) : bool
 
 Lemma apply_reified_phis_wf : forall pevals allowed lmap,
   wf_pure_lmap allowed lmap ->
-  Forall (fun '(_, w, ce) => is_supported_bit_width w = true /\ cert_expr_bit_width ce = w /\ wf_pure_eval_entry allowed ce) pevals ->
+  Forall (fun '(_, w, ce) =>
+    is_supported_bit_width w = true /\ cert_expr_bit_width ce = w /\ wf_pure_eval_entry allowed ce) pevals ->
   wf_pure_lmap allowed (apply_reified_phis lmap pevals).
 Proof.
   intros pevals allowed lmap Hlmap Hfa; revert lmap Hlmap;
@@ -183,7 +184,8 @@ Proof.
   destruct Hin as [Heq | Hinr].
   - inversion Heq; subst; rewrite String.eqb_refl; reflexivity.
   - destruct (String.eqb x y) eqn:Exy; [| exact (IH base x dv Hnd' Hinr)].
-    apply String.eqb_eq in Exy; subst y; exfalso; apply Hnin, in_map_iff; exists (x, dv); split; [reflexivity | exact Hinr].
+    apply String.eqb_eq in Exy; subst y.
+    exfalso; apply Hnin, in_map_iff; exists (x, dv); split; [reflexivity | exact Hinr].
 Qed.
 
 Lemma overlay_penv_not_in {Pa : Params} :
@@ -193,7 +195,8 @@ Lemma overlay_penv_not_in {Pa : Params} :
 Proof.
   induction binds as [| [y v] rest IH]; intros base nm Hnin; cbn [overlay_penv List.map] in *; [reflexivity |].
   destruct (String.eqb nm y) eqn:Eny.
-  - apply String.eqb_eq in Eny; subst y; exfalso; apply Hnin; left; reflexivity.
+  - apply String.eqb_eq in Eny; subst y.
+    exfalso; apply Hnin; left; reflexivity.
   - apply IH; intro H; apply Hnin; right; exact H.
 Qed.
 
@@ -334,7 +337,8 @@ Proof.
   rewrite Hcx_ev,
           (step_spec_eval_lit st st4 asg asg4 src_no_ub Hs14 Hnub),
           Hno_ub, Hdb_ev,
-          (eval_neg_lit_nonzero asg3 (rbv_psn src_r) (wf_lit_bound_nonzero _ _ (wf_lit_bound_mono _ _ _ (proj1 Hs13) Hps))),
+          (eval_neg_lit_nonzero asg3 (rbv_psn src_r)
+             (wf_lit_bound_nonzero _ _ (wf_lit_bound_mono _ _ _ (proj1 Hs13) Hps))),
           (step_spec_eval_lit st st3 asg asg3 (rbv_psn src_r) Hs13 Hps),
           Hps_f, Hbt_ev,
           (step_spec_eval_lit st st2 asg asg2 (rbv_psn tgt_r) Hs12 Hpt),
@@ -661,12 +665,15 @@ Proof.
                 (wf_lit_bound_mono _ _ _ (proj1 Hs12) Hwg) Hwc_wf Ea2)
       as (asg3 & Hs3 & Hwg'_wf & Hwg'_ev).
     pose proof (step_spec_trans (be_st env) st1 st2 asg asg2 asg3 Hs12 Hs3) as Hs13.
-    pose proof (sat_blast_env_step penv foracle asg1 asg3 env1 st2 Henv1 (step_spec_trans _ _ _ _ _ _ Hs2 Hs3)) as Henv3.
+    pose proof
+      (sat_blast_env_step penv foracle asg1 asg3 env1 st2 Henv1 (step_spec_trans _ _ _ _ _ _ Hs2 Hs3))
+      as Henv3.
     destruct (IH g' (mk_blast_env st2 (be_vars env1) (be_freezes env1)) out_lit env' asg3
                 Hrest Hpenv Hctx Henv3 Hwg'_wf Hem)
       as (asg4 & Hs4 & Henv4 & Hwo_wf & Hwo_ev).
     exists asg4; split; [exact (step_spec_trans _ _ _ _ _ _ Hs13 Hs4) | split; [exact Henv4 | split; [exact Hwo_wf |]]].
-    intros Hg Hpath; apply Hwo_ev; [| intros b1 c1 Hc1; apply Hpath; right; exact Hc1].
+    intros Hg Hpath; apply Hwo_ev;
+      [| intros b1 c1 Hc1; apply Hpath; right; exact Hc1].
     rewrite Hwg'_ev, (step_spec_eval_lit _ _ _ _ _ Hs12 Hwg), Hg, Hwc_ev,
             (eval_neg_lit_nonzero asg1 (rbv_psn rc) (wf_lit_bound_nonzero _ _ Hps1)).
     pose proof (Hpath b c (or_introl eq_refl)) as Hpc.
@@ -684,7 +691,8 @@ Proof.
         cbn [List.map bools_to_Z Zshiftin dvalue_int_unsigned] in Hu;
         rewrite Integers.unsigned_repr in Hu by (change (@Integers.max_unsigned 1%positive) with 1%Z; lia); lia. }
     destruct b; [exact Hevb0 |].
-    rewrite (eval_neg_lit_nonzero asg1 b0 (wf_lit_bound_nonzero _ _ ltac:(inversion Hlbs1; exact H1))), Hevb0; reflexivity.
+    rewrite (eval_neg_lit_nonzero asg1 b0 (wf_lit_bound_nonzero _ _ ltac:(inversion Hlbs1; exact H1))), Hevb0;
+      reflexivity.
 Qed.
 
 Lemma blast_mc_obl_sat {Pa : Params} :
@@ -721,7 +729,8 @@ Proof.
               Hwfp Hpenv Hctx Henv Hwg0 Epl)
     as (asg1 & Hs1 & Henv1 & Hwg1 & Hg1_true).
   destruct o as [ib p w s t | ib p w e]; cbn [obl_is_body obl_path] in *.
-  - rewrite !andb_true_iff in Hwfo; destruct Hwfo as (((((((((Hwts & Hwtt) & Hbws) & Hbwt) & Hlfs) & Hlft) & _) & _) & Hsubs) & Hsubt).
+  - rewrite !andb_true_iff in Hwfo.
+    destruct Hwfo as (((((((((Hwts & Hwtt) & Hbws) & Hbwt) & Hlfs) & Hlft) & _) & _) & Hsubs) & Hsubt).
     apply Pos.eqb_eq in Hbws; apply Pos.eqb_eq in Hbwt.
     destruct (blast_cert_expr ctx [] (mc_ms_opt s) s env1) as [[rs env2] |] eqn:Ebs; [| discriminate Hbl].
     destruct (blast_cert_expr ctx [] (mc_ms_opt t) t env2) as [[rt env3] |] eqn:Ebt; [| discriminate Hbl].
@@ -816,7 +825,8 @@ Proof.
       [exact (step_spec_refl _ _ (proj1 Henv)) | split; [exact Henv | split]].
     + rewrite elf_rev_tr_eq; unfold wf_lits_bound in *; rewrite Forall_forall in Hwacc |- *.
       intros l Hl; rewrite <- in_rev in Hl; exact (Hwacc l Hl).
-    + intros Hall; split; [constructor | intros l Hl; apply Hall; rewrite elf_rev_tr_eq, <- in_rev; exact Hl].
+    + intros Hall; split;
+        [constructor | intros l Hl; apply Hall; rewrite elf_rev_tr_eq, <- in_rev; exact Hl].
   - cbn [forallb] in Hwf; apply andb_true_iff in Hwf as [Ho Hrest].
     destruct (blast_mc_obl ctx body_hyp_lit env o) as [[cx env1] |] eqn:Ebo; [| discriminate Hbl].
     destruct (blast_mc_obl_sat ctx penv foracle known_vars opt_inv is_body_mode body_hyp_lit env o cx env1 asg
@@ -826,7 +836,14 @@ Proof.
       by exact (wf_lit_bound_mono _ _ _ (proj1 Hs1) Hwbh).
     assert (Hwacc1 : wf_lits_bound (bs_next_var (be_st env1)) (cx :: acc))
       by (constructor; [exact Hwcx | exact (wf_lits_bound_mono _ _ _ (proj1 Hs1) Hwacc)]).
-    assert (Hbh1_true : is_body_mode = true -> match opt_inv with None => True | Some inv_e => eval_closed_cert_expr penv foracle inv_e = raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.one 1%positive))) end -> eval_lit asg1 body_hyp_lit = true).
+    assert (Hbh1_true : is_body_mode = true ->
+      match opt_inv with
+      | None => True
+      | Some inv_e =>
+          eval_closed_cert_expr penv foracle inv_e =
+          raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.one 1%positive)))
+      end ->
+      eval_lit asg1 body_hyp_lit = true).
     { intros Hbm Hinv; rewrite (step_spec_eval_lit _ _ _ _ _ Hs1 Hwbh); exact (Hbh_true Hbm Hinv). }
     destruct (IH env1 (cx :: acc) cexs env' asg1 Hrest Hpenv Hctx Henv1 Hbh1_wf Hwacc1 Hbh1_true Hbl)
       as (asg2 & Hs2 & Henv2 & Hwcxs & Hrest_sound).
@@ -865,7 +882,8 @@ Proof.
   destruct (blast_mc_obls_list_acc_sat ctx penv foracle known_vars opt_inv is_body_mode body_hyp_lit
               obls env [] cexs env' asg Hwf Hpenv Hctx Henv Hwbh (Forall_nil _) Hbh_true Hbl)
     as (asg' & Hs & Henv' & Hwc & Hfa).
-  exists asg'; split; [exact Hs | split; [exact Henv' | split; [exact Hwc | intro Hall; exact (proj1 (Hfa Hall))]]].
+  exists asg'; split;
+    [exact Hs | split; [exact Henv' | split; [exact Hwc | intro Hall; exact (proj1 (Hfa Hall))]]].
 Qed.
 
 Theorem check_mc_loop_obls_sound {Pa : Params} :
@@ -887,7 +905,8 @@ Proof.
     unfold obl_wf_exprs in Hwfo; apply andb_true_iff in Hwfo as [_ Hwfo].
     destruct o as [ib p w s t | ib p w e]; cbn in Hal; try discriminate Hal.
     destruct ib; [discriminate Hal |]; destruct p; [| discriminate Hal].
-    rewrite !andb_true_iff in Hwfo; destruct Hwfo as (((((((((Hwts & Hwtt) & Hbws) & Hbwt) & Hlfs) & Hlft) & _) & _) & Hsubs) & Hsubt).
+    rewrite !andb_true_iff in Hwfo.
+    destruct Hwfo as (((((((((Hwts & Hwtt) & Hbws) & Hbwt) & Hlfs) & Hlft) & _) & _) & Hsubs) & Hsubt).
     exact (check_expr_refines_sound ctx s t penv foracle Hal
              (vars_subset_b_wf_param_env _ _ penv Hsubs Hpenv)
              (vars_subset_b_wf_param_env _ _ penv Hsubt Hpenv) Hctx). }
@@ -898,7 +917,8 @@ Proof.
                       Forall (mc_obl_holds penv foracle opt_inv is_body_mode) obls).
   { intro Hfr; rewrite Forall_forall in Hfr |- *; intros o Ho.
     destruct (obl_is_alg_ok ctx o) eqn:Eal; [exact (Halg o Ho Eal) |].
-    apply Hfr; rewrite Erem; apply filter_In; split; [exact Ho | rewrite Eal; reflexivity]. }
+    apply Hfr; rewrite Erem; apply filter_In; split;
+      [exact Ho | rewrite Eal; reflexivity]. }
   apply Hfrom_rem.
   destruct rem as [| r0 rem']; [constructor |].
   destruct (build_mc_loop_cnf tag ctx known_vars opt_inv (r0 :: rem')) as [| [nv f]] eqn:Ebld; [discriminate Hchk |].
@@ -912,7 +932,28 @@ Proof.
     by (split; [exact init_blast_state_sat | split; intros; discriminate]).
   destruct (blast_ub_ctx_sat ctx known_vars ctx penv foracle (fun _ => true) init_env
               Hctx Hctx Hpenv Hinit_env) as [asg0 Henv0].
-  set (hyp_res := match opt_inv with None => inr (lit_true, env0) | Some inv_e => if wt_cert_expr [] inv_e && Pos.eqb (cert_expr_bit_width inv_e) 1%positive && is_let_free_expr inv_e && ub_free_expr inv_e && vars_subset_b (collect_free_vars [] inv_e) known_vars then match blast_cert_expr ctx [] (mc_ms_opt inv_e) inv_e env0 with Some (ri, env_i) => let b0 := match rbv_bits ri with x :: _ => x | [] => lit_false end in let '(hlit, st1) := emit_and2_opt (neg_lit (rbv_psn ri)) b0 (be_st env_i) in inr (hlit, mk_blast_env st1 (be_vars env_i) (be_freezes env_i)) | None => inl (diag (tag ++ "-blast")%string "failed to bit-blast loop invariant") end else inl (diag (tag ++ "-inv")%string "loop invariant expression failed typing or variable-scope check") end) in *.
+  set (hyp_res :=
+    match opt_inv with
+    | None => inr (lit_true, env0)
+    | Some inv_e =>
+        if wt_cert_expr [] inv_e &&
+           Pos.eqb (cert_expr_bit_width inv_e) 1%positive &&
+           is_let_free_expr inv_e &&
+           ub_free_expr inv_e &&
+           vars_subset_b (collect_free_vars [] inv_e) known_vars
+        then
+          match blast_cert_expr ctx [] (mc_ms_opt inv_e) inv_e env0 with
+          | Some (ri, env_i) =>
+              let b0 := match rbv_bits ri with x :: _ => x | [] => lit_false end in
+              let '(hlit, st1) := emit_and2_opt (neg_lit (rbv_psn ri)) b0 (be_st env_i) in
+              inr (hlit, mk_blast_env st1 (be_vars env_i) (be_freezes env_i))
+          | None =>
+              inl (diag (tag ++ "-blast")%string "failed to bit-blast loop invariant")
+          end
+        else
+          inl (diag (tag ++ "-inv")%string
+            "loop invariant expression failed typing or variable-scope check")
+    end) in *.
   destruct hyp_res as [| [body_hyp_lit env1]] eqn:Ehyp; [discriminate Ebld |].
   assert (Hhyp_sat : exists asg1,
     sat_blast_env penv foracle asg1 env1 /\
@@ -926,7 +967,12 @@ Proof.
      end ->
      eval_lit asg1 body_hyp_lit = true)).
   { unfold hyp_res in Ehyp; destruct opt_inv as [inv_e |].
-    - destruct (wt_cert_expr [] inv_e && Pos.eqb (cert_expr_bit_width inv_e) 1%positive && is_let_free_expr inv_e && ub_free_expr inv_e && vars_subset_b (collect_free_vars [] inv_e) known_vars) eqn:Ewi; [| discriminate Ehyp].
+    - destruct (wt_cert_expr [] inv_e &&
+                Pos.eqb (cert_expr_bit_width inv_e) 1%positive &&
+                is_let_free_expr inv_e &&
+                ub_free_expr inv_e &&
+                vars_subset_b (collect_free_vars [] inv_e) known_vars) eqn:Ewi;
+        [| discriminate Ehyp].
       rewrite !andb_true_iff in Ewi; destruct Ewi as ((((Hwti & Hbwi) & _) & _) & Hsubi); apply Pos.eqb_eq in Hbwi.
       destruct (blast_cert_expr ctx [] (mc_ms_opt inv_e) inv_e env0) as [[ri env_i] |] eqn:Ebi; [| discriminate Ehyp].
       destruct (blast_cert_expr_sat inv_e ctx [] [] (mc_ms_opt inv_e) penv [] foracle asg0 env0 env_i ri
@@ -940,12 +986,17 @@ Proof.
       destruct (emit_and2_opt_step asg_i (neg_lit (rbv_psn ri)) bi0 (be_st env_i) hlit st1
                   (proj1 Henv_i) (wf_lit_bound_neg _ _ Hpsi) ltac:(inversion Hlbsi; assumption) Ea_h)
         as (asg1 & Hs1 & Hwhl & Hevh).
-      exists asg1; split; [exact (sat_blast_env_step penv foracle asg_i asg1 env_i st1 Henv_i Hs1) | split; [exact Hwhl |]].
-      intros _ Hinv; unfold eval_closed_cert_expr in Hinv; rewrite Evi in Hinv; inversion Hinv; subst vi; clear Hinv.
+      exists asg1; split;
+        [exact (sat_blast_env_step penv foracle asg_i asg1 env_i st1 Henv_i Hs1)
+        | split; [exact Hwhl |]].
+      intros _ Hinv; unfold eval_closed_cert_expr in Hinv;
+        rewrite Evi in Hinv; inversion Hinv; subst vi; clear Hinv.
       unfold rail_matches_dvalue in Hmri.
       destruct (eval_rail_psn asg_i ri) eqn:Epsi; [discriminate Hmri |].
       unfold eval_rail_val in Hmri; rewrite Ebitsi in Hmri.
-      unfold eval_rail_psn in Epsi; rewrite Hevh, (eval_neg_lit_nonzero asg_i _ (wf_lit_bound_nonzero _ _ Hpsi)), Epsi; cbn [negb andb].
+      unfold eval_rail_psn in Epsi.
+      rewrite Hevh, (eval_neg_lit_nonzero asg_i _ (wf_lit_bound_nonzero _ _ Hpsi)), Epsi;
+        cbn [negb andb].
       destruct rbitsi as [| ? ?]; [| cbn in Hleni; discriminate Hleni].
       pose proof (f_equal dvalue_int_unsigned Hmri) as Hu; cbn [List.map bools_to_Z Zshiftin dvalue_int_unsigned] in Hu;
         rewrite (@Integers.unsigned_one 1%positive) in Hu.
@@ -954,9 +1005,11 @@ Proof.
         rewrite Integers.unsigned_repr in Hu by (change (@Integers.max_unsigned 1%positive) with 1%Z; lia); lia].
     - inversion Ehyp; subst body_hyp_lit env1; exists asg0.
       pose proof Henv0 as [[Hwf0 [Ht _]] _]; destruct Hwf0 as [Hge0 _].
-      split; [exact Henv0 | split; [unfold env0, wf_lit_bound, lit_true; lia | intros _ _; cbn [eval_lit]; exact Ht]]. }
+      split; [exact Henv0 |].
+      split; [unfold env0, wf_lit_bound, lit_true; lia | intros _ _; cbn [eval_lit]; exact Ht]. }
   destruct Hhyp_sat as (asg1 & Henv1 & Hbh_wf & Hbh_true).
-  destruct (blast_mc_obls_list ctx body_hyp_lit (r0 :: rem') env1) as [[cex_lits env2] |] eqn:Eobls; [| discriminate Ebld].
+  destruct (blast_mc_obls_list ctx body_hyp_lit (r0 :: rem') env1)
+    as [[cex_lits env2] |] eqn:Eobls; [| discriminate Ebld].
   destruct (emit_or_list_opt cex_lits (be_st env2)) as [any_cex st_or] eqn:Eor.
   inversion Ebld; subst f; clear Ebld.
   destruct (blast_mc_obls_list_sat ctx penv foracle known_vars opt_inv is_body_mode body_hyp_lit (r0 :: rem')
@@ -972,7 +1025,8 @@ Proof.
       by (intros cl [<- | []]; cbn; rewrite Etrue; reflexivity).
     pose proof (add_clauses_sat_intro asg3 st_or [[any_cex]] Hge3 Ha1_3 Hwf_st3 Hcls_wf Hev_st3 Hcls_sat) as Hsat_fin.
     pose proof (check_cex_unsat_sound _ opt_pf Hcun asg3) as Huns.
-    destruct Hsat_fin as [_ [_ Hsat_cnf]]; unfold add_clauses, bs_cnf in Hsat_cnf, Huns; cbn [prepend_clauses_rev fst snd] in Hsat_cnf.
+    destruct Hsat_fin as [_ [_ Hsat_cnf]]; unfold add_clauses, bs_cnf in Hsat_cnf, Huns;
+      cbn [prepend_clauses_rev fst snd] in Hsat_cnf.
     rewrite Huns in Hsat_cnf; discriminate Hsat_cnf. }
   apply Hsound; intros l Hl.
   rewrite Hev_any, existsb_id_map_eval_lit in Hany_false.
@@ -991,10 +1045,17 @@ Definition imposs_obl_cons (is_body : bool) (path : list (bool * cert_expr)) (ac
 
 Lemma imposs_obl_absurd {Pa : Params} :
   forall (penv : param_env Pa) foracle opt_inv (is_body : bool) (path : list (bool * cert_expr)),
-    (is_body = true -> match opt_inv with None => True | Some inv_e => eval_closed_cert_expr penv foracle inv_e = raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.one 1%positive))) end) ->
+    (is_body = true ->
+     match opt_inv with
+     | None => True
+     | Some inv_e =>
+         eval_closed_cert_expr penv foracle inv_e =
+         raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (@Integers.one 1%positive)))
+     end) ->
     (forall (b : bool) (c : cert_expr), In (b, c) path ->
        eval_closed_cert_expr penv foracle c =
-       raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if b then @Integers.one 1%positive else @Integers.zero 1%positive)))) ->
+       raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive
+         (if b then @Integers.one 1%positive else @Integers.zero 1%positive)))) ->
     Forall (mc_obl_holds penv foracle opt_inv is_body) (imposs_obl is_body path) ->
     False.
 Proof.

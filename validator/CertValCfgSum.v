@@ -385,7 +385,8 @@ Proof.
               (fun id fm dt pargs md op idx w0 pnm Hphi Hparg Hu Hpnm =>
                  Hpu_cfg idx w0 pnm
                    (proj2 (in_flat_map _ (blks G) _)
-                     (ex_intro _ b (conj Hb_in (block_param_uses_phi_in _ _ b id fm dt pargs md bid_from op _ Hphi Hparg Hu))))
+                     (ex_intro _ b
+                       (conj Hb_in (block_param_uses_phi_in _ _ b id fm dt pargs md bid_from op _ Hphi Hparg Hu))))
                    Hpnm)
               Hr_phis)
     as [Hinc_sp Hfa_p].
@@ -455,13 +456,15 @@ Proof.
                   (ocfg_map (blks G)) false bid_cur br1 smap_c seen_br)
         as [d_t |] eqn:Hr_t; [| discriminate Hopt].
       inversion Hopt; subst d_term.
-      pose proof (IH blk_uas uf G src_pnames allowed false bid_cur br1 smap_c seen_br d_t Hpu_cfg Hsmap_br Hr_t) as Hwft.
+      pose proof (IH blk_uas uf G src_pnames allowed false bid_cur br1 smap_c seen_br d_t
+                    Hpu_cfg Hsmap_br Hr_t) as Hwft.
       cbn [wf_cfg_dag]; rewrite Hwt, Hbw, Pos.eqb_refl, Hlf, (incl_vars_subset_b _ _ Hfv), Hwft; reflexivity.
     + destruct (summarize_ocfg_dag fuel' blk_uas uf (args G) src_pnames (defined_ids_of_cfg G)
                   (ocfg_map (blks G)) false bid_cur br2 smap_c seen_br)
         as [d_f |] eqn:Hr_f; [| discriminate Hopt].
       inversion Hopt; subst d_term.
-      pose proof (IH blk_uas uf G src_pnames allowed false bid_cur br2 smap_c seen_br d_f Hpu_cfg Hsmap_br Hr_f) as Hwff.
+      pose proof (IH blk_uas uf G src_pnames allowed false bid_cur br2 smap_c seen_br d_f
+                    Hpu_cfg Hsmap_br Hr_f) as Hwff.
       cbn [wf_cfg_dag]; rewrite Hwt, Hbw, Pos.eqb_refl, Hlf, (incl_vars_subset_b _ _ Hfv), Hwff; reflexivity.
     + destruct (summarize_ocfg_dag fuel' blk_uas uf (args G) src_pnames (defined_ids_of_cfg G)
                   (ocfg_map (blks G)) false bid_cur br1 smap_c seen_br)
@@ -470,8 +473,10 @@ Proof.
                   (ocfg_map (blks G)) false bid_cur br2 smap_c seen_br)
         as [d_f |] eqn:Hr_f; [| discriminate Hopt].
       inversion Hopt; subst d_term.
-      pose proof (IH blk_uas uf G src_pnames allowed false bid_cur br1 smap_c seen_br d_t Hpu_cfg Hsmap_br Hr_t) as Hwft.
-      pose proof (IH blk_uas uf G src_pnames allowed false bid_cur br2 smap_c seen_br d_f Hpu_cfg Hsmap_br Hr_f) as Hwff.
+      pose proof (IH blk_uas uf G src_pnames allowed false bid_cur br1 smap_c seen_br d_t
+                    Hpu_cfg Hsmap_br Hr_t) as Hwft.
+      pose proof (IH blk_uas uf G src_pnames allowed false bid_cur br2 smap_c seen_br d_f
+                    Hpu_cfg Hsmap_br Hr_f) as Hwff.
       cbn [wf_cfg_dag]; rewrite Hwt, Hbw, Pos.eqb_refl, Hlf, (incl_vars_subset_b _ _ Hfv), Hwft, Hwff; reflexivity.
   - (* TERM_Br_1 *)
     exact (IH blk_uas uf G src_pnames allowed false bid_cur br smap_c seen_c d_term Hpu_cfg Hsmap_c Hopt).
@@ -540,6 +545,248 @@ Proof.
   apply dtyp_eqb_dec_eq in Hidx; subst dt_a; reflexivity.
 Qed.
 
+Local Lemma summarize_ocfg_src_term_br {Pa : Params} :
+  forall fuel' blk_uas G src_pnames ext_c arg_dtys (vs : list (@dvalue Pa))
+         (foracle : freeze_oracle) bid_from bid_cur (env env_p env_c : rmap (@dvalue Pa))
+         seen_c b pevals cevals smap_c d_term draws_p draws_c
+         tiid op br1 br2 tmd ce_cond seen_br,
+    NoDup src_pnames ->
+    List.length (args G) = List.length vs ->
+    List.length src_pnames = List.length vs ->
+    List.length arg_dtys = List.length (args G) ->
+    cfg_param_dtyp_compatible G arg_dtys = true ->
+    Forall2 dvalue_has_dtyp vs arg_dtys ->
+    RM.find bid_cur (ocfg_map (blks G)) = Some b ->
+    In b (blks G) ->
+    blk_term b = (tiid, TERM_Br (DTYPE_Base (DTYPE_I 1%positive), op) br1 br2, tmd) ->
+    reify_exp false (args G) src_pnames (defined_ids_of_cfg G) smap_c seen_c
+      (Some (DTYPE_Base (DTYPE_I 1%positive))) op = Some (1%positive, ce_cond, seen_br) ->
+    match try_const_i1 ce_cond with
+    | Some true =>
+        match summarize_ocfg_dag fuel' blk_uas false (args G) src_pnames (defined_ids_of_cfg G)
+                (ocfg_map (blks G)) false bid_cur br1 smap_c seen_br with
+        | Some d_t => Some (CD_Eval 1%positive ce_cond d_t)
+        | None => None
+        end
+    | Some false =>
+        match summarize_ocfg_dag fuel' blk_uas false (args G) src_pnames (defined_ids_of_cfg G)
+                (ocfg_map (blks G)) false bid_cur br2 smap_c seen_br with
+        | Some d_f => Some (CD_Eval 1%positive ce_cond d_f)
+        | None => None
+        end
+    | None =>
+        match summarize_ocfg_dag fuel' blk_uas false (args G) src_pnames (defined_ids_of_cfg G)
+                (ocfg_map (blks G)) false bid_cur br1 smap_c seen_br,
+              summarize_ocfg_dag fuel' blk_uas false (args G) src_pnames (defined_ids_of_cfg G)
+                (ocfg_map (blks G)) false bid_cur br2 smap_c seen_br with
+        | Some d_t, Some d_f => Some (CD_Branch ce_cond d_t d_f)
+        | _, _ => None
+        end
+    end = Some d_term ->
+    Forall (fun '(dt, v) => valid_draw_value dt v) draws_p ->
+    Forall (fun '(dt, v) => valid_draw_value dt v) draws_c ->
+    (forall tail_s,
+       cfg_steps_to_ret (chain_draws draws_p tail_s) env
+         (denote_phis bid_from (blk_phis b)) tail_s env_p tt) ->
+    (forall k,
+       eval_cfg_dag (build_param_env src_pnames vs) foracle (wrap_phi_evals pevals k) =
+       eval_cfg_dag (build_param_env src_pnames vs) foracle k) ->
+    (forall tail_s,
+       cfg_steps_to_ret (chain_draws draws_c tail_s) env_p
+         (denote_code (blk_code b) None) tail_s env_c tt) ->
+    (forall k,
+       eval_cfg_dag (build_param_env src_pnames vs) foracle (wrap_evals cevals k) =
+       eval_cfg_dag (build_param_env src_pnames vs) foracle k) ->
+    (forall idx r, nth_error (args G) idx = Some r -> ~ In r (defined_ids_of_cfg G) ->
+       exists dv, nth_error vs idx = Some dv /\ RM.find r env_c = Some dv) ->
+    wf_smap_entries ext_c (defined_ids_of_cfg G) seen_c false smap_c ->
+    env_matches_smap (defined_ids_of_cfg G) (build_param_env src_pnames vs) foracle smap_c env_c ->
+    (forall br_tgt d_next,
+       wf_smap_entries ext_c (defined_ids_of_cfg G) seen_br false smap_c ->
+       summarize_ocfg_dag fuel' blk_uas false (args G) src_pnames (defined_ids_of_cfg G)
+         (ocfg_map (blks G)) false bid_cur br_tgt smap_c seen_br = Some d_next ->
+       exists draws_n : list (dtyp * @dvalue Pa),
+         Forall (fun '(dt, v) => valid_draw_value dt v) draws_n /\
+         (((forall tail_s,
+              cfg_steps_to_ub (chain_draws draws_n tail_s) env_c
+                (denote_ocfg_map (ocfg_map (blks G)) None (bid_cur, br_tgt))) /\
+           eval_cfg_dag (build_param_env src_pnames vs) foracle d_next = DO_UB) \/
+          (exists env_out dv,
+             eval_cfg_dag (build_param_env src_pnames vs) foracle d_next = DO_Ret dv /\
+             (forall tail_s,
+                cfg_steps_to_ret (chain_draws draws_n tail_s) env_c
+                  (denote_ocfg_map (ocfg_map (blks G)) None (bid_cur, br_tgt))
+                  tail_s env_out (inr dv))))) ->
+    exists draws : list (dtyp * @dvalue Pa),
+      Forall (fun '(dt, v) => valid_draw_value dt v) draws /\
+      (((forall tail_s,
+           cfg_steps_to_ub (chain_draws draws tail_s) env
+             (denote_ocfg_map (ocfg_map (blks G)) None (bid_from, bid_cur))) /\
+        eval_cfg_dag (build_param_env src_pnames vs) foracle
+          (CD_BlockAssume (blk_uas bid_cur) (wrap_phi_evals pevals (wrap_evals cevals d_term))) = DO_UB) \/
+       (exists env_out dv,
+          eval_cfg_dag (build_param_env src_pnames vs) foracle
+            (CD_BlockAssume (blk_uas bid_cur) (wrap_phi_evals pevals (wrap_evals cevals d_term))) = DO_Ret dv /\
+          (forall tail_s,
+             cfg_steps_to_ret (chain_draws draws tail_s) env
+               (denote_ocfg_map (ocfg_map (blks G)) None (bid_from, bid_cur))
+               tail_s env_out (inr dv)))).
+Proof.
+  intros fuel' blk_uas G src_pnames ext_c arg_dtys vs foracle bid_from bid_cur
+         env env_p env_c seen_c b pevals cevals smap_c d_term draws_p draws_c
+         tiid op br1 br2 tmd ce_cond seen_br
+         Hnd Hlp Hls Hla Hcomp Hvs Hfb Hb_in Htm Hr_cond Hopt
+         Hfa_dp Hfa_dc Hphis_step Hev_kp Hst_c Hev_kc Hpe_c Hwfs_c Henv_c HIH.
+  destruct (reify_exp_wt_lf op false (args G) src_pnames (defined_ids_of_cfg G)
+              ext_c smap_c seen_c (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive ce_cond seen_br
+              Hwfs_c Hr_cond) as [Hwt_cond Hlf_cond].
+  pose proof (wf_smap_entries_false_seen ext_c (defined_ids_of_cfg G) seen_c seen_br smap_c Hwfs_c) as Hwfs_br.
+  destruct (eval_reified_exp_src op (args G) src_pnames (defined_ids_of_cfg G)
+              ext_c arg_dtys vs foracle smap_c env_c seen_c
+              (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive ce_cond seen_br
+              Hnd Hlp Hls Hla Hvs
+              (fun idx dt_u Hu =>
+                 cfg_param_dtyp_compatible_nth G arg_dtys idx dt_u Hcomp
+                   (proj2 (in_flat_map _ (blks G) _)
+                     (ex_intro _ b (conj Hb_in (block_param_uses_br_in _ _ b tiid _ op br1 br2 tmd _ Htm Hu)))))
+              Hpe_c Hwfs_c Henv_c Hr_cond)
+    as (draws_br & Hfa_dbr & [[Hub_br [msg_br Hev_br]] | [dv_br [Hev_br [Hsc_br Hst_br]]]]).
+  - exists ((draws_p ++ draws_c) ++ draws_br).
+    split.
+    + apply Forall_app; split; [apply Forall_app; split; assumption | exact Hfa_dbr].
+    + left; split.
+      * intros tail_s; rewrite !chain_draws_app.
+        eapply cfg_steps_to_ub_obs; [symmetry; exact (denote_ocfg_map_step_obs _ _ _ _ Hfb) |].
+        unfold denote_block; rewrite Htm.
+        apply cfg_steps_to_ub_bind_l, cfg_steps_to_ub_bind_l.
+        eapply cfg_steps_to_ub_bind_r;
+          [exact (Hphis_step (chain_draws draws_c (chain_draws draws_br tail_s))) |].
+        eapply cfg_steps_to_ub_bind_r; [exact (Hst_c (chain_draws draws_br tail_s)) |].
+        cbn [denote_terminator]; unfold denote_exp'.
+        apply cfg_steps_to_ub_bind_l, mcfg_to_cfg_steps_ub; exact (Hub_br tail_s).
+      * cbn [eval_cfg_dag]; rewrite Hev_kp, Hev_kc.
+        destruct (try_const_i1 ce_cond) as [[|] |].
+        -- destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br1 _ _); [| discriminate Hopt].
+           inversion Hopt; subst d_term; cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
+        -- destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br2 _ _); [| discriminate Hopt].
+           inversion Hopt; subst d_term; cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
+        -- destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br1 _ _); [| discriminate Hopt].
+           destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br2 _ _); [| discriminate Hopt].
+           inversion Hopt; subst d_term; cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
+  - pose proof (eval_closed_lf_ret_wf_param_env ce_cond (build_param_env src_pnames vs)
+                   foracle dv_br Hlf_cond Hev_br) as Hp_cond.
+    destruct Hsc_br as [-> | [cbit ->]].
+    + exists ((draws_p ++ draws_c) ++ draws_br).
+      split.
+      * apply Forall_app; split; [apply Forall_app; split; assumption | exact Hfa_dbr].
+      * left; split.
+        -- intros tail_s; rewrite !chain_draws_app.
+           eapply cfg_steps_to_ub_obs; [symmetry; exact (denote_ocfg_map_step_obs _ _ _ _ Hfb) |].
+           unfold denote_block; rewrite Htm.
+           apply cfg_steps_to_ub_bind_l, cfg_steps_to_ub_bind_l.
+           eapply cfg_steps_to_ub_bind_r;
+             [exact (Hphis_step (chain_draws draws_c (chain_draws draws_br tail_s))) |].
+           eapply cfg_steps_to_ub_bind_r; [exact (Hst_c (chain_draws draws_br tail_s)) |].
+           cbn [denote_terminator]; unfold denote_exp'.
+           eapply cfg_steps_to_ub_bind_r;
+             [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ (Hst_br tail_s)) | apply cfg_steps_raiseUB].
+        -- destruct (try_const_i1 ce_cond) as [b_tc |] eqn:Etc.
+           ++ destruct (try_const_i1_sound ce_cond (build_param_env src_pnames vs)
+                           foracle b_tc Hwt_cond Hlf_cond Hp_cond Etc) as [cbit_tc [Hev_tc _]].
+              congruence.
+           ++ destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br1 _ _); [| discriminate Hopt].
+              destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br2 _ _); [| discriminate Hopt].
+              inversion Hopt; subst d_term.
+              cbn [eval_cfg_dag]; rewrite Hev_kp, Hev_kc; cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
+    + set (br_tgt := if (@Integers.unsigned 1 cbit =? 1)%Z then br1 else br2).
+      assert (Hnext_br :
+        exists d_next,
+          summarize_ocfg_dag fuel' blk_uas false (args G) src_pnames (defined_ids_of_cfg G)
+            (ocfg_map (blks G)) false bid_cur br_tgt smap_c seen_br = Some d_next /\
+          eval_cfg_dag (build_param_env src_pnames vs) foracle d_term =
+          eval_cfg_dag (build_param_env src_pnames vs) foracle d_next).
+      { destruct (try_const_i1 ce_cond) as [[|] |] eqn:Etc.
+        - destruct (try_const_i1_sound ce_cond (build_param_env src_pnames vs)
+                      foracle true Hwt_cond Hlf_cond Hp_cond Etc) as [cbit' [Hev_tc Ecbit']].
+          rewrite Hev_br in Hev_tc.
+          pose proof (eou_dvalue_I_same_sz_inj 1 cbit cbit' Hev_tc) as <-.
+          destruct (summarize_ocfg_dag fuel' blk_uas false (args G) src_pnames (defined_ids_of_cfg G)
+                      (ocfg_map (blks G)) false bid_cur br1 smap_c seen_br) as [d_t |] eqn:Hr_t;
+            [| discriminate Hopt].
+          inversion Hopt; subst d_term; exists d_t.
+          unfold br_tgt; rewrite Ecbit'; split; [exact Hr_t |].
+          cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
+        - destruct (try_const_i1_sound ce_cond (build_param_env src_pnames vs)
+                      foracle false Hwt_cond Hlf_cond Hp_cond Etc) as [cbit' [Hev_tc Ecbit']].
+          rewrite Hev_br in Hev_tc.
+          pose proof (eou_dvalue_I_same_sz_inj 1 cbit cbit' Hev_tc) as <-.
+          destruct (summarize_ocfg_dag fuel' blk_uas false (args G) src_pnames (defined_ids_of_cfg G)
+                      (ocfg_map (blks G)) false bid_cur br2 smap_c seen_br) as [d_f |] eqn:Hr_f;
+            [| discriminate Hopt].
+          inversion Hopt; subst d_term; exists d_f.
+          unfold br_tgt; rewrite Ecbit'; split; [exact Hr_f |].
+          cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
+        - destruct (summarize_ocfg_dag fuel' blk_uas false (args G) src_pnames (defined_ids_of_cfg G)
+                      (ocfg_map (blks G)) false bid_cur br1 smap_c seen_br) as [d_t |] eqn:Hr_t;
+            [| discriminate Hopt].
+          destruct (summarize_ocfg_dag fuel' blk_uas false (args G) src_pnames (defined_ids_of_cfg G)
+                      (ocfg_map (blks G)) false bid_cur br2 smap_c seen_br) as [d_f |] eqn:Hr_f;
+            [| discriminate Hopt].
+          inversion Hopt; subst d_term.
+          exists (if (@Integers.unsigned 1 cbit =? 1)%Z then d_t else d_f); split.
+          + unfold br_tgt; destruct (@Integers.unsigned 1 cbit =? 1)%Z; [exact Hr_t | exact Hr_f].
+          + cbn [eval_cfg_dag]; rewrite Hev_br; destruct (@Integers.unsigned 1 cbit =? 1)%Z; reflexivity. }
+      destruct Hnext_br as [d_next [Hr_next Hev_term]].
+      destruct (HIH br_tgt d_next Hwfs_br Hr_next)
+        as (draws_n & Hfa_dn & [[Hub_n Hev_ub_n] | [env_out [dv_out [Hev_out Hst_n]]]]).
+      * exists (((draws_p ++ draws_c) ++ draws_br) ++ draws_n).
+        split;
+          [apply Forall_app; split;
+             [apply Forall_app; split; [apply Forall_app; split; assumption | exact Hfa_dbr] | exact Hfa_dn]
+          | left; split].
+        -- intros tail_s; rewrite !chain_draws_app.
+           eapply cfg_steps_to_ub_obs; [symmetry; exact (denote_ocfg_map_step_obs _ _ _ _ Hfb) |].
+           unfold denote_block; rewrite Htm.
+           eapply cfg_steps_to_ub_bind_r.
+           ++ eapply cfg_steps_to_ret_bind.
+              ** eapply cfg_steps_to_ret_bind;
+                   [exact (Hphis_step (chain_draws draws_c (chain_draws draws_br (chain_draws draws_n tail_s))))
+                   |].
+                 eapply cfg_steps_to_ret_bind;
+                   [exact (Hst_c (chain_draws draws_br (chain_draws draws_n tail_s))) |].
+                 cbn [denote_terminator]; unfold denote_exp'.
+                 eapply cfg_steps_to_ret_bind;
+                   [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ (Hst_br (chain_draws draws_n tail_s))) |].
+                 cbn iota beta; rewrite bit_int_1_equ_one_eq_unsigned; unfold br_tgt.
+                 destruct (@Integers.unsigned 1 cbit =? 1)%Z; apply CSR_Ret; reflexivity.
+              ** apply CSR_Ret; reflexivity.
+           ++ eapply CSU_Tau; [reflexivity | exact (Hub_n tail_s)].
+        -- cbn [eval_cfg_dag]; rewrite Hev_kp, Hev_kc, Hev_term; exact Hev_ub_n.
+      * exists (((draws_p ++ draws_c) ++ draws_br) ++ draws_n).
+        split;
+          [apply Forall_app; split;
+             [apply Forall_app; split; [apply Forall_app; split; assumption | exact Hfa_dbr] | exact Hfa_dn]
+          | right; exists env_out, dv_out; split].
+        -- cbn [eval_cfg_dag]; rewrite Hev_kp, Hev_kc, Hev_term; exact Hev_out.
+        -- intros tail_s; rewrite !chain_draws_app.
+           eapply cfg_steps_to_ret_obs; [symmetry; exact (denote_ocfg_map_step_obs _ _ _ _ Hfb) |].
+           unfold denote_block; rewrite Htm.
+           eapply cfg_steps_to_ret_bind.
+           ++ eapply cfg_steps_to_ret_bind.
+              ** eapply cfg_steps_to_ret_bind;
+                   [exact (Hphis_step (chain_draws draws_c (chain_draws draws_br (chain_draws draws_n tail_s))))
+                   |].
+                 eapply cfg_steps_to_ret_bind;
+                   [exact (Hst_c (chain_draws draws_br (chain_draws draws_n tail_s))) |].
+                 cbn [denote_terminator]; unfold denote_exp'.
+                 eapply cfg_steps_to_ret_bind;
+                   [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ (Hst_br (chain_draws draws_n tail_s))) |].
+                 cbn iota beta; rewrite bit_int_1_equ_one_eq_unsigned; unfold br_tgt.
+                 destruct (@Integers.unsigned 1 cbit =? 1)%Z; apply CSR_Ret; reflexivity.
+              ** apply CSR_Ret; reflexivity.
+           ++ eapply CSR_Tau; [reflexivity | exact (Hst_n tail_s)].
+Qed.
+
 Lemma summarize_ocfg_src_sound {Pa : Params} :
   forall fuel blk_uas G src_pnames allowed arg_dtys (vs : list (@dvalue Pa))
          (foracle : freeze_oracle) is_entry bid_from bid_cur
@@ -593,7 +840,8 @@ Proof.
               (fun id fm dt pargs md op idx dt_u Hphi Hparg Hu =>
                  cfg_param_dtyp_compatible_nth G arg_dtys idx dt_u Hcomp
                    (proj2 (in_flat_map _ (blks G) _)
-                     (ex_intro _ b (conj Hb_in (block_param_uses_phi_in _ _ b id fm dt pargs md bid_from op _ Hphi Hparg Hu)))))
+                     (ex_intro _ b
+                       (conj Hb_in (block_param_uses_phi_in _ _ b id fm dt pargs md bid_from op _ Hphi Hparg Hu)))))
               Hpe Hwfs Henv Hr_phis)
     as (draws_p & Hfa_dp & [[Hub_p Hev_ub_p] | (dvs_p & Hpm_p & Hev_kp & Hst_p)]).
   - exists draws_p; split; [exact Hfa_dp | left; split].
@@ -631,7 +879,8 @@ Proof.
                        (ex_intro _ b (conj Hb_in (block_param_uses_code_in _ _ b iid ins md _ Hc Hu)))))
                 Hpe_p Hwfs_p Henv_p Hr_code)
       as (draws_c & Hfa_dc & [[Hub_c Hev_ub_c] | (env_c & Hpe_c & Henv_c & Hev_kc & Hst_c)]).
-    + exists (draws_p ++ draws_c); split; [apply Forall_app; split; assumption | left; split].
+    + exists (draws_p ++ draws_c); split;
+        [apply Forall_app; split; assumption | left; split].
       * intros tail_s; rewrite chain_draws_app.
         eapply cfg_steps_to_ub_obs; [symmetry; exact (denote_ocfg_map_step_obs _ _ _ _ Hfb) |].
         unfold denote_block.
@@ -663,7 +912,9 @@ Proof.
                     Hpe_c Hwfs_c Henv_c Hr_ret)
           as (draws_r & Hfa_dr & [[Hub_r [msg_r Hev_r]] | [dv_r [Hev_r [_ Hst_r]]]]).
         -- exists ((draws_p ++ draws_c) ++ draws_r).
-           split; [apply Forall_app; split; [apply Forall_app; split; assumption | exact Hfa_dr] | left; split].
+           split;
+             [apply Forall_app; split; [apply Forall_app; split; assumption | exact Hfa_dr]
+             | left; split].
            ++ intros tail_s; rewrite !chain_draws_app.
               eapply cfg_steps_to_ub_obs; [symmetry; exact (denote_ocfg_map_step_obs _ _ _ _ Hfb) |].
               unfold denote_block; rewrite Htm.
@@ -674,7 +925,9 @@ Proof.
               apply cfg_steps_to_ub_bind_l, mcfg_to_cfg_steps_ub; exact (Hub_r tail_s).
            ++ cbn [eval_cfg_dag]; rewrite Hev_kp, Hev_kc; cbn [eval_cfg_dag]; rewrite Hev_r; reflexivity.
         -- exists ((draws_p ++ draws_c) ++ draws_r).
-           split; [apply Forall_app; split; [apply Forall_app; split; assumption | exact Hfa_dr] | right].
+           split;
+             [apply Forall_app; split; [apply Forall_app; split; assumption | exact Hfa_dr]
+             | right].
            exists env_c, dv_r; split.
            ++ cbn [eval_cfg_dag]; rewrite Hev_kp, Hev_kc; cbn [eval_cfg_dag]; rewrite Hev_r; reflexivity.
            ++ intros tail_s; rewrite !chain_draws_app.
@@ -682,7 +935,8 @@ Proof.
               unfold denote_block; rewrite Htm.
               eapply cfg_steps_to_ret_bind.
               ** eapply cfg_steps_to_ret_bind.
-                 --- eapply cfg_steps_to_ret_bind; [exact (Hphis_step (chain_draws draws_c (chain_draws draws_r tail_s))) |].
+                 --- eapply cfg_steps_to_ret_bind;
+                       [exact (Hphis_step (chain_draws draws_c (chain_draws draws_r tail_s))) |].
                      eapply cfg_steps_to_ret_bind; [exact (Hst_c (chain_draws draws_r tail_s)) |].
                      cbn [denote_terminator]; unfold denote_exp'.
                      eapply cfg_steps_to_ret_bind;
@@ -710,177 +964,56 @@ Proof.
                     (Some (DTYPE_Base (DTYPE_I 1%positive))) op)
           as [[[wc' ce_cond] seen_br] |] eqn:Hr_cond; [| discriminate Hopt].
         pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr_cond)) as ->.
-        destruct (reify_exp_wt_lf op false (args G) src_pnames (defined_ids_of_cfg G)
-                    ext_c smap_c seen_c (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive ce_cond seen_br
-                    Hwfs_c Hr_cond) as [Hwt_cond Hlf_cond].
-        pose proof (wf_smap_entries_false_seen ext_c (defined_ids_of_cfg G) seen_c seen_br smap_c Hwfs_c) as Hwfs_br.
-        destruct (eval_reified_exp_src op (args G) src_pnames (defined_ids_of_cfg G)
-                    ext_c arg_dtys vs foracle smap_c env_c seen_c
-                    (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive ce_cond seen_br
-                    Hnd Hlp Hls Hla Hvs
-                    (fun idx dt_u Hu =>
-                       cfg_param_dtyp_compatible_nth G arg_dtys idx dt_u Hcomp
-                         (proj2 (in_flat_map _ (blks G) _)
-                           (ex_intro _ b (conj Hb_in (block_param_uses_br_in _ _ b tiid _ op br1 br2 tmd _ Htm Hu)))))
-                    Hpe_c Hwfs_c Henv_c Hr_cond)
-          as (draws_br & Hfa_dbr & [[Hub_br [msg_br Hev_br]] | [dv_br [Hev_br [Hsc_br Hst_br]]]]).
-        -- exists ((draws_p ++ draws_c) ++ draws_br).
-           split; [apply Forall_app; split; [apply Forall_app; split; assumption | exact Hfa_dbr] | left; split].
-           ++ intros tail_s; rewrite !chain_draws_app.
-              eapply cfg_steps_to_ub_obs; [symmetry; exact (denote_ocfg_map_step_obs _ _ _ _ Hfb) |].
-              unfold denote_block; rewrite Htm.
-              apply cfg_steps_to_ub_bind_l, cfg_steps_to_ub_bind_l.
-              eapply cfg_steps_to_ub_bind_r; [exact (Hphis_step (chain_draws draws_c (chain_draws draws_br tail_s))) |].
-              eapply cfg_steps_to_ub_bind_r; [exact (Hst_c (chain_draws draws_br tail_s)) |].
-              cbn [denote_terminator]; unfold denote_exp'.
-              apply cfg_steps_to_ub_bind_l, mcfg_to_cfg_steps_ub; exact (Hub_br tail_s).
-           ++ cbn [eval_cfg_dag]; rewrite Hev_kp, Hev_kc.
-              destruct (try_const_i1 ce_cond) as [[|] |].
-              ** destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br1 _ _); [| discriminate Hopt].
-                 inversion Hopt; subst d_term; cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
-              ** destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br2 _ _); [| discriminate Hopt].
-                 inversion Hopt; subst d_term; cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
-              ** destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br1 _ _); [| discriminate Hopt].
-                 destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br2 _ _); [| discriminate Hopt].
-                 inversion Hopt; subst d_term; cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
-        -- pose proof (eval_closed_lf_ret_wf_param_env ce_cond (build_param_env src_pnames vs)
-                         foracle dv_br Hlf_cond Hev_br) as Hp_cond.
-           destruct Hsc_br as [-> | [cbit ->]].
-           ++ exists ((draws_p ++ draws_c) ++ draws_br).
-              split; [apply Forall_app; split; [apply Forall_app; split; assumption | exact Hfa_dbr] | left; split].
-              ** intros tail_s; rewrite !chain_draws_app.
-                 eapply cfg_steps_to_ub_obs; [symmetry; exact (denote_ocfg_map_step_obs _ _ _ _ Hfb) |].
-                 unfold denote_block; rewrite Htm.
-                 apply cfg_steps_to_ub_bind_l, cfg_steps_to_ub_bind_l.
-                 eapply cfg_steps_to_ub_bind_r; [exact (Hphis_step (chain_draws draws_c (chain_draws draws_br tail_s))) |].
-                 eapply cfg_steps_to_ub_bind_r; [exact (Hst_c (chain_draws draws_br tail_s)) |].
-                 cbn [denote_terminator]; unfold denote_exp'.
-                 eapply cfg_steps_to_ub_bind_r;
-                   [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ (Hst_br tail_s)) | apply cfg_steps_raiseUB].
-              ** destruct (try_const_i1 ce_cond) as [b_tc |] eqn:Etc.
-                 --- destruct (try_const_i1_sound ce_cond (build_param_env src_pnames vs)
-                                 foracle b_tc Hwt_cond Hlf_cond Hp_cond Etc) as [cbit_tc [Hev_tc _]].
-                     congruence.
-                 --- destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br1 _ _); [| discriminate Hopt].
-                     destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br2 _ _); [| discriminate Hopt].
-                     inversion Hopt; subst d_term.
-                     cbn [eval_cfg_dag]; rewrite Hev_kp, Hev_kc; cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
-           ++ set (br_tgt := if (@Integers.unsigned 1 cbit =? 1)%Z then br1 else br2).
-              assert (Hnext_br :
-                exists d_next,
-                  summarize_ocfg_dag fuel' blk_uas false (args G) src_pnames (defined_ids_of_cfg G)
-                    (ocfg_map (blks G)) false bid_cur br_tgt smap_c seen_br = Some d_next /\
-                  eval_cfg_dag (build_param_env src_pnames vs) foracle d_term =
-                  eval_cfg_dag (build_param_env src_pnames vs) foracle d_next).
-              { destruct (try_const_i1 ce_cond) as [[|] |] eqn:Etc.
-                - destruct (try_const_i1_sound ce_cond (build_param_env src_pnames vs)
-                              foracle true Hwt_cond Hlf_cond Hp_cond Etc) as [cbit' [Hev_tc Ecbit']].
-                  rewrite Hev_br in Hev_tc.
-                  pose proof (eou_dvalue_I_same_sz_inj 1 cbit cbit' Hev_tc) as <-.
-                  destruct (summarize_ocfg_dag fuel' blk_uas false (args G) src_pnames (defined_ids_of_cfg G)
-                              (ocfg_map (blks G)) false bid_cur br1 smap_c seen_br) as [d_t |] eqn:Hr_t;
-                    [| discriminate Hopt].
-                  inversion Hopt; subst d_term; exists d_t; unfold br_tgt; rewrite Ecbit'; split; [exact Hr_t |].
-                  cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
-                - destruct (try_const_i1_sound ce_cond (build_param_env src_pnames vs)
-                              foracle false Hwt_cond Hlf_cond Hp_cond Etc) as [cbit' [Hev_tc Ecbit']].
-                  rewrite Hev_br in Hev_tc.
-                  pose proof (eou_dvalue_I_same_sz_inj 1 cbit cbit' Hev_tc) as <-.
-                  destruct (summarize_ocfg_dag fuel' blk_uas false (args G) src_pnames (defined_ids_of_cfg G)
-                              (ocfg_map (blks G)) false bid_cur br2 smap_c seen_br) as [d_f |] eqn:Hr_f;
-                    [| discriminate Hopt].
-                  inversion Hopt; subst d_term; exists d_f; unfold br_tgt; rewrite Ecbit'; split; [exact Hr_f |].
-                  cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
-                - destruct (summarize_ocfg_dag fuel' blk_uas false (args G) src_pnames (defined_ids_of_cfg G)
-                              (ocfg_map (blks G)) false bid_cur br1 smap_c seen_br) as [d_t |] eqn:Hr_t;
-                    [| discriminate Hopt].
-                  destruct (summarize_ocfg_dag fuel' blk_uas false (args G) src_pnames (defined_ids_of_cfg G)
-                              (ocfg_map (blks G)) false bid_cur br2 smap_c seen_br) as [d_f |] eqn:Hr_f;
-                    [| discriminate Hopt].
-                  inversion Hopt; subst d_term.
-                  exists (if (@Integers.unsigned 1 cbit =? 1)%Z then d_t else d_f); split.
-                  + unfold br_tgt; destruct (@Integers.unsigned 1 cbit =? 1)%Z; [exact Hr_t | exact Hr_f].
-                  + cbn [eval_cfg_dag]; rewrite Hev_br; destruct (@Integers.unsigned 1 cbit =? 1)%Z; reflexivity. }
-              destruct Hnext_br as [d_next [Hr_next Hev_term]].
-              destruct (IH blk_uas G src_pnames ext_c arg_dtys vs foracle false bid_cur br_tgt
-                          smap_c env_c seen_br d_next
-                          Hnd Hlp Hls Hla Hcomp Hvs Hpe_c Hwfs_br Henv_c Hr_next)
-                as (draws_n & Hfa_dn & [[Hub_n Hev_ub_n] | [env_out [dv_out [Hev_out Hst_n]]]]).
-              ** exists (((draws_p ++ draws_c) ++ draws_br) ++ draws_n).
-                 split;
-                   [apply Forall_app; split;
-                      [apply Forall_app; split; [apply Forall_app; split; assumption | exact Hfa_dbr] | exact Hfa_dn]
-                   | left; split].
-                 --- intros tail_s; rewrite !chain_draws_app.
-                     eapply cfg_steps_to_ub_obs; [symmetry; exact (denote_ocfg_map_step_obs _ _ _ _ Hfb) |].
-                     unfold denote_block; rewrite Htm.
-                     eapply cfg_steps_to_ub_bind_r.
-                     +++ eapply cfg_steps_to_ret_bind.
-                         *** eapply cfg_steps_to_ret_bind;
-                               [exact (Hphis_step (chain_draws draws_c (chain_draws draws_br (chain_draws draws_n tail_s)))) |].
-                             eapply cfg_steps_to_ret_bind;
-                               [exact (Hst_c (chain_draws draws_br (chain_draws draws_n tail_s))) |].
-                             cbn [denote_terminator]; unfold denote_exp'.
-                             eapply cfg_steps_to_ret_bind;
-                               [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ (Hst_br (chain_draws draws_n tail_s))) |].
-                             cbn iota beta; rewrite bit_int_1_equ_one_eq_unsigned; unfold br_tgt.
-                             destruct (@Integers.unsigned 1 cbit =? 1)%Z; apply CSR_Ret; reflexivity.
-                         *** apply CSR_Ret; reflexivity.
-                     +++ eapply CSU_Tau; [reflexivity | exact (Hub_n tail_s)].
-                 --- cbn [eval_cfg_dag]; rewrite Hev_kp, Hev_kc, Hev_term; exact Hev_ub_n.
-              ** exists (((draws_p ++ draws_c) ++ draws_br) ++ draws_n).
-                 split;
-                   [apply Forall_app; split;
-                      [apply Forall_app; split; [apply Forall_app; split; assumption | exact Hfa_dbr] | exact Hfa_dn]
-                   | right; exists env_out, dv_out; split].
-                 --- cbn [eval_cfg_dag]; rewrite Hev_kp, Hev_kc, Hev_term; exact Hev_out.
-                 --- intros tail_s; rewrite !chain_draws_app.
-                     eapply cfg_steps_to_ret_obs; [symmetry; exact (denote_ocfg_map_step_obs _ _ _ _ Hfb) |].
-                     unfold denote_block; rewrite Htm.
-                     eapply cfg_steps_to_ret_bind.
-                     +++ eapply cfg_steps_to_ret_bind.
-                         *** eapply cfg_steps_to_ret_bind;
-                               [exact (Hphis_step (chain_draws draws_c (chain_draws draws_br (chain_draws draws_n tail_s)))) |].
-                             eapply cfg_steps_to_ret_bind;
-                               [exact (Hst_c (chain_draws draws_br (chain_draws draws_n tail_s))) |].
-                             cbn [denote_terminator]; unfold denote_exp'.
-                             eapply cfg_steps_to_ret_bind;
-                               [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ (Hst_br (chain_draws draws_n tail_s))) |].
-                             cbn iota beta; rewrite bit_int_1_equ_one_eq_unsigned; unfold br_tgt.
-                             destruct (@Integers.unsigned 1 cbit =? 1)%Z; apply CSR_Ret; reflexivity.
-                         *** apply CSR_Ret; reflexivity.
-                     +++ eapply CSR_Tau; [reflexivity | exact (Hst_n tail_s)].
+        exact (summarize_ocfg_src_term_br fuel' blk_uas G src_pnames ext_c arg_dtys vs foracle
+                 bid_from bid_cur env (apply_phi_env env dvs_p) env_c seen_c b
+                 pevals cevals smap_c d_term draws_p draws_c
+                 tiid op br1 br2 tmd ce_cond seen_br
+                 Hnd Hlp Hls Hla Hcomp Hvs Hfb Hb_in Htm Hr_cond Hopt
+                 Hfa_dp Hfa_dc Hphis_step Hev_kp Hst_c Hev_kc Hpe_c Hwfs_c Henv_c
+                 (fun br_tgt d_next Hwfs_br Hr_next =>
+                    IH blk_uas G src_pnames ext_c arg_dtys vs foracle false bid_cur br_tgt
+                      smap_c env_c seen_br d_next
+                      Hnd Hlp Hls Hla Hcomp Hvs Hpe_c Hwfs_br Henv_c Hr_next)).
       * (* TERM_Br_1 *)
         destruct (IH blk_uas G src_pnames ext_c arg_dtys vs foracle false bid_cur br smap_c env_c seen_c d_term
                     Hnd Hlp Hls Hla Hcomp Hvs Hpe_c Hwfs_c Henv_c Hopt)
           as (draws_n & Hfa_dn & [[Hub_n Hev_ub_n] | [env_out [dv_out [Hev_out Hst_n]]]]).
         -- exists ((draws_p ++ draws_c) ++ draws_n).
-           split; [apply Forall_app; split; [apply Forall_app; split; assumption | exact Hfa_dn] | left; split].
+           split;
+             [apply Forall_app; split; [apply Forall_app; split; assumption | exact Hfa_dn]
+             | left; split].
            ++ intros tail_s; rewrite !chain_draws_app.
               eapply cfg_steps_to_ub_obs; [symmetry; exact (denote_ocfg_map_step_obs _ _ _ _ Hfb) |].
               unfold denote_block; rewrite Htm.
               eapply cfg_steps_to_ub_bind_r.
               ** eapply cfg_steps_to_ret_bind.
-                 --- eapply cfg_steps_to_ret_bind; [exact (Hphis_step (chain_draws draws_c (chain_draws draws_n tail_s))) |].
-                     eapply cfg_steps_to_ret_bind; [exact (Hst_c (chain_draws draws_n tail_s)) | apply CSR_Ret; reflexivity].
+                 --- eapply cfg_steps_to_ret_bind;
+                       [exact (Hphis_step (chain_draws draws_c (chain_draws draws_n tail_s))) |].
+                     eapply cfg_steps_to_ret_bind;
+                       [exact (Hst_c (chain_draws draws_n tail_s)) | apply CSR_Ret; reflexivity].
                  --- apply CSR_Ret; reflexivity.
               ** eapply CSU_Tau; [reflexivity | exact (Hub_n tail_s)].
            ++ cbn [eval_cfg_dag]; rewrite Hev_kp, Hev_kc; exact Hev_ub_n.
         -- exists ((draws_p ++ draws_c) ++ draws_n).
-           split; [apply Forall_app; split; [apply Forall_app; split; assumption | exact Hfa_dn] | right].
+           split;
+             [apply Forall_app; split; [apply Forall_app; split; assumption | exact Hfa_dn]
+             | right].
            exists env_out, dv_out; split; [cbn [eval_cfg_dag]; rewrite Hev_kp, Hev_kc; exact Hev_out |].
            intros tail_s; rewrite !chain_draws_app.
            eapply cfg_steps_to_ret_obs; [symmetry; exact (denote_ocfg_map_step_obs _ _ _ _ Hfb) |].
            unfold denote_block; rewrite Htm.
            eapply cfg_steps_to_ret_bind.
            ++ eapply cfg_steps_to_ret_bind.
-              ** eapply cfg_steps_to_ret_bind; [exact (Hphis_step (chain_draws draws_c (chain_draws draws_n tail_s))) |].
-                 eapply cfg_steps_to_ret_bind; [exact (Hst_c (chain_draws draws_n tail_s)) | apply CSR_Ret; reflexivity].
+              ** eapply cfg_steps_to_ret_bind;
+                   [exact (Hphis_step (chain_draws draws_c (chain_draws draws_n tail_s))) |].
+                 eapply cfg_steps_to_ret_bind;
+                   [exact (Hst_c (chain_draws draws_n tail_s)) | apply CSR_Ret; reflexivity].
               ** apply CSR_Ret; reflexivity.
            ++ eapply CSR_Tau; [reflexivity | exact (Hst_n tail_s)].
       * (* TERM_Unreachable *)
         inversion Hopt; subst d_term; clear Hopt.
-        exists (draws_p ++ draws_c); split; [apply Forall_app; split; assumption | left; split].
+        exists (draws_p ++ draws_c); split;
+          [apply Forall_app; split; assumption | left; split].
         -- intros tail_s; rewrite chain_draws_app.
            eapply cfg_steps_to_ub_obs; [symmetry; exact (denote_ocfg_map_step_obs _ _ _ _ Hfb) |].
            unfold denote_block; rewrite Htm.
@@ -955,6 +1088,242 @@ Proof.
   exact (summarize_src_dag_with_uas_sound (fun _ => []) G src_pnames arg_dtys vs foracle d).
 Qed.
 
+Local Lemma summarize_ocfg_tgt_term_br {Pa : Params} :
+  forall fuel' blk_uas G src_pnames ext_c arg_dtys (vs : list (@dvalue Pa))
+         (sigma0 sigma_p sigma_c : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
+         bid_from bid_cur (env env_p env_c : rmap (@dvalue Pa))
+         seen0 seen_c seen_br b pevals cevals smap_c d_term
+         added_p added_c tiid op br1 br2 tmd ce_cond,
+    NoDup src_pnames ->
+    List.length (args G) = List.length vs ->
+    List.length src_pnames = List.length vs ->
+    List.length arg_dtys = List.length (args G) ->
+    cfg_param_dtyp_compatible G arg_dtys = true ->
+    Forall2 dvalue_has_dtyp vs arg_dtys ->
+    RM.find bid_cur (ocfg_map (blks G)) = Some b ->
+    In b (blks G) ->
+    blk_term b = (tiid, TERM_Br (DTYPE_Base (DTYPE_I 1%positive), op) br1 br2, tmd) ->
+    reify_exp true (args G) src_pnames (defined_ids_of_cfg G) smap_c seen_c
+      (Some (DTYPE_Base (DTYPE_I 1%positive))) op = Some (1%positive, ce_cond, seen_br) ->
+    match try_const_i1 ce_cond with
+    | Some true =>
+        match summarize_ocfg_dag fuel' blk_uas true (args G) src_pnames (defined_ids_of_cfg G)
+                (ocfg_map (blks G)) false bid_cur br1 smap_c seen_br with
+        | Some d_t => Some (CD_Eval 1%positive ce_cond d_t)
+        | None => None
+        end
+    | Some false =>
+        match summarize_ocfg_dag fuel' blk_uas true (args G) src_pnames (defined_ids_of_cfg G)
+                (ocfg_map (blks G)) false bid_cur br2 smap_c seen_br with
+        | Some d_f => Some (CD_Eval 1%positive ce_cond d_f)
+        | None => None
+        end
+    | None =>
+        match summarize_ocfg_dag fuel' blk_uas true (args G) src_pnames (defined_ids_of_cfg G)
+                (ocfg_map (blks G)) false bid_cur br1 smap_c seen_br,
+              summarize_ocfg_dag fuel' blk_uas true (args G) src_pnames (defined_ids_of_cfg G)
+                (ocfg_map (blks G)) false bid_cur br2 smap_c seen_br with
+        | Some d_t, Some d_f => Some (CD_Branch ce_cond d_t d_f)
+        | _, _ => None
+        end
+    end = Some d_term ->
+    cfg_steps_to_ret sigma0 env (denote_phis bid_from (blk_phis b)) sigma_p env_p tt ->
+    cfg_steps_to_ret sigma_p env_p (denote_code (blk_code b) None) sigma_c env_c tt ->
+    (forall added_t dt_k,
+       (forall k z, In (k, z) added_t -> ~ In k seen_c) ->
+       eval_cfg_dag (build_param_env src_pnames vs)
+         (oracle_of_fmap ((added_t ++ added_c ++ added_p) ++ fmap0))
+         (wrap_phi_evals pevals (wrap_evals cevals dt_k)) =
+       eval_cfg_dag (build_param_env src_pnames vs)
+         (oracle_of_fmap (added_t ++ added_c ++ added_p ++ fmap0)) dt_k) ->
+    (forall added_t,
+       (forall k z, In (k, z) added_t -> ~ In k seen_c) ->
+       forall k z, In (k, z) (added_t ++ added_c ++ added_p) -> ~ In k seen0) ->
+    (forall idx r, nth_error (args G) idx = Some r -> ~ In r (defined_ids_of_cfg G) ->
+       exists dv, nth_error vs idx = Some dv /\ RM.find r env_c = Some dv) ->
+    wf_draw_strat sigma_c ->
+    wf_smap_entries ext_c (defined_ids_of_cfg G) seen_c true smap_c ->
+    env_matches_smap (defined_ids_of_cfg G) (build_param_env src_pnames vs)
+      (oracle_of_fmap (added_c ++ added_p ++ fmap0)) smap_c env_c ->
+    (forall br_tgt sigma_br fmap_br d_next,
+       wf_draw_strat sigma_br ->
+       wf_smap_entries ext_c (defined_ids_of_cfg G) seen_br true smap_c ->
+       env_matches_smap (defined_ids_of_cfg G) (build_param_env src_pnames vs)
+         (oracle_of_fmap fmap_br) smap_c env_c ->
+       summarize_ocfg_dag fuel' blk_uas true (args G) src_pnames (defined_ids_of_cfg G)
+         (ocfg_map (blks G)) false bid_cur br_tgt smap_c seen_br = Some d_next ->
+       exists added_n : list (freeze_key * Z),
+         (forall key z, In (key, z) added_n -> ~ In key seen_br) /\
+         (eval_cfg_dag (build_param_env src_pnames vs)
+            (oracle_of_fmap (added_n ++ fmap_br)) d_next = DO_UB \/
+          (exists sigma_out env_out dv_out,
+             wf_draw_strat sigma_out /\
+             eval_cfg_dag (build_param_env src_pnames vs)
+               (oracle_of_fmap (added_n ++ fmap_br)) d_next = DO_Ret dv_out /\
+             cfg_steps_to_ret sigma_br env_c
+               (denote_ocfg_map (ocfg_map (blks G)) None (bid_cur, br_tgt))
+               sigma_out env_out (inr dv_out)))) ->
+    exists added : list (freeze_key * Z),
+      (forall key z, In (key, z) added -> ~ In key seen0) /\
+      (eval_cfg_dag (build_param_env src_pnames vs) (oracle_of_fmap (added ++ fmap0))
+         (CD_BlockAssume (blk_uas bid_cur) (wrap_phi_evals pevals (wrap_evals cevals d_term))) = DO_UB \/
+       (exists sigma_out env_out dv,
+          wf_draw_strat sigma_out /\
+          eval_cfg_dag (build_param_env src_pnames vs) (oracle_of_fmap (added ++ fmap0))
+            (CD_BlockAssume (blk_uas bid_cur) (wrap_phi_evals pevals (wrap_evals cevals d_term))) = DO_Ret dv /\
+          cfg_steps_to_ret sigma0 env
+            (denote_ocfg_map (ocfg_map (blks G)) None (bid_from, bid_cur))
+            sigma_out env_out (inr dv))).
+Proof.
+  intros fuel' blk_uas G src_pnames ext_c arg_dtys vs sigma0 sigma_p sigma_c fmap0
+         bid_from bid_cur env env_p env_c seen0 seen_c seen_br b pevals cevals smap_c d_term
+         added_p added_c tiid op br1 br2 tmd ce_cond
+         Hnd Hlp Hls Hla Hcomp Hvs Hfb Hb_in Htm Hr_cond Hopt
+         Hphis_step Hst_c Hstrip_blk Hdisj_all Hpe_c Hwfd_c Hwfs_c Henv_c HIH.
+  destruct (reify_exp_wt_lf op true (args G) src_pnames (defined_ids_of_cfg G)
+              ext_c smap_c seen_c (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive ce_cond seen_br
+              Hwfs_c Hr_cond) as [Hwt_cond _].
+  destruct (reify_exp_freeze_props op true (args G) src_pnames (defined_ids_of_cfg G)
+              ext_c smap_c seen_c (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive ce_cond seen_br
+              Hwfs_c Hr_cond)
+    as (Hlf_cond & Hinc_cbr & Hfk_cond).
+  pose proof (wf_smap_entries_seen_mono ext_c (defined_ids_of_cfg G) seen_c seen_br true smap_c Hinc_cbr Hwfs_c)
+    as Hwfs_br.
+  destruct (eval_reified_exp_tgt op (args G) src_pnames (defined_ids_of_cfg G)
+              ext_c arg_dtys vs sigma_c (added_c ++ added_p ++ fmap0) smap_c env_c seen_c
+              (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive ce_cond seen_br
+              Hnd Hlp Hls Hla Hvs
+              (fun idx dt_u Hu =>
+                 cfg_param_dtyp_compatible_nth G arg_dtys idx dt_u Hcomp
+                   (proj2 (in_flat_map _ (blks G) _)
+                     (ex_intro _ b (conj Hb_in (block_param_uses_br_in _ _ b tiid _ op br1 br2 tmd _ Htm Hu)))))
+              Hpe_c Hwfd_c Hwfs_c Henv_c Hr_cond)
+    as (added_br & Had_br & [[msg_br Hev_br] | (sigma_br & dv_br & Hwfd_br & Hev_br & Hsc_br & Hst_br)]).
+  - exists (added_br ++ added_c ++ added_p).
+    split; [exact (Hdisj_all added_br (fun k z H => proj2 (Had_br k z H))) | left].
+    cbn [eval_cfg_dag]; rewrite (Hstrip_blk added_br d_term (fun k z H => proj2 (Had_br k z H))).
+    destruct (try_const_i1 ce_cond) as [[|] |].
+    + destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br1 _ _); [| discriminate Hopt].
+      inversion Hopt; subst d_term; cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
+    + destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br2 _ _); [| discriminate Hopt].
+      inversion Hopt; subst d_term; cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
+    + destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br1 _ _); [| discriminate Hopt].
+      destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br2 _ _); [| discriminate Hopt].
+      inversion Hopt; subst d_term; cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
+  - pose proof (eval_closed_lf_ret_wf_param_env ce_cond (build_param_env src_pnames vs)
+                   (oracle_of_fmap (added_br ++ added_c ++ added_p ++ fmap0))
+                   dv_br Hlf_cond Hev_br) as Hp_cond.
+    destruct Hsc_br as [-> | [cbit ->]].
+    + exists (added_br ++ added_c ++ added_p).
+      split; [exact (Hdisj_all added_br (fun k z H => proj2 (Had_br k z H))) | left].
+      destruct (try_const_i1 ce_cond) as [b_tc |] eqn:Etc.
+      * destruct (try_const_i1_sound ce_cond (build_param_env src_pnames vs)
+                      (oracle_of_fmap (added_br ++ added_c ++ added_p ++ fmap0))
+                      b_tc Hwt_cond Hlf_cond Hp_cond Etc) as [cbit_tc [Hev_tc _]].
+        congruence.
+      * destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br1 _ _); [| discriminate Hopt].
+        destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br2 _ _); [| discriminate Hopt].
+        inversion Hopt; subst d_term.
+        cbn [eval_cfg_dag]; rewrite (Hstrip_blk added_br _ (fun k z H => proj2 (Had_br k z H))).
+        cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
+    + pose proof (env_matches_smap_oracle_prepend ext_c (defined_ids_of_cfg G) seen_c
+                      added_br (added_c ++ added_p ++ fmap0)
+                      (build_param_env src_pnames vs) smap_c env_c Hwfs_c
+                      (fun k z H => proj2 (Had_br k z H)) Henv_c) as Henv_br.
+      set (br_tgt := if (@Integers.unsigned 1 cbit =? 1)%Z then br1 else br2).
+      assert (Hnext_br :
+        exists d_next,
+          summarize_ocfg_dag fuel' blk_uas true (args G) src_pnames (defined_ids_of_cfg G)
+            (ocfg_map (blks G)) false bid_cur br_tgt smap_c seen_br = Some d_next /\
+          (forall fo,
+             eval_closed_cert_expr (build_param_env src_pnames vs) fo ce_cond =
+               raise_ret (DVALUE_Base (@DVALUE_I Pa 1 cbit)) ->
+             eval_cfg_dag (build_param_env src_pnames vs) fo d_term =
+             eval_cfg_dag (build_param_env src_pnames vs) fo d_next)).
+      { destruct (try_const_i1 ce_cond) as [[|] |] eqn:Etc.
+        - destruct (try_const_i1_sound ce_cond (build_param_env src_pnames vs)
+                      (oracle_of_fmap (added_br ++ added_c ++ added_p ++ fmap0))
+                      true Hwt_cond Hlf_cond Hp_cond Etc) as [cbit' [Hev_tc Ecbit']].
+          rewrite Hev_br in Hev_tc.
+          pose proof (eou_dvalue_I_same_sz_inj 1 cbit cbit' Hev_tc) as <-.
+          destruct (summarize_ocfg_dag fuel' blk_uas true (args G) src_pnames (defined_ids_of_cfg G)
+                      (ocfg_map (blks G)) false bid_cur br1 smap_c seen_br) as [d_t |] eqn:Hr_t;
+            [| discriminate Hopt].
+          inversion Hopt; subst d_term; exists d_t.
+          unfold br_tgt; rewrite Ecbit'; split; [exact Hr_t |].
+          intros fo Hfo; cbn [eval_cfg_dag]; rewrite Hfo; reflexivity.
+        - destruct (try_const_i1_sound ce_cond (build_param_env src_pnames vs)
+                      (oracle_of_fmap (added_br ++ added_c ++ added_p ++ fmap0))
+                      false Hwt_cond Hlf_cond Hp_cond Etc) as [cbit' [Hev_tc Ecbit']].
+          rewrite Hev_br in Hev_tc.
+          pose proof (eou_dvalue_I_same_sz_inj 1 cbit cbit' Hev_tc) as <-.
+          destruct (summarize_ocfg_dag fuel' blk_uas true (args G) src_pnames (defined_ids_of_cfg G)
+                      (ocfg_map (blks G)) false bid_cur br2 smap_c seen_br) as [d_f |] eqn:Hr_f;
+            [| discriminate Hopt].
+          inversion Hopt; subst d_term; exists d_f.
+          unfold br_tgt; rewrite Ecbit'; split; [exact Hr_f |].
+          intros fo Hfo; cbn [eval_cfg_dag]; rewrite Hfo; reflexivity.
+        - destruct (summarize_ocfg_dag fuel' blk_uas true (args G) src_pnames (defined_ids_of_cfg G)
+                      (ocfg_map (blks G)) false bid_cur br1 smap_c seen_br) as [d_t |] eqn:Hr_t;
+            [| discriminate Hopt].
+          destruct (summarize_ocfg_dag fuel' blk_uas true (args G) src_pnames (defined_ids_of_cfg G)
+                      (ocfg_map (blks G)) false bid_cur br2 smap_c seen_br) as [d_f |] eqn:Hr_f;
+            [| discriminate Hopt].
+          inversion Hopt; subst d_term.
+          exists (if (@Integers.unsigned 1 cbit =? 1)%Z then d_t else d_f); split.
+          + unfold br_tgt; destruct (@Integers.unsigned 1 cbit =? 1)%Z; [exact Hr_t | exact Hr_f].
+          + intros fo Hfo; cbn [eval_cfg_dag]; rewrite Hfo.
+            destruct (@Integers.unsigned 1 cbit =? 1)%Z; reflexivity. }
+      destruct Hnext_br as [d_next [Hr_next Hev_term]].
+      destruct (HIH br_tgt sigma_br (added_br ++ added_c ++ added_p ++ fmap0) d_next
+                  Hwfd_br Hwfs_br Henv_br Hr_next)
+        as (added_n & Had_n & [Hev_ub_n | (sigma_out & env_out & dv_out & Hwfd_out & Hev_out & Hst_n)]).
+      * assert (Hdisj_nbr : forall k z, In (k, z) (added_n ++ added_br) -> ~ In k seen_c).
+        { intros k z Hkz; apply in_app_iff in Hkz as [Hn | Hb0].
+          - intros Hsc0; exact (Had_n k z Hn (Hinc_cbr k Hsc0)).
+          - exact (proj2 (Had_br k z Hb0)). }
+        exists ((added_n ++ added_br) ++ added_c ++ added_p).
+        split; [exact (Hdisj_all (added_n ++ added_br) Hdisj_nbr) | left].
+        cbn [eval_cfg_dag]; rewrite (Hstrip_blk (added_n ++ added_br) d_term Hdisj_nbr).
+        replace ((added_n ++ added_br) ++ added_c ++ added_p ++ fmap0)
+          with (added_n ++ added_br ++ added_c ++ added_p ++ fmap0)
+          by (rewrite !app_assoc; reflexivity).
+        pose proof (eval_let_free_prepend_fmap ce_cond (build_param_env src_pnames vs)
+                      added_n (added_br ++ added_c ++ added_p ++ fmap0) seen_br
+                      Hlf_cond (Hfk_cond eq_refl) Had_n) as Hev_br'.
+        rewrite Hev_br in Hev_br'.
+        rewrite (Hev_term _ Hev_br'); exact Hev_ub_n.
+      * assert (Hdisj_nbr : forall k z, In (k, z) (added_n ++ added_br) -> ~ In k seen_c).
+        { intros k z Hkz; apply in_app_iff in Hkz as [Hn | Hb0].
+          - intros Hsc0; exact (Had_n k z Hn (Hinc_cbr k Hsc0)).
+          - exact (proj2 (Had_br k z Hb0)). }
+        exists ((added_n ++ added_br) ++ added_c ++ added_p).
+        split; [exact (Hdisj_all (added_n ++ added_br) Hdisj_nbr) | right].
+        exists sigma_out, env_out, dv_out; split; [exact Hwfd_out | split].
+        -- cbn [eval_cfg_dag]; rewrite (Hstrip_blk (added_n ++ added_br) d_term Hdisj_nbr).
+           replace ((added_n ++ added_br) ++ added_c ++ added_p ++ fmap0)
+             with (added_n ++ added_br ++ added_c ++ added_p ++ fmap0)
+             by (rewrite !app_assoc; reflexivity).
+           pose proof (eval_let_free_prepend_fmap ce_cond (build_param_env src_pnames vs)
+                         added_n (added_br ++ added_c ++ added_p ++ fmap0) seen_br
+                         Hlf_cond (Hfk_cond eq_refl) Had_n) as Hev_br'.
+           rewrite Hev_br in Hev_br'.
+           rewrite (Hev_term _ Hev_br'); exact Hev_out.
+        -- eapply cfg_steps_to_ret_obs; [symmetry; exact (denote_ocfg_map_step_obs _ _ _ _ Hfb) |].
+           unfold denote_block; rewrite Htm.
+           eapply cfg_steps_to_ret_bind.
+           ++ eapply cfg_steps_to_ret_bind.
+              ** eapply cfg_steps_to_ret_bind; [exact Hphis_step |].
+                 eapply cfg_steps_to_ret_bind; [exact Hst_c |].
+                 cbn [denote_terminator]; unfold denote_exp'.
+                 eapply cfg_steps_to_ret_bind;
+                   [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ Hst_br) |].
+                 cbn iota beta; rewrite bit_int_1_equ_one_eq_unsigned; unfold br_tgt.
+                 destruct (@Integers.unsigned 1 cbit =? 1)%Z; apply CSR_Ret; reflexivity.
+              ** apply CSR_Ret; reflexivity.
+           ++ eapply CSR_Tau; [reflexivity | exact Hst_n].
+Qed.
+
 Lemma summarize_ocfg_tgt_sound {Pa : Params} :
   forall fuel blk_uas G src_pnames allowed arg_dtys (vs : list (@dvalue Pa))
          (sigma0 : @draw_strat Pa) (fmap0 : list (freeze_key * Z))
@@ -1013,7 +1382,8 @@ Proof.
               (fun id fm dt pargs md op idx dt_u Hphi Hparg Hu =>
                  cfg_param_dtyp_compatible_nth G arg_dtys idx dt_u Hcomp
                    (proj2 (in_flat_map _ (blks G) _)
-                     (ex_intro _ b (conj Hb_in (block_param_uses_phi_in _ _ b id fm dt pargs md bid_from op _ Hphi Hparg Hu)))))
+                     (ex_intro _ b
+                       (conj Hb_in (block_param_uses_phi_in _ _ b id fm dt pargs md bid_from op _ Hphi Hparg Hu)))))
               Hpe Hwfd0 Hwfs0 Henv0 Hr_phis)
     as (added_p & Had_p & [Hev_ub_p | (sigma_p & dvs_p & Hwfd_p & Hpm_p & Hev_kp & Hst_p)]).
   - exists added_p; split; [intros k z H; exact (proj2 (Had_p k z H)) | left].
@@ -1148,147 +1518,16 @@ Proof.
                     (Some (DTYPE_Base (DTYPE_I 1%positive))) op)
           as [[[wc' ce_cond] seen_br] |] eqn:Hr_cond; [| discriminate Hopt].
         pose proof (check_opt_int_width_some_inv _ _ (reify_exp_top_width _ _ _ _ _ _ _ _ _ _ _ Hr_cond)) as ->.
-        destruct (reify_exp_wt_lf op true (args G) src_pnames (defined_ids_of_cfg G)
-                    ext_c smap_c seen_c (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive ce_cond seen_br
-                    Hwfs_c Hr_cond) as [Hwt_cond _].
-        destruct (reify_exp_freeze_props op true (args G) src_pnames (defined_ids_of_cfg G)
-                    ext_c smap_c seen_c (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive ce_cond seen_br
-                    Hwfs_c Hr_cond)
-          as (Hlf_cond & Hinc_cbr & Hfk_cond).
-        pose proof (wf_smap_entries_seen_mono ext_c (defined_ids_of_cfg G) seen_c seen_br true smap_c Hinc_cbr Hwfs_c)
-          as Hwfs_br.
-        destruct (eval_reified_exp_tgt op (args G) src_pnames (defined_ids_of_cfg G)
-                    ext_c arg_dtys vs sigma_c (added_c ++ added_p ++ fmap0) smap_c env_c seen_c
-                    (Some (DTYPE_Base (DTYPE_I 1%positive))) 1%positive ce_cond seen_br
-                    Hnd Hlp Hls Hla Hvs
-                    (fun idx dt_u Hu =>
-                       cfg_param_dtyp_compatible_nth G arg_dtys idx dt_u Hcomp
-                         (proj2 (in_flat_map _ (blks G) _)
-                           (ex_intro _ b (conj Hb_in (block_param_uses_br_in _ _ b tiid _ op br1 br2 tmd _ Htm Hu)))))
-                    Hpe_c Hwfd_c Hwfs_c Henv_c Hr_cond)
-          as (added_br & Had_br & [[msg_br Hev_br] | (sigma_br & dv_br & Hwfd_br & Hev_br & Hsc_br & Hst_br)]).
-        -- exists (added_br ++ added_c ++ added_p).
-           split; [exact (Hdisj_all added_br (fun k z H => proj2 (Had_br k z H))) | left].
-           cbn [eval_cfg_dag]; rewrite (Hstrip_blk added_br d_term (fun k z H => proj2 (Had_br k z H))).
-           destruct (try_const_i1 ce_cond) as [[|] |].
-           ++ destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br1 _ _); [| discriminate Hopt].
-              inversion Hopt; subst d_term; cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
-           ++ destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br2 _ _); [| discriminate Hopt].
-              inversion Hopt; subst d_term; cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
-           ++ destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br1 _ _); [| discriminate Hopt].
-              destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br2 _ _); [| discriminate Hopt].
-              inversion Hopt; subst d_term; cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
-        -- pose proof (eval_closed_lf_ret_wf_param_env ce_cond (build_param_env src_pnames vs)
-                         (oracle_of_fmap (added_br ++ added_c ++ added_p ++ fmap0))
-                         dv_br Hlf_cond Hev_br) as Hp_cond.
-           destruct Hsc_br as [-> | [cbit ->]].
-           ++ exists (added_br ++ added_c ++ added_p).
-              split; [exact (Hdisj_all added_br (fun k z H => proj2 (Had_br k z H))) | left].
-              destruct (try_const_i1 ce_cond) as [b_tc |] eqn:Etc.
-              ** destruct (try_const_i1_sound ce_cond (build_param_env src_pnames vs)
-                             (oracle_of_fmap (added_br ++ added_c ++ added_p ++ fmap0))
-                             b_tc Hwt_cond Hlf_cond Hp_cond Etc) as [cbit_tc [Hev_tc _]].
-                 congruence.
-              ** destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br1 _ _); [| discriminate Hopt].
-                 destruct (summarize_ocfg_dag fuel' _ _ _ _ _ _ _ _ br2 _ _); [| discriminate Hopt].
-                 inversion Hopt; subst d_term.
-                 cbn [eval_cfg_dag]; rewrite (Hstrip_blk added_br _ (fun k z H => proj2 (Had_br k z H))).
-                 cbn [eval_cfg_dag]; rewrite Hev_br; reflexivity.
-           ++ pose proof (env_matches_smap_oracle_prepend ext_c (defined_ids_of_cfg G) seen_c
-                            added_br (added_c ++ added_p ++ fmap0)
-                            (build_param_env src_pnames vs) smap_c env_c Hwfs_c
-                            (fun k z H => proj2 (Had_br k z H)) Henv_c) as Henv_br.
-              set (br_tgt := if (@Integers.unsigned 1 cbit =? 1)%Z then br1 else br2).
-              assert (Hnext_br :
-                exists d_next,
-                  summarize_ocfg_dag fuel' blk_uas true (args G) src_pnames (defined_ids_of_cfg G)
-                    (ocfg_map (blks G)) false bid_cur br_tgt smap_c seen_br = Some d_next /\
-                  (forall fo,
-                     eval_closed_cert_expr (build_param_env src_pnames vs) fo ce_cond =
-                       raise_ret (DVALUE_Base (@DVALUE_I Pa 1 cbit)) ->
-                     eval_cfg_dag (build_param_env src_pnames vs) fo d_term =
-                     eval_cfg_dag (build_param_env src_pnames vs) fo d_next)).
-              { destruct (try_const_i1 ce_cond) as [[|] |] eqn:Etc.
-                - destruct (try_const_i1_sound ce_cond (build_param_env src_pnames vs)
-                              (oracle_of_fmap (added_br ++ added_c ++ added_p ++ fmap0))
-                              true Hwt_cond Hlf_cond Hp_cond Etc) as [cbit' [Hev_tc Ecbit']].
-                  rewrite Hev_br in Hev_tc.
-                  pose proof (eou_dvalue_I_same_sz_inj 1 cbit cbit' Hev_tc) as <-.
-                  destruct (summarize_ocfg_dag fuel' blk_uas true (args G) src_pnames (defined_ids_of_cfg G)
-                              (ocfg_map (blks G)) false bid_cur br1 smap_c seen_br) as [d_t |] eqn:Hr_t;
-                    [| discriminate Hopt].
-                  inversion Hopt; subst d_term; exists d_t; unfold br_tgt; rewrite Ecbit'; split; [exact Hr_t |].
-                  intros fo Hfo; cbn [eval_cfg_dag]; rewrite Hfo; reflexivity.
-                - destruct (try_const_i1_sound ce_cond (build_param_env src_pnames vs)
-                              (oracle_of_fmap (added_br ++ added_c ++ added_p ++ fmap0))
-                              false Hwt_cond Hlf_cond Hp_cond Etc) as [cbit' [Hev_tc Ecbit']].
-                  rewrite Hev_br in Hev_tc.
-                  pose proof (eou_dvalue_I_same_sz_inj 1 cbit cbit' Hev_tc) as <-.
-                  destruct (summarize_ocfg_dag fuel' blk_uas true (args G) src_pnames (defined_ids_of_cfg G)
-                              (ocfg_map (blks G)) false bid_cur br2 smap_c seen_br) as [d_f |] eqn:Hr_f;
-                    [| discriminate Hopt].
-                  inversion Hopt; subst d_term; exists d_f; unfold br_tgt; rewrite Ecbit'; split; [exact Hr_f |].
-                  intros fo Hfo; cbn [eval_cfg_dag]; rewrite Hfo; reflexivity.
-                - destruct (summarize_ocfg_dag fuel' blk_uas true (args G) src_pnames (defined_ids_of_cfg G)
-                              (ocfg_map (blks G)) false bid_cur br1 smap_c seen_br) as [d_t |] eqn:Hr_t;
-                    [| discriminate Hopt].
-                  destruct (summarize_ocfg_dag fuel' blk_uas true (args G) src_pnames (defined_ids_of_cfg G)
-                              (ocfg_map (blks G)) false bid_cur br2 smap_c seen_br) as [d_f |] eqn:Hr_f;
-                    [| discriminate Hopt].
-                  inversion Hopt; subst d_term.
-                  exists (if (@Integers.unsigned 1 cbit =? 1)%Z then d_t else d_f); split.
-                  + unfold br_tgt; destruct (@Integers.unsigned 1 cbit =? 1)%Z; [exact Hr_t | exact Hr_f].
-                  + intros fo Hfo; cbn [eval_cfg_dag]; rewrite Hfo; destruct (@Integers.unsigned 1 cbit =? 1)%Z; reflexivity. }
-              destruct Hnext_br as [d_next [Hr_next Hev_term]].
-              destruct (IH blk_uas G src_pnames ext_c arg_dtys vs sigma_br
-                          (added_br ++ added_c ++ added_p ++ fmap0)
-                          false bid_cur br_tgt smap_c env_c seen_br d_next
-                          Hnd Hlp Hls Hla Hcomp Hvs Hpe_c Hwfd_br Hwfs_br Henv_br Hr_next)
-                as (added_n & Had_n & [Hev_ub_n | (sigma_out & env_out & dv_out & Hwfd_out & Hev_out & Hst_n)]).
-              ** assert (Hdisj_nbr : forall k z, In (k, z) (added_n ++ added_br) -> ~ In k seen_c).
-                 { intros k z Hkz; apply in_app_iff in Hkz as [Hn | Hb0].
-                   - intros Hsc0; exact (Had_n k z Hn (Hinc_cbr k Hsc0)).
-                   - exact (proj2 (Had_br k z Hb0)). }
-                 exists ((added_n ++ added_br) ++ added_c ++ added_p).
-                 split; [exact (Hdisj_all (added_n ++ added_br) Hdisj_nbr) | left].
-                 cbn [eval_cfg_dag]; rewrite (Hstrip_blk (added_n ++ added_br) d_term Hdisj_nbr).
-                 replace ((added_n ++ added_br) ++ added_c ++ added_p ++ fmap0)
-                   with (added_n ++ added_br ++ added_c ++ added_p ++ fmap0)
-                   by (rewrite !app_assoc; reflexivity).
-                 pose proof (eval_let_free_prepend_fmap ce_cond (build_param_env src_pnames vs)
-                               added_n (added_br ++ added_c ++ added_p ++ fmap0) seen_br
-                               Hlf_cond (Hfk_cond eq_refl) Had_n) as Hev_br'.
-                 rewrite Hev_br in Hev_br'.
-                 rewrite (Hev_term _ Hev_br'); exact Hev_ub_n.
-              ** assert (Hdisj_nbr : forall k z, In (k, z) (added_n ++ added_br) -> ~ In k seen_c).
-                 { intros k z Hkz; apply in_app_iff in Hkz as [Hn | Hb0].
-                   - intros Hsc0; exact (Had_n k z Hn (Hinc_cbr k Hsc0)).
-                   - exact (proj2 (Had_br k z Hb0)). }
-                 exists ((added_n ++ added_br) ++ added_c ++ added_p).
-                 split; [exact (Hdisj_all (added_n ++ added_br) Hdisj_nbr) | right].
-                 exists sigma_out, env_out, dv_out; split; [exact Hwfd_out | split].
-                 --- cbn [eval_cfg_dag]; rewrite (Hstrip_blk (added_n ++ added_br) d_term Hdisj_nbr).
-                     replace ((added_n ++ added_br) ++ added_c ++ added_p ++ fmap0)
-                       with (added_n ++ added_br ++ added_c ++ added_p ++ fmap0)
-                       by (rewrite !app_assoc; reflexivity).
-                     pose proof (eval_let_free_prepend_fmap ce_cond (build_param_env src_pnames vs)
-                                   added_n (added_br ++ added_c ++ added_p ++ fmap0) seen_br
-                                   Hlf_cond (Hfk_cond eq_refl) Had_n) as Hev_br'.
-                     rewrite Hev_br in Hev_br'.
-                     rewrite (Hev_term _ Hev_br'); exact Hev_out.
-                 --- eapply cfg_steps_to_ret_obs; [symmetry; exact (denote_ocfg_map_step_obs _ _ _ _ Hfb) |].
-                     unfold denote_block; rewrite Htm.
-                     eapply cfg_steps_to_ret_bind.
-                     +++ eapply cfg_steps_to_ret_bind.
-                         *** eapply cfg_steps_to_ret_bind; [exact Hphis_step |].
-                             eapply cfg_steps_to_ret_bind; [exact Hst_c |].
-                             cbn [denote_terminator]; unfold denote_exp'.
-                             eapply cfg_steps_to_ret_bind;
-                               [exact (mcfg_to_cfg_steps_ret _ _ _ _ _ _ Hst_br) |].
-                             cbn iota beta; rewrite bit_int_1_equ_one_eq_unsigned; unfold br_tgt.
-                             destruct (@Integers.unsigned 1 cbit =? 1)%Z; apply CSR_Ret; reflexivity.
-                         *** apply CSR_Ret; reflexivity.
-                     +++ eapply CSR_Tau; [reflexivity | exact Hst_n].
+        exact (summarize_ocfg_tgt_term_br fuel' blk_uas G src_pnames ext_c arg_dtys vs
+                 sigma0 sigma_p sigma_c fmap0 bid_from bid_cur env (apply_phi_env env dvs_p) env_c
+                 seen0 seen_c seen_br b pevals cevals smap_c d_term
+                 added_p added_c tiid op br1 br2 tmd ce_cond
+                 Hnd Hlp Hls Hla Hcomp Hvs Hfb Hb_in Htm Hr_cond Hopt
+                 Hphis_step Hst_c Hstrip_blk Hdisj_all Hpe_c Hwfd_c Hwfs_c Henv_c
+                 (fun br_tgt sigma_br fmap_br d_next Hwfd_br Hwfs_br Henv_br Hr_next =>
+                    IH blk_uas G src_pnames ext_c arg_dtys vs sigma_br fmap_br
+                      false bid_cur br_tgt smap_c env_c seen_br d_next
+                      Hnd Hlp Hls Hla Hcomp Hvs Hpe_c Hwfd_br Hwfs_br Henv_br Hr_next)).
       * (* TERM_Br_1 *)
         destruct (IH blk_uas G src_pnames ext_c arg_dtys vs sigma_c (added_c ++ added_p ++ fmap0)
                     false bid_cur br smap_c env_c seen_c d_term

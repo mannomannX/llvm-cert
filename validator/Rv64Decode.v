@@ -416,7 +416,9 @@ Fixpoint decode_rv64_stream_acc
       | O => inl (diag "mc-decode" ("RV64 decoder fuel exhausted at offset " ++ diag_N_hex (N.of_nat cur_off)))
       | S fuel' =>
           match take_u16_le cur with
-          | None => inl (diag "mc-decode" ("truncated RV64 instruction stream at offset " ++ diag_N_hex (N.of_nat cur_off)))
+          | None =>
+              inl (diag "mc-decode"
+                ("truncated RV64 instruction stream at offset " ++ diag_N_hex (N.of_nat cur_off)))
           | Some (hw, rest2) =>
               if negb (N.eqb (N.modulo hw 4%N) 3%N) then
                 if negb rvc_enabled then
@@ -436,7 +438,8 @@ Fixpoint decode_rv64_stream_acc
               else
                 match take_u32_le cur with
                 | None =>
-                    inl (diag "mc-decode" ("truncated 32-bit RV64 instruction at offset " ++ diag_N_hex (N.of_nat cur_off)))
+                    inl (diag "mc-decode"
+                      ("truncated 32-bit RV64 instruction at offset " ++ diag_N_hex (N.of_nat cur_off)))
                 | Some (w, rest4) =>
                     match decode_rv32_word w with
                     | None =>

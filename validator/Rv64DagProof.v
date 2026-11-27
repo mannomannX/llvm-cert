@@ -130,13 +130,15 @@ Proof.
   - (* RAI_Slti *)
     assert (H1w : (1 <? w)%positive = true) by (destruct Hw as [-> | ->]; reflexivity).
     rewrite (eval_ce_zext _ _ _ _ _ _ H1w
-               (eval_ce_icmp_eq_bool penv foracle CIP_Slt w a (ce_bv_z w imm) va (@Integers.repr w imm) Ha (eval_ce_bv_z _ _ _ _))).
+               (eval_ce_icmp_eq_bool penv foracle CIP_Slt w a (ce_bv_z w imm)
+                  va (@Integers.repr w imm) Ha (eval_ce_bv_z _ _ _ _))).
     destruct (@Integers.lt w va (@Integers.repr w imm));
       [rewrite (@Integers.unsigned_one 1%positive) | rewrite (@Integers.unsigned_zero 1%positive)]; reflexivity.
   - (* RAI_Sltiu *)
     assert (H1w : (1 <? w)%positive = true) by (destruct Hw as [-> | ->]; reflexivity).
     rewrite (eval_ce_zext _ _ _ _ _ _ H1w
-               (eval_ce_icmp_eq_bool penv foracle CIP_Ult w a (ce_bv_z w imm) va (@Integers.repr w imm) Ha (eval_ce_bv_z _ _ _ _))).
+               (eval_ce_icmp_eq_bool penv foracle CIP_Ult w a (ce_bv_z w imm)
+                  va (@Integers.repr w imm) Ha (eval_ce_bv_z _ _ _ _))).
     destruct (@Integers.ltu w va (@Integers.repr w imm));
       [rewrite (@Integers.unsigned_one 1%positive) | rewrite (@Integers.unsigned_zero 1%positive)]; reflexivity.
   - (* RAI_Xori *)
@@ -217,8 +219,10 @@ Proof.
   - (* CB_UDiv *)
     set (is_z := CE_ICmp CIP_Eq false w b (CE_BvConst w 0%N)).
     assert (Hisz : eval_closed_cert_expr penv foracle is_z =
-      raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if @Integers.eq w vb (@Integers.zero w) then @Integers.one 1%positive else @Integers.zero 1%positive)))).
-    { unfold is_z; apply (eval_ce_icmp_eq_bool _ _ CIP_Eq); [exact Hb | rewrite eval_ce_const, repr_zero_N; reflexivity]. }
+      raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive
+        (if @Integers.eq w vb (@Integers.zero w) then @Integers.one 1%positive else @Integers.zero 1%positive)))).
+    { unfold is_z; apply (eval_ce_icmp_eq_bool _ _ CIP_Eq);
+        [exact Hb | rewrite eval_ce_const, repr_zero_N; reflexivity]. }
     assert (Hsb : eval_closed_cert_expr penv foracle (CE_Select w is_z (CE_BvConst w 1%N) b) =
       raise_ret (DVALUE_Base (@DVALUE_I Pa w (if @Integers.eq w vb (@Integers.zero w) then @Integers.one w else vb)))).
     { eapply eval_ce_select_int; [exact Hisz | rewrite eval_ce_const, repr_one_N; reflexivity | exact Hb]. }
@@ -240,8 +244,10 @@ Proof.
   - (* CB_URem *)
     set (is_z := CE_ICmp CIP_Eq false w b (CE_BvConst w 0%N)).
     assert (Hisz : eval_closed_cert_expr penv foracle is_z =
-      raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if @Integers.eq w vb (@Integers.zero w) then @Integers.one 1%positive else @Integers.zero 1%positive)))).
-    { unfold is_z; apply (eval_ce_icmp_eq_bool _ _ CIP_Eq); [exact Hb | rewrite eval_ce_const, repr_zero_N; reflexivity]. }
+      raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive
+        (if @Integers.eq w vb (@Integers.zero w) then @Integers.one 1%positive else @Integers.zero 1%positive)))).
+    { unfold is_z; apply (eval_ce_icmp_eq_bool _ _ CIP_Eq);
+        [exact Hb | rewrite eval_ce_const, repr_zero_N; reflexivity]. }
     assert (Hsb : eval_closed_cert_expr penv foracle (CE_Select w is_z (CE_BvConst w 1%N) b) =
       raise_ret (DVALUE_Base (@DVALUE_I Pa w (if @Integers.eq w vb (@Integers.zero w) then @Integers.one w else vb)))).
     { eapply eval_ce_select_int; [exact Hisz | rewrite eval_ce_const, repr_one_N; reflexivity | exact Hb]. }
@@ -263,10 +269,13 @@ Proof.
   - (* CB_SDiv *)
     set (is_z := CE_ICmp CIP_Eq false w b (CE_BvConst w 0%N)).
     set (imin := ce_int_min w).
-    set (is_ovf := CE_BinOp CB_And 1%positive no_binop_flags (CE_ICmp CIP_Eq false w a imin) (CE_ICmp CIP_Eq false w b (ce_all_ones w))).
+    set (is_ovf := CE_BinOp CB_And 1%positive no_binop_flags
+                   (CE_ICmp CIP_Eq false w a imin) (CE_ICmp CIP_Eq false w b (ce_all_ones w))).
     assert (Hisz : eval_closed_cert_expr penv foracle is_z =
-      raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if Z.eqb (@Integers.signed w vb) 0%Z then @Integers.one 1%positive else @Integers.zero 1%positive)))).
-    { assert (Hz0 : eval_closed_cert_expr penv foracle (CE_BvConst w 0%N) = raise_ret (DVALUE_Base (@DVALUE_I Pa w (@Integers.zero w))))
+      raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive
+        (if Z.eqb (@Integers.signed w vb) 0%Z then @Integers.one 1%positive else @Integers.zero 1%positive)))).
+    { assert (Hz0 : eval_closed_cert_expr penv foracle (CE_BvConst w 0%N) =
+        raise_ret (DVALUE_Base (@DVALUE_I Pa w (@Integers.zero w))))
         by (rewrite eval_ce_const, repr_zero_N; reflexivity).
       unfold is_z; rewrite (eval_ce_icmp_eq_bool _ _ CIP_Eq w b (CE_BvConst w 0%N) vb (@Integers.zero w) Hb Hz0).
       destruct (Z.eqb (@Integers.signed w vb) 0%Z) eqn:Esz, (@Integers.eq w vb (@Integers.zero w)) eqn:Euz;
@@ -277,8 +286,10 @@ Proof.
         (if Z.eqb (@Integers.signed w va) (@Integers.min_signed w) && Z.eqb (@Integers.signed w vb) (-1)%Z
          then @Integers.one 1%positive else @Integers.zero 1%positive)))).
     { unfold is_ovf; rewrite eval_ce_binop.
-      rewrite (eval_ce_icmp_eq_bool penv foracle CIP_Eq w a imin va (@Integers.repr w (@Integers.min_signed w)) Ha (eval_ce_int_min _ _ _)).
-      rewrite (eval_ce_icmp_eq_bool penv foracle CIP_Eq w b (ce_all_ones w) vb (@Integers.mone w) Hb (eval_ce_all_ones _ _ _)).
+      rewrite (eval_ce_icmp_eq_bool penv foracle CIP_Eq w a imin va
+                 (@Integers.repr w (@Integers.min_signed w)) Ha (eval_ce_int_min _ _ _)).
+      rewrite (eval_ce_icmp_eq_bool penv foracle CIP_Eq w b (ce_all_ones w) vb
+                 (@Integers.mone w) Hb (eval_ce_all_ones _ _ _)).
       cbn [eou_bind].
       unfold eval_iop; rewrite eval_iop_integer_base_same_width; cbn [eval_int_op].
       destruct (@Integers.eq w va (@Integers.repr w (@Integers.min_signed w))) eqn:Ea,
@@ -292,16 +303,19 @@ Proof.
         try (exfalso; apply Z.eqb_eq in Esb; apply integers_eq_mone_iff in Esb; congruence);
         reflexivity. }
     set (cz := Z.eqb (@Integers.signed w vb) 0%Z) in *.
-    set (co := (Z.eqb (@Integers.signed w va) (@Integers.min_signed w) && Z.eqb (@Integers.signed w vb) (-1)%Z)%bool) in *.
+    set (co := (Z.eqb (@Integers.signed w va) (@Integers.min_signed w) &&
+                Z.eqb (@Integers.signed w vb) (-1)%Z)%bool) in *.
     assert (Hbad : eval_closed_cert_expr penv foracle (CE_BinOp CB_Or 1%positive no_binop_flags is_z is_ovf) =
-      raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if (cz || co)%bool then @Integers.one 1%positive else @Integers.zero 1%positive)))).
+      raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive
+        (if (cz || co)%bool then @Integers.one 1%positive else @Integers.zero 1%positive)))).
     { rewrite eval_ce_binop, Hisz, Hovf; cbn [eou_bind].
       unfold eval_iop; rewrite eval_iop_integer_base_same_width; cbn [eval_int_op].
       destruct cz, co; reflexivity. }
     assert (Hsa : eval_closed_cert_expr penv foracle (CE_Select w is_ovf (CE_BvConst w 0%N) a) =
       raise_ret (DVALUE_Base (@DVALUE_I Pa w (if co then @Integers.zero w else va)))).
     { eapply eval_ce_select_int; [exact Hovf | rewrite eval_ce_const, repr_zero_N; reflexivity | exact Ha]. }
-    assert (Hsb : eval_closed_cert_expr penv foracle (CE_Select w (CE_BinOp CB_Or 1%positive no_binop_flags is_z is_ovf) (CE_BvConst w 1%N) b) =
+    assert (Hsb : eval_closed_cert_expr penv foracle
+      (CE_Select w (CE_BinOp CB_Or 1%positive no_binop_flags is_z is_ovf) (CE_BvConst w 1%N) b) =
       raise_ret (DVALUE_Base (@DVALUE_I Pa w (if (cz || co)%bool then @Integers.one w else vb)))).
     { eapply eval_ce_select_int; [exact Hbad | rewrite eval_ce_const, repr_one_N; reflexivity | exact Hb]. }
     assert (Hsdiv : eval_closed_cert_expr penv foracle
@@ -331,10 +345,13 @@ Proof.
   - (* CB_SRem *)
     set (is_z := CE_ICmp CIP_Eq false w b (CE_BvConst w 0%N)).
     set (imin := ce_int_min w).
-    set (is_ovf := CE_BinOp CB_And 1%positive no_binop_flags (CE_ICmp CIP_Eq false w a imin) (CE_ICmp CIP_Eq false w b (ce_all_ones w))).
+    set (is_ovf := CE_BinOp CB_And 1%positive no_binop_flags
+                   (CE_ICmp CIP_Eq false w a imin) (CE_ICmp CIP_Eq false w b (ce_all_ones w))).
     assert (Hisz : eval_closed_cert_expr penv foracle is_z =
-      raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if Z.eqb (@Integers.signed w vb) 0%Z then @Integers.one 1%positive else @Integers.zero 1%positive)))).
-    { assert (Hz0 : eval_closed_cert_expr penv foracle (CE_BvConst w 0%N) = raise_ret (DVALUE_Base (@DVALUE_I Pa w (@Integers.zero w))))
+      raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive
+        (if Z.eqb (@Integers.signed w vb) 0%Z then @Integers.one 1%positive else @Integers.zero 1%positive)))).
+    { assert (Hz0 : eval_closed_cert_expr penv foracle (CE_BvConst w 0%N) =
+        raise_ret (DVALUE_Base (@DVALUE_I Pa w (@Integers.zero w))))
         by (rewrite eval_ce_const, repr_zero_N; reflexivity).
       unfold is_z; rewrite (eval_ce_icmp_eq_bool _ _ CIP_Eq w b (CE_BvConst w 0%N) vb (@Integers.zero w) Hb Hz0).
       destruct (Z.eqb (@Integers.signed w vb) 0%Z) eqn:Esz, (@Integers.eq w vb (@Integers.zero w)) eqn:Euz;
@@ -345,8 +362,10 @@ Proof.
         (if Z.eqb (@Integers.signed w va) (@Integers.min_signed w) && Z.eqb (@Integers.signed w vb) (-1)%Z
          then @Integers.one 1%positive else @Integers.zero 1%positive)))).
     { unfold is_ovf; rewrite eval_ce_binop.
-      rewrite (eval_ce_icmp_eq_bool penv foracle CIP_Eq w a imin va (@Integers.repr w (@Integers.min_signed w)) Ha (eval_ce_int_min _ _ _)).
-      rewrite (eval_ce_icmp_eq_bool penv foracle CIP_Eq w b (ce_all_ones w) vb (@Integers.mone w) Hb (eval_ce_all_ones _ _ _)).
+      rewrite (eval_ce_icmp_eq_bool penv foracle CIP_Eq w a imin va
+                 (@Integers.repr w (@Integers.min_signed w)) Ha (eval_ce_int_min _ _ _)).
+      rewrite (eval_ce_icmp_eq_bool penv foracle CIP_Eq w b (ce_all_ones w) vb
+                 (@Integers.mone w) Hb (eval_ce_all_ones _ _ _)).
       cbn [eou_bind].
       unfold eval_iop; rewrite eval_iop_integer_base_same_width; cbn [eval_int_op].
       destruct (@Integers.eq w va (@Integers.repr w (@Integers.min_signed w))) eqn:Ea,
@@ -360,16 +379,19 @@ Proof.
         try (exfalso; apply Z.eqb_eq in Esb; apply integers_eq_mone_iff in Esb; congruence);
         reflexivity. }
     set (cz := Z.eqb (@Integers.signed w vb) 0%Z) in *.
-    set (co := (Z.eqb (@Integers.signed w va) (@Integers.min_signed w) && Z.eqb (@Integers.signed w vb) (-1)%Z)%bool) in *.
+    set (co := (Z.eqb (@Integers.signed w va) (@Integers.min_signed w) &&
+                Z.eqb (@Integers.signed w vb) (-1)%Z)%bool) in *.
     assert (Hbad : eval_closed_cert_expr penv foracle (CE_BinOp CB_Or 1%positive no_binop_flags is_z is_ovf) =
-      raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive (if (cz || co)%bool then @Integers.one 1%positive else @Integers.zero 1%positive)))).
+      raise_ret (DVALUE_Base (@DVALUE_I Pa 1%positive
+        (if (cz || co)%bool then @Integers.one 1%positive else @Integers.zero 1%positive)))).
     { rewrite eval_ce_binop, Hisz, Hovf; cbn [eou_bind].
       unfold eval_iop; rewrite eval_iop_integer_base_same_width; cbn [eval_int_op].
       destruct cz, co; reflexivity. }
     assert (Hsa : eval_closed_cert_expr penv foracle (CE_Select w is_ovf (CE_BvConst w 0%N) a) =
       raise_ret (DVALUE_Base (@DVALUE_I Pa w (if co then @Integers.zero w else va)))).
     { eapply eval_ce_select_int; [exact Hovf | rewrite eval_ce_const, repr_zero_N; reflexivity | exact Ha]. }
-    assert (Hsb : eval_closed_cert_expr penv foracle (CE_Select w (CE_BinOp CB_Or 1%positive no_binop_flags is_z is_ovf) (CE_BvConst w 1%N) b) =
+    assert (Hsb : eval_closed_cert_expr penv foracle
+      (CE_Select w (CE_BinOp CB_Or 1%positive no_binop_flags is_z is_ovf) (CE_BvConst w 1%N) b) =
       raise_ret (DVALUE_Base (@DVALUE_I Pa w (if (cz || co)%bool then @Integers.one w else vb)))).
     { eapply eval_ce_select_int; [exact Hbad | rewrite eval_ce_const, repr_one_N; reflexivity | exact Hb]. }
     assert (Hsrem : eval_closed_cert_expr penv foracle
@@ -393,9 +415,11 @@ Proof.
       eapply eval_ce_select_int; [exact Hovf | rewrite eval_ce_const, repr_zero_N; reflexivity | exact Hsrem]. }
     { destruct co eqn:Eco.
       - eapply (eval_ce_select_int _ _ _ _ _ _ false); [exact Hisz | exact Ha |].
-        eapply (eval_ce_select_int _ _ _ _ _ _ true); [exact Hovf | rewrite eval_ce_const, repr_zero_N; reflexivity | exact Hsrem].
+        eapply (eval_ce_select_int _ _ _ _ _ _ true);
+          [exact Hovf | rewrite eval_ce_const, repr_zero_N; reflexivity | exact Hsrem].
       - eapply (eval_ce_select_int _ _ _ _ _ _ false); [exact Hisz | exact Ha |].
-        eapply (eval_ce_select_int _ _ _ _ _ _ false); [exact Hovf | rewrite eval_ce_const, repr_zero_N; reflexivity | exact Hsrem]. }
+        eapply (eval_ce_select_int _ _ _ _ _ _ false);
+          [exact Hovf | rewrite eval_ce_const, repr_zero_N; reflexivity | exact Hsrem]. }
 Qed.
 
 Lemma eval_sym_mulhi64_sound :
@@ -412,11 +436,13 @@ Proof.
   unfold sym_mulhi64.
   assert (Ha128 : eval_closed_cert_expr penv foracle (if sa then ce_sext64_128 a else ce_zext64_128 a) =
     raise_ret (DVALUE_Base (@DVALUE_I Pa 128%positive
-      (@Integers.repr 128%positive (if sa then @Integers.signed 64%positive va else @Integers.unsigned 64%positive va))))).
+      (@Integers.repr 128%positive
+        (if sa then @Integers.signed 64%positive va else @Integers.unsigned 64%positive va))))).
   { destruct sa; [apply eval_ce_sext | apply eval_ce_zext]; try reflexivity; assumption. }
   assert (Hb128 : eval_closed_cert_expr penv foracle (if sb then ce_sext64_128 b else ce_zext64_128 b) =
     raise_ret (DVALUE_Base (@DVALUE_I Pa 128%positive
-      (@Integers.repr 128%positive (if sb then @Integers.signed 64%positive vb else @Integers.unsigned 64%positive vb))))).
+      (@Integers.repr 128%positive
+        (if sb then @Integers.signed 64%positive vb else @Integers.unsigned 64%positive vb))))).
   { destruct sb; [apply eval_ce_sext | apply eval_ce_zext]; try reflexivity; assumption. }
   assert (Hprod : eval_closed_cert_expr penv foracle
     (CE_BinOp CB_Mul 128%positive no_binop_flags
@@ -453,7 +479,8 @@ Lemma eval_sym_alu_reg_raw_sound :
 Proof.
   intros Pa penv foracle op w a b va vb Hw Hmul Ha Hb.
   destruct op; cbn [sym_alu_reg_raw rv_eval_alu_reg_raw];
-    try (exfalso; destruct Hmul as [[H0 [H1 H2]] | ->]; [contradiction | discriminate H0 || discriminate H1 || discriminate H2]).
+    try (exfalso; destruct Hmul as [[H0 [H1 H2]] | ->];
+         [contradiction | discriminate H0 || discriminate H1 || discriminate H2]).
   - (* RAR_Add *)
     unfold eval_closed_cert_expr in *; cbn [eval_cert_expr]; rewrite Ha, Hb; cbn [eou_bind eval_iop].
     rewrite eval_iop_integer_base_same_width; cbn [eval_int_op]; reflexivity.
@@ -853,7 +880,10 @@ Proof.
                   sp_off vrf astk rf mstk sp_off' vrf' astk' Hag Hastk Hval_sv Est)
         as [Hag' Hastk'].
       exact (IH (pt_add_n pc visited) (pc + dri_len dec)%N sp_off' vrf' astk' ret_w d_mc
-                penv foracle rf0 (rv_write_reg rd (rv_eval_alu_reg op is_word (rv_read_reg rs1 rf) (rv_read_reg rs2 rf)) rf) mstk
+                penv foracle rf0
+                (rv_write_reg rd
+                   (rv_eval_alu_reg op is_word (rv_read_reg rs1 rf) (rv_read_reg rs2 rf)) rf)
+                mstk
                 Hrw Hnmul Hsp0 Hrng' Hsp2' Hag' Hastk' Hsum).
     + (* RV_Load *)
       destruct (rv_val_read rs1 vrf) as [| | | base_off] eqn:Er1; try discriminate Hsum.
@@ -919,12 +949,14 @@ Proof.
       destruct (add_rel_off pc rel) as [tgt_pc |] eqn:Erel; [| discriminate Hsum].
       destruct (summarize_rv64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk ret_w) as [| dt] eqn:Edt;
         [discriminate Hsum |].
-      destruct (summarize_rv64_dag_at fuel' im (pt_add_n pc visited) (pc + dri_len dec)%N sp_off vrf astk ret_w) as [| df] eqn:Edf;
+      destruct (summarize_rv64_dag_at fuel' im (pt_add_n pc visited) (pc + dri_len dec)%N
+                  sp_off vrf astk ret_w) as [| df] eqn:Edf;
         [discriminate Hsum |].
       inversion Hsum; subst d_mc; clear Hsum.
       pose proof (Hag rs1) as H1; rewrite Er1 in H1; cbn [mc_sym_val_agrees] in H1.
       pose proof (Hag rs2) as H2; rewrite Er2 in H2; cbn [mc_sym_val_agrees] in H2.
-      pose proof (eval_sym_br_cond_sound penv foracle cond e1 e2 (rv_read_reg rs1 rf) (rv_read_reg rs2 rf) H1 H2) as Hbr.
+      pose proof (eval_sym_br_cond_sound penv foracle cond e1 e2
+                    (rv_read_reg rs1 rf) (rv_read_reg rs2 rf) H1 H2) as Hbr.
       cbn [eval_cfg_dag]; rewrite Hbr.
       destruct (rv_eval_br_cond cond (rv_read_reg rs1 rf) (rv_read_reg rs2 rf)).
       * rewrite (@Integers.unsigned_one 1%positive); cbn [Z.eqb].
@@ -1002,7 +1034,9 @@ Proof.
         (CE_BinOp CB_And 1%positive no_binop_flags
           (CE_ICmp CIP_Eq false w a (ce_int_min w))
           (CE_ICmp CIP_Eq false w b (ce_all_ones w))))
-      by (apply wf_sym_binop; [right; left; reflexivity | apply wf_sym_icmp; [exact Ha | apply wf_sym_bv_const] | apply wf_sym_icmp; [exact Hb | apply wf_sym_bv_const]]);
+      by (apply wf_sym_binop;
+          [right; left; reflexivity | apply wf_sym_icmp; [exact Ha | apply wf_sym_bv_const]
+           | apply wf_sym_icmp; [exact Hb | apply wf_sym_bv_const]]);
       assert (Hbad : wf_sym_expr allowed 1%positive
         (CE_BinOp CB_Or 1%positive no_binop_flags
           (CE_ICmp CIP_Eq false w b (CE_BvConst w 0%N))
@@ -1012,13 +1046,18 @@ Proof.
       by (apply wf_sym_binop; [right; right; reflexivity | exact Hiz | exact Hovf]);
       apply wf_sym_select; [exact Hiz | try apply wf_sym_bv_const; try exact Ha |
         apply wf_sym_select; [exact Hovf | apply wf_sym_bv_const |
-          apply wf_sym_binop; [left; exact Hnz | apply wf_sym_select; [exact Hovf | apply wf_sym_bv_const | exact Ha] | apply wf_sym_select; [exact Hbad | apply wf_sym_bv_const | exact Hb]]]]).
+          apply wf_sym_binop;
+            [left; exact Hnz
+             | apply wf_sym_select; [exact Hovf | apply wf_sym_bv_const | exact Ha]
+             | apply wf_sym_select; [exact Hbad | apply wf_sym_bv_const | exact Hb]]]]).
   - (* CB_UDiv *)
     apply wf_sym_select; [exact Hiz | apply wf_sym_bv_const |].
-    apply wf_sym_binop; [left; exact Hnz | exact Ha | apply wf_sym_select; [exact Hiz | apply wf_sym_bv_const | exact Hb]].
+    apply wf_sym_binop;
+      [left; exact Hnz | exact Ha | apply wf_sym_select; [exact Hiz | apply wf_sym_bv_const | exact Hb]].
   - (* CB_URem *)
     apply wf_sym_select; [exact Hiz | exact Ha |].
-    apply wf_sym_binop; [left; exact Hnz | exact Ha | apply wf_sym_select; [exact Hiz | apply wf_sym_bv_const | exact Hb]].
+    apply wf_sym_binop;
+      [left; exact Hnz | exact Ha | apply wf_sym_select; [exact Hiz | apply wf_sym_bv_const | exact Hb]].
 Qed.
 
 Lemma wf_sym_mulhi64 : forall allowed sa sb a b,
@@ -1044,15 +1083,19 @@ Proof.
   intros allowed op w a b Hw Hmul Ha Hb.
   assert (Hnz : w <> 1%positive) by (destruct Hw as [-> | ->]; discriminate).
   destruct op; cbn [sym_alu_reg_raw];
-    try (exfalso; destruct Hmul as [[H0 [H1 H2]] | ->]; [contradiction | discriminate H0 || discriminate H1 || discriminate H2]).
+    try (exfalso; destruct Hmul as [[H0 [H1 H2]] | ->];
+         [contradiction | discriminate H0 || discriminate H1 || discriminate H2]).
   - apply wf_sym_binop; [left; exact Hnz | exact Ha | exact Hb].
   - apply wf_sym_binop; [left; exact Hnz | exact Ha | exact Hb].
-  - apply wf_sym_binop; [left; exact Hnz | exact Ha | apply wf_sym_binop; [left; exact Hnz | exact Hb | apply wf_sym_bv_const]].
+  - apply wf_sym_binop;
+      [left; exact Hnz | exact Ha | apply wf_sym_binop; [left; exact Hnz | exact Hb | apply wf_sym_bv_const]].
   - apply wf_sym_cast; [destruct Hw as [-> | ->]; reflexivity | apply wf_sym_icmp; assumption].
   - apply wf_sym_cast; [destruct Hw as [-> | ->]; reflexivity | apply wf_sym_icmp; assumption].
   - apply wf_sym_binop; [left; exact Hnz | exact Ha | exact Hb].
-  - apply wf_sym_binop; [left; exact Hnz | exact Ha | apply wf_sym_binop; [left; exact Hnz | exact Hb | apply wf_sym_bv_const]].
-  - apply wf_sym_binop; [left; exact Hnz | exact Ha | apply wf_sym_binop; [left; exact Hnz | exact Hb | apply wf_sym_bv_const]].
+  - apply wf_sym_binop;
+      [left; exact Hnz | exact Ha | apply wf_sym_binop; [left; exact Hnz | exact Hb | apply wf_sym_bv_const]].
+  - apply wf_sym_binop;
+      [left; exact Hnz | exact Ha | apply wf_sym_binop; [left; exact Hnz | exact Hb | apply wf_sym_bv_const]].
   - apply wf_sym_binop; [left; exact Hnz | exact Ha | exact Hb].
   - apply wf_sym_binop; [left; exact Hnz | exact Ha | exact Hb].
   - apply wf_sym_binop; [left; exact Hnz | exact Ha | exact Hb].
@@ -1142,7 +1185,8 @@ Proof.
       { unfold rv_sym_step_write in Est; destruct (N.eqb rd 2%N); [discriminate Est |].
         inversion Est; subst; apply rv_val_regs_wf_write; [exact Hwf | apply wf_sym_bv_z]. }
       assert (Hstk' : mc_sym_stack_wf allowed sp_off' astk').
-      { unfold rv_sym_step_write in Est; destruct (N.eqb rd 2%N); [discriminate Est | inversion Est; subst; exact Hstk]. }
+      { unfold rv_sym_step_write in Est; destruct (N.eqb rd 2%N);
+          [discriminate Est | inversion Est; subst; exact Hstk]. }
       exact (IH _ _ _ _ _ _ _ _ Hrw Hnmul Hrng' Hsp2' Hwf' Hstk' Hsum).
     + set (sv_opt :=
         match op, is_word, rv_val_read rs1 vrf with
@@ -1173,7 +1217,8 @@ Proof.
       destruct (rv_sym_step_write_sp _ _ _ _ _ _ _ _ Hrng Hsp2 Est) as [Hrng' Hsp2'].
       assert (Hwf' : rv_val_regs_wf allowed vrf' /\ mc_sym_stack_wf allowed sp_off' astk').
       { unfold rv_sym_step_write in Est; destruct (N.eqb rd 2%N).
-        - destruct sv; try discriminate Est; destruct (Z.leb (- mc_frame_cap) off && Z.leb off 0%Z) eqn:Eb; try discriminate Est.
+        - destruct sv; try discriminate Est;
+            destruct (Z.leb (- mc_frame_cap) off && Z.leb off 0%Z) eqn:Eb; try discriminate Est.
           apply andb_true_iff in Eb as [Eb1 Eb2]; apply Z.leb_le in Eb1; apply Z.leb_le in Eb2.
           inversion Est; subst; split;
             [apply rv_val_regs_wf_write; assumption | eapply mc_sym_stk_prune_wf; [lia | exact Hstk]].
@@ -1215,7 +1260,8 @@ Proof.
       destruct (rv_sym_step_write_sp _ _ _ _ _ _ _ _ Hrng Hsp2 Est) as [Hrng' Hsp2'].
       assert (Hwf' : rv_val_regs_wf allowed vrf' /\ mc_sym_stack_wf allowed sp_off' astk').
       { unfold rv_sym_step_write in Est; destruct (N.eqb rd 2%N).
-        - destruct sv; try discriminate Est; destruct (Z.leb (- mc_frame_cap) off && Z.leb off 0%Z); try discriminate Est.
+        - destruct sv; try discriminate Est;
+            destruct (Z.leb (- mc_frame_cap) off && Z.leb off 0%Z); try discriminate Est.
           inversion Est; subst; split;
             [apply rv_val_regs_wf_write; assumption | eapply mc_sym_stk_prune_wf; [lia | exact Hstk]].
         - inversion Est; subst; split; [apply rv_val_regs_wf_write; assumption | exact Hstk]. }
@@ -1230,7 +1276,8 @@ Proof.
       destruct (rv_sym_step_write_sp _ _ _ _ _ _ _ _ Hrng Hsp2 Est) as [Hrng' Hsp2'].
       assert (Hwf' : rv_val_regs_wf allowed vrf' /\ mc_sym_stack_wf allowed sp_off' astk').
       { unfold rv_sym_step_write in Est; destruct (N.eqb rd 2%N).
-        - destruct sv; try discriminate Est; destruct (Z.leb (- mc_frame_cap) off && Z.leb off 0%Z); try discriminate Est.
+        - destruct sv; try discriminate Est;
+            destruct (Z.leb (- mc_frame_cap) off && Z.leb off 0%Z); try discriminate Est.
           inversion Est; subst; split;
             [apply rv_val_regs_wf_write; assumption | eapply mc_sym_stk_prune_wf; [lia | exact Hstk]].
         - inversion Est; subst; split; [apply rv_val_regs_wf_write; assumption | exact Hstk]. }
@@ -1249,7 +1296,8 @@ Proof.
       destruct (add_rel_off pc rel) as [tgt_pc |]; [| discriminate Hsum].
       destruct (summarize_rv64_dag_at fuel' im (pt_add_n pc visited) tgt_pc sp_off vrf astk ret_w) as [| dt] eqn:Edt;
         [discriminate Hsum |].
-      destruct (summarize_rv64_dag_at fuel' im (pt_add_n pc visited) (pc + dri_len dec)%N sp_off vrf astk ret_w) as [| df] eqn:Edf;
+      destruct (summarize_rv64_dag_at fuel' im (pt_add_n pc visited) (pc + dri_len dec)%N
+                  sp_off vrf astk ret_w) as [| df] eqn:Edf;
         [discriminate Hsum |].
       inversion Hsum; subst d_mc; clear Hsum.
       pose proof (Hwf rs1) as H1; rewrite Er1 in H1; pose proof (Hwf rs2) as H2; rewrite Er2 in H2.
@@ -1331,13 +1379,19 @@ Proof.
     destruct (if N.eqb _ 0%N then _ else _) as [r |]; [inversion H; subst; destruct r; exact I | discriminate H]. }
   destruct (N.eqb (bit_slice w 0%N 7%N) 59%N).
   { destruct (N.eqb (bit_slice w 25%N 7%N) 0%N);
-      [destruct (N.eqb (bit_slice w 12%N 3%N) 0%N); [| destruct (N.eqb (bit_slice w 12%N 3%N) 1%N); [| destruct (N.eqb (bit_slice w 12%N 3%N) 5%N)]];
+      [destruct (N.eqb (bit_slice w 12%N 3%N) 0%N);
+       [| destruct (N.eqb (bit_slice w 12%N 3%N) 1%N);
+       [| destruct (N.eqb (bit_slice w 12%N 3%N) 5%N)]];
        try (inversion H; subst; exact I); discriminate H |].
     destruct (N.eqb (bit_slice w 25%N 7%N) 32%N);
       [destruct (N.eqb (bit_slice w 12%N 3%N) 0%N); [| destruct (N.eqb (bit_slice w 12%N 3%N) 5%N)];
        try (inversion H; subst; exact I); discriminate H |].
     destruct (N.eqb (bit_slice w 25%N 7%N) 1%N);
-      [destruct (N.eqb (bit_slice w 12%N 3%N) 0%N); [| destruct (N.eqb (bit_slice w 12%N 3%N) 4%N); [| destruct (N.eqb (bit_slice w 12%N 3%N) 5%N); [| destruct (N.eqb (bit_slice w 12%N 3%N) 6%N); [| destruct (N.eqb (bit_slice w 12%N 3%N) 7%N)]]]];
+      [destruct (N.eqb (bit_slice w 12%N 3%N) 0%N);
+       [| destruct (N.eqb (bit_slice w 12%N 3%N) 4%N);
+       [| destruct (N.eqb (bit_slice w 12%N 3%N) 5%N);
+       [| destruct (N.eqb (bit_slice w 12%N 3%N) 6%N);
+       [| destruct (N.eqb (bit_slice w 12%N 3%N) 7%N)]]]];
        try (inversion H; subst; exact I); discriminate H | discriminate H]. }
   cbv zeta in H;
   repeat match type of H with
@@ -1474,15 +1528,18 @@ Proof.
           -- rewrite (eval_ce_sext penv foracle (ras_width sp) 64%positive (CE_Var (ras_name sp) (ras_width sp)) v).
              ++ reflexivity.
              ++ exact (rv_supported_arg_width_lt64 _ Hwsp Ew64).
-             ++ unfold eval_closed_cert_expr; cbn [eval_cert_expr]; rewrite Hp; cbn [lookup_let_val check_scalar_width]; rewrite Pos.eqb_refl; reflexivity.
+             ++ unfold eval_closed_cert_expr; cbn [eval_cert_expr];
+                rewrite Hp; cbn [lookup_let_val check_scalar_width]; rewrite Pos.eqb_refl; reflexivity.
           -- rewrite (eval_ce_sext penv foracle (ras_width sp) 64%positive (CE_Var (ras_name sp) (ras_width sp)) v).
              ++ reflexivity.
              ++ exact (rv_supported_arg_width_lt64 _ Hwsp Ew64).
-             ++ unfold eval_closed_cert_expr; cbn [eval_cert_expr]; rewrite Hp; cbn [lookup_let_val check_scalar_width]; rewrite Pos.eqb_refl; reflexivity.
+             ++ unfold eval_closed_cert_expr; cbn [eval_cert_expr];
+                rewrite Hp; cbn [lookup_let_val check_scalar_width]; rewrite Pos.eqb_refl; reflexivity.
           -- rewrite (eval_ce_zext penv foracle (ras_width sp) 64%positive (CE_Var (ras_name sp) (ras_width sp)) v).
              ++ reflexivity.
              ++ exact (rv_supported_arg_width_lt64 _ Hwsp Ew64).
-             ++ unfold eval_closed_cert_expr; cbn [eval_cert_expr]; rewrite Hp; cbn [lookup_let_val check_scalar_width]; rewrite Pos.eqb_refl; reflexivity.
+             ++ unfold eval_closed_cert_expr; cbn [eval_cert_expr];
+                rewrite Hp; cbn [lookup_let_val check_scalar_width]; rewrite Pos.eqb_refl; reflexivity.
       + assert (Hargs : forall (k : nat) sp0, (k < List.length rest)%nat -> nth_error rest k = Some sp0 ->
           exists v : @Integers.bit_int (ras_width sp0),
             penv (ras_name sp0) = Some (DVALUE_Base (@DVALUE_I Pa (ras_width sp0) v)) /\

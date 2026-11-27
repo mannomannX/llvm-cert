@@ -61,7 +61,8 @@ Local Open Scope list_scope.
 
 Lemma xorb_false_iff : forall b1 b2 : bool, xorb b1 b2 = false <-> b1 = b2.
 Proof.
-  intros [] []; cbn; split; intros H; try reflexivity; discriminate.
+  intros [] []; cbn; split;
+    intros H; try reflexivity; discriminate.
 Qed.
 
 From CertValidator Require Import LratCore AigGates.
@@ -775,7 +776,8 @@ Proof.
       as (asg6 & Hs6 & Hlen_r & Hwf_r & Hwf_c & Heq_r).
     pose proof (step_spec_trans st2 st5 st' asg2 asg5 asg6 Hs25 Hs6) as Hs26.
     pose proof (step_spec_trans st st5 st' asg asg5 asg6 Hs05 Hs6) as Hs06.
-    exists asg6; split; [exact Hs06 | split; [cbn; rewrite Hlen_r; reflexivity | split]].
+    exists asg6; split;
+      [exact Hs06 | split; [cbn; rewrite Hlen_r; reflexivity | split]].
     + constructor; [exact (wf_lit_bound_mono _ _ _ (proj1 Hs26) Hw_sb) | exact Hwf_r].
     + split; [exact Hwf_c |].
       cbn [List.map List.length];
@@ -1361,7 +1363,8 @@ Qed.
 Lemma nth_app_l : forall {A : Type} (d : A) k (l1 l2 : list A),
   (k < List.length l1)%nat -> List.nth k (l1 ++ l2) d = List.nth k l1 d.
 Proof.
-  intros A d k l1; revert k; induction l1 as [| x r IH]; intros [| k'] l2 Hlt; cbn in *;
+  intros A d k l1; revert k; induction l1 as [| x r IH];
+    intros [| k'] l2 Hlt; cbn in *;
     [lia | lia | reflexivity | apply IH; lia].
 Qed.
 
@@ -1369,7 +1372,8 @@ Lemma nth_app_r : forall {A : Type} (d : A) k (l1 l2 : list A),
   (List.length l1 <= k)%nat ->
   List.nth k (l1 ++ l2) d = List.nth (k - List.length l1) l2 d.
 Proof.
-  intros A d k l1; revert k; induction l1 as [| x r IH]; intros [| k'] l2 Hle; cbn in *;
+  intros A d k l1; revert k; induction l1 as [| x r IH];
+    intros [| k'] l2 Hle; cbn in *;
     [reflexivity | reflexivity | lia | apply IH; lia].
 Qed.
 
@@ -2355,9 +2359,11 @@ Proof.
     pose proof (bools_to_Z_range b_lo) as Hr; rewrite Hlo_len, positive_nat_Z, <- modulus_pow_sz in Hr.
     unfold Integers.max_unsigned; lia. }
   exists asg5; split; [exact Hs05 | split].
-  - split; [split; [reflexivity | cbn; unfold lo; apply len_firstn_le; rewrite Hla; lia] |
-            split; [exact (wf_lits_bound_mono _ _ _ (proj1 Hs05) (wf_lits_bound_firstn _ _ _ Hba))
-                    | exact Hwf_p]].
+  - split;
+      [split;
+         [reflexivity | cbn; unfold lo; apply len_firstn_le; rewrite Hla; lia]
+      | split; [exact (wf_lits_bound_mono _ _ _ (proj1 Hs05) (wf_lits_bound_firstn _ _ _ Hba))
+                | exact Hwf_p]].
   - split.
     + unfold eval_rail_psn; cbn [rbv_psn]; cbn zeta; fold va res.
       rewrite Hev_p,

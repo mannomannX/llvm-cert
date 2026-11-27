@@ -64,7 +64,8 @@ Definition length_tr {A : Type} (xs : list A) : nat :=
 Lemma length_tr_acc_eq : forall {A : Type} (acc : nat) (xs : list A),
   length_tr_acc acc xs = (acc + List.length xs)%nat.
 Proof.
-  intros A acc xs; revert acc; induction xs as [| x rest IH]; intro acc; cbn;
+  intros A acc xs; revert acc;
+    induction xs as [| x rest IH]; intro acc; cbn;
     [lia | rewrite IH; lia].
 Qed.
 
@@ -319,7 +320,8 @@ Proof.
       clear Hno.
       assert (Hnot_none : forall u0 r0,
                 scan_rup_clause trail (Some u0) r0 <> RUP_Conflict).
-      { clear; intros u0 r0; revert u0; induction r0 as [| x xr IHxr]; intros u0; cbn.
+      { clear; intros u0 r0; revert u0;
+        induction r0 as [| x xr IHxr]; intros u0; cbn.
         - discriminate.
         - destruct (lit_status trail x) as [[|] |]; try discriminate; apply IHxr. }
       exact (Hnot_none l rest Hs).
@@ -342,7 +344,8 @@ Proof.
       * destruct unassigned as [u0 |]; [discriminate |].
         assert (Hu_eq : forall x0 r0,
                   scan_rup_clause trail (Some x0) r0 = RUP_Unit u -> x0 = u).
-        { clear; intros x0 r0; revert x0; induction r0 as [| y yr IHyr]; intros x0 H; cbn in H.
+        { clear; intros x0 r0; revert x0;
+          induction r0 as [| y yr IHyr]; intros x0 H; cbn in H.
           - inversion H; reflexivity.
           - destruct (lit_status trail y) as [[|] |]; try discriminate.
             exact (IHyr x0 H). }
@@ -353,7 +356,8 @@ Proof.
         destruct (IH (Some l) Hrest Hs) as [Hl_true | Hu_true]; [right | right; exact Hu_true].
         assert (Hu_eq : forall x0 r0,
                   scan_rup_clause trail (Some x0) r0 = RUP_Unit u -> x0 = u).
-        { clear; intros x0 r0; revert x0; induction r0 as [| y yr IHyr]; intros x0 H; cbn in H.
+        { clear; intros x0 r0; revert x0;
+          induction r0 as [| y yr IHyr]; intros x0 H; cbn in H.
           - inversion H; reflexivity.
           - destruct (lit_status trail y) as [[|] |]; try discriminate.
             exact (IHyr x0 H). }
@@ -598,7 +602,10 @@ Proof.
           as [[] | Hv]; cbn in Hv; apply negb_true_iff in Hv.
         exact (IH (pt_set v false trail) true kept_rev
                   (trail_sound_set assign trail v false Htr Hv) Hkept Hrest).
-      * apply IH; [exact Htr | unfold eval_cnf in Hkept |- *; cbn [forallb]; rewrite Hcl, Hkept; reflexivity | exact Hrest].
+      * apply IH;
+          [exact Htr
+          | unfold eval_cnf in Hkept |- *; cbn [forallb]; rewrite Hcl, Hkept; reflexivity
+          | exact Hrest].
 Qed.
 
 Variant bcp_loop_res : Type :=

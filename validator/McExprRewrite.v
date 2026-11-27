@@ -449,7 +449,8 @@ Proof.
   - apply Z.ltb_lt in Esgn.
     assert (Hsgn : @Integers.shr w x (@Integers.repr w (Z.pos w - 1)) = @Integers.mone w).
     { rewrite Integers.shr_div_two_p, Hwm1_u, alg_two_p_pow by lia.
-      replace (@Integers.signed w x) with (2 ^ (Z.pos w - 1) * (-1) + (@Integers.signed w x + 2 ^ (Z.pos w - 1)))%Z by lia.
+      replace (@Integers.signed w x)
+        with (2 ^ (Z.pos w - 1) * (-1) + (@Integers.signed w x + 2 ^ (Z.pos w - 1)))%Z by lia.
       rewrite Z.add_comm, Z.mul_comm, Z.div_add, Z.div_small by lia.
       rewrite Z.add_0_l; reflexivity. }
     assert (Hbias : @Integers.shru w (@Integers.mone w) (@Integers.repr w (Z.pos w - k)) =
@@ -621,9 +622,11 @@ Proof.
     pose proof (eval_cert_expr_ret_wf_scalar (lower_sdiv_pow2 l) [] penv [] foracle vl' Hwt_l' El') as Hwfl'.
     rewrite Hbw_l', Hwl in Hwfl'.
     assert (Hwm1_u : @Integers.unsigned w (@Integers.repr w (Z.of_N (N.pos w - 1))) = (Z.pos w - 1)%Z)
-      by (replace (Z.of_N (N.pos w - 1)) with (Z.pos w - 1)%Z by lia; apply @Integers.unsigned_repr; unfold Integers.max_unsigned; rewrite Hmod; lia).
+      by (replace (Z.of_N (N.pos w - 1)) with (Z.pos w - 1)%Z by lia;
+          apply @Integers.unsigned_repr; unfold Integers.max_unsigned; rewrite Hmod; lia).
     assert (Hwmk_u : @Integers.unsigned w (@Integers.repr w (Z.of_N (N.pos w - kN))) = (Z.pos w - Z.of_N kN)%Z)
-      by (replace (Z.of_N (N.pos w - kN)) with (Z.pos w - Z.of_N kN)%Z by lia; apply @Integers.unsigned_repr; unfold Integers.max_unsigned; rewrite Hmod; lia).
+      by (replace (Z.of_N (N.pos w - kN)) with (Z.pos w - Z.of_N kN)%Z by lia;
+          apply @Integers.unsigned_repr; unfold Integers.max_unsigned; rewrite Hmod; lia).
     assert (Hk_u : @Integers.unsigned w (@Integers.repr w (Z.of_N kN)) = Z.of_N kN)
       by (apply @Integers.unsigned_repr; unfold Integers.max_unsigned; rewrite Hmod; lia).
     assert (Hge1 : (@Integers.unsigned w (@Integers.repr w (Z.of_N (N.pos w - 1))) >=? Z.pos w)%Z = false)
@@ -637,13 +640,17 @@ Proof.
     destruct Hwfl' as [-> | [il ->]].
     + cbn [cert_to_ibinop]; rewrite Hex, eval_iop_sdiv_poison_l.
       destruct (Z.eq_dec (@Integers.signed w (@Integers.repr w (Z.of_N c))) (-1)%Z); [lia |].
-      rewrite (eval_iop_no_flags_poison_any CB_AShr w) by (first [reflexivity | left; reflexivity | right; eexists; reflexivity]).
+      rewrite (eval_iop_no_flags_poison_any CB_AShr w)
+        by (first [reflexivity | left; reflexivity | right; eexists; reflexivity]).
       cbn [eou_bind].
-      rewrite (eval_iop_no_flags_poison_any CB_LShr w) by (first [reflexivity | left; reflexivity | right; eexists; reflexivity]).
+      rewrite (eval_iop_no_flags_poison_any CB_LShr w)
+        by (first [reflexivity | left; reflexivity | right; eexists; reflexivity]).
       cbn [eou_bind].
-      rewrite (eval_iop_no_flags_poison_any CB_Add w) by (first [reflexivity | left; reflexivity | right; eexists; reflexivity]).
+      rewrite (eval_iop_no_flags_poison_any CB_Add w)
+        by (first [reflexivity | left; reflexivity | right; eexists; reflexivity]).
       cbn [eou_bind].
-      rewrite (eval_iop_no_flags_poison_any CB_AShr w) by (first [reflexivity | left; reflexivity | right; eexists; reflexivity]).
+      rewrite (eval_iop_no_flags_poison_any CB_AShr w)
+        by (first [reflexivity | left; reflexivity | right; eexists; reflexivity]).
       reflexivity.
     + assert (Hs0 : (2 ^ Z.of_N kN =? 0)%Z = false) by (apply Z.eqb_neq; lia).
       assert (Hsm1 : (2 ^ Z.of_N kN =? -1)%Z = false) by (apply Z.eqb_neq; lia).
@@ -655,7 +662,8 @@ Proof.
       do 2 f_equal; rewrite Hcrep.
       exact (sdiv_pow2_bias_exact w il (Z.of_N kN) Hw3 Hkrng).
   - cbn [wt_cert_expr is_let_free_expr] in Hwt, Hlf.
-    rewrite !andb_true_iff in Hwt; rewrite !andb_true_iff in Hlf; destruct Hwt as (((Hwtl & Hwtr) & _) & _); destruct Hlf as [Hlfl Hlfr].
+    rewrite !andb_true_iff in Hwt; rewrite !andb_true_iff in Hlf;
+      destruct Hwt as (((Hwtl & Hwtr) & _) & _); destruct Hlf as [Hlfl Hlfr].
     unfold eval_closed_cert_expr in *; cbn [lower_sdiv_pow2 eval_cert_expr].
     apply cert_eou_bind_equiv; [exact (IHl Hwtl Hlfl) | intros vl].
     apply cert_eou_bind_equiv; [exact (IHr Hwtr Hlfr) | intros vr].
@@ -770,23 +778,31 @@ Proof.
   - destruct (cert_expr_eqb (CE_BvConst w0 val0) target) eqn:Heq.
     + apply cert_expr_eqb_eq in Heq; subst target; rewrite Htw.
       cbn [wt_cert_expr cert_expr_bit_width is_let_free_expr collect_free_vars lookup_let_width].
-      rewrite Hnd; repeat split; try reflexivity; [intros x [Hx | []]; left; exact Hx | constructor; auto].
-    + cbn [cert_expr_bit_width]; repeat split; try assumption; [intros x Hx; right; exact Hx | constructor].
+      rewrite Hnd; repeat split; try reflexivity;
+        [intros x [Hx | []]; left; exact Hx | constructor; auto].
+    + cbn [cert_expr_bit_width]; repeat split; try assumption;
+        [intros x Hx; right; exact Hx | constructor].
   - destruct (cert_expr_eqb (CE_Poison w0) target) eqn:Heq.
     + apply cert_expr_eqb_eq in Heq; subst target; rewrite Htw.
       cbn [wt_cert_expr cert_expr_bit_width is_let_free_expr collect_free_vars lookup_let_width].
-      rewrite Hnd; repeat split; try reflexivity; [intros x [Hx | []]; left; exact Hx | constructor; auto].
-    + cbn [cert_expr_bit_width]; repeat split; try assumption; [intros x Hx; right; exact Hx | constructor].
+      rewrite Hnd; repeat split; try reflexivity;
+        [intros x [Hx | []]; left; exact Hx | constructor; auto].
+    + cbn [cert_expr_bit_width]; repeat split; try assumption;
+        [intros x Hx; right; exact Hx | constructor].
   - destruct (cert_expr_eqb (CE_Var nm0 w0) target) eqn:Heq.
     + apply cert_expr_eqb_eq in Heq; subst target; rewrite Htw.
       cbn [wt_cert_expr cert_expr_bit_width is_let_free_expr collect_free_vars lookup_let_width].
-      rewrite Hnd; repeat split; try reflexivity; [intros x [Hx | []]; left; exact Hx | constructor; auto].
-    + cbn [cert_expr_bit_width]; repeat split; try assumption; [intros x Hx; right; exact Hx |].
-      cbn [collect_free_vars string_in_list List.map] in Hni |- *; constructor; [intros ->; exfalso; apply Hni; left; reflexivity | constructor].
+      rewrite Hnd; repeat split; try reflexivity;
+        [intros x [Hx | []]; left; exact Hx | constructor; auto].
+    + cbn [cert_expr_bit_width]; repeat split; try assumption;
+        [intros x Hx; right; exact Hx |].
+      cbn [collect_free_vars string_in_list List.map] in Hni |- *; constructor;
+        [intros ->; exfalso; apply Hni; left; reflexivity | constructor].
   - destruct (cert_expr_eqb (CE_BinOp op w0 fl l r) target) eqn:Heq.
     + apply cert_expr_eqb_eq in Heq; subst target; rewrite Htw.
       cbn [wt_cert_expr cert_expr_bit_width is_let_free_expr collect_free_vars lookup_let_width].
-      rewrite Hnd; repeat split; try reflexivity; [intros x [Hx | []]; left; exact Hx | constructor; auto].
+      rewrite Hnd; repeat split; try reflexivity;
+        [intros x [Hx | []]; left; exact Hx | constructor; auto].
     + cbn [wt_cert_expr cert_expr_bit_width is_let_free_expr collect_free_vars] in Hni, Hwt, Hlf |- *.
       rewrite map_app in Hni.
       rewrite !andb_true_iff in Hwt; rewrite !andb_true_iff in Hlf.
@@ -799,13 +815,16 @@ Proof.
       rewrite Hfl, Hwt_l, Hwt_r, Hbw_l, Hbw_r, Hwl, Hwr, Hlf_l, Hlf_r.
       repeat split; try reflexivity.
       * intros x Hx; apply in_app_iff in Hx as [Hx | Hx].
-        -- destruct (Hfv_l x Hx) as [-> | Hx']; [left; reflexivity | right; apply in_app_iff; left; exact Hx'].
-        -- destruct (Hfv_r x Hx) as [-> | Hx']; [left; reflexivity | right; apply in_app_iff; right; exact Hx'].
+        -- destruct (Hfv_l x Hx) as [-> | Hx'];
+             [left; reflexivity | right; apply in_app_iff; left; exact Hx'].
+        -- destruct (Hfv_r x Hx) as [-> | Hx'];
+             [left; reflexivity | right; apply in_app_iff; right; exact Hx'].
       * apply Forall_app; split; assumption.
   - destruct (cert_expr_eqb (CE_ICmp pr ss w0 l r) target) eqn:Heq.
     + apply cert_expr_eqb_eq in Heq; subst target; rewrite Htw.
       cbn [wt_cert_expr cert_expr_bit_width is_let_free_expr collect_free_vars lookup_let_width].
-      rewrite Hnd; repeat split; try reflexivity; [intros x [Hx | []]; left; exact Hx | constructor; auto].
+      rewrite Hnd; repeat split; try reflexivity;
+        [intros x [Hx | []]; left; exact Hx | constructor; auto].
     + cbn [wt_cert_expr cert_expr_bit_width is_let_free_expr collect_free_vars] in Hni, Hwt, Hlf |- *.
       rewrite map_app in Hni.
       rewrite !andb_true_iff in Hwt; rewrite !andb_true_iff in Hlf.
@@ -818,13 +837,16 @@ Proof.
       rewrite Hwt_l, Hwt_r, Hbw_l, Hbw_r, Hwl, Hwr, Hlf_l, Hlf_r.
       repeat split; try reflexivity.
       * intros x Hx; apply in_app_iff in Hx as [Hx | Hx].
-        -- destruct (Hfv_l x Hx) as [-> | Hx']; [left; reflexivity | right; apply in_app_iff; left; exact Hx'].
-        -- destruct (Hfv_r x Hx) as [-> | Hx']; [left; reflexivity | right; apply in_app_iff; right; exact Hx'].
+        -- destruct (Hfv_l x Hx) as [-> | Hx'];
+             [left; reflexivity | right; apply in_app_iff; left; exact Hx'].
+        -- destruct (Hfv_r x Hx) as [-> | Hx'];
+             [left; reflexivity | right; apply in_app_iff; right; exact Hx'].
       * apply Forall_app; split; assumption.
   - destruct (cert_expr_eqb (CE_Cast k fw tw fl o) target) eqn:Heq.
     + apply cert_expr_eqb_eq in Heq; subst target; rewrite Htw.
       cbn [wt_cert_expr cert_expr_bit_width is_let_free_expr collect_free_vars lookup_let_width].
-      rewrite Hnd; repeat split; try reflexivity; [intros x [Hx | []]; left; exact Hx | constructor; auto].
+      rewrite Hnd; repeat split; try reflexivity;
+        [intros x [Hx | []]; left; exact Hx | constructor; auto].
     + cbn [wt_cert_expr cert_expr_bit_width is_let_free_expr collect_free_vars] in Hni, Hwt, Hlf |- *.
       rewrite !andb_true_iff in Hwt; destruct Hwt as ((Hk & Hwto) & Hwo).
       destruct (IHo Hni Hwto Hlf) as (Hwt_o & Hbw_o & Hlf_o & Hfv_o & Hfa_o).
@@ -832,7 +854,8 @@ Proof.
   - destruct (cert_expr_eqb (CE_Select w0 c t f) target) eqn:Heq.
     + apply cert_expr_eqb_eq in Heq; subst target; rewrite Htw.
       cbn [wt_cert_expr cert_expr_bit_width is_let_free_expr collect_free_vars lookup_let_width].
-      rewrite Hnd; repeat split; try reflexivity; [intros x [Hx | []]; left; exact Hx | constructor; auto].
+      rewrite Hnd; repeat split; try reflexivity;
+        [intros x [Hx | []]; left; exact Hx | constructor; auto].
     + cbn [wt_cert_expr cert_expr_bit_width is_let_free_expr collect_free_vars] in Hni, Hwt, Hlf |- *.
       rewrite !map_app in Hni.
       rewrite !andb_true_iff in Hwt; rewrite !andb_true_iff in Hlf.
@@ -840,22 +863,32 @@ Proof.
         destruct Hlf as ([Hlfc Hlft] & Hlff).
       destruct (IHc (fun H => Hni (proj2 (in_app_iff _ _ _) (or_introl H))) Hwtc Hlfc)
         as (Hwt_c & Hbw_c & Hlf_c & Hfv_c & Hfa_c).
-      destruct (IHt (fun H => Hni (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_introl H))))) Hwtt Hlft)
+      destruct (IHt (fun H => Hni (proj2 (in_app_iff _ _ _)
+                  (or_intror (proj2 (in_app_iff _ _ _) (or_introl H))))) Hwtt Hlft)
         as (Hwt_t & Hbw_t & Hlf_t & Hfv_t & Hfa_t).
-      destruct (IHf (fun H => Hni (proj2 (in_app_iff _ _ _) (or_intror (proj2 (in_app_iff _ _ _) (or_intror H))))) Hwtf Hlff)
+      destruct (IHf (fun H => Hni (proj2 (in_app_iff _ _ _)
+                  (or_intror (proj2 (in_app_iff _ _ _) (or_intror H))))) Hwtf Hlff)
         as (Hwt_f & Hbw_f & Hlf_f & Hfv_f & Hfa_f).
       rewrite Hwt_c, Hwt_t, Hwt_f, Hbw_c, Hbw_t, Hbw_f, Hwc, Hwt0, Hwf0, Hlf_c, Hlf_t, Hlf_f.
       repeat split; try reflexivity.
       * intros x Hx; apply in_app_iff in Hx as [Hx | Hx].
-        -- destruct (Hfv_c x Hx) as [-> | Hx']; [left; reflexivity | right; apply in_app_iff; left; exact Hx'].
+        -- destruct (Hfv_c x Hx) as [-> | Hx'];
+             [left; reflexivity | right; apply in_app_iff; left; exact Hx'].
         -- apply in_app_iff in Hx as [Hx | Hx].
-           ++ destruct (Hfv_t x Hx) as [-> | Hx']; [left; reflexivity | right; apply in_app_iff; right; apply in_app_iff; left; exact Hx'].
-           ++ destruct (Hfv_f x Hx) as [-> | Hx']; [left; reflexivity | right; apply in_app_iff; right; apply in_app_iff; right; exact Hx'].
+           ++ destruct (Hfv_t x Hx) as [-> | Hx'];
+                [left; reflexivity
+                | right; apply in_app_iff; right;
+                  apply in_app_iff; left; exact Hx'].
+           ++ destruct (Hfv_f x Hx) as [-> | Hx'];
+                [left; reflexivity
+                | right; apply in_app_iff; right;
+                  apply in_app_iff; right; exact Hx'].
       * apply Forall_app; split; [exact Hfa_c | apply Forall_app; split; assumption].
   - destruct (cert_expr_eqb (CE_Freeze w0 o) target) eqn:Heq.
     + apply cert_expr_eqb_eq in Heq; subst target; rewrite Htw.
       cbn [wt_cert_expr cert_expr_bit_width is_let_free_expr collect_free_vars lookup_let_width].
-      rewrite Hnd; repeat split; try reflexivity; [intros x [Hx | []]; left; exact Hx | constructor; auto].
+      rewrite Hnd; repeat split; try reflexivity;
+        [intros x [Hx | []]; left; exact Hx | constructor; auto].
     + cbn [wt_cert_expr cert_expr_bit_width is_let_free_expr collect_free_vars] in Hni, Hwt, Hlf |- *.
       apply andb_true_iff in Hwt as [Hwto Hwo].
       destruct (IHo Hni Hwto Hlf) as (Hwt_o & Hbw_o & Hlf_o & Hfv_o & Hfa_o).
@@ -918,7 +951,8 @@ Proof.
   - reflexivity.
   - cbn [collect_free_vars] in Hni; cbn [lookup_let_val].
     unfold set_param_env; destruct (String.eqb nm nm0) eqn:Eeq; [| reflexivity].
-    apply String.eqb_eq in Eeq; subst nm0; exfalso; apply Hni; left; reflexivity.
+    apply String.eqb_eq in Eeq; subst nm0;
+      exfalso; apply Hni; left; reflexivity.
   - cbn [is_let_free_expr collect_free_vars] in Hlf, Hni; apply andb_true_iff in Hlf as [Hl Hr]; rewrite map_app in Hni.
     rewrite (IHl Hl (fun H => Hni (proj2 (in_app_iff _ _ _) (or_introl H)))).
     rewrite (IHr Hr (fun H => Hni (proj2 (in_app_iff _ _ _) (or_intror H)))).
@@ -966,13 +1000,16 @@ Proof.
   - reflexivity.
   - unfold eval_closed_cert_expr; cbn [eval_cert_expr lookup_let_val]; cbn [collect_free_vars] in Hni.
     unfold set_param_env; destruct (String.eqb nm nm0) eqn:Eeq; [| reflexivity].
-    apply String.eqb_eq in Eeq; subst nm0; exfalso; apply Hni; left; reflexivity.
-  - cbn [freeze_free_expr collect_free_vars] in Hfr, Hni; apply andb_true_iff in Hfr as [Hfl Hfr]; rewrite map_app in Hni.
+    apply String.eqb_eq in Eeq; subst nm0;
+      exfalso; apply Hni; left; reflexivity.
+  - cbn [freeze_free_expr collect_free_vars] in Hfr, Hni;
+      apply andb_true_iff in Hfr as [Hfl Hfr]; rewrite map_app in Hni.
     unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
     rewrite (IHl Hfl (fun H => Hni (proj2 (in_app_iff _ _ _) (or_introl H)))).
     rewrite (IHr Hfr (fun H => Hni (proj2 (in_app_iff _ _ _) (or_intror H)))).
     reflexivity.
-  - cbn [freeze_free_expr collect_free_vars] in Hfr, Hni; apply andb_true_iff in Hfr as [Hfl Hfr]; rewrite map_app in Hni.
+  - cbn [freeze_free_expr collect_free_vars] in Hfr, Hni;
+      apply andb_true_iff in Hfr as [Hfl Hfr]; rewrite map_app in Hni.
     unfold eval_closed_cert_expr in *; cbn [eval_cert_expr].
     rewrite (IHl Hfl (fun H => Hni (proj2 (in_app_iff _ _ _) (or_introl H)))).
     rewrite (IHr Hfr (fun H => Hni (proj2 (in_app_iff _ _ _) (or_intror H)))).
@@ -1084,12 +1121,16 @@ Proof.
       by (intros x wx Hx; apply Hpenv, in_app_iff; right; exact Hx).
     assert (Hpl_t : wf_param_env_for (collect_free_vars [] l) (set_param_env penv nm vt)).
     { intros x wx Hx; unfold set_param_env; destruct (String.eqb nm x) eqn:Enm.
-      - apply String.eqb_eq in Enm; subst x; rewrite Forall_forall in Hfal; rewrite (Hfal (nm, wx) Hx eq_refl); exists vt; split; auto.
-      - destruct (Hpl x wx Hx) as [dv [Hdv Hwfdv]]; unfold set_param_env in Hdv; rewrite Enm in Hdv; exists dv; split; assumption. }
+      - apply String.eqb_eq in Enm; subst x; rewrite Forall_forall in Hfal;
+          rewrite (Hfal (nm, wx) Hx eq_refl); exists vt; split; auto.
+      - destruct (Hpl x wx Hx) as [dv [Hdv Hwfdv]]; unfold set_param_env in Hdv;
+          rewrite Enm in Hdv; exists dv; split; assumption. }
     assert (Hpr_t : wf_param_env_for (collect_free_vars [] r) (set_param_env penv nm vt)).
     { intros x wx Hx; unfold set_param_env; destruct (String.eqb nm x) eqn:Enm.
-      - apply String.eqb_eq in Enm; subst x; rewrite Forall_forall in Hfar; rewrite (Hfar (nm, wx) Hx eq_refl); exists vt; split; auto.
-      - destruct (Hpr x wx Hx) as [dv [Hdv Hwfdv]]; unfold set_param_env in Hdv; rewrite Enm in Hdv; exists dv; split; assumption. }
+      - apply String.eqb_eq in Enm; subst x; rewrite Forall_forall in Hfar;
+          rewrite (Hfar (nm, wx) Hx eq_refl); exists vt; split; auto.
+      - destruct (Hpr x wx Hx) as [dv [Hdv Hwfdv]]; unfold set_param_env in Hdv;
+          rewrite Enm in Hdv; exists dv; split; assumption. }
     destruct (ub_free_expr_eval_ret l [] _ [] foracle Hubl Hwtl wf_let_val_env_nil Hpl) as [vl1 [El1 Hwfl1]].
     destruct (ub_free_expr_eval_ret r [] _ [] foracle Hubr Hwtr wf_let_val_env_nil Hpr) as [vr1 [Er1 Hwfr1]].
     destruct (ub_free_expr_eval_ret l [] _ [] foracle Hubl Hwtl wf_let_val_env_nil Hpl_t) as [vl2 [El2 Hwfl2]].
@@ -1105,8 +1146,10 @@ Proof.
     rewrite !andb_true_iff in Hwt; destruct Hwt as ((Hk & Hwto) & Hwo); apply Pos.eqb_eq in Hwo.
     assert (Hpo_t : wf_param_env_for (collect_free_vars [] o) (set_param_env penv nm vt)).
     { intros x wx Hx; unfold set_param_env; destruct (String.eqb nm x) eqn:Enm.
-      - apply String.eqb_eq in Enm; subst x; rewrite Forall_forall in Hfa; rewrite (Hfa (nm, wx) Hx eq_refl); exists vt; split; auto.
-      - destruct (Hpenv x wx Hx) as [dv [Hdv Hwfdv]]; unfold set_param_env in Hdv; rewrite Enm in Hdv; exists dv; split; assumption. }
+      - apply String.eqb_eq in Enm; subst x; rewrite Forall_forall in Hfa;
+          rewrite (Hfa (nm, wx) Hx eq_refl); exists vt; split; auto.
+      - destruct (Hpenv x wx Hx) as [dv [Hdv Hwfdv]]; unfold set_param_env in Hdv;
+          rewrite Enm in Hdv; exists dv; split; assumption. }
     destruct (ub_free_expr_eval_ret o [] _ [] foracle Hub Hwto wf_let_val_env_nil Hpenv) as [vo1 [Eo1 Hwfo1]].
     destruct (ub_free_expr_eval_ret o [] _ [] foracle Hub Hwto wf_let_val_env_nil Hpo_t) as [vo2 [Eo2 Hwfo2]].
     pose proof (IHo Hwto Hlf Hub Hfr Hfa Hpenv) as Ro.
@@ -1124,21 +1167,29 @@ Proof.
     assert (Hpc : wf_param_env_for (collect_free_vars [] c) (set_param_env penv nm vs))
       by (intros x wx Hx; apply Hpenv, in_app_iff; left; exact Hx).
     assert (Hpt : wf_param_env_for (collect_free_vars [] t) (set_param_env penv nm vs))
-      by (intros x wx Hx; apply Hpenv, in_app_iff; right; apply in_app_iff; left; exact Hx).
+      by (intros x wx Hx; apply Hpenv, in_app_iff;
+          right; apply in_app_iff; left; exact Hx).
     assert (Hpf : wf_param_env_for (collect_free_vars [] f) (set_param_env penv nm vs))
-      by (intros x wx Hx; apply Hpenv, in_app_iff; right; apply in_app_iff; right; exact Hx).
+      by (intros x wx Hx; apply Hpenv, in_app_iff;
+          right; apply in_app_iff; right; exact Hx).
     assert (Hpc_t : wf_param_env_for (collect_free_vars [] c) (set_param_env penv nm vt)).
     { intros x wx Hx; unfold set_param_env; destruct (String.eqb nm x) eqn:Enm.
-      - apply String.eqb_eq in Enm; subst x; rewrite Forall_forall in Hfac; rewrite (Hfac (nm, wx) Hx eq_refl); exists vt; split; auto.
-      - destruct (Hpc x wx Hx) as [dv [Hdv Hwfdv]]; unfold set_param_env in Hdv; rewrite Enm in Hdv; exists dv; split; assumption. }
+      - apply String.eqb_eq in Enm; subst x; rewrite Forall_forall in Hfac;
+          rewrite (Hfac (nm, wx) Hx eq_refl); exists vt; split; auto.
+      - destruct (Hpc x wx Hx) as [dv [Hdv Hwfdv]]; unfold set_param_env in Hdv;
+          rewrite Enm in Hdv; exists dv; split; assumption. }
     assert (Hpt_t : wf_param_env_for (collect_free_vars [] t) (set_param_env penv nm vt)).
     { intros x wx Hx; unfold set_param_env; destruct (String.eqb nm x) eqn:Enm.
-      - apply String.eqb_eq in Enm; subst x; rewrite Forall_forall in Hfat; rewrite (Hfat (nm, wx) Hx eq_refl); exists vt; split; auto.
-      - destruct (Hpt x wx Hx) as [dv [Hdv Hwfdv]]; unfold set_param_env in Hdv; rewrite Enm in Hdv; exists dv; split; assumption. }
+      - apply String.eqb_eq in Enm; subst x; rewrite Forall_forall in Hfat;
+          rewrite (Hfat (nm, wx) Hx eq_refl); exists vt; split; auto.
+      - destruct (Hpt x wx Hx) as [dv [Hdv Hwfdv]]; unfold set_param_env in Hdv;
+          rewrite Enm in Hdv; exists dv; split; assumption. }
     assert (Hpf_t : wf_param_env_for (collect_free_vars [] f) (set_param_env penv nm vt)).
     { intros x wx Hx; unfold set_param_env; destruct (String.eqb nm x) eqn:Enm.
-      - apply String.eqb_eq in Enm; subst x; rewrite Forall_forall in Hfaf; rewrite (Hfaf (nm, wx) Hx eq_refl); exists vt; split; auto.
-      - destruct (Hpf x wx Hx) as [dv [Hdv Hwfdv]]; unfold set_param_env in Hdv; rewrite Enm in Hdv; exists dv; split; assumption. }
+      - apply String.eqb_eq in Enm; subst x; rewrite Forall_forall in Hfaf;
+          rewrite (Hfaf (nm, wx) Hx eq_refl); exists vt; split; auto.
+      - destruct (Hpf x wx Hx) as [dv [Hdv Hwfdv]]; unfold set_param_env in Hdv;
+          rewrite Enm in Hdv; exists dv; split; assumption. }
     destruct (ub_free_expr_eval_ret c [] _ [] foracle Hubc Hwtc wf_let_val_env_nil Hpc) as [vc1 [Ec1 Hwfc1]].
     destruct (ub_free_expr_eval_ret t [] _ [] foracle Hubt Hwtt wf_let_val_env_nil Hpt) as [vt1 [Et1 Hwft1]].
     destruct (ub_free_expr_eval_ret f [] _ [] foracle Hubf Hwtf wf_let_val_env_nil Hpf) as [vf1 [Ef1 Hwff1]].
@@ -1195,9 +1246,19 @@ Proof.
   - apply orb_false_iff in Hu as [Hlf Hnin]; apply negb_false_iff, andb_true_iff in Hlf as [Hlfl Hlfr].
     intros w il ir Hl Hr.
     rewrite eval_cert_expr_set_unused_lf in Hl;
-      [| exact Hlfl | intros Hin; assert (Hin' : In nm (List.map fst (collect_free_vars [] (expand_lets lhs) ++ collect_free_vars [] (expand_lets rhs)))) by (rewrite map_app; apply in_app_iff; left; exact Hin); apply string_in_list_spec in Hin'; congruence].
+      [| exact Hlfl
+      | intros Hin;
+        assert (Hin' : In nm (List.map fst
+          (collect_free_vars [] (expand_lets lhs) ++ collect_free_vars [] (expand_lets rhs))))
+          by (rewrite map_app; apply in_app_iff; left; exact Hin);
+        apply string_in_list_spec in Hin'; congruence].
     rewrite eval_cert_expr_set_unused_lf in Hr;
-      [| exact Hlfr | intros Hin; assert (Hin' : In nm (List.map fst (collect_free_vars [] (expand_lets lhs) ++ collect_free_vars [] (expand_lets rhs)))) by (rewrite map_app; apply in_app_iff; right; exact Hin); apply string_in_list_spec in Hin'; congruence].
+      [| exact Hlfr
+      | intros Hin;
+        assert (Hin' : In nm (List.map fst
+          (collect_free_vars [] (expand_lets lhs) ++ collect_free_vars [] (expand_lets rhs))))
+          by (rewrite map_app; apply in_app_iff; right; exact Hin);
+        apply string_in_list_spec in Hin'; congruence].
     exact (Hua w il ir Hl Hr).
   - apply orb_false_iff in Hu as [Hlf Hnin]; apply negb_false_iff in Hlf.
     intros v Hv; rewrite eval_cert_expr_set_unused_lf in Hv;
@@ -1230,7 +1291,8 @@ Proof.
   intros idx avoid ctx nm H; unfold fresh_abs_name in H.
   set (fuel := S (List.length avoid + List.length ctx)) in *.
   set (cand := String.append "mc_abs_" (show_Z_dec (Z.of_nat idx))) in *.
-  clearbody fuel cand; revert cand H; induction fuel as [| fuel' IH]; intros cand H; cbn in H; [discriminate H |].
+  clearbody fuel cand; revert cand H; induction fuel as [| fuel' IH];
+    intros cand H; cbn in H; [discriminate H |].
   destruct (negb (starts_with_dollar cand) && negb (string_in_list cand avoid) && negb (var_in_ub_ctx cand ctx))
     eqn:Eok; [| exact (IH _ H)].
   inversion H; subst cand; clear H.
@@ -1330,22 +1392,29 @@ Proof.
   - destruct (IHr _ Hin) as [Hl | Hr].
     + destruct (IHl _ Hl) as [Ha1 | Hl0];
         [first [exact (Hacc1 Ha1) | left; exact Ha1] |].
-      right; cbn [collect_free_vars]; intros x Hx; apply in_app_iff; left; exact (Hl0 x Hx).
-    + right; cbn [collect_free_vars]; intros x Hx; apply in_app_iff; right; exact (Hr x Hx).
+      right; cbn [collect_free_vars];
+        intros x Hx; apply in_app_iff; left; exact (Hl0 x Hx).
+    + right; cbn [collect_free_vars];
+        intros x Hx; apply in_app_iff; right; exact (Hr x Hx).
   - destruct (IHr _ Hin) as [Hl | Hr].
     + destruct (IHl _ Hl) as [Ha1 | Hl0];
         [first [exact (Hacc1 Ha1) | left; exact Ha1] |].
-      right; cbn [collect_free_vars]; intros x Hx; apply in_app_iff; left; exact (Hl0 x Hx).
-    + right; cbn [collect_free_vars]; intros x Hx; apply in_app_iff; right; exact (Hr x Hx).
+      right; cbn [collect_free_vars];
+        intros x Hx; apply in_app_iff; left; exact (Hl0 x Hx).
+    + right; cbn [collect_free_vars];
+        intros x Hx; apply in_app_iff; right; exact (Hr x Hx).
   - destruct (IHo _ Hin) as [Ha1 | Ho];
       [first [exact (Hacc1 Ha1) | left; exact Ha1] | right; exact Ho].
   - destruct (IHf _ Hin) as [Ht | Hf].
     + destruct (IHt _ Ht) as [Hc | Ht0].
       * destruct (IHc _ Hc) as [Ha1 | Hc0];
           [first [exact (Hacc1 Ha1) | left; exact Ha1] |].
-        right; cbn [collect_free_vars]; intros x Hx; apply in_app_iff; left; exact (Hc0 x Hx).
-      * right; cbn [collect_free_vars]; intros x Hx; apply in_app_iff; right; apply in_app_iff; left; exact (Ht0 x Hx).
-    + right; cbn [collect_free_vars]; intros x Hx; apply in_app_iff; right; apply in_app_iff; right; exact (Hf x Hx).
+        right; cbn [collect_free_vars];
+          intros x Hx; apply in_app_iff; left; exact (Hc0 x Hx).
+      * right; cbn [collect_free_vars]; intros x Hx;
+          apply in_app_iff; right; apply in_app_iff; left; exact (Ht0 x Hx).
+    + right; cbn [collect_free_vars]; intros x Hx;
+        apply in_app_iff; right; apply in_app_iff; right; exact (Hf x Hx).
   - destruct (IHo _ Hin) as [Ha1 | Ho];
       [first [exact (Hacc1 Ha1) | left; exact Ha1] | right; exact Ho].
   - left; exact Hin.
@@ -1375,7 +1444,8 @@ Proof.
   - rewrite !andb_true_iff in Eok; destruct Eok as ((((Hw & Hwt) & Hlf) & Hub) & Href).
     apply Pos.eqb_eq in Hw; subst w_t; intros H; inversion H; subst mt0.
     repeat split; try assumption; left; reflexivity.
-  - intros H; destruct (IH H) as (Hin & ? & ? & ? & ?); repeat split; try assumption; right; exact Hin.
+  - intros H; destruct (IH H) as (Hin & ? & ? & ? & ?);
+      repeat split; try assumption; right; exact Hin.
 Qed.
 
 Lemma find_matching_mul_pair_spec :
@@ -1394,8 +1464,10 @@ Proof.
     + intros H; inversion H; subst w_s ms0 mt0.
       destruct (find_matching_mul_tgt_spec _ _ _ _ _ Etgt) as (Hint & Hwtt & Hlft & Hubt & Href).
       repeat split; try assumption; left; reflexivity.
-    + intros H; destruct (IH H) as (Hins & ? & ? & ? & ? & ? & ? & ? & ?); repeat split; try assumption; right; exact Hins.
-  - intros H; destruct (IH H) as (Hins & ? & ? & ? & ? & ? & ? & ? & ?); repeat split; try assumption; right; exact Hins.
+    + intros H; destruct (IH H) as (Hins & ? & ? & ? & ? & ? & ? & ? & ?);
+        repeat split; try assumption; right; exact Hins.
+  - intros H; destruct (IH H) as (Hins & ? & ? & ? & ? & ? & ? & ? & ?);
+      repeat split; try assumption; right; exact Hins.
 Qed.
 
 Lemma abstract_shared_muls_sound {Pa : Params} :
@@ -1437,9 +1509,11 @@ Proof.
         as (Hins & Hint & Hwt_ms & Hlf_ms & Hub_ms & Hwt_mt & Hlf_mt & Hub_mt & Href_m).
       destruct (fresh_abs_name_ok _ _ _ _ Efr) as (Hnd & Hnin_av & Hnin_ctx).
       assert (Hnin_es : ~ In nm (List.map fst (collect_free_vars [] es))).
-      { intros Hin; rewrite Forall_forall in Havs; pose proof (Havs nm Hin) as Hs; rewrite Hs in Hnin_av; discriminate. }
+      { intros Hin; rewrite Forall_forall in Havs;
+          pose proof (Havs nm Hin) as Hs; rewrite Hs in Hnin_av; discriminate. }
       assert (Hnin_et : ~ In nm (List.map fst (collect_free_vars [] et))).
-      { intros Hin; rewrite Forall_forall in Havt; pose proof (Havt nm Hin) as Hs; rewrite Hs in Hnin_av; discriminate. }
+      { intros Hin; rewrite Forall_forall in Havt;
+          pose proof (Havt nm Hin) as Hs; rewrite Hs in Hnin_av; discriminate. }
       pose proof (collect_nonblastable_muls_vars _ _ _ Hins) as Hinc_ms.
       pose proof (collect_nonblastable_muls_vars _ _ _ Hint) as Hinc_mt.
       assert (Hp_ms : wf_param_env_for (collect_free_vars [] ms) penv)
@@ -1465,7 +1539,8 @@ Proof.
         - inversion Heqp; subst; cbn [string_in_list]; rewrite String.eqb_refl; reflexivity.
         - assert (Hinx_f : In x (List.map fst (collect_free_vars [] es)))
             by (apply in_map_iff; exists (x, wx0); auto).
-          rewrite Forall_forall in Havs; cbn [string_in_list]; rewrite (Havs x Hinx_f); destruct (String.eqb _ _); reflexivity. }
+          rewrite Forall_forall in Havs; cbn [string_in_list];
+            rewrite (Havs x Hinx_f); destruct (String.eqb _ _); reflexivity. }
       assert (Havt' : Forall (fun x => string_in_list x (nm :: avoid) = true)
                         (List.map fst (collect_free_vars [] (subst_subexpr mt (CE_Var nm w) et)))).
       { rewrite Forall_forall; intros x Hx; apply in_map_iff in Hx as [[x0 wx0] [Heqx Hinx]].
@@ -1473,23 +1548,27 @@ Proof.
         - inversion Heqp; subst; cbn [string_in_list]; rewrite String.eqb_refl; reflexivity.
         - assert (Hinx_f : In x (List.map fst (collect_free_vars [] et)))
             by (apply in_map_iff; exists (x, wx0); auto).
-          rewrite Forall_forall in Havt; cbn [string_in_list]; rewrite (Havt x Hinx_f); destruct (String.eqb _ _); reflexivity. }
+          rewrite Forall_forall in Havt; cbn [string_in_list];
+            rewrite (Havt x Hinx_f); destruct (String.eqb _ _); reflexivity. }
       assert (Hp_s_vs : wf_param_env_for (collect_free_vars [] (subst_subexpr ms (CE_Var nm w) es))
                           (set_param_env penv nm vs)).
       { intros x wx Hx; apply Hinc_s' in Hx; destruct Hx as [Heq | Hx].
-        - inversion Heq; subst; unfold set_param_env; rewrite String.eqb_refl; exists vs; split; auto.
+        - inversion Heq; subst; unfold set_param_env;
+            rewrite String.eqb_refl; exists vs; split; auto.
         - assert (Hneq : nm <> x) by (intros ->; apply Hnin_es, in_map_iff; exists (x, wx); auto).
           unfold set_param_env; apply String.eqb_neq in Hneq; rewrite Hneq; exact (Hps x wx Hx). }
       assert (Hp_s_vt : wf_param_env_for (collect_free_vars [] (subst_subexpr ms (CE_Var nm w) es))
                           (set_param_env penv nm vt)).
       { intros x wx Hx; apply Hinc_s' in Hx; destruct Hx as [Heq | Hx].
-        - inversion Heq; subst; unfold set_param_env; rewrite String.eqb_refl; exists vt; split; auto.
+        - inversion Heq; subst; unfold set_param_env;
+            rewrite String.eqb_refl; exists vt; split; auto.
         - assert (Hneq : nm <> x) by (intros ->; apply Hnin_es, in_map_iff; exists (x, wx); auto).
           unfold set_param_env; apply String.eqb_neq in Hneq; rewrite Hneq; exact (Hps x wx Hx). }
       assert (Hp_t_vt : wf_param_env_for (collect_free_vars [] (subst_subexpr mt (CE_Var nm w) et))
                           (set_param_env penv nm vt)).
       { intros x wx Hx; apply Hinc_t' in Hx; destruct Hx as [Heq | Hx].
-        - inversion Heq; subst; unfold set_param_env; rewrite String.eqb_refl; exists vt; split; auto.
+        - inversion Heq; subst; unfold set_param_env;
+            rewrite String.eqb_refl; exists vt; split; auto.
         - assert (Hneq : nm <> x) by (intros ->; apply Hnin_et, in_map_iff; exists (x, wx); auto).
           unfold set_param_env; apply String.eqb_neq in Hneq; rewrite Hneq; exact (Hpt x wx Hx). }
       pose proof (ub_ctx_holds_set_fresh penv foracle ctx nm vt Hnin_ctx Hctx) as Hctx'.
@@ -1549,7 +1628,8 @@ Definition check_blast_pair_diag
                    " step(s)) failed to refute bit-blasted MC-to-IR refinement counterexample"))
             | None =>
                 inl (diag "mc-refine"
-                  (phase ++ ": bounded SAT solver failed to discharge bit-blasted MC-to-IR refinement obligation (no LRAT proof provided)"))
+                  (phase ++ ": bounded SAT solver failed to discharge bit-blasted MC-to-IR refinement " ++
+                   "obligation (no LRAT proof provided)"))
             end
       end
   end.

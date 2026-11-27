@@ -143,14 +143,17 @@ Proof.
       destruct (expr_has_freeze _); [discriminate Hrc |].
       exact (IH cid _ k_end t Hk Hrc nm w Hin).
     + destruct fn as [dt_ret fn_e].
-      destruct (match_pure_int_intrinsic_call (INSTR_Call (dt_ret, fn_e) args anns obs)) as [[op wi a0 a1 | wi a0 fl] |] eqn:Epic.
-      * destruct (match metadata_range md with None => true | Some _ => false end) eqn:Emr; cbn [negb] in Hrc; [| discriminate Hrc].
+      destruct (match_pure_int_intrinsic_call (INSTR_Call (dt_ret, fn_e) args anns obs))
+        as [[op wi a0 a1 | wi a0 fl] |] eqn:Epic.
+      * destruct (match metadata_range md with None => true | Some _ => false end) eqn:Emr;
+          cbn [negb] in Hrc; [| discriminate Hrc].
         destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I wi))) a0) as [[? ?] |] eqn:Ea0; [| discriminate Hrc].
         destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I wi))) a1) as [[? ?] |] eqn:Ea1; [| discriminate Hrc].
         destruct (ub_free_expr _ && ub_free_expr _) eqn:Euf; cbn [negb] in Hrc; [| discriminate Hrc].
         destruct (expr_has_freeze _ || expr_has_freeze _); [discriminate Hrc |].
         exact (IH cid _ k_end t Hk Hrc nm w Hin).
-      * destruct (match metadata_range md with None => true | Some _ => false end) eqn:Emr; cbn [negb] in Hrc; [| discriminate Hrc].
+      * destruct (match metadata_range md with None => true | Some _ => false end) eqn:Emr;
+          cbn [negb] in Hrc; [| discriminate Hrc].
         destruct (reify_pure_exp lmap (Some (DTYPE_Base (DTYPE_I wi))) a0) as [[? ?] |] eqn:Ea0; [| discriminate Hrc].
         destruct (ub_free_expr _) eqn:Euf; cbn [negb] in Hrc; [| discriminate Hrc].
         destruct (expr_has_freeze _); [discriminate Hrc |].
@@ -159,9 +162,13 @@ Proof.
           destruct fn_e;
           try match goal with iv : ident |- _ => destruct iv as [[cname | | ] | ?] end;
           destruct obs; try discriminate Hrc.
-        destruct (match @intrinsic_exp dtyp (EXP_Ident (ID_Global (Name cname))) with None => true | Some _ => false end); cbn [negb] in Hrc; [| discriminate Hrc].
+        destruct (match @intrinsic_exp dtyp (EXP_Ident (ID_Global (Name cname))) with
+                  | None => true
+                  | Some _ => false
+                  end); cbn [negb] in Hrc; [| discriminate Hrc].
         destruct (cconv_eqb (anns_cconv anns) CC_Ccc); cbn [negb] in Hrc; [| discriminate Hrc].
-        destruct (match metadata_range md with None => true | Some _ => false end); cbn [negb] in Hrc; [| discriminate Hrc].
+        destruct (match metadata_range md with None => true | Some _ => false end);
+          cbn [negb] in Hrc; [| discriminate Hrc].
         destruct (fattrs_call_ok (ann_fun_attributes anns)); cbn [negb] in Hrc; [| discriminate Hrc].
         destruct (pattrs_no_value_poison (ann_ret_attributes anns)); cbn [negb] in Hrc; [| discriminate Hrc].
         destruct (is_supported_bit_width rw); cbn [negb] in Hrc; [| discriminate Hrc].
@@ -197,13 +204,17 @@ Proof.
     destruct (reify_pure_exp lmap' _ op) as [[? ret_e] |]; [| discriminate Ht'].
     destruct (ub_free_expr ret_e); cbn [negb] in Ht'; [| discriminate Ht'].
     destruct (expr_has_freeze ret_e); inversion Ht'; subst t'; contradiction Hin.
-  - match goal with x : texp dtyp |- _ => destruct x as [[[w0 | | | | | | | | | |] | |] e_cond] end; try discriminate Ht'.
+  - match goal with
+    | x : texp dtyp |- _ => destruct x as [[[w0 | | | | | | | | | |] | |] e_cond]
+    end; try discriminate Ht'.
     destruct w0; try discriminate Ht'.
     destruct (reify_pure_exp lmap' _ e_cond) as [[? cond_e] |]; [| discriminate Ht'].
     destruct (ub_free_expr cond_e); cbn [negb] in Ht'; [| discriminate Ht'].
     destruct (expr_has_freeze cond_e); [discriminate Ht' |].
-    destruct (reify_ir_call_at fuel' callees bmap ret_w (cur_bid :: visited) false cur_bid br1 cid' lmap') as [| dt1] eqn:Edt; [discriminate Ht' |].
-    destruct (reify_ir_call_at fuel' callees bmap ret_w (cur_bid :: visited) false cur_bid br2 cid' lmap') as [| df1] eqn:Edf; [discriminate Ht' |].
+    destruct (reify_ir_call_at fuel' callees bmap ret_w (cur_bid :: visited) false cur_bid br1 cid' lmap')
+      as [| dt1] eqn:Edt; [discriminate Ht' |].
+    destruct (reify_ir_call_at fuel' callees bmap ret_w (cur_bid :: visited) false cur_bid br2 cid' lmap')
+      as [| df1] eqn:Edf; [discriminate Ht' |].
     inversion Ht'; subst t';
       unfold collect_ir_call_vars in Hin; cbn [collect_ir_call_vars_acc] in Hin;
       rewrite collect_ir_call_vars_acc_shift in Hin; apply in_app_iff in Hin as [Hin | Hin];
@@ -225,8 +236,10 @@ Proof.
   - destruct (rv_sym_step_one (mk_decoded_rv (drci_off dec) (drci_len dec) i) pc sp_off vrf astk ret_w)
       as [[npc sp' vrf' astk' | cond tpc npc | ret_e] |] eqn:Est; try discriminate Hsum.
     + exact (IH _ _ _ _ _ _ _ _ _ _ Hsum nm w Hin).
-    + destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) tpc cid sp_off vrf astk ret_w) as [| dt] eqn:Hdt; [discriminate Hsum |].
-      destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) npc cid sp_off vrf astk ret_w) as [| df] eqn:Hdf; [discriminate Hsum |].
+    + destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) tpc cid sp_off vrf astk ret_w)
+        as [| dt] eqn:Hdt; [discriminate Hsum |].
+      destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) npc cid sp_off vrf astk ret_w)
+        as [| df] eqn:Hdf; [discriminate Hsum |].
       inversion Hsum; subst t;
         unfold collect_mc_call_vars in Hin; cbn [collect_mc_call_vars_acc] in Hin;
         rewrite collect_mc_call_vars_acc_shift in Hin; apply in_app_iff in Hin as [H | H];
@@ -236,7 +249,8 @@ Proof.
     destruct (find_callee_spec callees cname) as [c |]; [| discriminate Hsum].
     destruct (rv_sym_read_call_args_from pc cname 10%N (List.length (mcs_args c)) vrf); [discriminate Hsum |].
     destruct (mc_post_call_ret_expr cid (mcs_ret_width c) (mcs_ret_ext c)) as [ret_e64 opt_hi] eqn:Epc.
-    destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited) (pc + drci_len dec)%N (S cid) sp_off (rv_post_call_vrf cid c vrf) astk ret_w)
+    destruct (summarize_rv64_call_at fuel' im callees (pt_add_n pc visited)
+                (pc + drci_len dec)%N (S cid) sp_off (rv_post_call_vrf cid c vrf) astk ret_w)
       as [| cont] eqn:Ect; [discriminate Hsum |].
     inversion Hsum; subst t;
       unfold collect_mc_call_vars in Hin; cbn [collect_mc_call_vars_acc] in Hin;
@@ -264,8 +278,10 @@ Proof.
   - destruct (a64_sym_step_one (mk_decoded_a64_inst (daci_off dec) i) pc sp_off vrf astk sfl fl_def ret_w)
       as [[npc sp' vrf' astk' sfl' fl_def' | cond tpc npc fl_def' | ret_e] |] eqn:Est; try discriminate Hsum.
     + exact (IH _ _ _ _ _ _ _ _ _ _ _ _ Hsum nm w Hin).
-    + destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited) tpc cid sp_off vrf astk sfl fl_def' ret_w) as [| dt] eqn:Hdt; [discriminate Hsum |].
-      destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited) npc cid sp_off vrf astk sfl fl_def' ret_w) as [| df] eqn:Hdf; [discriminate Hsum |].
+    + destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited)
+                  tpc cid sp_off vrf astk sfl fl_def' ret_w) as [| dt] eqn:Hdt; [discriminate Hsum |].
+      destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited)
+                  npc cid sp_off vrf astk sfl fl_def' ret_w) as [| df] eqn:Hdf; [discriminate Hsum |].
       inversion Hsum; subst t;
         unfold collect_mc_call_vars in Hin; cbn [collect_mc_call_vars_acc] in Hin;
         rewrite collect_mc_call_vars_acc_shift in Hin; apply in_app_iff in Hin as [H | H];
@@ -275,7 +291,8 @@ Proof.
     destruct (find_callee_spec callees cname) as [c |]; [| discriminate Hsum].
     destruct (a64_sym_read_call_args_from pc cname 0%N (List.length (mcs_args c)) vrf); [discriminate Hsum |].
     destruct (mc_post_call_ret_expr cid (mcs_ret_width c) (mcs_ret_ext c)) as [ret_e64 opt_hi] eqn:Epc.
-    destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited) (pc + 4%N)%N (S cid) sp_off (a64_post_call_vrf cid c vrf) astk sfl false ret_w)
+    destruct (summarize_a64_call_at fuel' im callees (pt_add_n pc visited)
+                (pc + 4%N)%N (S cid) sp_off (a64_post_call_vrf cid c vrf) astk sfl false ret_w)
       as [| cont] eqn:Ect; [discriminate Hsum |].
     inversion Hsum; subst t;
       unfold collect_mc_call_vars in Hin; cbn [collect_mc_call_vars_acc] in Hin;
@@ -326,7 +343,8 @@ Section CallGhostFilling.
       ub_ctx_holds penv_full dummy_freeze_oracle (List.map (fun '(nm, w) => UBA_ParamNoUndef nm w) call_vars).
   Proof.
     intros allowed0 mc_vars call_vars all_vars penv0 new_binds
-           Hnb_al Hnb_cv Hnd_cv Hnd_av Hcv_av Hal_av Hav_sp Hmv_av Hnd_nb Hnb_nb Hnb_vals Hpenv0 _ extra_binds penv_full.
+           Hnb_al Hnb_cv Hnd_cv Hnd_av Hcv_av Hal_av Hav_sp Hmv_av
+           Hnd_nb Hnb_nb Hnb_vals Hpenv0 _ extra_binds penv_full.
     assert (Hextra_bang : forall nm, In nm (List.map fst extra_binds) -> mc_starts_with_bang nm = true).
     { intros nm Hin; unfold extra_binds, call_extra_binds in Hin.
       rewrite map_map in Hin; apply in_map_iff in Hin as [[nm0 w0] [Heq Hflt]]; cbn in Heq; subst nm0.
@@ -347,9 +365,13 @@ Section CallGhostFilling.
     assert (Hnd_comb : NoDup (List.map fst (new_binds ++ extra_binds))).
     { rewrite map_app; apply NoDup_app; [exact Hnd_nb | |].
       - unfold extra_binds, call_extra_binds.
-        assert (Hmfst : List.map fst (List.map (fun '(nm, w) => (nm, DVALUE_Base (@DVALUE_I Pa w (@Integers.zero w))))
-                                        (List.filter (fun '(nm, _) => negb (existsb (String.eqb nm) (List.map fst new_binds))) call_vars)) =
-                        List.filter (fun nm => negb (existsb (String.eqb nm) (List.map fst new_binds))) (List.map fst call_vars)).
+        assert (Hmfst :
+          List.map fst
+            (List.map (fun '(nm, w) => (nm, DVALUE_Base (@DVALUE_I Pa w (@Integers.zero w))))
+               (List.filter (fun '(nm, _) => negb (existsb (String.eqb nm) (List.map fst new_binds)))
+                  call_vars)) =
+          List.filter (fun nm => negb (existsb (String.eqb nm) (List.map fst new_binds)))
+            (List.map fst call_vars)).
         { clear; induction call_vars as [| [a w] r IH]; cbn; [reflexivity |].
           destruct (negb (existsb (String.eqb a) (List.map fst new_binds))); cbn; [f_equal |]; exact IH. }
         rewrite Hmfst; apply NoDup_filter; exact Hnd_cv.
@@ -367,8 +389,10 @@ Section CallGhostFilling.
           inversion Hnd_av as [| ? ? Hni Hndr]; subst.
           destruct Hav1 as [H1 | H1], Hav2 as [H2 | H2].
           - inversion H1; inversion H2; congruence.
-          - inversion H1; subst; exfalso; apply Hni; apply in_map_iff; exists (nm, w'); split; [reflexivity | exact H2].
-          - inversion H2; subst; exfalso; apply Hni; apply in_map_iff; exists (nm, w); split; [reflexivity | exact H1].
+          - inversion H1; subst; exfalso; apply Hni, in_map_iff;
+              exists (nm, w'); split; [reflexivity | exact H2].
+          - inversion H2; subst; exfalso; apply Hni, in_map_iff;
+              exists (nm, w); split; [reflexivity | exact H1].
           - exact (IH Hndr H1 H2). }
         subst w'; exists v'; unfold penv_full; apply overlay_penv_lookup_in; [exact Hnd_comb |].
         apply in_or_app; left; exact HinP.
@@ -382,9 +406,11 @@ Section CallGhostFilling.
     repeat split; try assumption.
     - intros nm w Hav; destruct (Hav_sp nm w Hav) as [Hal | Hcv].
       + rewrite (Hpres_nonbang nm (Hnb_al nm w Hal)); exact (Hpenv0 nm w Hal).
-      + destruct (Hcv_val nm w Hcv) as [v Hv]; exists (DVALUE_Base (@DVALUE_I Pa w v)); split; [exact Hv | right; exists v; reflexivity].
+      + destruct (Hcv_val nm w Hcv) as [v Hv]; exists (DVALUE_Base (@DVALUE_I Pa w v));
+          split; [exact Hv | right; exists v; reflexivity].
     - apply Forall_forall; intros u Hu; apply in_map_iff in Hu as [[nm w] [<- Hcv]].
-      destruct (Hcv_val nm w Hcv) as [v Hv]; cbn [ub_assumption_holds]; intros dv Hdv; rewrite Hv in Hdv; inversion Hdv; discriminate.
+      destruct (Hcv_val nm w Hcv) as [v Hv]; cbn [ub_assumption_holds];
+        intros dv Hdv; rewrite Hv in Hdv; inversion Hdv; discriminate.
   Qed.
 
 End CallGhostFilling.
@@ -396,7 +422,8 @@ Proof.
   cbn in H; apply andb_true_iff in H as [Hneg Hnd]; apply negb_true_iff in Hneg.
   constructor; [| exact (IH Hnd)].
   intro Hin; unfold mc_str_in_list in Hneg;
-    assert (Hex : existsb (String.eqb x) rest = true) by (apply existsb_exists; exists x; split; [exact Hin | apply String.eqb_refl]);
+    assert (Hex : existsb (String.eqb x) rest = true)
+      by (apply existsb_exists; exists x; split; [exact Hin | apply String.eqb_refl]);
     congruence.
 Qed.
 
@@ -461,13 +488,16 @@ Proof.
               all_vars None obls opt_pf) as [| []] eqn:Hchk; [discriminate Hval |].
   clear Hval.
   assert (Hnb_al : forall nm w, In (nm, w) allowed0 -> mc_starts_with_bang nm = false).
-  { intros nm w Hin; rewrite forallb_forall in Hnb_al_b; pose proof (Hnb_al_b (nm, w) Hin) as Hn; apply negb_true_iff in Hn; exact Hn. }
+  { intros nm w Hin; rewrite forallb_forall in Hnb_al_b;
+      pose proof (Hnb_al_b (nm, w) Hin) as Hn; apply negb_true_iff in Hn; exact Hn. }
   assert (Hcws : forall c, In c callees -> rv_supported_arg_width (mcs_ret_width c) = true).
   { intros c Hc; rewrite forallb_forall in Hcal_b; pose proof (Hcal_b c Hc) as Ht;
       rewrite !andb_true_iff in Ht; exact (proj1 (proj1 (proj1 Ht))). }
-  assert (Hcs : forall c, In c callees -> forallb rv_valid_arg_spec (mcs_args c) = true /\ NoDup (List.map ras_name (mcs_args c))).
+  assert (Hcs : forall c, In c callees ->
+    forallb rv_valid_arg_spec (mcs_args c) = true /\ NoDup (List.map ras_name (mcs_args c))).
   { intros c Hc; rewrite forallb_forall in Hcal_b; pose proof (Hcal_b c Hc) as Ht;
-      rewrite !andb_true_iff in Ht; destruct Ht as [[[_ _] Hva] Hnd]; split; [exact Hva | apply mc_no_dup_strings_spec; exact Hnd]. }
+      rewrite !andb_true_iff in Ht; destruct Ht as [[[_ _] Hva] Hnd];
+      split; [exact Hva | apply mc_no_dup_strings_spec; exact Hnd]. }
   assert (Hnb_cv : forall nm w, In (nm, w) call_vars -> mc_starts_with_bang nm = true).
   { intros nm w Hcv; apply dedup_typed_vars_sub in Hcv; unfold raw_cvars in Hcv;
       rewrite collect_ir_call_vars_acc_shift in Hcv; apply in_app_iff in Hcv as [H1 | H2].
@@ -488,7 +518,8 @@ Proof.
     by (unfold rv_val_read; cbn [N.eqb]; rewrite rv_build_init_val_regs_other by lia; reflexivity).
   assert (Hfresh0 : forall nm w, In (nm, w) allowed0 -> forall k' w', (0 <= k')%nat ->
     nm <> mc_call_ret_var k' w' /\ nm <> mc_call_hi_var k').
-  { intros nm w Hal k' w' _; pose proof (Hnb_al nm w Hal) as Hnb; split; intro Heq; subst;
+  { intros nm w Hal k' w' _; pose proof (Hnb_al nm w Hal) as Hnb;
+      split; intro Heq; subst;
       [rewrite mc_call_ret_var_bang in Hnb | rewrite mc_call_hi_var_bang in Hnb]; discriminate Hnb. }
   unfold summarize_rv64_call_tree in Emc; rewrite elf_length_tr_eq in Emc.
   destruct (summarize_rv64_call_at_exec insts (pt_of_list_first drci_off insts) (pt_of_list_first_lookup_rv_call insts)
@@ -498,7 +529,8 @@ Proof.
               (rv_init_val_regs_wf allowed0 arg_specs Hargs_al Hws) ltac:(constructor)
               Hfresh0 (rv_init_val_regs_agrees penv0 dummy_freeze_oracle arg_specs rf0 Hws Hm)
               (mc_sym_stack_agrees_empty _ _ _ _ _) Emc)
-    as (tr_mc & new_binds & rf_end & mstk_end & Hnd_nb & Hdisj_nb & Hnb_form & Hnb_vals & Hexec & Hcs_mc & Hra_mc & Hmt_gen).
+    as (tr_mc & new_binds & rf_end & mstk_end & Hnd_nb & Hdisj_nb &
+        Hnb_form & Hnb_vals & Hexec & Hcs_mc & Hra_mc & Hmt_gen).
   assert (Hnb_nb : forall nm, In nm (List.map fst new_binds) -> mc_starts_with_bang nm = true).
   { intros nm Hin; destruct (Hnb_form nm Hin) as [k [_ [[w ->] | ->]]];
       [apply mc_call_ret_var_bang | apply mc_call_hi_var_bang]. }
@@ -509,9 +541,12 @@ Proof.
     as (Hdisj_eb & Hdisj_nb_eb & Hpres_nb & Hwf_full & Hctx_call).
   set (extra_binds := call_extra_binds new_binds call_vars) in *.
   set (penv_full := overlay_penv (new_binds ++ extra_binds) penv0) in *.
-  assert (Hctx_all : ub_ctx_holds penv_full dummy_freeze_oracle (mc_init_ctx ++ List.map (fun '(nm, w) => UBA_ParamNoUndef nm w) call_vars))
+  assert (Hctx_all : ub_ctx_holds penv_full dummy_freeze_oracle
+    (mc_init_ctx ++ List.map (fun '(nm, w) => UBA_ParamNoUndef nm w) call_vars))
     by (apply Forall_app; split; [exact (Hctx0 penv_full Hpres_nb) | exact Hctx_call]).
-  pose proof (check_mc_loop_obls_sound _ _ _ _ _ _ penv_full dummy_freeze_oracle false Hchk Hwf_full Hctx_all) as Hobls_ok.
+  pose proof
+    (check_mc_loop_obls_sound _ _ _ _ _ _ penv_full dummy_freeze_oracle false Hchk Hwf_full Hctx_all)
+    as Hobls_ok.
   assert (Hpenv_ir_eq : forall nm, In nm (List.map cert_reg_name (args ir_cfg)) ->
     penv_full nm = build_param_env (List.map cert_reg_name (args ir_cfg)) vs nm).
   { intros nm Hin; rewrite (Hpres_nb nm), (Hpenv_eq nm Hin); [reflexivity |].
@@ -529,7 +564,8 @@ Proof.
   { intros idx dt Hin; apply arg_specs_uses_from_in in Hin as (k & sp & -> & Hnth & ->).
     cbn [Nat.add]; exact (proj1 (Hargs_compat k sp Hnth)). }
   assert (Hwf_ir_t : ir_call_tree_wf all_vars ret_w t_ir)
-    by (exact (reify_ir_call_tree_wf ir_cfg arg_specs callees ret_w all_vars t_ir (rv_supported_to_is_supported _ Hrw) Hpu_as Eir)).
+    by (exact (reify_ir_call_tree_wf ir_cfg arg_specs callees ret_w all_vars t_ir
+                 (rv_supported_to_is_supported _ Hrw) Hpu_as Eir)).
   pose proof (reify_ir_call_tree_exec genv penv_full ir_cfg arg_specs callees ret_w all_vars arg_dtys vs t_ir
                 (rv_supported_to_is_supported _ Hrw) Hnd_a Hnd_s Hlen_s Hlen_ad Hcomp_as Hty
                 Hpu_as Hpenv_ir_eq Hwf_full Eir) as Hden_ir.
@@ -548,8 +584,10 @@ Proof.
     rewrite Efc in Hargs, Hlen_a.
     unfold rv_call_event_matches; split; [exact Hcn | exists sp; repeat split; try assumption].
     intros k sp0 Hlt Hsp0.
-    assert (Evm : nth_error (List.map (fun j => rv_read_reg (10%N + N.of_nat j) rf_c) (seq 0 (List.length (mcs_args sp)))) k =
-                  Some (rv_read_reg (10%N + N.of_nat k) rf_c))
+    assert (Evm :
+      nth_error
+        (List.map (fun j => rv_read_reg (10%N + N.of_nat j) rf_c) (seq 0 (List.length (mcs_args sp)))) k =
+      Some (rv_read_reg (10%N + N.of_nat k) rf_c))
       by (rewrite nth_error_map, nth_error_seq; apply Nat.ltb_lt in Hlt; rewrite Hlt; reflexivity).
     exact (Hargs k sp0 _ Hsp0 Evm).
   - exists tr_mc, rf_end, mstk_end; repeat split; try assumption.
@@ -562,8 +600,10 @@ Proof.
     rewrite Efc in Hargs, Hlen_a.
     unfold rv_call_event_matches; split; [exact Hcn | exists sp; repeat split; try assumption].
     intros k sp0 Hlt Hsp0.
-    assert (Evm : nth_error (List.map (fun j => rv_read_reg (10%N + N.of_nat j) rf_c) (seq 0 (List.length (mcs_args sp)))) k =
-                  Some (rv_read_reg (10%N + N.of_nat k) rf_c))
+    assert (Evm :
+      nth_error
+        (List.map (fun j => rv_read_reg (10%N + N.of_nat j) rf_c) (seq 0 (List.length (mcs_args sp)))) k =
+      Some (rv_read_reg (10%N + N.of_nat k) rf_c))
       by (rewrite nth_error_map, nth_error_seq; apply Nat.ltb_lt in Hlt; rewrite Hlt; reflexivity).
     exact (Hargs k sp0 _ Hsp0 Evm).
 Qed.
@@ -592,7 +632,8 @@ Theorem validate_mc_call_a64_sound {Pa : Params} :
        penv0 nm = build_param_env (List.map cert_reg_name (args ir_cfg)) vs nm) ->
     (forall sp, In sp arg_specs ->
        penv0 (a64_hi_var_name (ras_name sp)) =
-       a64_extend_penv_with_hi (build_param_env (List.map cert_reg_name (args ir_cfg)) vs) arg_specs rf0 (a64_hi_var_name (ras_name sp))) ->
+       a64_extend_penv_with_hi (build_param_env (List.map cert_reg_name (args ir_cfg)) vs)
+         arg_specs rf0 (a64_hi_var_name (ras_name sp))) ->
     wf_param_env_for allowed0 penv0 ->
     (forall penv' : param_env Pa,
        (forall nm, mc_starts_with_bang nm = false -> penv' nm = penv0 nm) ->
@@ -601,14 +642,16 @@ Theorem validate_mc_call_a64_sound {Pa : Params} :
     (forall nv, In nv (a64_hi_vars arg_specs) -> In nv allowed0) ->
     NoDup (List.map ras_name arg_specs) ->
     (forall sp, In sp arg_specs -> ~ In (a64_hi_var_name (ras_name sp)) (List.map ras_name arg_specs)) ->
-    (forall sp, In sp arg_specs -> penv0 (ras_name sp) = build_param_env (List.map cert_reg_name (args ir_cfg)) vs (ras_name sp)) ->
+    (forall sp, In sp arg_specs ->
+       penv0 (ras_name sp) = build_param_env (List.map cert_reg_name (args ir_cfg)) vs (ras_name sp)) ->
     mc_valid_sp0_depth 2%nat sp0 ->
     a64_rf_matches_args (build_param_env (List.map cert_reg_name (args ir_cfg)) vs) arg_specs rf0 ->
     a64_call_sound_spec ir_cfg insts ret_w callees vs rf0 sp0 fl0 mstk0.
 Proof.
   intros ir_cfg allowed0 mc_init_ctx insts arg_specs ret_w callees opt_pf
          arg_dtys vs penv0 rf0 sp0 fl0 mstk0
-         Hval Hnd_a Hnd_s Hlen_s Hlen_ad Hcomp Hty Hargs_compat Hpu Hpenv_eq Hhi_eq Hpenv0 Hctx0 Hargs_al Hhi_al Hnd_sp Hdis_hi Hsp_eq Hsp0 Hm.
+         Hval Hnd_a Hnd_s Hlen_s Hlen_ad Hcomp Hty Hargs_compat Hpu
+         Hpenv_eq Hhi_eq Hpenv0 Hctx0 Hargs_al Hhi_al Hnd_sp Hdis_hi Hsp_eq Hsp0 Hm.
   unfold validate_mc_call_a64, build_mc_call_bundle_a64 in Hval.
   destruct (rv_supported_arg_width ret_w) eqn:Hrw; cbn [negb] in Hval; [| discriminate Hval].
   destruct (forallb a64_call_inst_valid insts) eqn:Hvalid; cbn [negb] in Hval; [| discriminate Hval].
@@ -636,13 +679,18 @@ Proof.
               all_vars None obls opt_pf) as [| []] eqn:Hchk; [discriminate Hval |].
   clear Hval.
   assert (Hnb_al : forall nm w, In (nm, w) allowed0 -> mc_starts_with_bang nm = false).
-  { intros nm w Hin; rewrite forallb_forall in Hnb_al_b; pose proof (Hnb_al_b (nm, w) Hin) as Hn; apply negb_true_iff in Hn; exact Hn. }
-  assert (Hcws : forall c, In c callees -> rv_supported_arg_width (mcs_ret_width c) = true /\ (List.length (mcs_args c) <= 8)%nat).
+  { intros nm w Hin; rewrite forallb_forall in Hnb_al_b;
+      pose proof (Hnb_al_b (nm, w) Hin) as Hn; apply negb_true_iff in Hn; exact Hn. }
+  assert (Hcws : forall c, In c callees ->
+    rv_supported_arg_width (mcs_ret_width c) = true /\ (List.length (mcs_args c) <= 8)%nat).
   { intros c Hc; rewrite forallb_forall in Hcal_b; pose proof (Hcal_b c Hc) as Ht;
-      rewrite !andb_true_iff in Ht; destruct Ht as [[[Hrwc Hlc] _] _]; split; [exact Hrwc | apply Nat.leb_le; exact Hlc]. }
-  assert (Hcs : forall c, In c callees -> forallb rv_valid_arg_spec (mcs_args c) = true /\ NoDup (List.map ras_name (mcs_args c))).
+      rewrite !andb_true_iff in Ht; destruct Ht as [[[Hrwc Hlc] _] _];
+      split; [exact Hrwc | apply Nat.leb_le; exact Hlc]. }
+  assert (Hcs : forall c, In c callees ->
+    forallb rv_valid_arg_spec (mcs_args c) = true /\ NoDup (List.map ras_name (mcs_args c))).
   { intros c Hc; rewrite forallb_forall in Hcal_b; pose proof (Hcal_b c Hc) as Ht;
-      rewrite !andb_true_iff in Ht; destruct Ht as [[[_ _] Hva] Hnd]; split; [exact Hva | apply mc_no_dup_strings_spec; exact Hnd]. }
+      rewrite !andb_true_iff in Ht; destruct Ht as [[[_ _] Hva] Hnd];
+      split; [exact Hva | apply mc_no_dup_strings_spec; exact Hnd]. }
   assert (Hnb_cv : forall nm w, In (nm, w) call_vars -> mc_starts_with_bang nm = true).
   { intros nm w Hcv; apply dedup_typed_vars_sub in Hcv; unfold raw_cvars in Hcv;
       rewrite collect_ir_call_vars_acc_shift in Hcv; apply in_app_iff in Hcv as [H1 | H2].
@@ -660,21 +708,25 @@ Proof.
   intros genv O Hgenv HO; cbn [a64_call_sound_spec].
   assert (Hfresh0 : forall nm w, In (nm, w) allowed0 -> forall k' w', (0 <= k')%nat ->
     nm <> mc_call_ret_var k' w' /\ nm <> mc_call_hi_var k').
-  { intros nm w Hal k' w' _; pose proof (Hnb_al nm w Hal) as Hnb; split; intro Heq; subst;
+  { intros nm w Hal k' w' _; pose proof (Hnb_al nm w Hal) as Hnb;
+      split; intro Heq; subst;
       [rewrite mc_call_ret_var_bang in Hnb | rewrite mc_call_hi_var_bang in Hnb]; discriminate Hnb. }
   assert (Hag_init : a64_val_regs_agrees penv0 dummy_freeze_oracle rf0 sp0 (a64_build_init_val_regs 0%N arg_specs) rf0).
   { set (penv_ir := build_param_env (List.map cert_reg_name (args ir_cfg)) vs) in *.
     pose proof (a64_init_val_regs_agrees penv_ir dummy_freeze_oracle arg_specs rf0 sp0 Hws Hnd_sp) as Hbase.
-    assert (Hbase2 : a64_val_regs_agrees (a64_extend_penv_with_hi penv_ir arg_specs rf0) dummy_freeze_oracle rf0 sp0 (a64_build_init_val_regs 0%N arg_specs) rf0)
+    assert (Hbase2 : a64_val_regs_agrees (a64_extend_penv_with_hi penv_ir arg_specs rf0)
+                       dummy_freeze_oracle rf0 sp0 (a64_build_init_val_regs 0%N arg_specs) rf0)
       by (apply Hbase; [exact Hdis_hi | exact Hm]).
-    intro r; pose proof (Hbase2 r) as Hr; destruct (a64_val_read r (a64_build_init_val_regs 0%N arg_specs)) as [| e_arg | |] eqn:Erd; try exact Hr.
+    intro r; pose proof (Hbase2 r) as Hr;
+      destruct (a64_val_read r (a64_build_init_val_regs 0%N arg_specs)) as [| e_arg | |] eqn:Erd; try exact Hr.
     destruct (a64_build_init_val_regs_vars 0%N arg_specs r e_arg Erd) as [Hlf Hfv].
     cbn [mc_sym_val_agrees] in *; unfold eval_closed_cert_expr in Hr |- *;
       erewrite mcc_eval_cert_expr_penv_agree; [exact Hr | exact Hlf |].
     intros nm w Hin; destruct (Hfv nm w Hin) as [sp [Hsp [[-> ->] | [_ [-> ->]]]]].
     - unfold a64_extend_penv_with_hi; rewrite a64_extend_penv_at_orig;
         [exact (Hsp_eq sp Hsp)
-        | intros s Hs Heq; apply (Hdis_hi s Hs); rewrite Heq; apply in_map_iff; exists sp; split; [reflexivity | exact Hsp]].
+        | intros s Hs Heq; apply (Hdis_hi s Hs);
+            rewrite Heq; apply in_map_iff; exists sp; split; [reflexivity | exact Hsp]].
     - exact (Hhi_eq sp Hsp). }
   assert (Hall_a64 : forall sp, In sp arg_specs ->
     In (ras_name sp, ras_width sp) allowed0 /\
@@ -689,7 +741,8 @@ Proof.
               (a64_init_val_regs_wf allowed0 arg_specs Hall_a64 Hws)
               ltac:(constructor) (fun C => ltac:(discriminate C))
               Hfresh0 Hag_init (mc_sym_stack_agrees_empty _ _ _ _ _) (fun C => ltac:(discriminate C)) Emc)
-    as (tr_mc & new_binds & rf_end & fl_end & mstk_end & Hnd_nb & Hdisj_nb & Hnb_form & Hnb_vals & Hexec & Hcs_mc & Hmt_gen).
+    as (tr_mc & new_binds & rf_end & fl_end & mstk_end & Hnd_nb & Hdisj_nb &
+        Hnb_form & Hnb_vals & Hexec & Hcs_mc & Hmt_gen).
   assert (Hnb_nb : forall nm, In nm (List.map fst new_binds) -> mc_starts_with_bang nm = true).
   { intros nm Hin; destruct (Hnb_form nm Hin) as [k [_ [[w ->] | ->]]];
       [apply mc_call_ret_var_bang | apply mc_call_hi_var_bang]. }
@@ -700,9 +753,12 @@ Proof.
     as (Hdisj_eb & Hdisj_nb_eb & Hpres_nb & Hwf_full & Hctx_call).
   set (extra_binds := call_extra_binds new_binds call_vars) in *.
   set (penv_full := overlay_penv (new_binds ++ extra_binds) penv0) in *.
-  assert (Hctx_all : ub_ctx_holds penv_full dummy_freeze_oracle (mc_init_ctx ++ List.map (fun '(nm, w) => UBA_ParamNoUndef nm w) call_vars))
+  assert (Hctx_all : ub_ctx_holds penv_full dummy_freeze_oracle
+    (mc_init_ctx ++ List.map (fun '(nm, w) => UBA_ParamNoUndef nm w) call_vars))
     by (apply Forall_app; split; [exact (Hctx0 penv_full Hpres_nb) | exact Hctx_call]).
-  pose proof (check_mc_loop_obls_sound _ _ _ _ _ _ penv_full dummy_freeze_oracle false Hchk Hwf_full Hctx_all) as Hobls_ok.
+  pose proof
+    (check_mc_loop_obls_sound _ _ _ _ _ _ penv_full dummy_freeze_oracle false Hchk Hwf_full Hctx_all)
+    as Hobls_ok.
   assert (Hpenv_ir_eq : forall nm, In nm (List.map cert_reg_name (args ir_cfg)) ->
     penv_full nm = build_param_env (List.map cert_reg_name (args ir_cfg)) vs nm).
   { intros nm Hin; rewrite (Hpres_nb nm), (Hpenv_eq nm Hin); [reflexivity |].
@@ -720,7 +776,8 @@ Proof.
   { intros idx dt Hin; apply arg_specs_uses_from_in in Hin as (k & sp & -> & Hnth & ->).
     cbn [Nat.add]; exact (proj1 (Hargs_compat k sp Hnth)). }
   assert (Hwf_ir_t : ir_call_tree_wf all_vars ret_w t_ir)
-    by (exact (reify_ir_call_tree_wf ir_cfg arg_specs callees ret_w all_vars t_ir (rv_supported_to_is_supported _ Hrw) Hpu_as Eir)).
+    by (exact (reify_ir_call_tree_wf ir_cfg arg_specs callees ret_w all_vars t_ir
+                 (rv_supported_to_is_supported _ Hrw) Hpu_as Eir)).
   pose proof (reify_ir_call_tree_exec genv penv_full ir_cfg arg_specs callees ret_w all_vars arg_dtys vs t_ir
                 (rv_supported_to_is_supported _ Hrw) Hnd_a Hnd_s Hlen_s Hlen_ad Hcomp_as Hty
                 Hpu_as Hpenv_ir_eq Hwf_full Eir) as Hden_ir.
@@ -806,8 +863,10 @@ Proof.
   intros cs lc Hnd Hlc; induction cs as [| x rest IH]; cbn in *; [contradiction |].
   inversion Hnd as [| ? ? Hni Hndr]; subst.
   destruct Hlc as [<- | Hr]; [rewrite String.eqb_refl; reflexivity |].
-  destruct (String.eqb (mc_strip_leading_at (mcs_name (rlc_spec x))) (mc_strip_leading_at (mcs_name (rlc_spec lc)))) eqn:Eeq.
-  - apply String.eqb_eq in Eeq; exfalso; apply Hni; rewrite Eeq; apply in_map_iff; exists lc; split; [reflexivity | exact Hr].
+  destruct (String.eqb (mc_strip_leading_at (mcs_name (rlc_spec x)))
+              (mc_strip_leading_at (mcs_name (rlc_spec lc)))) eqn:Eeq.
+  - apply String.eqb_eq in Eeq; exfalso; apply Hni;
+      rewrite Eeq; apply in_map_iff; exists lc; split; [reflexivity | exact Hr].
   - exact (IH Hndr Hr).
 Qed.
 
@@ -844,7 +903,8 @@ Proof.
   destruct (lookup_rv_call_inst insts pc) as [d |]; [| discriminate Hexec].
   destruct (drci_inst d) as [i | cname].
   - destruct i; try discriminate Hexec;
-      try (destruct (rv_exec_one_nonret _ _ _ _ _) as [[[pc1 rf1] mstk1] |]; [exact (IH _ _ _ _ _ _ _ _ _ Hexec) | discriminate Hexec]).
+      try (destruct (rv_exec_one_nonret _ _ _ _ _) as [[[pc1 rf1] mstk1] |];
+           [exact (IH _ _ _ _ _ _ _ _ _ Hexec) | discriminate Hexec]).
     inversion Hexec; constructor.
   - destruct (mc_sp_aligned16 (mc_addr_to_off sp0 (rv_read_reg 2%N rf))); [| discriminate Hexec].
     destruct (O cname _ mstk) as [[rf_ret mstk_ret] |] eqn:Eo; [| discriminate Hexec].
@@ -894,7 +954,8 @@ Theorem compose_rv64_caller_callee_sound {Pa : Params} :
 Proof.
   intros ir_cfg insts ret_w cs vs rf0 mstk0 genv Hnd Hcaller Hgenv.
   destruct (Hcaller genv (rv_leaf_oracle cs) Hgenv (rv_leaf_oracle_wf cs Hnd))
-    as (tr_mc & rf_end & mstk_end & Hexec & Hcs & Hra & [Hub | (sigma_ir & tr_ir & sigma_ir' & env_out & dv_ir & Hwf_s & Hfa & Hret & Href)]).
+    as (tr_mc & rf_end & mstk_end & Hexec & Hcs & Hra &
+        [Hub | (sigma_ir & tr_ir & sigma_ir' & env_out & dv_ir & Hwf_s & Hfa & Hret & Href)]).
   - exists tr_mc, rf_end, mstk_end; repeat split; try assumption; left; exact Hub.
   - pose proof (rv_exec_with_calls_events _ _ _ _ _ _ _ _ _ _ Hexec) as Hevs.
     exists tr_mc, rf_end, mstk_end; repeat split; try assumption.
@@ -962,8 +1023,10 @@ Proof.
   intros cs lc Hnd Hlc; induction cs as [| x rest IH]; cbn in *; [contradiction |].
   inversion Hnd as [| ? ? Hni Hndr]; subst.
   destruct Hlc as [<- | Hr]; [rewrite String.eqb_refl; reflexivity |].
-  destruct (String.eqb (mc_strip_leading_at (mcs_name (alc_spec x))) (mc_strip_leading_at (mcs_name (alc_spec lc)))) eqn:Eeq.
-  - apply String.eqb_eq in Eeq; exfalso; apply Hni; rewrite Eeq; apply in_map_iff; exists lc; split; [reflexivity | exact Hr].
+  destruct (String.eqb (mc_strip_leading_at (mcs_name (alc_spec x)))
+              (mc_strip_leading_at (mcs_name (alc_spec lc)))) eqn:Eeq.
+  - apply String.eqb_eq in Eeq; exfalso; apply Hni;
+      rewrite Eeq; apply in_map_iff; exists lc; split; [reflexivity | exact Hr].
   - exact (IH Hndr Hr).
 Qed.
 
@@ -1051,7 +1114,8 @@ Theorem compose_a64_caller_callee_sound {Pa : Params} :
 Proof.
   intros ir_cfg insts ret_w cs vs rf0 sp0 fl0 mstk0 genv Hnd Hcaller Hgenv.
   destruct (Hcaller genv (a64_leaf_oracle cs) Hgenv (a64_leaf_oracle_wf cs Hnd))
-    as (tr_mc & rf_end & fl_end & mstk_end & Hexec & Hcs & [Hub | (sigma_ir & tr_ir & sigma_ir' & env_out & dv_ir & Hwf_s & Hfa & Hret & Href)]).
+    as (tr_mc & rf_end & fl_end & mstk_end & Hexec & Hcs &
+        [Hub | (sigma_ir & tr_ir & sigma_ir' & env_out & dv_ir & Hwf_s & Hfa & Hret & Href)]).
   - exists tr_mc, rf_end, fl_end, mstk_end; repeat split; try assumption; left; exact Hub.
   - pose proof (a64_exec_with_calls_events _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hexec) as Hevs.
     exists tr_mc, rf_end, fl_end, mstk_end; repeat split; try assumption.

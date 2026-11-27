@@ -288,7 +288,8 @@ Definition cert_binop_eqb (a b : cert_binop) : bool :=
 
 Lemma cert_binop_eqb_eq : forall a b, cert_binop_eqb a b = true <-> a = b.
 Proof.
-  intros [] []; cbn; split; intros H; try reflexivity; discriminate.
+  intros [] []; cbn; split;
+    intros H; try reflexivity; discriminate.
 Qed.
 
 Definition cert_binop_flags_eqb (a b : cert_binop_flags) : bool :=
@@ -316,7 +317,8 @@ Definition cert_icmp_pred_eqb (a b : cert_icmp_pred) : bool :=
 
 Lemma cert_icmp_pred_eqb_eq : forall a b, cert_icmp_pred_eqb a b = true <-> a = b.
 Proof.
-  intros [] []; cbn; split; intros H; try reflexivity; discriminate.
+  intros [] []; cbn; split;
+    intros H; try reflexivity; discriminate.
 Qed.
 
 Definition cert_cast_kind_eqb (a b : cert_cast_kind) : bool :=
@@ -327,7 +329,8 @@ Definition cert_cast_kind_eqb (a b : cert_cast_kind) : bool :=
 
 Lemma cert_cast_kind_eqb_eq : forall a b, cert_cast_kind_eqb a b = true <-> a = b.
 Proof.
-  intros [] []; cbn; split; intros H; try reflexivity; discriminate.
+  intros [] []; cbn; split;
+    intros H; try reflexivity; discriminate.
 Qed.
 
 Definition cert_cast_flags_eqb (a b : cert_cast_flags) : bool :=
@@ -822,10 +825,13 @@ Lemma var_pair_in_spec : forall u us,
 Proof.
   intros u us; induction us as [| x rx IH]; cbn; [split; [discriminate | contradiction] |].
   destruct (var_pair_eqb u x) eqn:E.
-  - apply var_pair_eqb_eq in E; subst; split; [intros _; left; reflexivity | intros _; reflexivity].
-  - rewrite IH; split; [intros H; right; exact H | intros [-> | H]; [
-      assert (Hr : var_pair_eqb u u = true) by (apply var_pair_eqb_eq; reflexivity);
-      rewrite Hr in E; discriminate | exact H]].
+  - apply var_pair_eqb_eq in E; subst; split;
+      [intros _; left; reflexivity | intros _; reflexivity].
+  - rewrite IH; split;
+      [intros H; right; exact H
+      | intros [-> | H];
+          [assert (Hr : var_pair_eqb u u = true) by (apply var_pair_eqb_eq; reflexivity);
+           rewrite Hr in E; discriminate | exact H]].
 Qed.
 
 (** Shared variable-subset checker over typed parameter pairs (used by

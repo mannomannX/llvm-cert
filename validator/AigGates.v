@@ -62,7 +62,8 @@ Local Open Scope list_scope.
 
 Lemma xorb_false_iff : forall b1 b2 : bool, xorb b1 b2 = false <-> b1 = b2.
 Proof.
-  intros [] []; cbn; split; intros H; try reflexivity; discriminate.
+  intros [] []; cbn; split;
+    intros H; try reflexivity; discriminate.
 Qed.
 
 From CertValidator Require Import LratCore.
@@ -565,24 +566,30 @@ Qed.
 Lemma emit_and2_pref : forall x y st z st1,
   emit_and2 x y st = (z, st1) -> exists d, bs_cnf st1 = d ++ bs_cnf st.
 Proof.
-  intros x y st z st1 H; unfold emit_and2 in H; destruct (alloc_var st) as [out st0] eqn:Ha;
-    inversion H; subst; clear H; unfold alloc_var in Ha; inversion Ha; subst;
+  intros x y st z st1 H; unfold emit_and2 in H;
+    destruct (alloc_var st) as [out st0] eqn:Ha;
+    inversion H; subst; clear H;
+    unfold alloc_var in Ha; inversion Ha; subst;
     exact (add_clauses_pref _ _).
 Qed.
 
 Lemma emit_or2_pref : forall x y st z st1,
   emit_or2 x y st = (z, st1) -> exists d, bs_cnf st1 = d ++ bs_cnf st.
 Proof.
-  intros x y st z st1 H; unfold emit_or2 in H; destruct (alloc_var st) as [out st0] eqn:Ha;
-    inversion H; subst; clear H; unfold alloc_var in Ha; inversion Ha; subst;
+  intros x y st z st1 H; unfold emit_or2 in H;
+    destruct (alloc_var st) as [out st0] eqn:Ha;
+    inversion H; subst; clear H;
+    unfold alloc_var in Ha; inversion Ha; subst;
     exact (add_clauses_pref _ _).
 Qed.
 
 Lemma emit_xor2_pref : forall x y st z st1,
   emit_xor2 x y st = (z, st1) -> exists d, bs_cnf st1 = d ++ bs_cnf st.
 Proof.
-  intros x y st z st1 H; unfold emit_xor2 in H; destruct (alloc_var st) as [out st0] eqn:Ha;
-    inversion H; subst; clear H; unfold alloc_var in Ha; inversion Ha; subst;
+  intros x y st z st1 H; unfold emit_xor2 in H;
+    destruct (alloc_var st) as [out st0] eqn:Ha;
+    inversion H; subst; clear H;
+    unfold alloc_var in Ha; inversion Ha; subst;
     exact (add_clauses_pref _ _).
 Qed.
 
@@ -765,7 +772,8 @@ Lemma emit_or_list_acc_sound : forall assign ls acc st out st' rem,
 Proof.
   intros assign ls; induction ls as [| x rest IH]; intros acc st out st' rem Hacc Hwf Hemit Hsat;
     cbn [emit_or_list_acc] in Hemit.
-  - inversion Hemit; subst; split; [exact Hacc | cbn; rewrite orb_false_r; reflexivity].
+  - inversion Hemit; subst; split;
+      [exact Hacc | cbn; rewrite orb_false_r; reflexivity].
   - inversion Hwf as [| ? ? Hx Hwfr]; subst.
     destruct (emit_or2 acc x st) as [acc1 st1] eqn:He.
     destruct (emit_or_list_acc_pref rest acc1 st1 out st' Hemit) as [d2 Hd2].
@@ -847,7 +855,8 @@ Proof.
     inversion H; subst; clear H.
     assert (Hd1 : exists d1, bs_cnf st1 = d1 ++ bs_cnf st).
     { unfold emit_mux2 in Hm; destruct (alloc_var st) as [out st0] eqn:Ha;
-        inversion Hm; subst; clear Hm; unfold alloc_var in Ha; inversion Ha; subst;
+        inversion Hm; subst; clear Hm;
+        unfold alloc_var in Ha; inversion Ha; subst;
         exact (add_clauses_pref _ _). }
     destruct Hd1 as [d1 Hd1].
     destruct (IH rf st1 mr st' Hmr) as [d2 Hd2].
@@ -1471,7 +1480,8 @@ Proof.
               (conj (conj Hge2 Hwf) (conj Ha1 Hev)) Hv)
     as (asg1 & Hle1 & Hag1 & ([Hge2_1 Hwf1] & Ha1_1 & Hev1) & Hwf_v & Hev_v).
   assert (Hbs : bs_next_var (add_clauses
-                  [[neg_lit vlit; a]; [neg_lit vlit; b]; [vlit; neg_lit a; neg_lit b]] st1) =
+                  [[neg_lit vlit; a]; [neg_lit vlit; b];
+                   [vlit; neg_lit a; neg_lit b]] st1) =
                 bs_next_var st1)
     by (unfold add_clauses; destruct (prepend_clauses_rev _ _ _); reflexivity).
   assert (Hwa1 : wf_lit_bound (bs_next_var st1) a)
@@ -1479,10 +1489,12 @@ Proof.
   assert (Hwb1 : wf_lit_bound (bs_next_var st1) b)
     by exact (wf_lit_bound_mono _ _ b Hle1 Hwb).
   assert (Hcls_wf : Forall (wf_clause_bound (bs_next_var st1))
-                      [[neg_lit vlit; a]; [neg_lit vlit; b]; [vlit; neg_lit a; neg_lit b]]).
+                      [[neg_lit vlit; a]; [neg_lit vlit; b];
+                       [vlit; neg_lit a; neg_lit b]]).
   { repeat constructor; try assumption; apply wf_lit_bound_neg; assumption. }
   assert (Hcls_sat : forall cl,
-            In cl [[neg_lit vlit; a]; [neg_lit vlit; b]; [vlit; neg_lit a; neg_lit b]] ->
+            In cl [[neg_lit vlit; a]; [neg_lit vlit; b];
+                   [vlit; neg_lit a; neg_lit b]] ->
             eval_clause asg1 cl = true).
   { intros cl [<- | [<- | [<- | []]]]; cbn [eval_clause existsb];
       rewrite ?(eval_neg_lit_nonzero asg1 vlit (wf_lit_bound_nonzero _ _ Hwf_v)),
@@ -1519,7 +1531,8 @@ Proof.
               (conj (conj Hge2 Hwf) (conj Ha1 Hev)) Hv)
     as (asg1 & Hle1 & Hag1 & ([Hge2_1 Hwf1] & Ha1_1 & Hev1) & Hwf_v & Hev_v).
   assert (Hbs : bs_next_var (add_clauses
-                  [[vlit; neg_lit a]; [vlit; neg_lit b]; [neg_lit vlit; a; b]] st1) =
+                  [[vlit; neg_lit a]; [vlit; neg_lit b];
+                   [neg_lit vlit; a; b]] st1) =
                 bs_next_var st1)
     by (unfold add_clauses; destruct (prepend_clauses_rev _ _ _); reflexivity).
   assert (Hwa1 : wf_lit_bound (bs_next_var st1) a)
@@ -1527,10 +1540,12 @@ Proof.
   assert (Hwb1 : wf_lit_bound (bs_next_var st1) b)
     by exact (wf_lit_bound_mono _ _ b Hle1 Hwb).
   assert (Hcls_wf : Forall (wf_clause_bound (bs_next_var st1))
-                      [[vlit; neg_lit a]; [vlit; neg_lit b]; [neg_lit vlit; a; b]]).
+                      [[vlit; neg_lit a]; [vlit; neg_lit b];
+                       [neg_lit vlit; a; b]]).
   { repeat constructor; try assumption; apply wf_lit_bound_neg; assumption. }
   assert (Hcls_sat : forall cl,
-            In cl [[vlit; neg_lit a]; [vlit; neg_lit b]; [neg_lit vlit; a; b]] ->
+            In cl [[vlit; neg_lit a]; [vlit; neg_lit b];
+                   [neg_lit vlit; a; b]] ->
             eval_clause asg1 cl = true).
   { intros cl [<- | [<- | [<- | []]]]; cbn [eval_clause existsb];
       rewrite ?(eval_neg_lit_nonzero asg1 vlit (wf_lit_bound_nonzero _ _ Hwf_v)),
@@ -1567,8 +1582,10 @@ Proof.
               (conj (conj Hge2 Hwf) (conj Ha1 Hev)) Hv)
     as (asg1 & Hle1 & Hag1 & ([Hge2_1 Hwf1] & Ha1_1 & Hev1) & Hwf_v & Hev_v).
   assert (Hbs : bs_next_var (add_clauses
-                  [[neg_lit vlit; a; b]; [neg_lit vlit; neg_lit a; neg_lit b];
-                   [vlit; neg_lit a; b]; [vlit; a; neg_lit b]] st1) =
+                  [[neg_lit vlit; a; b];
+                   [neg_lit vlit; neg_lit a; neg_lit b];
+                   [vlit; neg_lit a; b];
+                   [vlit; a; neg_lit b]] st1) =
                 bs_next_var st1)
     by (unfold add_clauses; destruct (prepend_clauses_rev _ _ _); reflexivity).
   assert (Hwa1 : wf_lit_bound (bs_next_var st1) a)
@@ -1576,12 +1593,16 @@ Proof.
   assert (Hwb1 : wf_lit_bound (bs_next_var st1) b)
     by exact (wf_lit_bound_mono _ _ b Hle1 Hwb).
   assert (Hcls_wf : Forall (wf_clause_bound (bs_next_var st1))
-                      [[neg_lit vlit; a; b]; [neg_lit vlit; neg_lit a; neg_lit b];
-                       [vlit; neg_lit a; b]; [vlit; a; neg_lit b]]).
+                      [[neg_lit vlit; a; b];
+                       [neg_lit vlit; neg_lit a; neg_lit b];
+                       [vlit; neg_lit a; b];
+                       [vlit; a; neg_lit b]]).
   { repeat constructor; try assumption; apply wf_lit_bound_neg; assumption. }
   assert (Hcls_sat : forall cl,
-            In cl [[neg_lit vlit; a; b]; [neg_lit vlit; neg_lit a; neg_lit b];
-                   [vlit; neg_lit a; b]; [vlit; a; neg_lit b]] ->
+            In cl [[neg_lit vlit; a; b];
+                   [neg_lit vlit; neg_lit a; neg_lit b];
+                   [vlit; neg_lit a; b];
+                   [vlit; a; neg_lit b]] ->
             eval_clause asg1 cl = true).
   { intros cl [<- | [<- | [<- | [<- | []]]]]; cbn [eval_clause existsb];
       rewrite ?(eval_neg_lit_nonzero asg1 vlit (wf_lit_bound_nonzero _ _ Hwf_v)),
@@ -2172,7 +2193,9 @@ Proof.
                 (wf_lits_bound_mono _ _ rest (proj1 Hs1) Hwfr) (proj2 (proj2 Hs1)) Hemit)
       as (asg2 & Hs2 & Hwf_out & Hev_out).
     exists asg2; split; [exact (step_spec_trans st st1 st' asg asg1 asg2 Hs1 Hs2) | split; [exact Hwf_out |]].
-    cbn [List.map existsb]; rewrite Hev_out, Hev_acc1, (step_spec_eval_lits st st1 asg asg1 rest Hs1 Hwfr), orb_assoc; reflexivity.
+    cbn [List.map existsb];
+      rewrite Hev_out, Hev_acc1, (step_spec_eval_lits st st1 asg asg1 rest Hs1 Hwfr), orb_assoc;
+      reflexivity.
 Qed.
 
 Lemma emit_or_list_opt_step : forall ls asg st out st',
